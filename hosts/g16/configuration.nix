@@ -65,6 +65,11 @@
     '';
   };
 
+  # Enable supergfxd/asusctl for asus
+  services.supergfxd.enable = true;
+  services.asusd.enable = true;
+  services.asusd.enableUserService = true;
+
   # Configure keymap in X11
   services.xserver.xkb = {
     layout = "us";
