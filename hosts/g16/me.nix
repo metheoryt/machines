@@ -11,6 +11,7 @@
     jetbrains.pycharm-professional
     windsurf
     fastfetch
+    nvidia-smi
   ];
   programs.git.enable = true;
   programs.git.userName = "Maxim Romanyuk";

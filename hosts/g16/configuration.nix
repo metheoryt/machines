@@ -5,6 +5,7 @@
     [
       # Include the results of the hardware scan.
       ./hardware-configuration.nix
+      ../../modules/nvidia.nix
       inputs.home-manager.nixosModules.default
     ];
 
@@ -49,6 +50,7 @@
 
   # Enable the X11 windowing system.
   services.xserver.enable = true;
+  services.xserver.videoDrivers = [ "nvidia" ];
 
   # Enable the GNOME Desktop Environment scaling.
   services.displayManager.gdm = {
