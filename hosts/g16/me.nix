@@ -24,7 +24,7 @@
     enable = true;
     settings = {
       "org/gnome/desktop/interface" = {
-        scaling-factor = 1.5;
+        scaling-factor = 1.25;
       };
     };
   };

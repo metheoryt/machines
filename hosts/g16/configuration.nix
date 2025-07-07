@@ -50,8 +50,7 @@
 
   # Enable the X11 windowing system.
   services.xserver.enable = true;
-  services.xserver.videoDrivers = [ "nvidia" ];
-
+  
   # Enable the GNOME Desktop Environment scaling.
   services.displayManager.gdm = {
     enable = true;
