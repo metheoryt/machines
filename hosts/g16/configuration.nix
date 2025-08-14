@@ -18,6 +18,9 @@
   boot.loader.grub.device = "nodev";
   boot.loader.grub.useOSProber = true;
   boot.loader.efi.efiSysMountPoint = "/boot";
+  boot.loader.grub.extraConfig = ''
+    GRUB_DISABLE_OS_PROBER=false
+  '';
 
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
@@ -110,6 +113,7 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
+    os-prober
     vim
     wget
   ];
