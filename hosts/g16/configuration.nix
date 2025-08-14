@@ -33,11 +33,11 @@
   # Keep EFIs separate, but add a Windows entry to *this* menu.
   # Replace <PUT-WINDOWS-ESP-PARTUUID-HERE> with the PARTUUID of the Windows EFI partition:
   #   sudo blkid | grep -i efi
-  boot.loader.systemd-boot.extraEntries."windows.conf" = ''
-    title   Windows 11 (other EFI)
-    device  PARTUUID=2094-41F7
-    efi     /EFI/Microsoft/Boot/bootmgfw.efi
-  '';
+  # boot.loader.systemd-boot.extraEntries."windows.conf" = ''
+  #   title   Windows 11 (other EFI)
+  #   device  PARTUUID=ea6024d4-62ff-4f86-bdac-a60e2bc93f94
+  #   efi     /EFI/Microsoft/Boot/bootmgfw.efi
+  # '';
 
   # Nix basics
   nix.settings = {
