@@ -28,7 +28,7 @@
     settings = {
       "org/gnome/mutter" = { experimental-features = [ "scale-monitor-framebuffer" ]; };
       "org/gnome/desktop/interface" = {
-        text-scaling-factor = 1;
+        text-scaling-factor = 1.15;
       };
     };
   };
