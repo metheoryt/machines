@@ -185,6 +185,7 @@
     wget
     efibootmgr
     appimage-run
+    python312
   ];
 
   # Steam
