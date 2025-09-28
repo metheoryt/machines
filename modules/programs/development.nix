@@ -1,4 +1,41 @@
 {pkgs, ...}: {
+  # Enable nix-ld for compatibility with dynamically linked executables
+  programs.nix-ld = {
+    enable = true;
+    libraries = with pkgs; [
+      # Standard C and C++ libraries
+      stdenv.cc.cc.lib
+      glibc
+      libgcc
+
+      # Common system libraries that compiled Python packages might need
+      zlib
+      openssl
+      libffi
+      bzip2
+      xz
+      ncurses
+      readline
+      sqlite
+
+      # Graphics and system libraries
+      libGL
+      libGLU
+      freetype
+      fontconfig
+
+      # Additional libraries for scientific computing
+      openblas
+      lapack
+
+      # X11 libraries
+      xorg.libX11
+      xorg.libXext
+      xorg.libXrender
+      xorg.libXtst
+    ];
+  };
+
   # Development tools and environments
   environment.systemPackages = with pkgs; [
     # Version control
@@ -72,6 +109,7 @@
     python313
     python313Packages.pip
     python313Packages.virtualenv
+    python313Packages.python-lsp-server
     uv # Fast Python package manager
   ];
 
