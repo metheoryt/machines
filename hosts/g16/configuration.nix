@@ -47,7 +47,6 @@
   services.supergfxd.enable = true; # GPU mode switching
   services.asusd = {
     enable = true;
-    enableUserService = true;
   };
 
   # Flatpak support

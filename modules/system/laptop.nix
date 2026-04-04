@@ -47,19 +47,19 @@
   # };
 
   # Backlight control
-  programs.light.enable = true;
+  hardware.acpilight.enable = true;
   services.actkbd = {
     enable = true;
     bindings = [
       {
         keys = [224];
         events = ["key"];
-        command = "/run/current-system/sw/bin/light -U 10";
+        command = "/run/current-system/sw/bin/brightnessctl set 10%-";
       }
       {
         keys = [225];
         events = ["key"];
-        command = "/run/current-system/sw/bin/light -A 10";
+        command = "/run/current-system/sw/bin/brightnessctl set +10%";
       }
     ];
   };

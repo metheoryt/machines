@@ -17,6 +17,9 @@
     windsurf
     zed-editor
 
+    # Node.js for Claude Code and other tools
+    nodejs_22
+
     # System utilities
     fastfetch
 
@@ -46,29 +49,32 @@
   # Git configuration
   programs.git = {
     enable = true;
-    userName = "Maxim Romanyuk";
-    userEmail = "metheoryt@gmail.com";
 
-    extraConfig = {
+    settings = {
+      user = {
+        name = "Maxim Romanyuk";
+        email = "metheoryt@gmail.com";
+        signingkey = ""; # Add your GPG key if you use one
+      };
+
       init.defaultBranch = "main";
       pull.rebase = true;
       push.autoSetupRemote = true;
       core.autocrlf = "input";
       merge.conflictstyle = "diff3";
       diff.tool = "vimdiff";
-      user.signingkey = ""; # Add your GPG key if you use one
-    };
 
-    aliases = {
-      st = "status";
-      co = "checkout";
-      br = "branch";
-      up = "pull --rebase";
-      ci = "commit";
-      unstage = "reset HEAD --";
-      last = "log -1 HEAD";
-      visual = "!gitk";
-      graph = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+      alias = {
+        st = "status";
+        co = "checkout";
+        br = "branch";
+        up = "pull --rebase";
+        ci = "commit";
+        unstage = "reset HEAD --";
+        last = "log -1 HEAD";
+        visual = "!gitk";
+        graph = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+      };
     };
   };
 
@@ -101,6 +107,9 @@
       nrs = "sudo nixos-rebuild switch --flake .#g16";
       nrt = "sudo nixos-rebuild test --flake .#g16";
       nrb = "sudo nixos-rebuild boot --flake .#g16";
+
+      # Claude Code (installed via npm)
+      cc = "claude";
 
       # System utilities
       df = "df -h";
@@ -157,6 +166,9 @@
       if command -v direnv >/dev/null
           direnv hook fish | source
       end
+
+      # Set up npm global packages path
+      fish_add_path ~/.npm-global/bin
     '';
   };
 
@@ -177,6 +189,12 @@
       # Colored ls
       alias ls='ls --color=auto'
       alias grep='grep --color=auto'
+
+      # Add npm global bin to PATH
+      export PATH="$HOME/.npm-global/bin:$PATH"
+
+      # Claude Code alias
+      alias cc='claude'
     '';
   };
 

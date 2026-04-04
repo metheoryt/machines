@@ -92,7 +92,8 @@ This configuration includes a `justfile` with convenient shortcuts:
 
 ### Updates
 - `just update` - Update all flake inputs
-- `just upgrade` - Update and rebuild system
+- `just upgrade` - Update and set for next boot (safe for Nvidia drivers)
+- `just upgrade-now` - Update and switch immediately (may fail with Nvidia driver mismatch)
 - `just hm-switch` - Switch Home Manager configuration
 
 ### Maintenance
@@ -112,6 +113,40 @@ This configuration includes a `justfile` with convenient shortcuts:
 - `just health` - Quick health check
 
 Run `just` without arguments to see all available commands.
+
+## 🤖 Claude Code (AI Coding Assistant)
+
+Claude Code is installed via npm for the latest version. It's an AI-powered coding assistant that runs in your terminal.
+
+### Setup
+
+1. **Authenticate (first time only):**
+   ```bash
+   claude auth login
+   ```
+   This opens a browser for authentication with your Claude account.
+
+2. **Start Claude Code:**
+   ```bash
+   cc
+   # or
+   claude
+   ```
+
+3. **Common commands inside Claude:**
+   - `/help` - Show available commands
+   - `/commit` - Generate and create a git commit
+   - `/diff` - Show git diff
+   - `/files` - Show files in context
+   - `/exit` - Exit Claude Code
+
+### Updating Claude Code
+
+```bash
+npm update -g @anthropic-ai/claude-code
+```
+
+📖 **Detailed setup guide:** See [CLAUDE_CODE_SETUP.md](./CLAUDE_CODE_SETUP.md)
 
 ## 🔧 Configuration Guide
 

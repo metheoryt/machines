@@ -29,10 +29,10 @@
       lapack
 
       # X11 libraries
-      xorg.libX11
-      xorg.libXext
-      xorg.libXrender
-      xorg.libXtst
+      libx11
+      libxext
+      libxrender
+      libxtst
     ];
   };
 

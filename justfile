@@ -12,8 +12,9 @@ default:
     @echo "  just boot      - Build and set for next boot"
     @echo ""
     @echo "Updates:"
-    @echo "  just update    - Update all flake inputs"
-    @echo "  just upgrade   - Update and rebuild system"
+    @echo "  just update      - Update all flake inputs"
+    @echo "  just upgrade     - Update and set for next boot (safe for Nvidia)"
+    @echo "  just upgrade-now - Update and switch immediately"
     @echo ""
     @echo "Maintenance:"
     @echo "  just clean     - Clean old generations and garbage collect"
@@ -64,9 +65,17 @@ update:
     nix flake update --flake {{flake_dir}}
     @echo "✅ Flake inputs updated!"
 
-# Update and rebuild system
+# Update and set for next boot (safe for Nvidia drivers)
 upgrade:
     @echo "⬆️ Upgrading system..."
+    just update
+    just boot
+    @echo "🎉 System upgrade complete!"
+    @echo "⚠️  Please reboot your system to activate the new configuration."
+
+# Update and switch immediately (may fail with Nvidia driver mismatch)
+upgrade-now:
+    @echo "⬆️ Upgrading system (immediate switch)..."
     just update
     just switch
     @echo "🎉 System upgrade complete!"
