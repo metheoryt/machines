@@ -78,12 +78,15 @@
 
   # Home Manager configuration
   home-manager = {
-    extraSpecialArgs = {inherit inputs;};
+    extraSpecialArgs = {
+      inherit inputs;
+      hostname = "g16";
+    };
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "backup";
     users = {
-      "me" = import ./me.nix;
+      "me" = import ../../modules/home/me.nix;
     };
   };
 
