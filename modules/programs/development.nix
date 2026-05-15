@@ -126,6 +126,9 @@
     python313Packages.virtualenv
     python313Packages.python-lsp-server
     uv # Fast Python package manager
+
+    # PURE org programs
+    slack
   ];
 
   # Docker support
