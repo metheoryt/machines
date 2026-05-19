@@ -80,7 +80,6 @@
     networkmanager = {
       enable = true;
       wifi.powersave = false; # Better WiFi performance
-      plugins = [ pkgs.networkmanager-openvpn ];
     };
 
     # Firewall
@@ -90,6 +89,10 @@
       # allowedUDPPorts = [];
     };
   };
+
+  # systemd-resolved: required by openvpn3's netcfg service for VPN DNS
+  # (NetworkManager integrates with it automatically).
+  services.resolved.enable = true;
 
   # Localization
   time.timeZone = lib.mkDefault "UTC";
@@ -216,6 +219,10 @@
   ];
 
   programs.fish.enable = true;
+
+  # OpenVPN 3 client (supports browser-based SSO/OAuth web-auth,
+  # which networkmanager-openvpn cannot do)
+  programs.openvpn3.enable = true;
 
   # System state version
   system.stateVersion = lib.mkDefault "25.05";
