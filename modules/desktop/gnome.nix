@@ -3,10 +3,9 @@
   services.xserver.enable = true;
 
   # GNOME Desktop Environment
-  services.displayManager.gdm = {
-    enable = true;
-    wayland = true;
-  };
+  # Wayland is the only supported mode in GNOME 50+; the `wayland` option
+  # was removed.
+  services.displayManager.gdm.enable = true;
 
   services.desktopManager.gnome = {
     enable = true;
