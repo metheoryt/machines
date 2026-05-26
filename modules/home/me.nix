@@ -59,6 +59,31 @@
     vlc
     gimp
 
+    # cameractrls — nixpkgs ships only the CLI; override to also install the
+    # GTK GUI (cameractrlsgtk) plus desktop entry & icon, wrapped with the
+    # GTK3 typelib path so `import gi; gi.require_version('Gtk', '3.0')` works.
+    (pkgs.cameractrls.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
+      installPhase = ''
+        runHook preInstall
+        mkdir -p $out/bin $out/lib/python3.13/site-packages/CameraCtrls
+        for file in cameractrls cameractrlsd cameractrlsgtk cameraptzgame cameraptzmidi cameraptzspnav cameraview; do
+          install -Dm755 $file.py -t $out/lib/python3.13/site-packages/CameraCtrls
+        done
+        for file in cameractrls cameractrlsd cameraptzgame cameraptzmidi cameraptzspnav cameraview; do
+          ln -s $out/lib/python3.13/site-packages/CameraCtrls/$file.py $out/bin/$file
+        done
+        makeWrapper ${pkgs.python3.withPackages (ps: [ ps.pygobject3 ])}/bin/python3 $out/bin/cameractrlsgtk \
+          --add-flags $out/lib/python3.13/site-packages/CameraCtrls/cameractrlsgtk.py \
+          --prefix GI_TYPELIB_PATH : "${pkgs.gtk3}/lib/girepository-1.0:${pkgs.glib}/lib/girepository-1.0:${pkgs.pango.out}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0:${pkgs.atk}/lib/girepository-1.0"
+        install -Dm644 pkg/hu.irl.cameractrls.desktop $out/share/applications/hu.irl.cameractrls.desktop
+        substituteInPlace $out/share/applications/hu.irl.cameractrls.desktop \
+          --replace-fail 'Exec=cameractrlsgtk.py' 'Exec=cameractrlsgtk'
+        install -Dm644 pkg/hu.irl.cameractrls.svg $out/share/icons/hicolor/scalable/apps/hu.irl.cameractrls.svg
+        runHook postInstall
+      '';
+    }))
+
     # Archive tools
     file-roller
 
