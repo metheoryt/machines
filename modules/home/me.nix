@@ -19,6 +19,7 @@
     # Development tools
     jetbrains.pycharm
     claude-code
+    sox # for claude /voice audio recording
 
     # Office suite
     libreoffice-qt6-fresh
