@@ -216,6 +216,7 @@ in
       fastfetch
       printf '\n\033[1;35m Ghostty\033[0m\n'
       printf '\033[90m tabs   \033[0m new \033[1mC-S-t\033[0m  close \033[1mC-w\033[0m  next \033[1mC-Tab\033[0m  prev \033[1mC-S-Tab\033[0m\n'
+      printf '\033[90m splits \033[0m new \033[1mC-S-o\033[0m / \033[1mC-S-e\033[0m  focus \033[1mC-A-↑↓←→\033[0m  zoom \033[1mC-S-Enter\033[0m\n'
       printf '\033[90m window \033[0m new \033[1mC-S-n\033[0m\n'
       printf '\033[90m text   \033[0m copy \033[1mC-S-c\033[0m  paste \033[1mC-S-v\033[0m  font \033[1mC-+\033[0m / \033[1mC--\033[0m / \033[1mC-0\033[0m\n'
       printf '\033[90m scroll \033[0m \033[1mS-PgUp\033[0m / \033[1mS-PgDn\033[0m\n\n'
