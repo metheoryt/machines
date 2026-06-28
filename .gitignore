@@ -33,3 +33,7 @@ Thumbs.db
 
 # Flake inputs (managed externally)
 nixos-hardware/
+
+# Claude Code per-repo local settings (personal: permission allowlist + gortex
+# hooks). Machine-local by convention — keep out of git.
+.claude/settings.local.json
