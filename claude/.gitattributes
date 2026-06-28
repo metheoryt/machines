@@ -1,0 +1,5 @@
+# This config is consumed by bash and python on Windows (Git Bash), macOS and
+# Linux. Force LF in the working tree on every platform — CRLF breaks bash
+# shebangs/parsing (e.g. `#!/usr/bin/env bash\r`) and confuses python on the
+# symlinked scripts. Everything here is text; there are no binaries.
+* text eol=lf

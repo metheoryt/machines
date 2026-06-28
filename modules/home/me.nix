@@ -14,6 +14,11 @@ let
   pycharm = pkgs.callPackage ./pycharm-bin.nix { };
 in
 {
+  imports = [
+    # Claude Code config: version-controlled in claude/, symlinked into ~/.claude
+    ./claude.nix
+  ];
+
   home.username = "me";
   home.homeDirectory = "/home/me";
   home.stateVersion = "25.05";

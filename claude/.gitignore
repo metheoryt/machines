@@ -1,0 +1,49 @@
+# Defensive: this directory holds ONLY the version-controlled Claude config.
+# Secrets, transcripts, caches and auto-regenerated state must never be tracked
+# here even if something copies them in. The live versions live in ~/.claude and
+# are intentionally NOT symlinked into this repo (see bootstrap.sh / README.md).
+
+# Secrets & machine-local
+.credentials.json
+.env
+settings.local.json
+remote-settings.json
+policy-limits.json
+
+# Transcripts / session state / caches (auto-regenerated)
+projects/
+sessions/
+tasks/
+plans/
+history.jsonl
+file-history/
+shell-snapshots/
+paste-cache/
+downloads/
+chrome/
+session-env/
+backups/
+cache/
+stats-cache.json
+.last-cleanup
+.last-update-result.json
+
+# Plugins — portable via settings.json (enabledPlugins + extraKnownMarketplaces);
+# the plugins/ tree holds absolute paths and is regenerated on launch.
+plugins/
+
+# Balance / budget runtime state (machine-local or cloud-synced, never git)
+api-balance.json
+api-balance.cache.json
+api-balance.lock
+window-reset.json
+anchor.json
+spend-*.json
+
+# Backups created by bootstrap.sh
+*.bak
+.bootstrap-bak/
+
+# Python bytecode
+__pycache__/
+*.pyc
