@@ -57,6 +57,10 @@
     git-lfs
     gh # GitHub CLI
 
+    # AI coding agents / code intelligence (packaged locally, see ../../pkgs)
+    (callPackage ../../pkgs/gortex.nix { }) # code-intelligence engine / MCP server
+    (callPackage ../../pkgs/openclaude { }) # multi-provider Claude Code fork
+
     # Text editors and IDEs
     vim
     neovim
@@ -127,6 +131,11 @@
     python313Packages.python-lsp-server
     uv # Fast Python package manager
 
+    # JavaScript / Node development
+    # gitnexus CLI: install globally with `npm install -g gitnexus`
+    # (needs a writable npm prefix — see NPM_CONFIG_PREFIX below)
+    nodejs_22
+
     # PURE org programs
     slack
     zoom-us
@@ -185,6 +194,14 @@
     PAGER = "less";
     BROWSER = "google-chrome-stable";
     TERMINAL = "ghostty";
+  };
+
+  # Writable npm global prefix so `npm install -g <pkg>` works with the
+  # read-only Nix store (otherwise global installs fail). Adds the resulting
+  # bin dir to PATH so installed CLIs (e.g. gitnexus) are runnable.
+  environment.sessionVariables = {
+    NPM_CONFIG_PREFIX = "$HOME/.npm-global";
+    PATH = [ "$HOME/.npm-global/bin" ];
   };
 
   # User groups for development

@@ -118,11 +118,21 @@ stdenv.mkDerivation (finalAttrs: {
   # blanking WAYLAND_DISPLAY alone is not enough once the session exports
   # XDG_SESSION_TYPE=wayland / QT_QPA_PLATFORM=wayland (see modules/desktop/gnome.nix).
   # QT_QPA_PLATFORM=xcb covers any Qt subcomponents. Then apply the GApps env fixes.
+  #
+  # libva is in buildInputs, but RustDesk's bundled ffmpeg dlopen()s "libva.so.2"
+  # by soname at runtime — autopatchelf can't see that, so it never lands in the
+  # binary's RUNPATH and VAAPI fails ("Failed to load libva … H265 decoder" falls
+  # back to CPU, causing laggy playback even on a fast LAN). Put libva on
+  # LD_LIBRARY_PATH so the dlopen resolves, and point libva at the host's VAAPI
+  # driver dir (/run/opengl-driver/lib/dri holds iHD on Intel, nvidia on g16),
+  # which NixOS populates from hardware.graphics.extraPackages.
   postFixup = ''
     makeWrapper $out/share/rustdesk/rustdesk $out/bin/rustdesk \
       --set GDK_BACKEND x11 \
       --set QT_QPA_PLATFORM xcb \
       --set WAYLAND_DISPLAY "" \
+      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ libva ]}" \
+      --set-default LIBVA_DRIVERS_PATH "/run/opengl-driver/lib/dri" \
       "''${gappsWrapperArgs[@]}"
   '';
 
