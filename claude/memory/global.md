@@ -44,6 +44,17 @@ elsewhere to sync. Do NOT put secrets here.
 - `graph_stats`' `semantic` block under-reports (the native `python-types` line
   can show ~0 edges); the real resolver is the `lsp-pyright` provider — judge
   coverage from `find_usages` output, not that block.
+- **Build caveat (verified vasya, gortex v0.56.0, 2026-06-30):** that "real
+  resolver is lsp-pyright" claim is BUILD-DEPENDENT and was false for this
+  daemon. v0.56.0 ships only NATIVE semantic providers (`python-types`, etc.) —
+  no `lsp-*` in `graph_stats.semantic.providers`, and the daemon log shows no
+  pyright langserver spawn. Here `python-types` WAS the resolver and reported
+  100% coverage (1535/1535 symbols, edges as `ast_resolved`), not ~0. So:
+  installing pyright + a `pyrightconfig.json` does NOT add a gortex resolution
+  tier on this build — it buys a standalone type-checker whose demanded
+  annotations still help the native type-aware provider, plus gap-diagnostics.
+  Before assuming lsp-pyright is live, check `semantic.providers` for an `lsp-*`
+  entry and grep the daemon log for a langserver spawn.
 - Integration is reproducible ONLY if `.gortex.yaml` + a gortex server entry in
   `.mcp.json` are committed. A local daemon merely *tracking* a repo works for you
   but carries nothing to teammates/CI — run `gortex init` to commit the wiring.

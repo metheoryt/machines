@@ -1,17 +1,20 @@
 # Pyright config rationale (for the `gortex-align` skill)
 
-Gortex's Python resolver is the **`lsp-pyright`** provider. Whether an edge lands
-as `lsp_resolved` or degrades to a speculative `text_matched` is driven almost
-entirely by what pyright can resolve. The fastest way to make a Python repo
-gortex-friendly is to make it resolve cleanly under a strict-ish pyright.
+Gortex's Python resolver is the **native, type-aware `python-types`** provider —
+this build ships no `lsp-pyright`, so pyright is *not* in gortex's resolution
+path. Pyright earns its place anyway: it's a standalone type checker whose
+demanded annotations and stubs feed the type-aware native provider, and its
+diagnostics surface every spot that would otherwise resolve weakly. The fastest
+way to make a Python repo gortex-friendly is still to make it resolve cleanly
+under a strict-ish pyright.
 
 `pyrightconfig.json` next to this file is the drop-in. The skill's step 4 copies
 it into the target repo; this doc explains *why* each part is there.
 
 ## How to read the config
 
-- **(A) Resolution knobs** — settings that *actually change what pyright (and
-  therefore gortex) can resolve*:
+- **(A) Resolution knobs** — settings that *actually change what pyright can
+  resolve* — and therefore the type information it can feed the native provider:
   - `useLibraryCodeForTypes: true` — infer types from a dependency's source when
     it ships no stubs. The most common single cause of un-stubbed libraries
     resolving to `Any`.
@@ -19,9 +22,10 @@ it into the target repo; this doc explains *why* each part is there.
     **installed** — pyright can't resolve imports it can't see.
   - `pythonVersion` — match the interpreter the project runs.
 - **(B) Gap diagnostics** — these don't change resolution; they *surface* every
-  spot that would otherwise become a weak `text_matched` edge (missing
-  annotations, inferred `Any`, unresolved imports, missing stubs). Fixing each
-  one — annotate, or install the stub — is what upgrades the edge.
+  spot with thin type info (missing annotations, inferred `Any`, unresolved
+  imports, missing stubs) — the same spots the native provider can't key off
+  either. Fixing each one — annotate, or install the stub — improves what the
+  provider resolves.
 
 ## `[tool.pyright]` (pyproject.toml) variant
 
@@ -63,7 +67,7 @@ reportImplicitOverride = "warning"
    `djangorestframework-stubs`, `celery-types`, `types-requests`, etc.
    `reportMissingTypeStubs` warnings tell you which.
 3. Work the `reportMissing*Type` / `reportUnknown*` warnings down — each fix
-   turns a `text_matched` gortex edge into `lsp_resolved`.
+   gives the native type-aware provider more to resolve against.
 4. Once clean, ratchet `typeCheckingMode` to `"strict"`.
 
 ## Honest limits (what pyright still won't resolve)

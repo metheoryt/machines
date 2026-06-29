@@ -1,21 +1,25 @@
 ---
 name: gortex-align
-description: Use when the user wants to align, onboard, or tune a repository for Gortex — improve its code-graph resolution quality, commit the gortex wiring (.gortex.yaml / .mcp.json), or set up pyright governance on a Python project so calls resolve as lsp_resolved instead of text_matched. Configures per-repo wiring; does NOT install the gortex binary (that's a machine-level concern).
+description: Use when the user wants to align, onboard, or tune a repository for Gortex — improve its code-graph resolution quality, commit the gortex wiring (.gortex.yaml / .mcp.json), or set up pyright governance on a Python project so its type annotations feed gortex's native type-aware Python resolver. Configures per-repo wiring; does NOT install the gortex binary (that's a machine-level concern).
 ---
 
 # Align a repo for Gortex
 
 ## Overview
 
-Gortex indexes a repo into a code graph. Edge quality depends on what the
-language's underlying static analyzer can resolve — for Python that's the
-**`lsp-pyright`** provider. "Aligning a repo for gortex" means two things:
+Gortex indexes a repo into a code graph. Edge quality depends on how well the
+code's type information resolves. For Python the resolver is gortex's **native,
+type-aware `python-types`** provider — this build ships no `lsp-pyright`, so
+pyright is *not* in gortex's resolution path. "Aligning a repo for gortex" means
+two things:
 
 1. **Wire it** — commit the gortex config so the integration is reproducible for
    teammates/CI, and confirm the daemon is tracking and has indexed it.
-2. **Tune the analyzer's view** — make the code resolve cleanly under its static
-   analyzer, so edges land as `lsp_resolved` instead of speculative
-   `text_matched`. For Python this is pyright governance (bundled config below).
+2. **Tune the type view** — make the code carry the type information the native
+   provider keys off. For Python this is pyright governance: pyright is a
+   standalone type checker, and the annotations/stubs it forces you to add feed
+   gortex's type-aware provider (plus pyright surfaces every unresolved spot as a
+   diagnostic). Bundled config below.
 
 **Scope boundary:** this skill *configures* per-repo wiring. It does **not**
 install the `gortex` binary itself — that's machine provisioning (declarative on
@@ -68,13 +72,13 @@ Detect the language. **For Python:**
    ```
 2. Adapt it to the repo: fix `include` to the real source roots, point
    `venv`/`venvPath` (or `pythonPath`) at the env where deps are **installed**,
-   set `pythonVersion`. Pyright can't resolve imports it can't see, and gortex
-   inherits that blindness.
+   set `pythonVersion`. Pyright can't resolve imports it can't see, so without a
+   deps-installed env its diagnostics are useless.
 3. Run pyright (or read the diagnostics) and act on them:
    - `reportMissingTypeStubs` → install the stubs (`django-stubs`,
      `djangorestframework-stubs`, `celery-types`, `types-requests`, …).
-   - `reportMissing*Type` / `reportUnknown*` → add annotations. Each fix
-     upgrades a `text_matched` edge to `lsp_resolved`.
+   - `reportMissing*Type` / `reportUnknown*` → add annotations. Each fix gives
+     the native type-aware provider more type information to resolve against.
 4. Once clean, suggest ratcheting `typeCheckingMode` from `standard` to
    `strict`.
 

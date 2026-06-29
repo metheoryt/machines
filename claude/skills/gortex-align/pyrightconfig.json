@@ -1,12 +1,15 @@
 // Reference pyright config tuned for GORTEX RESOLUTION QUALITY.
 //
-// Gortex's real Python resolver is the lsp-pyright provider, so "align a repo
-// for gortex" == "make it resolve cleanly under pyright." Copy this to the
-// repo root as pyrightconfig.json (or fold the keys into [tool.pyright] in
-// pyproject.toml). Pyright parses this file as JSONC, so // comments are fine.
+// Gortex's Python resolver is the native, type-aware python-types provider
+// (this build ships no lsp-pyright). Pyright is NOT in gortex's resolution path,
+// but the annotations/stubs it forces you to add feed that native provider, so
+// "align a repo for gortex" == "make it resolve cleanly under pyright." Copy
+// this to the repo root as pyrightconfig.json (or fold the keys into
+// [tool.pyright] in pyproject.toml). Pyright parses this as JSONC, so // is fine.
 //
 // Two halves below:
-//   (A) RESOLUTION KNOBS  - actually change what pyright/gortex can resolve.
+//   (A) RESOLUTION KNOBS  - actually change what pyright can resolve, and so the
+//                           type info it can feed gortex's native provider.
 //   (B) GAP DIAGNOSTICS   - don't change resolution, but flag every spot that
 //                           would otherwise become a weak `text_matched` edge,
 //                           so a human/agent can fix it and feed the resolver.
@@ -48,8 +51,9 @@
   "typeCheckingMode": "standard",
 
   // ---- (B) GAP DIAGNOSTICS -------------------------------------------------
-  // Each of these flags a place gortex cannot resolve a real type. Fixing them
-  // (annotate, or install stubs) is what upgrades text_matched -> lsp_resolved.
+  // Each of these flags a place with thin type info that the native provider
+  // also can't key off. Fixing them (annotate, or install stubs) gives that
+  // provider more to resolve against (and turns weak text_matched edges solid).
 
   // Unresolved imports / missing stubs. reportMissingTypeStubs is the nudge to
   // `pip install django-stubs djangorestframework-stubs types-*` — installed
