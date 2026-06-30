@@ -13,10 +13,21 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Preferences & feedback
 
-- Before doing any work on a local branch, pull and rebase it onto its remote
-  first (`git pull --rebase`, or `git fetch && git rebase origin/<branch>`).
-  Applies to every branch in every repo — start from an up-to-date base, never
-  commit on top of a stale branch.
+- **Git-sync protocol — keep work synced across machines, agents do it
+  themselves.** Applies to every branch in every repo:
+  - **Before acting on code:** pull and rebase/merge the local branch onto its
+    remote first (`git pull --rebase`, or `git fetch && git rebase
+    origin/<branch>`). Start from an up-to-date base — never commit on top of a
+    stale branch.
+  - **After making changes:** commit and push the work yourself, without waiting
+    to be told. Don't leave work uncommitted between turns.
+  - **Cooldown ~10 min:** throttle these sync operations — don't pull or
+    commit+push more than about once every 10 minutes. Batch changes within a
+    cooldown window into a single commit rather than thrashing git on every
+    micro-edit. If &lt;10 min since the last sync and nothing is mid-break, keep
+    working and let the next window catch it up.
+  - Scope commits to coherent units; don't sweep unrelated in-progress work into
+    one commit. If the tree mixes concerns, surface it rather than lumping.
 
 ## Context
 
