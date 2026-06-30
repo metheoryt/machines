@@ -36,6 +36,7 @@ in {
     # Development tools
     pycharm # upstream-latest override — see ./pycharm-bin.nix (nixpkgs lags)
     claude-code
+    codex # OpenAI Codex CLI (config synced via codex.nix); attr unverified on Windows — confirm with `just check` on a Nix host
     sox # for claude /voice audio recording
     difftastic # structural diff tool — `difft`, also wired as `git dft`
 
