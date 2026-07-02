@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"SESSION NAMING RULE: If you are generating a recap of a resumed session, check whether the session already has a user-assigned name (it will appear in the status line or system context as a quoted name the user explicitly chose). Auto-generated names like long hex strings, random word pairs, or anything that looks machine-generated do not count. If the session appears unnamed or has an auto-generated name, end your recap with a clearly separated block:\\n---\\nSuggested rename: `/rename <3-5-word-kebab-case-topic>`\\n---\\nDerive the topic slug from the main task discussed in the session. Keep it lowercase-hyphenated, no generic words like \\\"session\\\" or \\\"work\\\".\"}}'",
+            "statusMessage": "Loading session context..."
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude-work/hooks/global-memory-load.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$HOME/.claude-work/statusline-command.sh\""
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "pure-connectors@pure-team": true,
+    "pure-dev@pure-team": true,
+    "sentry@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "pure-team": {
+      "source": {
+        "source": "directory",
+        "path": "/home/me/gh/pure/claude-plugins"
+      },
+      "autoUpdate": true
+    }
+  },
+  "tui": "fullscreen",
+  "voice": {
+    "enabled": true,
+    "mode": "tap"
+  },
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
+  "agentPushNotifEnabled": true,
+  "voiceEnabled": true
+}
