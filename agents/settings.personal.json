@@ -26,18 +26,9 @@
     "refreshInterval": 180
   },
   "enabledPlugins": {
-    "warp@claude-code-warp": true,
     "superpowers@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "claude-code-warp": {
-      "source": {
-        "source": "github",
-        "repo": "warpdotdev/claude-code-warp"
-      }
-    }
   },
   "advisorModel": "opus",
   "autoUpdatesChannel": "latest",
