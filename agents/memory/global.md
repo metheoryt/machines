@@ -31,6 +31,23 @@ elsewhere to sync. Do NOT put secrets here.
   - Scope commits to coherent units; don't sweep unrelated in-progress work into
     one commit. If the tree mixes concerns, surface it rather than lumping.
 
+- **Never destroy the last copy of a secret.** Don't delete a backup/stash of a
+  credential on the reasoning that it's "reconstructable" from other files —
+  those other files can change or vanish too. Keep at least one intact copy
+  until the secret is verified in its new home. (Learned the hard way: deleted
+  a `settings.json.backup` holding a Sentry token, then the sibling
+  `settings.local.json` copy also disappeared → token lost, user had to
+  regenerate.)
+
+- **Verify Claude Code's file-reading before designing around it.** Empirically
+  confirmed for a user config dir (`CLAUDE_CONFIG_DIR`): only `settings.json` is
+  read at the config-dir ROOT — a config-root `settings.local.json` **and** a
+  config-root `.env` are NOT read. Reliable ways to get env into a session (and
+  its Bash-tool subprocesses): (a) a var in the launching process env, or
+  (b) a PROJECT-scope `<repo>/.claude/settings.local.json` `env` (this is the
+  one place `settings.local.json` is honored). Test with a throwaway
+  `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
+
 ## Context
 
 ## Communication — professional tone (outward-facing)
