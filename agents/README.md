@@ -139,7 +139,7 @@ From this repo, prefer the `just` recipes over calling the script directly:
 
 Direct invocation, if you need something other than those two: `bash
 agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
-agents/bootstrap.sh` (any other profile — SHARED set only).
+agents/bootstrap.sh` (any other profile — SHARED set + `settings.work.json`).
 
 ### Windows note — Developer Mode
 
