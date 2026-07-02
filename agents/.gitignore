@@ -6,7 +6,7 @@
 # Secrets & machine-local
 .credentials.json
 .env
-settings.local.json
+settings.local.json   # machine-local per profile (gortex hooks / Sentry secret) — never commit
 remote-settings.json
 policy-limits.json
 

@@ -182,10 +182,13 @@ The memory stores (`memory/global.md`, `memory/practices.md`, and the per-host
 SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory.md`),
 `hooks/`, `skills/`, `subagents/`, `commands/`, `statusline-command.sh`, and
 `balance-refresh.py` — so they're symlinked into **every** profile bootstrapped:
-`~/.claude`, `~/.codex`, and secondary profiles like `~/.claude-work`. Only
-`settings.json` is PERSONAL-ONLY, linked into `~/.claude` alone — a secondary
-profile keeps its own. Anything recorded in the memory stores survives sessions
-and syncs across machines on commit + pull. The `global-memory-load.sh`
+`~/.claude`, `~/.codex`, and secondary profiles like `~/.claude-work`.
+`settings.json` is committed PER-PROFILE (`settings.personal.json` →
+`~/.claude`, `settings.work.json` → `~/.claude-work`); each profile's
+machine-local `settings.local.json` (personal: gortex hooks; work: the Sentry
+secret) is owned by neither mechanism and never committed. Anything recorded
+in the memory stores survives sessions and syncs across machines on commit +
+pull. The `global-memory-load.sh`
 SessionStart hook injects them into EVERY session (it replaces the old
 `@memory/...` imports, which only Claude Code resolved — the hook works for Codex
 too). Be concise, and never put secrets in them.
@@ -216,7 +219,7 @@ delete stale entries rather than letting them pile up.
 - **Global + per-host** load in EVERY project automatically: `just
   agent-bootstrap` (personal profile: `~/.claude` + `~/.codex`) / `just
   agent-bootstrap-work` (secondary profile, e.g. `~/.claude-work` — SHARED set
-  only, `settings.json` and Codex untouched) symlink `memory/global.md`,
+  + `settings.work.json`, Codex untouched) symlink `memory/global.md`,
   `memory/practices.md`, and `hosts/<hostname>.md` (as `host-memory.md`) into
   the bootstrapped profile. On NixOS, `modules/home/claude.nix` symlinks these
   files into `~/.claude` (and `modules/home/codex.nix` into `~/.codex`);

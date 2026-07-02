@@ -1,8 +1,9 @@
 # Claude Code config (version-controlled)
 
-The Claude Code user config — skills, agents, commands, statusline and
-`settings.json` — lives here and is **symlinked into `~/.claude`** so the same
-setup is reused on every machine (Windows 11 / Git Bash, macOS, Linux).
+The Claude Code user config — skills, agents, commands, statusline and a
+committed per-profile `settings.json` — lives here and is **symlinked into both
+`~/.claude` (personal) and `~/.claude-work` (work)** so the same setup is reused
+on every machine (Windows 11 / Git Bash, macOS, Linux).
 
 Because `~/.claude` is the *user-level* config, these skills/plugins/agents are
 active in **every repo** you open Claude Code in — not just this one. And since
@@ -20,7 +21,8 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 
 | Path | Linked into `~/.claude` as | Notes |
 |---|---|---|
-| `settings.json` | `settings.json` | statusline path is portable (`$HOME`) |
+| `settings.personal.json` | `~/.claude/settings.json` | personal profile config (committed) |
+| `settings.work.json` | `~/.claude-work/settings.json` | work profile config (committed; Sentry secret lives in machine-local `settings.local.json`) |
 | `statusline-command.sh` | `statusline-command.sh` | compact status line |
 | `balance-refresh.py` | `balance-refresh.py` | spend calculator (statusline depends on it) |
 | `AGENTS.md` | `CLAUDE.md` | canonical global instructions; memory stores load via the `global-memory-load.sh` hook, not imports (see below); `agents/CLAUDE.md` is a symlink → it, and `~/.codex/AGENTS.md` links here too |
@@ -127,11 +129,13 @@ From this repo, prefer the `just` recipes over calling the script directly:
   forced personal even if `$CLAUDE_CONFIG_DIR` is set elsewhere in your shell
   (`env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh`).
 - `just agent-bootstrap-work` — a **secondary** profile, e.g. `~/.claude-work`
-  (invoked as `ccw`): links the SHARED set only (`AGENTS.md`→`CLAUDE.md`,
-  `memory/`, `hosts/`→`host-memory.md`, `hooks/`, `skills/`, `subagents/`,
-  `commands/`, `statusline-command.sh`, `balance-refresh.py`) and never touches
-  that profile's own `settings.json` or its Codex config
-  (`CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh`).
+  (invoked as `ccw`): links the SHARED set (`AGENTS.md`→`CLAUDE.md`, `memory/`,
+  `hosts/`→`host-memory.md`, `hooks/`, `skills/`, `subagents/`, `commands/`,
+  `statusline-command.sh`, `balance-refresh.py`) **plus** the committed
+  `settings.work.json` → `settings.json`. It never touches the machine-local
+  `settings.local.json` (which holds the profile's Sentry secret) or its Codex
+  config (`CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh`).
+  On NixOS this profile is also managed by `just switch` (see the nix section).
 
 Direct invocation, if you need something other than those two: `bash
 agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
