@@ -22,7 +22,7 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 | Path | Linked into `~/.claude` as | Notes |
 |---|---|---|
 | `settings.personal.json` | `~/.claude/settings.json` | personal profile config (committed) |
-| `settings.work.json` | `~/.claude-work/settings.json` | work profile config (committed; Sentry secret lives in machine-local `settings.local.json`) |
+| `settings.work.json` | `~/.claude-work/settings.json` | work profile config (committed; no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
 | `statusline-command.sh` | `statusline-command.sh` | compact status line |
 | `balance-refresh.py` | `balance-refresh.py` | spend calculator (statusline depends on it) |
 | `AGENTS.md` | `CLAUDE.md` | canonical global instructions; memory stores load via the `global-memory-load.sh` hook, not imports (see below); `agents/CLAUDE.md` is a symlink → it, and `~/.codex/AGENTS.md` links here too |

@@ -185,8 +185,12 @@ SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory
 `~/.claude`, `~/.codex`, and secondary profiles like `~/.claude-work`.
 `settings.json` is committed PER-PROFILE (`settings.personal.json` →
 `~/.claude`, `settings.work.json` → `~/.claude-work`); each profile's
-machine-local `settings.local.json` (personal: gortex hooks; work: the Sentry
-secret) is owned by neither mechanism and never committed. Anything recorded
+machine-local `settings.local.json` (personal: gortex hooks) is owned by
+neither mechanism and never committed. The work profile's Sentry secret is NOT
+kept at the config-dir root (Claude does NOT read a config-dir-root
+`settings.local.json`) — it lives in each work repo's PROJECT-scope
+`.claude/settings.local.json` (gitignored per repo), which Claude reads
+natively and whose `env` reaches the session and its Bash-tool subprocesses. Anything recorded
 in the memory stores survives sessions and syncs across machines on commit +
 pull. The `global-memory-load.sh`
 SessionStart hook injects them into EVERY session (it replaces the old
