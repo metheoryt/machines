@@ -178,8 +178,13 @@ Once the daemon is up, **call** `distill_session` next — surfaces decisions / 
 # Persistent memory (synced & version-controlled)
 
 The memory stores (`memory/global.md`, `memory/practices.md`, and the per-host
-`host-memory.md`) are git-tracked in this repo (`claude/`) and symlinked into
-both `~/.claude` and `~/.codex`, so anything recorded in them survives sessions
+`host-memory.md`) are git-tracked in this repo (`agents/`) and belong to the
+SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory.md`),
+`hooks/`, `skills/`, `subagents/`, `commands/`, `statusline-command.sh`, and
+`balance-refresh.py` — so they're symlinked into **every** profile bootstrapped:
+`~/.claude`, `~/.codex`, and secondary profiles like `~/.claude-work`. Only
+`settings.json` is PERSONAL-ONLY, linked into `~/.claude` alone — a secondary
+profile keeps its own. Anything recorded in the memory stores survives sessions
 and syncs across machines on commit + pull. The `global-memory-load.sh`
 SessionStart hook injects them into EVERY session (it replaces the old
 `@memory/...` imports, which only Claude Code resolved — the hook works for Codex
@@ -208,12 +213,17 @@ delete stale entries rather than letting them pile up.
 
 ### Wiring — no per-project action needed
 
-- **Global + per-host** load in EVERY project automatically: `bootstrap.sh` /
-  `modules/home/claude.nix` symlink `memory/global.md`, `memory/practices.md`,
-  and `hosts/<hostname>.md` (as `host-memory.md`) into `~/.claude` (and
-  `~/.codex`), and the `global-memory-load.sh` SessionStart hook injects them
-  each session. Nothing to set up per repo — commit here, pull on the other
-  machine to propagate.
+- **Global + per-host** load in EVERY project automatically: `just
+  agent-bootstrap` (personal profile: `~/.claude` + `~/.codex`) / `just
+  agent-bootstrap-work` (secondary profile, e.g. `~/.claude-work` — SHARED set
+  only, `settings.json` and Codex untouched) symlink `memory/global.md`,
+  `memory/practices.md`, and `hosts/<hostname>.md` (as `host-memory.md`) into
+  the bootstrapped profile. On NixOS, `modules/home/claude.nix` symlinks these
+  files into `~/.claude` (and `modules/home/codex.nix` into `~/.codex`);
+  secondary profiles like `~/.claude-work` are handled ONLY by `bootstrap.sh`.
+  The `global-memory-load.sh` SessionStart hook injects them each session.
+  Nothing to set up per repo — commit here, pull (or re-run the relevant
+  `agent-bootstrap*` recipe) on the other machine to propagate.
 - **Per-project** memory lives *inside the target repo* (its `CLAUDE.md` /
   `.claude/memory/project.md` / `CLAUDE.local.md`) and Claude auto-discovers it
   from the working directory. It is NOT wired through this flake — each repo
