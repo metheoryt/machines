@@ -1,10 +1,12 @@
 # Claude Code config, version-controlled in this repo under agents/ and symlinked
-# into ~/.claude. This is the idiomatic nix path for Linux/macOS; Windows uses
-# agents/bootstrap.sh (which produces the identical symlinks).
+# into both ~/.claude (personal) and ~/.claude-work (work). This is the idiomatic
+# nix path for Linux/macOS; Windows uses agents/bootstrap.sh (which produces the
+# identical symlinks for both profiles).
 #
 # mkOutOfStoreSymlink points the live config straight at the repo working tree
 # (not a read-only /nix/store copy), so:
-#   - editing ~/.claude/<file> from ANY repo edits the tracked file here, and
+#   - editing ~/.claude/<file> (or ~/.claude-work/<file>) from ANY repo edits the
+#     tracked file here, and
 #   - changes take effect immediately, with no `nixos-rebuild` to iterate.
 # Commit from this repo and pull on the other machines to propagate.
 #
@@ -16,7 +18,10 @@
 # for `switch` to pick it up; bootstrap reads the working tree directly.)
 #
 # Secrets, transcripts, caches and plugins/ are intentionally NOT linked — they
-# stay machine-local in ~/.claude (see agents/.gitignore for the full list).
+# stay machine-local in ~/.claude / ~/.claude-work (see agents/.gitignore for the
+# full list). settings.local.json in particular is deliberately absent from both
+# profiles below: it stays machine-local (personal: gortex hooks; work:
+# PURE_SENTRY_TOKEN secret), owned by neither this module nor bootstrap.sh.
 {
   config,
   osConfig,
@@ -27,38 +32,39 @@
   agents = "${config.home.homeDirectory}/nix/agents";
   link = config.lib.file.mkOutOfStoreSymlink;
 
-  # Link each entry inside a source subdir into ~/.claude/<targetSub>/ individually.
+  # Link each entry inside a source subdir into <profileDir>/<targetSub>/ individually.
   # targetSub and srcSub differ only for subagents (source `subagents/`, target the
   # tool-dictated `agents/`). srcDir is the in-tree literal (enumeration only).
-  linkEntries = targetSub: srcSub: srcDir:
+  linkEntries = profileDir: targetSub: srcSub: srcDir:
     lib.mapAttrs'
     (name: _:
-      lib.nameValuePair ".claude/${targetSub}/${name}" {
+      lib.nameValuePair "${profileDir}/${targetSub}/${name}" {
         source = link "${agents}/${srcSub}/${name}";
       })
     (lib.filterAttrs (name: _: name != ".gitkeep") (builtins.readDir srcDir));
+
+  # All shared links for one profile dir (".claude" or ".claude-work"),
+  # parameterized by which committed settings file becomes settings.json.
+  # settings.local.json is intentionally NOT managed here — it stays machine-local
+  # (personal: gortex hooks; work: PURE_SENTRY_TOKEN secret), owned by neither
+  # this module nor bootstrap.sh.
+  profileFiles = profileDir: settingsFile:
+    {
+      "${profileDir}/settings.json".source = link "${agents}/${settingsFile}";
+      "${profileDir}/statusline-command.sh".source = link "${agents}/statusline-command.sh";
+      "${profileDir}/balance-refresh.py".source = link "${agents}/balance-refresh.py";
+      # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
+      "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
+      "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
+      "${profileDir}/memory/practices.md".source = link "${agents}/memory/practices.md";
+      "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
+    }
+    // linkEntries profileDir "hooks" "hooks" ../../agents/hooks
+    // linkEntries profileDir "skills" "skills" ../../agents/skills
+    // linkEntries profileDir "agents" "subagents" ../../agents/subagents
+    // linkEntries profileDir "commands" "commands" ../../agents/commands;
 in {
   home.file =
-    {
-      # Whole-file links.
-      ".claude/settings.json".source = link "${agents}/settings.json";
-      ".claude/statusline-command.sh".source = link "${agents}/statusline-command.sh";
-      ".claude/balance-refresh.py".source = link "${agents}/balance-refresh.py";
-
-      # Memory & knowledge base. Global instructions + memory stores are shared
-      # across machines; the per-host file is selected by this machine's hostname
-      # and surfaced as host-memory.md. The stores load each session via the
-      # global-memory-load.sh SessionStart hook (auto-discovered under hooks/),
-      # not via CLAUDE.md @imports.
-      # AGENTS.md is canonical; ~/.claude/CLAUDE.md links straight to the real file.
-      ".claude/CLAUDE.md".source = link "${agents}/AGENTS.md";
-      ".claude/memory/global.md".source = link "${agents}/memory/global.md";
-      ".claude/memory/practices.md".source = link "${agents}/memory/practices.md";
-      ".claude/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
-    }
-    # Auto-discovered entry dirs (kept in sync with bootstrap.sh's link_entries_into).
-    // linkEntries "hooks" "hooks" ../../agents/hooks
-    // linkEntries "skills" "skills" ../../agents/skills
-    // linkEntries "agents" "subagents" ../../agents/subagents
-    // linkEntries "commands" "commands" ../../agents/commands;
+    profileFiles ".claude" "settings.personal.json"
+    // profileFiles ".claude-work" "settings.work.json";
 }
