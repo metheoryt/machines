@@ -10,12 +10,12 @@
 #   - changes take effect immediately, with no `nixos-rebuild` to iterate.
 # Commit from this repo and pull on the other machines to propagate.
 #
-# The entry-dir links (hooks/skills/agents/commands) are AUTO-DISCOVERED from the
-# filesystem via `linkEntries`, mirroring bootstrap.sh's `link_entries_into`. That's
-# what keeps this file in sync with bootstrap.sh: adding a hook/skill/agent/
-# command needs NO edit here — both mechanisms derive the same set from the repo.
-# (readDir reads the flake source, i.e. git-tracked files, so commit a new entry
-# for `switch` to pick it up; bootstrap reads the working tree directly.)
+# hooks/skills/agents/commands are packaged as the "cyphy" Claude Code
+# skills-directory plugin (agents/plugin/), linked whole into
+# <profileDir>/skills/cyphy — mirroring bootstrap.sh's single `link` call for
+# the same directory. Adding a hook/skill/agent/command needs NO edit here or
+# in bootstrap.sh: both just link the directory, Claude Code discovers its
+# contents at load time.
 #
 # Secrets, transcripts, caches and plugins/ are intentionally NOT linked — they
 # stay machine-local in ~/.claude / ~/.claude-work (see agents/.gitignore for the
