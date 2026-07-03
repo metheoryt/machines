@@ -32,17 +32,6 @@
   agents = "${config.home.homeDirectory}/nix/agents";
   link = config.lib.file.mkOutOfStoreSymlink;
 
-  # Link each entry inside a source subdir into <profileDir>/<targetSub>/ individually.
-  # targetSub and srcSub differ only for subagents (source `subagents/`, target the
-  # tool-dictated `agents/`). srcDir is the in-tree literal (enumeration only).
-  linkEntries = profileDir: targetSub: srcSub: srcDir:
-    lib.mapAttrs'
-    (name: _:
-      lib.nameValuePair "${profileDir}/${targetSub}/${name}" {
-        source = link "${agents}/${srcSub}/${name}";
-      })
-    (lib.filterAttrs (name: _: name != ".gitkeep") (builtins.readDir srcDir));
-
   # All shared links for one profile dir (".claude" or ".claude-work"),
   # parameterized by which committed settings file becomes settings.json.
   # settings.local.json is intentionally NOT managed here — it stays machine-local
@@ -58,11 +47,12 @@
       "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
       "${profileDir}/memory/practices.md".source = link "${agents}/memory/practices.md";
       "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
-    }
-    // linkEntries profileDir "hooks" "hooks" ../../agents/hooks
-    // linkEntries profileDir "skills" "skills" ../../agents/skills
-    // linkEntries profileDir "agents" "subagents" ../../agents/subagents
-    // linkEntries profileDir "commands" "commands" ../../agents/commands;
+      # cyphy plugin: one whole-directory symlink replaces the four per-entry
+      # linkEntries calls that used to wire skills/agents/commands/hooks
+      # individually — they all live inside agents/plugin/ now, discovered by
+      # Claude Code as a skills-directory plugin (cyphy@skills-dir).
+      "${profileDir}/skills/cyphy".source = link "${agents}/plugin";
+    };
 in {
   home.file =
     profileFiles ".claude" "settings.personal.json"
