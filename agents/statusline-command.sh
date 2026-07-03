@@ -6,6 +6,7 @@
 #   🎼/📝/🍃/📖 = model family (Opus/Sonnet/Haiku/Fable)
 #   ↑a↓b on the branch = commits ahead/behind the upstream remote
 #   ⏳=5h limit  📆=7d limit  🧠=context window
+#   🕸=gortex code-graph daemon (green=ready & cwd indexed · 🕸?=up, cwd not indexed · 🕸…=warming · 🕸✗=down)
 #   "·" before a duration means "resets in"; value colored by severity
 
 input=$(cat)
@@ -527,6 +528,74 @@ if [ -n "$ctx_pct" ]; then
   ctx_str=$(printf "${M}🧠${RESET}$(pct_color "$ctx_pct")$(spark "$ctx_pct")$(round "$ctx_pct")%%${RESET}")
 fi
 
+# ── 5c. gortex code-graph daemon status (cached + bg-refreshed) ───────────────
+# 🕸 shows whether the gortex code-intelligence daemon is up and whether THIS cwd
+# is indexed. `gortex daemon status` is a Go binary (tens of ms) + it lists the
+# tracked repo paths, so we cache its parsed output on a short TTL and refresh it
+# in a detached, lock-guarded child — the status line never blocks on it, exactly
+# like the PR segment. Guarded on `command -v gortex`, so it vanishes where gortex
+# isn't installed. A linked worktree lives outside the tracked repo path, so it
+# reads as 🕸? (up, cwd not indexed) — the visible tell that graph tools are dark.
+gortex_str=""
+if [ -n "$cwd" ] && command -v gortex >/dev/null 2>&1; then
+  gcache_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gortex-cache"
+  mkdir -p "$gcache_dir" 2>/dev/null
+  gcache="$gcache_dir/status"; G_TTL=30; gage=999999
+  if [ -f "$gcache" ]; then
+    gmtime=$(date -r "$gcache" +%s 2>/dev/null); [ -z "$gmtime" ] && gmtime=0
+    gage=$(( $(date +%s) - gmtime ))
+    g_state=""; g_pct="-"
+    IFS=' ' read -r g_state g_pct < "$gcache"
+    covered=""
+    while IFS= read -r rp; do
+      [ -z "$rp" ] && continue
+      case "$cwd/" in "$rp/"*) covered=1; break ;; esac
+    done < <(tail -n +2 "$gcache")
+    case "$g_state" in
+      ready)
+        if [ -n "$covered" ]; then gortex_str=$(printf "${G}🕸${RESET}")
+        else gortex_str=$(printf "${Y}🕸?${RESET}"); fi ;;
+      down|"")
+        gortex_str=$(printf "${DIM}${R}🕸✗${RESET}") ;;
+      *)  # warming / indexing / any non-ready phase
+        pshow=""; [ -n "$g_pct" ] && [ "$g_pct" != "-" ] && pshow="${g_pct}%"
+        gortex_str=$(printf "${Y}🕸…${pshow}${RESET}") ;;
+    esac
+  fi
+  # Stale/missing cache → refresh once in the background (never block here).
+  if [ "$gage" -ge "$G_TTL" ]; then
+    glock="$gcache.lock"; glock_age=999999
+    if [ -f "$glock" ]; then
+      glmtime=$(date -r "$glock" +%s 2>/dev/null); [ -z "$glmtime" ] && glmtime=0
+      glock_age=$(( $(date +%s) - glmtime ))
+    fi
+    if [ "$glock_age" -ge 30 ]; then
+      : > "$glock" 2>/dev/null
+      (
+        st=$(timeout 5 gortex daemon status 2>/dev/null)
+        if [ -z "$st" ]; then
+          printf 'down -\n' > "$gcache.tmp"
+        else
+          word=$(printf '%s\n' "$st" | awk '/^ *state /{print $2; exit}')
+          [ -z "$word" ] && word="down"
+          pct=$(printf '%s\n' "$st" | grep -oE '[0-9]+%' | head -1 | tr -d '%')
+          [ -z "$pct" ] && pct="-"
+          {
+            printf '%s %s\n' "$word" "$pct"
+            # tracked-repo paths only (skip the MCP-sessions table's cwd column)
+            printf '%s\n' "$st" \
+              | awk '/^tracked repos:/{t=1;next} /^MCP sessions:/{t=0} t' \
+              | awk -F'│' '{for(i=1;i<=NF;i++){p=$i; gsub(/^ +| +$/,"",p); if(p ~ /^\//) print p}}'
+          } > "$gcache.tmp"
+        fi
+        mv "$gcache.tmp" "$gcache" 2>/dev/null
+        rm -f "$glock" 2>/dev/null
+      ) >/dev/null 2>&1 &
+      disown 2>/dev/null || true
+    fi
+  fi
+fi
+
 # ── 5b. API session: cost · i/o tokens · per-1M rate (API-key login only) ──────
 # Balance is intentionally absent: Claude Code's status-line stdin carries no
 # credit balance, and there's no synchronous account-balance API to call here.
@@ -626,7 +695,7 @@ profile_str=""
 # ── Assemble with dim │ separators ───────────────────────────────────────────
 sep=$(printf "${DIM}│${RESET}")
 out=""
-for p in "$project_str" "$git_str" "$link_str" "$model_str" "$rl_str" "$ctx_str" "$api_str" "$profile_str"; do
+for p in "$project_str" "$git_str" "$link_str" "$model_str" "$rl_str" "$ctx_str" "$gortex_str" "$api_str" "$profile_str"; do
   [ -z "$p" ] && continue
   if [ -z "$out" ]; then out="$p"; else out="${out} ${sep} ${p}"; fi
 done
