@@ -70,6 +70,23 @@ elsewhere to sync. Do NOT put secrets here.
   broken, say it directly. Directness tracks stakes: soft/optional on
   low-stakes, unambiguous on important. Courteous throughout.
 
+## Worktree agents under docker-compose
+
+- **Running tests from a worktree against a compose stack: reuse, don't
+  duplicate.** `docker compose run` from a worktree defaults its project name to
+  the worktree's directory basename → it tries to spin up a *second* copy of the
+  stateful services, which collide on any fixed `container_name` (hard error);
+  and the app service's `./src` bind-mount resolves relative to wherever compose
+  runs. So: force the base project (`-p <proj>`) to reuse the already-running
+  postgres/redis/mongo, and override the source mount (`-v <worktree>/src:/app/src`)
+  so the agent tests ITS code, not main's — miss this and it silently tests the
+  wrong branch. Namespace shared state per agent (unique test-DB name, redis DB
+  index, mongo db name) so parallel runs don't race.
+- **A fresh worktree has only committed files.** Gitignored local config
+  (`.env`, project-scope `.claude/settings.local.json` with tokens + local hook
+  wiring) is absent — symlink/copy it in on worktree creation or the agent
+  silently loses it.
+
 ## Gortex
 
 - Gortex's Python resolution is near-compiler-grade for the STATIC OO layer
@@ -115,6 +132,16 @@ elsewhere to sync. Do NOT put secrets here.
   type hints, installed/typed deps, framework stubs. When working in a
   gortex-backed repo, treat weak resolution as fixable — proactively offer the
   alignment wins that fit its stack rather than accepting `text_matched` edges.
+- **Worktree-isolated agents — don't re-index the worktree in gortex.** A git
+  worktree is a new path → either untracked (graph tools off, enforcement hooks
+  misfire for that agent) or a full re-index (warmup + hundreds of MB, *per*
+  worktree). Avoid both: review/read agents work off the base index +
+  `git diff <base>..HEAD` (review is about the change; the base graph already
+  answers "who calls this / what breaks"); edit agents get graph queries that
+  reflect their own uncommitted edits via **overlay-push to the base workspace**
+  (`overlay_register` + `overlay_push` — a per-MCP-session editor-buffer view, no
+  second index). Overlays model in-flight *unsaved* edits on the base graph; they
+  are NOT a way to index an arbitrary checked-out branch's on-disk state.
 - **`/gortex-align` skill does the alignment.** When a gortex-backed repo could
   be tuned — wiring not committed, or a Python project resolving to
   `text_matched` — offer the `gortex-align` skill. It detects the daemon (won't

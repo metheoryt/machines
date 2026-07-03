@@ -382,12 +382,29 @@ except Exception:
 PY
 fi
 
-# ── 1. Project name ───────────────────────────────────────────────────────────
+# ── 1. Project name (+ worktree flag) ────────────────────────────────────────
+# Prefer the CANONICAL repo name from git's *common* dir, so 📁 stays stable
+# (e.g. "kan-kan") no matter which linked worktree we're in. A linked worktree's
+# per-tree git dir differs from the common dir → flag it with 🌲. Outside a repo,
+# fall back to the workspace/cwd basename.
 name=""
-[ -n "$project_dir" ] && name=$(basename "$project_dir")
+wt_flag=""
+if [ -n "$cwd" ] && git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
+  commondir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null)
+  case "$commondir" in
+    /* | [A-Za-z]:* ) : ;;                                         # already absolute
+    * ) commondir=$(cd "$cwd" && cd "$commondir" 2>/dev/null && pwd) ;;
+  esac
+  if [ -n "$commondir" ]; then
+    name=$(basename "$(dirname "$commondir")")
+    [ -n "$gitdir" ] && [ "$gitdir" != "$commondir" ] && wt_flag=" 🌲"
+  fi
+fi
+[ -z "$name" ] && [ -n "$project_dir" ] && name=$(basename "$project_dir")
 [ -z "$name" ] && [ -n "$cwd" ] && name=$(basename "$cwd")
 project_str=""
-[ -n "$name" ] && project_str="📁$(trunc "$name" 14)"
+[ -n "$name" ] && project_str="📁$(trunc "$name" 14)${wt_flag}"
 
 # ── 2. Git branch + dirty counts ─────────────────────────────────────────────
 git_str=""
