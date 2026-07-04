@@ -180,9 +180,11 @@ Once the daemon is up, **call** `distill_session` next — surfaces decisions / 
 The memory stores (`memory/global.md`, `memory/practices.md`, and the per-host
 `host-memory.md`) are git-tracked in this repo (`agents/`) and belong to the
 SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory.md`),
-`hooks/`, `skills/`, `subagents/`, `commands/`, `statusline-command.sh`, and
-`balance-refresh.py` — so they're symlinked into **every** profile bootstrapped:
-`~/.claude`, `~/.codex`, and secondary profiles like `~/.claude-work`.
+`statusline-command.sh`, and `balance-refresh.py` as loose files, plus
+`plugin/` (skills, subagents as its `agents/`, hooks, commands — packaged as
+the `cyphy` skills-directory plugin) as one whole-directory link — so they're
+symlinked into **every** profile bootstrapped: `~/.claude`, `~/.codex`, and
+secondary profiles like `~/.claude-work`.
 `settings.json` is committed PER-PROFILE (`settings.personal.json` →
 `~/.claude`, `settings.work.json` → `~/.claude-work`); each profile's
 machine-local `settings.local.json` (personal: gortex hooks) is owned by
