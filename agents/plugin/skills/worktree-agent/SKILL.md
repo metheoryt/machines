@@ -1,6 +1,6 @@
 ---
 name: worktree-agent
-description: Use when spawning a review, code-edit, or test agent into an isolated git worktree (the Agent tool with isolation "worktree") in any repo — sets the per-tier conventions for gortex, Docker Compose, and gitignored local config so the spawned agent doesn't re-index the worktree, test the wrong code, or collide with the base stack on shared state. Model-invocable: the *launching* agent reads it while composing the subagent's prompt.
+description: "Use when spawning a review, code-edit, or test agent into an isolated git worktree (the Agent tool with isolation \"worktree\") in any repo — sets the per-tier conventions for gortex, Docker Compose, and gitignored local config so the spawned agent doesn't re-index the worktree, test the wrong code, or collide with the base stack on shared state. Model-invocable: the *launching* agent reads it while composing the subagent's prompt."
 ---
 
 # Running agents in isolated worktrees
