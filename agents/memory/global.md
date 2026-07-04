@@ -50,6 +50,30 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Context
 
+## Shipping & deployment defaults
+
+- **Default on push: ship to production, not just to git — overridable per
+  repo.** When work lands on a repo's main branch, "ship it" defaults to
+  getting the change actually running in prod if that's reachable from the
+  current session, not merely landing the commit.
+  - **Why:** confirmed default, 2026-07-04 (embedthat-bot audio-pager
+    delete-and-resend work) — the user's "ship it" meant deploy, not just
+    push. A repo's own `CLAUDE.md` / project memory can override this (e.g.
+    team repos with staging gates or an explicit manual-deploy process).
+  - **How to apply:**
+    - After pushing, check for an existing deploy path in the repo (a CI
+      workflow, `docker-compose` targeting a prod host, a known running
+      container) and use it if reachable this session.
+    - If no ship-on-push automation exists yet, **offer** (don't silently
+      set one up) to wire a GitHub Actions workflow that ships on every
+      push/merge to main. This fits mostly personal projects — hold off on
+      team repos with review/staging gates unless asked.
+    - If production runs a Docker image, offer to ship via Docker Hub:
+      build + push the image so the server's **Tugtainer** image-watcher
+      picks up the new tag and updates the running container automatically.
+      Prefer wiring that build+push into GitHub CI over a manual local
+      `docker push` when feasible.
+
 ## Communication — professional tone (outward-facing)
 
 - **Applies to everything a human other than me reads** — PR titles/bodies,
