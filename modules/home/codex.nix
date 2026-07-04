@@ -23,7 +23,7 @@
       lib.nameValuePair ".codex/${targetSub}/${name}" {
         source = link "${srcBase}/${srcSub}/${name}";
       })
-    (lib.filterAttrs (name: _: name != ".gitkeep") (builtins.readDir srcDir));
+    (lib.filterAttrs (name: _: name != ".gitkeep" && name != "hooks.json") (builtins.readDir srcDir));
 in {
   home.file =
     {

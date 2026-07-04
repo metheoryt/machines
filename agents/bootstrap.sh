@@ -139,7 +139,8 @@ link_entries_into() {
   for entry in "$src_sub"/* "$src_sub"/.[!.]*; do
     [ -e "$entry" ] || continue           # no matches → skip the literal glob
     base="$(basename "$entry")"
-    [ "$base" = ".gitkeep" ] && continue  # placeholder, not real config
+    [ "$base" = ".gitkeep" ] && continue   # placeholder, not real config
+    [ "$base" = "hooks.json" ] && continue # cyphy plugin manifest, not a Codex hook
     link "$entry" "$dest_sub/$base"
   done
 }
