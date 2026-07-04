@@ -48,8 +48,6 @@ elsewhere to sync. Do NOT put secrets here.
   one place `settings.local.json` is honored). Test with a throwaway
   `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
 
-## Context
-
 ## Shipping & deployment defaults
 
 - **Default on push: ship to production, not just to git — overridable per
@@ -68,11 +66,11 @@ elsewhere to sync. Do NOT put secrets here.
       set one up) to wire a GitHub Actions workflow that ships on every
       push/merge to main. This fits mostly personal projects — hold off on
       team repos with review/staging gates unless asked.
-    - If production runs a Docker image, offer to ship via Docker Hub:
-      build + push the image so the server's **Tugtainer** image-watcher
-      picks up the new tag and updates the running container automatically.
-      Prefer wiring that build+push into GitHub CI over a manual local
-      `docker push` when feasible.
+    - If prod runs a container image watched by an auto-updater, prefer
+      shipping via the registry: build + push the image (via CI when
+      feasible, not a manual local `docker push`) so the watcher pulls the
+      new tag and restarts the container. The concrete registry + watcher
+      belong in that repo's own project memory.
 
 ## Communication — professional tone (outward-facing)
 
