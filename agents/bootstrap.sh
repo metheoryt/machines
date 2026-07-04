@@ -139,7 +139,8 @@ link_entries_into() {
   for entry in "$src_sub"/* "$src_sub"/.[!.]*; do
     [ -e "$entry" ] || continue           # no matches → skip the literal glob
     base="$(basename "$entry")"
-    [ "$base" = ".gitkeep" ] && continue  # placeholder, not real config
+    [ "$base" = ".gitkeep" ] && continue   # placeholder, not real config
+    [ "$base" = "hooks.json" ] && continue # cyphy plugin manifest, not a Codex hook
     link "$entry" "$dest_sub/$base"
   done
 }
@@ -188,11 +189,12 @@ if [ ! -e "$host_src" ]; then
 fi
 link "$host_src" "$CLAUDE_DIR/host-memory.md"
 
-# Entry-by-entry links (each skill subdir / agent file / command / hook).
-link_entries_into "$SRC_DIR/skills"   "$CLAUDE_DIR/skills"
-link_entries_into "$SRC_DIR/subagents" "$CLAUDE_DIR/agents"
-link_entries_into "$SRC_DIR/commands" "$CLAUDE_DIR/commands"
-link_entries_into "$SRC_DIR/hooks"    "$CLAUDE_DIR/hooks"
+# cyphy plugin: one whole-directory symlink replaces the four entry-by-entry
+# loops above. skills/agents/commands/hooks all live inside agents/plugin/ now,
+# discovered by Claude Code as a skills-directory plugin (cyphy@skills-dir) —
+# live, in place, no copy-to-cache, no install/update step.
+mkdir -p "$CLAUDE_DIR/skills"
+link "$SRC_DIR/plugin" "$CLAUDE_DIR/skills/cyphy"
 
 # ── Codex config (~/.codex) — rides with the personal run only ───────────────
 if [ "$IS_PERSONAL" -eq 1 ]; then
@@ -210,9 +212,9 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
 
   link "$CODEX_SRC/hooks.json" "$CODEX_DIR/hooks.json"
 
-  link_entries_into "$SRC_DIR/skills"       "$CODEX_DIR/skills"
-  link_entries_into "$SRC_DIR/hooks"        "$CODEX_DIR/hooks"
-  link_entries_into "$CODEX_SRC/subagents"  "$CODEX_DIR/agents"
+  link_entries_into "$SRC_DIR/plugin/skills" "$CODEX_DIR/skills"
+  link_entries_into "$SRC_DIR/plugin/hooks"  "$CODEX_DIR/hooks"
+  link_entries_into "$CODEX_SRC/subagents"   "$CODEX_DIR/agents"
 fi
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls

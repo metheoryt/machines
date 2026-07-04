@@ -9,7 +9,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"$HOME/.codex/hooks/global-memory-load.sh\""
+            "command": "bash \"$HOME/.codex/hooks/global-memory-load.sh\" \"${CODEX_CONFIG_DIR:-$HOME/.codex}\""
           },
           {
             "type": "command",

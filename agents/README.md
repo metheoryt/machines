@@ -28,25 +28,27 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 | `AGENTS.md` | `CLAUDE.md` | canonical global instructions; memory stores load via the `global-memory-load.sh` hook, not imports (see below); `agents/CLAUDE.md` is a symlink → it, and `~/.codex/AGENTS.md` links here too |
 | `memory/global.md` | `memory/global.md` | global persistent memory store |
 | `hosts/<host>.md` | `host-memory.md` | per-host memory, chosen by hostname |
-| `skills/update-balance/` | `skills/update-balance` | per-entry link |
-| `subagents/quick-tasks.md` | `agents/quick-tasks.md` | per-entry link — source lives in `subagents/`, target dir is the tool-dictated `agents/` |
-| `commands/` | `commands/` (per-entry) | empty for now (`.gitkeep`) |
+| `plugin/` | `skills/cyphy` | whole-directory symlink — the "cyphy" skills-directory plugin (`skills/`, `agents/` [was `subagents/`], `hooks/hooks.json`, `commands/`), discovered by Claude Code as `cyphy@skills-dir`: live, in place, no copy-to-cache, no install/update step |
 
-`skills/`, `subagents/` and `commands/` are linked **entry-by-entry**, so any
-machine-local skill/agent you drop directly into `~/.claude` keeps working
-alongside the tracked ones. (The source dir is `subagents/` — named that way
-because `agents/` at the repo root is already this whole config tree; the
-symlinks still land in the tool-dictated `~/.claude/agents/`.)
+`plugin/` is linked as **one whole directory** (`~/.claude/skills/cyphy`,
+`~/.claude-work/skills/cyphy`) — Claude Code discovers its
+`.claude-plugin/plugin.json` and loads it as `cyphy@skills-dir`. Skills and
+subagents load namespaced under the plugin (e.g. `/cyphy:update-balance`). A
+machine-local skill/agent dropped directly into `~/.claude/skills/` or
+`~/.claude/agents/` still works fine alongside it — it's just not part of
+`cyphy`.
 
 ### Codex (`~/.codex`) — same setup, shared content
 
 Codex is Claude-Code-compatible, so it reuses **this** config as its source of
-truth rather than a separate copy. The tool-agnostic content here — `memory/`,
-`hooks/`, `skills/`, and the canonical `AGENTS.md` — is symlinked into **both**
-`~/.claude` and `~/.codex`. Only the format-divergent files live under
-`agents/codex/` (`hooks.json`, `subagents/*.toml`) and link into `~/.codex`
-alone — the `.toml` subagent defs land at `~/.codex/agents/*.toml`, the same
-tool-dictated target dirname Claude uses, just read by a different tool.
+truth rather than a separate copy. The tool-agnostic content — `memory/`,
+`plugin/hooks/`, `plugin/skills/`, and the canonical `AGENTS.md` — is
+symlinked into `~/.codex` entry-by-entry, same as always; only Claude's own
+wiring changed (a whole-directory `cyphy` plugin symlink instead of
+entry-by-entry). Only the format-divergent files live under `agents/codex/`
+(`hooks.json`, `subagents/*.toml`) and link into `~/.codex` alone — the
+`.toml` subagent defs land at `~/.codex/agents/*.toml`, the same tool-dictated
+target dirname Claude uses, just read by a different tool.
 Machine-local Codex state (`config.toml`, `auth.json`, sessions, caches) is
 git-ignored (`agents/codex/.gitignore`) and never tracked. Both `bootstrap.sh`
 and `modules/home/codex.nix` produce the identical `~/.codex` tree — the same

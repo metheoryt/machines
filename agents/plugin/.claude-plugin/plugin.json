@@ -1,0 +1,7 @@
+{
+  "name": "cyphy",
+  "description": "Personal Claude Code workflow: gortex skills, quick-tasks subagent, and memory-loading hooks — synced across machines and profiles.",
+  "author": {
+    "name": "Maxim Romanyuk"
+  }
+}

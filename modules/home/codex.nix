@@ -23,7 +23,7 @@
       lib.nameValuePair ".codex/${targetSub}/${name}" {
         source = link "${srcBase}/${srcSub}/${name}";
       })
-    (lib.filterAttrs (name: _: name != ".gitkeep") (builtins.readDir srcDir));
+    (lib.filterAttrs (name: _: name != ".gitkeep" && name != "hooks.json") (builtins.readDir srcDir));
 in {
   home.file =
     {
@@ -39,7 +39,7 @@ in {
       ".codex/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
     }
     # Shared from agents/: skills + hook scripts. Codex-specific: subagents.
-    // linkEntries "skills" agents "skills" ../../agents/skills
-    // linkEntries "hooks" agents "hooks" ../../agents/hooks
+    // linkEntries "skills" agents "plugin/skills" ../../agents/plugin/skills
+    // linkEntries "hooks" agents "plugin/hooks" ../../agents/plugin/hooks
     // linkEntries "agents" codex "subagents" ../../agents/codex/subagents;
 }

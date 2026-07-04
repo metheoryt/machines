@@ -9,14 +9,15 @@
 # independent of whether cwd is a git repo; the sibling project-memory-check.sh
 # handles the per-repo store.
 #
-# Config-dir-agnostic: derives the config dir from this script's own invocation
-# path, so the same file works whether it's run from ~/.claude/hooks or
-# ~/.codex/hooks. Uses the invocation path (BASH_SOURCE), NOT a symlink-resolved
-# one, so it points at the config tree rather than the repo it links back to.
+# Takes the config dir as $1 (e.g. "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" or
+# "${CODEX_CONFIG_DIR:-$HOME/.codex}"), passed explicitly by the caller's
+# hooks.json — NOT derived from this script's own path, because the same file
+# is symlinked at different nesting depths for different callers (directly
+# under <config_dir>/hooks/ for Codex; under <config_dir>/skills/cyphy/hooks/
+# for the Claude Code cyphy plugin).
 set -u
 
-hooks_dir="$(dirname "${BASH_SOURCE[0]}")"
-config_dir="$(dirname "$hooks_dir")"
+config_dir="${1:?config dir required (pass \$\{CLAUDE_CONFIG_DIR:-\$HOME/.claude\} or similar)}"
 
 emit() {
   # $1 = file path, $2 = header shown before its contents

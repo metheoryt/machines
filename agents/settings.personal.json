@@ -1,25 +1,5 @@
 {
   "env": {},
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/gortex-onboard-check.sh\""
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/global-memory-load.sh\""
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/project-memory-check.sh\""
-          }
-        ]
-      }
-    ]
-  },
   "statusLine": {
     "type": "command",
     "command": "bash \"$HOME/.claude/statusline-command.sh\"",
