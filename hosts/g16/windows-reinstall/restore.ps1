@@ -156,6 +156,10 @@ if (Test-Path (Join-Path $Root 'Downloads')) {
     $dst = Join-Path $TargetHome 'Downloads'
     Add-Plan 'Downloads' (Join-Path $Root 'Downloads') $dst 'dir' '' (Dir-Action $dst)
 }
+# Obsidian: only auto-restore vaults that were backed up as a standalone local
+# folder. Vaults that live INSIDE a cloud folder (e.g. G:\Мой диск\Obsidian on
+# g16) ride along in the cloud copy below — copying them to ~\Obsidian would
+# fork them from cloud sync, so those are surfaced as a GUIDED note instead.
 foreach ($vault in (Get-ChildItem (Join-Path $Root 'Obsidian') -Directory -ErrorAction SilentlyContinue)) {
     $dst = Join-Path $TargetHome "Obsidian\$($vault.Name)"
     Add-Plan "obsidian:$($vault.Name)" $vault.FullName $dst 'dir' 're-open in Obsidian; move if you prefer another path' (Dir-Action $dst)
@@ -234,6 +238,28 @@ if ($sys.Count) { $G += "5. System settings:"; $G += $sys; $G += "" }
 $G += "6. Docker / qaz-law DB: install Docker Desktop, bring the stack up EMPTY, re-run ingestion (DB was not backed up)."
 $G += ""
 $G += "7. Cloud: set up OneDrive/Google Drive fresh; reconcile against the *-from-backup folders (runbook Phase 4.7). SSD copy is authoritative."
+# Obsidian — vaults may be a standalone folder (auto-restored above) OR live
+# inside a cloud folder (this machine: G:\Мой диск\Obsidian). Surface both so a
+# cloud-embedded vault is never silently missed.
+$obsLocal = @(Get-ChildItem (Join-Path $Root 'Obsidian') -Directory -ErrorAction SilentlyContinue)
+$obsCloud = @()
+foreach ($cloud in 'GoogleDrive','OneDrive') {
+    foreach ($v in (Get-ChildItem (Join-Path $Root "$cloud\Obsidian") -Directory -ErrorAction SilentlyContinue)) {
+        $obsCloud += "$cloud\Obsidian\$($v.Name)"
+    }
+}
+if ($obsLocal.Count -or $obsCloud.Count) {
+    $G += ""
+    $G += "8. Obsidian vaults:"
+    if ($obsLocal.Count) {
+        $G += "     Standalone vaults were auto-restored to $TargetHome\Obsidian\ — just re-open them in Obsidian."
+    }
+    if ($obsCloud.Count) {
+        $G += "     These vaults live INSIDE a cloud folder, so they return when the cloud re-syncs. Do NOT copy them out (that forks them from sync):"
+        foreach ($v in $obsCloud) { $G += "       $Root\$v   (offline safety copy on the SSD)" }
+        $G += "     After the cloud folder finishes syncing, re-open each vault in Obsidian from its synced path (e.g. G:\Мой диск\Obsidian\...)."
+    }
+}
 $G | ForEach-Object { Write-Host $_ }
 
 # ---------- Execute (only on -Go) ----------
