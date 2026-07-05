@@ -123,6 +123,18 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 
 ## Phase 4 — Restore
 
+> ### 🔤 Phase 4.0 — Rename this repo `nix` → `machines` (do this FIRST, before re-cloning)
+> This repo outgrew the `nix` name — it holds every host's config (NixOS modules *and* Windows `hosts/g16`), the agent environment, memory, and bootstrap. Rename it now, while re-cloning is unavoidable anyway (so there's no local `git mv` to do — just clone under the new name).
+> 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. (GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.)
+> 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`.
+> 3. Sweep the hard-coded `nix` references (then commit + push):
+>    - This runbook + `hosts/g16/windows-reinstall/backup.ps1` (`GitHub\nix` paths, `github.com/metheoryt/nix`, "the nix repo")
+>    - `scripts\git-autofetch.ps1` (the `…\GitHub\nix\…` scheduled-task path) — and re-register the Scheduled Task with the new path
+>    - `agents/memory/global.md` (and any memory referencing `github.com/metheoryt/nix`)
+>    - `flake.nix` / `modules/**` self-references, `.gortex.yaml` / `.mcp.json` (gortex active-project name), the `just agent-bootstrap*` recipes
+>    - `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (low priority — history)
+> 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match.
+
 1. **Windows apps:** first delete the dropped IDs from `winget-packages.json` (see Appendix B → *Dropped*), then `winget import R:\backup\inventory\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer) by hand.
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
    - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** clone the `nix` repo, then run `just agent-bootstrap` (and `agent-bootstrap-work` if used) to recreate the symlinks + `cyphy` plugin. **Then** restore only the machine-local bits from `R:\backup\home\.claude`: `.credentials.json`, `settings.local.json`, and `projects/` (session history) if you want it. Do NOT overwrite the freshly-bootstrapped `.claude`/`.codex` wholesale.
