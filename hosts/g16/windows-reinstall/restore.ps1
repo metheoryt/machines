@@ -193,20 +193,22 @@ $G += "       winget import `"$Root\inventory\winget-packages.json`""
 $G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer."
 $G += ""
 $G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
-$G += "     cd $TargetHome\GitHub\machines; just agent-bootstrap   # (+ agent-bootstrap-work if used)"
-$G += "   Then restore ONLY machine-local bits from the backup (not the symlinked trees):"
-foreach ($p in '.claude','.codex') {
-    $mp = Join-Path $Root "home\$p"
-    if (Test-Path $mp) {
-        $G += "     copy $mp\.credentials.json , settings.local.json , projects\  ->  $TargetHome\$p\"
-    }
-}
+$G += "     One script does it all (Developer Mode, Claude Code install, bootstrap, machine-local restore):"
+$G += "       cd $TargetHome\GitHub\machines"
+$G += "       .\hosts\g16\windows-reinstall\bootstrap-agents.ps1 -BackupRoot $Root   # (+ -Work if the work profile is used)"
+$G += "     (On NixOS/macOS use 'just agent-bootstrap' instead; Windows needs the .ps1 - it enables Developer Mode for symlinks.)"
 $G += ""
 if ($sel.WslTars.Count) {
     $G += "3. WSL:  wsl --install   (reboot if prompted), then per distro:"
+    $G += "     # --import creates only the leaf folder; C:\ root needs admin, so import under the profile"
     foreach ($t in $sel.WslTars) {
         $name = [IO.Path]::GetFileNameWithoutExtension($t)
-        $G += "     wsl --import $name C:\WSL\$name `"$Root\wsl\$t`""
+        $G += "     New-Item -ItemType Directory -Force `$env:USERPROFILE\WSL | Out-Null"
+        $G += "     wsl --import $name `$env:USERPROFILE\WSL\$name `"$Root\wsl\$t`""
+        $G += "     # imported distro boots as root -> set default user (portable, rides along on re-export):"
+        $G += "     wsl -d $name -u root -- bash -c `"printf '\n[user]\ndefault=me\n' >> /etc/wsl.conf`""
+        $G += "     # make the VHD sparse so it auto-shrinks (shutdown releases the disk; --terminate alone errors):"
+        $G += "     wsl --shutdown; wsl --manage $name --set-sparse true --allow-unsafe"
     }
     $G += "   GPG/SSH inside WSL ride along in the tar; loose copies are in $Root\secrets\ if needed."
     $G += ""
