@@ -66,8 +66,8 @@
         specialArgs = specialArgs // { inherit hostname; };
         modules =
           [
-            ./hosts/${hostname}/configuration.nix
-            ./hosts/${hostname}/hardware-configuration.nix
+            ./hosts/${hostname}/nixos/configuration.nix
+            ./hosts/${hostname}/nixos/hardware-configuration.nix
             home-manager.nixosModules.default
             ({...}: { nixpkgs = nixpkgsConfig; })
           ]

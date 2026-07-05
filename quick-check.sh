@@ -18,9 +18,9 @@ echo "✅ Found flake.nix"
 
 # Check if required configuration files exist
 REQUIRED_FILES=(
-    "hosts/g16/configuration.nix"
-    "hosts/g16/hardware-configuration.nix"
-    "hosts/g16/me.nix"
+    "hosts/g16/nixos/configuration.nix"
+    "hosts/g16/nixos/hardware-configuration.nix"
+    "modules/home/me.nix"
 )
 
 echo "📁 Checking required files..."

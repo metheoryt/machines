@@ -9,19 +9,19 @@
     ./hardware-configuration.nix
 
     # System modules
-    ../../modules/system/base.nix
-    ../../modules/system/laptop.nix
-    ../../modules/system/self-update.nix
-    ../../modules/system/git-autofetch.nix
+    ../../../modules/system/base.nix
+    ../../../modules/system/laptop.nix
+    ../../../modules/system/self-update.nix
+    ../../../modules/system/git-autofetch.nix
 
     # Desktop environment
-    ../../modules/desktop/gnome.nix
+    ../../../modules/desktop/gnome.nix
 
     # Hardware-specific modules
-    ../../modules/hardware/dell-latitude.nix
+    ../../../modules/hardware/dell-latitude.nix
 
     # Program modules
-    ../../modules/programs/development.nix
+    ../../../modules/programs/development.nix
 
     # Home manager
     inputs.home-manager.nixosModules.default
@@ -108,7 +108,7 @@
     useUserPackages = true;
     backupFileExtension = "backup";
     users = {
-      "me" = import ../../modules/home/me.nix;
+      "me" = import ../../../modules/home/me.nix;
     };
   };
 
