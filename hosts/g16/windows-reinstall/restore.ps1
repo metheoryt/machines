@@ -1,5 +1,5 @@
 <#
-  Windows reinstall — restore (guided orchestrator). Mirror of backup.ps1.
+  Windows reinstall - restore (guided orchestrator). Mirror of backup.ps1.
 
   Discovers a backup produced by backup.ps1, lets you select one, verifies
   destinations, and restores. GUIDED, not a blind mirror: the safe,
@@ -8,7 +8,7 @@
   configs, cloud reconcile) are PRINTED as exact commands and left for you,
   per the runbook Phase 4.
 
-  DRY RUN BY DEFAULT — it writes nothing until you pass -Go.
+  DRY RUN BY DEFAULT - it writes nothing until you pass -Go.
 
   Usage (elevated PowerShell recommended):
       .\restore.ps1                       # discover + verify, write nothing
@@ -46,7 +46,7 @@ function Fix-SshPerms($dst) {
 function Dir-Action($dst, [switch]$Sensitive) {
     if (-not (Test-Path $dst)) { return 'create' }
     if (@(Get-ChildItem $dst -Force -ErrorAction SilentlyContinue).Count -eq 0) { return 'create' }
-    if ($Sensitive -and -not $Force) { return 'SKIP (exists — pass -Force)' }
+    if ($Sensitive -and -not $Force) { return 'SKIP (exists - pass -Force)' }
     return 'merge'
 }
 
@@ -81,7 +81,7 @@ function Find-Backups {
 }
 
 # ---------- Select a backup ----------
-Write-Host "=== machines — restore (dry run: $([bool](-not $Go))) ===" -ForegroundColor Cyan
+Write-Host "=== machines - restore (dry run: $([bool](-not $Go))) ===" -ForegroundColor Cyan
 Write-Host "Target user home: $TargetHome  (user: $env:USERNAME)`n"
 
 if ($BackupRoot) {
@@ -124,7 +124,7 @@ function Add-Plan($name, $src, $dst, $kind, $note, $action) {
 foreach ($r in $sel.Repos) {
     $src = Join-Path $Root "repos\$r"
     if ($r -in $ConfigRepoNames) {
-        Add-Plan "repo:$r" $src "(skipped)" 'skip' 'config repo — fresh clone is authoritative; backup copy kept on SSD for its stashes' 'SKIP (config repo)'
+        Add-Plan "repo:$r" $src "(skipped)" 'skip' 'config repo - fresh clone is authoritative; backup copy kept on SSD for its stashes' 'SKIP (config repo)'
         continue
     }
     $dst = Join-Path $TargetHome "GitHub\$r"
@@ -157,19 +157,19 @@ if (Test-Path (Join-Path $Root 'Downloads')) {
     Add-Plan 'Downloads' (Join-Path $Root 'Downloads') $dst 'dir' '' (Dir-Action $dst)
 }
 # Obsidian: only auto-restore vaults that were backed up as a standalone local
-# folder. Vaults that live INSIDE a cloud folder (e.g. G:\Мой диск\Obsidian on
-# g16) ride along in the cloud copy below — copying them to ~\Obsidian would
+# folder. Vaults that live INSIDE a cloud folder (e.g. G:\Google Drive\Obsidian on
+# g16) ride along in the cloud copy below - copying them to ~\Obsidian would
 # fork them from cloud sync, so those are surfaced as a GUIDED note instead.
 foreach ($vault in (Get-ChildItem (Join-Path $Root 'Obsidian') -Directory -ErrorAction SilentlyContinue)) {
     $dst = Join-Path $TargetHome "Obsidian\$($vault.Name)"
     Add-Plan "obsidian:$($vault.Name)" $vault.FullName $dst 'dir' 're-open in Obsidian; move if you prefer another path' (Dir-Action $dst)
 }
-# Cloud folders -> *-from-backup (NOT the live sync folder — reconcile, don't clobber cloud)
+# Cloud folders -> *-from-backup (NOT the live sync folder - reconcile, don't clobber cloud)
 foreach ($cloud in 'OneDrive','GoogleDrive') {
     $src = Join-Path $Root $cloud
     if (Test-Path $src) {
         $dst = Join-Path $TargetHome "$cloud-from-backup"
-        Add-Plan $cloud $src $dst 'dir' 'restored beside (not into) live sync — reconcile per runbook 4.7' (Dir-Action $dst)
+        Add-Plan $cloud $src $dst 'dir' 'restored beside (not into) live sync - reconcile per runbook 4.7' (Dir-Action $dst)
     }
 }
 
@@ -185,14 +185,14 @@ if (Test-Path $stubCsv) {
 }
 
 # ---------- GUIDED steps (printed, never auto-run) ----------
-Write-Host "`n================ GUIDED steps (do these by hand — order matters) ================" -ForegroundColor Yellow
+Write-Host "`n================ GUIDED steps (do these by hand - order matters) ================" -ForegroundColor Yellow
 $G = @()
 $G += "1. Windows apps (winget):"
 $G += "     - Prune the dropped IDs from the JSON first (runbook Appendix B), then:"
 $G += "       winget import `"$Root\inventory\winget-packages.json`""
 $G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer."
 $G += ""
-$G += "2. Agent config (.claude/.codex) — BOOTSTRAP, don't copy verbatim:"
+$G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
 $G += "     cd $TargetHome\GitHub\machines; just agent-bootstrap   # (+ agent-bootstrap-work if used)"
 $G += "   Then restore ONLY machine-local bits from the backup (not the symlinked trees):"
 foreach ($p in '.claude','.codex') {
@@ -211,7 +211,7 @@ if ($sel.WslTars.Count) {
     $G += "   GPG/SSH inside WSL ride along in the tar; loose copies are in $Root\secrets\ if needed."
     $G += ""
 }
-# App configs — install the app, close it, THEN drop these in
+# App configs - install the app, close it, THEN drop these in
 $appMap = @(
     @{ n='Windows Terminal'; s='home\AppData\WindowsTerminal'; d='%LOCALAPPDATA%\Packages\<Terminal pkg>\LocalState\ (settings.json)' }
     @{ n='PowerToys';        s='home\AppData\Local\PowerToys'; d='%LOCALAPPDATA%\Microsoft\PowerToys\' }
@@ -222,7 +222,7 @@ $appMap = @(
 )
 $present = $appMap | Where-Object { Test-Path (Join-Path $Root $_.s) }
 if ($present) {
-    $G += "4. App configs — install the app, CLOSE it, then copy back:"
+    $G += "4. App configs - install the app, CLOSE it, then copy back:"
     foreach ($a in $present) { $G += "     $($a.n):  $Root\$($a.s)  ->  $($a.d)" }
     $G += ""
 }
@@ -238,8 +238,8 @@ if ($sys.Count) { $G += "5. System settings:"; $G += $sys; $G += "" }
 $G += "6. Docker / qaz-law DB: install Docker Desktop, bring the stack up EMPTY, re-run ingestion (DB was not backed up)."
 $G += ""
 $G += "7. Cloud: set up OneDrive/Google Drive fresh; reconcile against the *-from-backup folders (runbook Phase 4.7). SSD copy is authoritative."
-# Obsidian — vaults may be a standalone folder (auto-restored above) OR live
-# inside a cloud folder (this machine: G:\Мой диск\Obsidian). Surface both so a
+# Obsidian - vaults may be a standalone folder (auto-restored above) OR live
+# inside a cloud folder (this machine: G:\Google Drive\Obsidian). Surface both so a
 # cloud-embedded vault is never silently missed.
 $obsLocal = @(Get-ChildItem (Join-Path $Root 'Obsidian') -Directory -ErrorAction SilentlyContinue)
 $obsCloud = @()
@@ -252,12 +252,12 @@ if ($obsLocal.Count -or $obsCloud.Count) {
     $G += ""
     $G += "8. Obsidian vaults:"
     if ($obsLocal.Count) {
-        $G += "     Standalone vaults were auto-restored to $TargetHome\Obsidian\ — just re-open them in Obsidian."
+        $G += "     Standalone vaults were auto-restored to $TargetHome\Obsidian\ - just re-open them in Obsidian."
     }
     if ($obsCloud.Count) {
         $G += "     These vaults live INSIDE a cloud folder, so they return when the cloud re-syncs. Do NOT copy them out (that forks them from sync):"
         foreach ($v in $obsCloud) { $G += "       $Root\$v   (offline safety copy on the SSD)" }
-        $G += "     After the cloud folder finishes syncing, re-open each vault in Obsidian from its synced path (e.g. G:\Мой диск\Obsidian\...)."
+        $G += "     After the cloud folder finishes syncing, re-open each vault in Obsidian from its synced path (e.g. G:\Google Drive\Obsidian\...)."
     }
 }
 $G | ForEach-Object { Write-Host $_ }
@@ -272,7 +272,7 @@ if (-not $Go) {
 $toDo = @($plan | Where-Object { $_.Action -notlike 'SKIP*' })
 Write-Host "`nAbout to perform $($toDo.Count) automatic restore action(s) into $TargetHome." -ForegroundColor Yellow
 $ok = Read-Host "Proceed? [y/N]"
-if ($ok -notmatch '^(y|yes)$') { Write-Host "Aborted — nothing written."; return }
+if ($ok -notmatch '^(y|yes)$') { Write-Host "Aborted - nothing written."; return }
 
 $log = Join-Path $TargetHome "restore-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 Start-Transcript -Path $log -Append | Out-Null
@@ -302,4 +302,4 @@ Write-Host "`n================ RESTORE SUMMARY ================" -ForegroundColo
 $results | Format-Table -AutoSize
 Write-Host "Log: $log"
 Write-Host "`nAutomatic items done. Now work through the GUIDED steps above (winget, agent bootstrap, WSL import, app configs, cloud reconcile)." -ForegroundColor Yellow
-if ($results.Status -contains 'FAIL') { Write-Host "*** Some items FAILED — review above. ***" -ForegroundColor Red }
+if ($results.Status -contains 'FAIL') { Write-Host "*** Some items FAILED - review above. ***" -ForegroundColor Red }
