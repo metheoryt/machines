@@ -188,9 +188,10 @@ if (Test-Path $stubCsv) {
 Write-Host "`n================ GUIDED steps (do these by hand - order matters) ================" -ForegroundColor Yellow
 $G = @()
 $G += "1. Windows apps (winget):"
-$G += "     - Prune the dropped IDs from the JSON first (runbook Appendix B), then:"
-$G += "       winget import `"$Root\inventory\winget-packages.json`""
-$G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer."
+$G += "     - Curated keeper list is version-controlled in the repo (already pruned - no manual editing):"
+$G += "       winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable ``"
+$G += "         `"$TargetHome\GitHub\machines\hosts\g16\windows-reinstall\winget-packages.json`""
+$G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer, RustDesk, Intel DSA."
 $G += ""
 $G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
 $G += "     One script does it all (Developer Mode, Claude Code install, bootstrap, machine-local restore):"

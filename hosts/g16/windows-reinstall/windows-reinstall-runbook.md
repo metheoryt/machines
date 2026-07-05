@@ -23,7 +23,7 @@ Run in **PowerShell**. Write outputs to the SSD.
 
 ```powershell
 mkdir R:\backup\inventory -Force
-winget export -o R:\backup\inventory\winget-packages.json          # winget-sourced apps only (used by `winget import`)
+winget export -o R:\backup\inventory\winget-packages-snapshot.json # point-in-time snapshot for DIFFING (restore uses the curated repo file, not this)
 winget list > R:\backup\inventory\winget-list-full.txt              # readable list of EVERYTHING (incl. Steam/ARP/Store apps winget can't reinstall)
 # WSL apt package list (also captured inside the export, this is a readable copy). The script
 # does this per distro (suffixed with the distro name); one distro shown here for reference.
@@ -100,7 +100,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 - [ ] Open 2–3 files **directly from `R:\`** — a repo file, the Obsidian vault, a Download — they actually open
 - [ ] `R:\backup\wsl\*.tar` — one tar per distro you kept (e.g. `Ubuntu-24.04.tar`), each a non-trivial size (full export, not 0); the main Ubuntu is ~25–31 GB. No `docker-desktop*.tar`.
 - [ ] `R:\backup\secrets\` has a **second copy** off the SSD (see 1f) — the one thing whose loss is unrecoverable
-- [ ] `R:\backup\inventory\winget-packages.json` is present and non-empty
+- [ ] `R:\backup\inventory\winget-packages-snapshot.json` is present and non-empty (restore uses the curated repo file; this is the diff snapshot)
 - [ ] `.ssh` keys (id_ed25519, id_rsa) present under `R:\backup\home\.ssh`
 - [ ] `R:\backup\OneDrive` and `R:\backup\GoogleDrive` copied — open a file from each on the SSD to confirm real content (not 0-byte). OneDrive folder includes your Documents + Pictures + **Desktop** (`Рабочий стол`) — confirm the Desktop subfolder is there.
 - [ ] **OneDrive sync is broken** → confirm **no** `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` was created (its presence means some files were online-only and got missed — recover them from onedrive.live.com first). Ideally also spot-check the SSD's OneDrive file count ≈ 13,527.
@@ -156,7 +156,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 > ```
 > Installs git if missing, clones `machines`, and runs `restore.ps1` — which **discovers the backup on the SSD, lets you pick one, and prints the plan (dry run; writes nothing)**. Re-run `hosts\g16\windows-reinstall\restore.ps1 -Go` to apply the **automatic** items (repos, dotfiles, `.ssh`+perms, Downloads, Obsidian, cloud→`*-from-backup`), and `-Go -Force` to also overwrite a non-empty `.ssh`/repo. The numbered steps 1–9 below are exactly what it automates or prints as **guided** commands (winget, agent bootstrap, WSL import, app configs, cloud reconcile). The reference sweep (step 3 above) stays manual.
 
-1. **Windows apps:** first delete the dropped IDs from `winget-packages.json` (see Appendix B → *Dropped*), then `winget import R:\backup\inventory\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer) by hand.
+1. **Windows apps:** the curated keeper list is version-controlled in the repo at `hosts\g16\windows-reinstall\winget-packages.json` (already pruned — dropped apps removed, Store/forgotten apps added), so no manual editing: `winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable hosts\g16\windows-reinstall\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer, RustDesk, Intel DSA) by hand. *(The SSD `inventory\winget-packages-snapshot.json` is only a point-in-time capture for diffing new installs back into the curated list — not the restore source.)*
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
    - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** run `hosts\g16\windows-reinstall\bootstrap-agents.ps1 -BackupRoot R:\backup` (add `-Work` if the work profile is used). One script enables **Developer Mode** (native symlinks fail without it — the agent config is all symlinks into this repo), ensures Git + Claude Code, runs `agents/bootstrap.sh` (via Git Bash — the `just agent-bootstrap` recipe and the bare `bash` on PATH both misbehave on Windows), and restores only the machine-local bits (`.credentials.json`, `settings.local.json`, `projects/`) without clobbering the freshly-bootstrapped symlink trees. On NixOS/macOS the equivalent is `just agent-bootstrap`.
 3. **WSL:** install WSL + Ubuntu, then either
@@ -216,7 +216,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 Curated from `winget list` + WSL packages on 2026-07-05. **Excluded as auto/noise** (don't reinstall by hand): NVIDIA/Intel/Realtek/Thunderbolt drivers, VC++ redistributables, .NET runtimes, WindowsAppRuntimes, UI.Xaml, codec/video extensions, and built-in Store apps (Photos, Paint, Calculator, Xbox, etc.).
 
 ### Restored automatically
-- **`winget import R:\backup\inventory\winget-packages.json`** → everything winget-sourced below.
+- **`winget import` the curated repo list** (`hosts\g16\windows-reinstall\winget-packages.json`, version-controlled) → all winget keepers below **plus** the four Store apps (WhatsApp, NetSpot, NVIDIA App, MyASUS) via its `msstore` source block. Already pruned, so no pre-edit — just import.
 - **Chrome / JetBrains** → account sync (bookmarks, passwords, IDE settings).
 
 ### Dev — IDEs & editors
@@ -243,8 +243,8 @@ Shutter Encoder · VLC · AIMP · Spotify · MusicBrainz Picard · Elgato Camera
 ### Utilities
 7-Zip · CrystalDiskInfo · WizTree · NetSpot · Logitech G HUB · NVIDIA App · MyASUS · Intel DSA
 
-### ✂️ Dropped — do NOT reinstall
-Strip these winget IDs from `winget-packages.json` **before** running `winget import` (or just skip them):
+### ✂️ Dropped — already excluded from the curated list
+These winget IDs are **not** in `winget-packages.json` (kept out on purpose — don't re-add them when folding in a fresh snapshot):
 `Warp.Warp` · `SublimeHQ.SublimeText.4` · `Exafunction.Windsurf` · `ZhipuAI.ZCode` · `Google.CloudSDK` · `GitHub.GitHubDesktop` · `Telegram.TelegramDesktop` · `TeamViewer.TeamViewer` · `Proton.ProtonVPN` · `OpenVPNTechnologies.OpenVPNConnect` · `WireGuard.WireGuard` · `OBSProject.OBSStudio` · `CrystalDewWorld.CrystalDiskMark.AoiEdition` · `WinDirStat.WinDirStat` · `Fastfetch-cli.Fastfetch`
 
 Not winget-managed (just don't reinstall): **VS Code** · **Chrome Remote Desktop** · **Supersonic** · **Recuva** · **Tablecruncher**

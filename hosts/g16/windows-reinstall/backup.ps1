@@ -78,7 +78,12 @@ Write-Host "Logging to $log`n"
 
 # ---------- 1. Inventory ----------
 Step 'Inventory (winget / WSL packages)' {
-    winget export -o "$Dst\inventory\winget-packages.json" --disable-interactivity | Out-Null
+    # Point-in-time snapshot of what's actually installed — for DIFFING against the
+    # curated keeper list, not for restore. The importable source of truth is the
+    # version-controlled hosts/g16/windows-reinstall/winget-packages.json in the repo
+    # (curated: dropped apps removed, Store/forgotten apps added). After a backup,
+    # diff this snapshot against that file and fold in anything new you want to keep.
+    winget export -o "$Dst\inventory\winget-packages-snapshot.json" --disable-interactivity | Out-Null
     winget list --disable-interactivity | Out-File "$Dst\inventory\winget-list-full.txt" -Encoding utf8
     foreach ($d in $wslDistros) {
         $safe = $d -replace '[^\w.-]','_'
