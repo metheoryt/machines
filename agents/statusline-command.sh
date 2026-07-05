@@ -17,11 +17,13 @@ export PYTHONUTF8=1
 export PYTHONIOENCODING=utf-8
 
 # Resolve a working Python interpreter. Prefer python3 (macOS/Linux), but on
-# Windows `python3` is often a Microsoft Store stub that just prints an install
-# message and exits non-zero — so test that it actually runs (`-c ''`) before
-# committing to it, and fall through to `python`.
+# Windows `python3`/`python` are often Microsoft Store stubs that just print an
+# install message and exit non-zero — so test that each actually runs (`-c ''`)
+# before committing to it. The `py` launcher is the reliable Windows fallback:
+# it finds real installs via the registry regardless of PATH order (the Store
+# stubs in WindowsApps usually shadow the real python.exe on PATH).
 PY=""
-for _py in python3 python; do
+for _py in python3 python py; do
   if command -v "$_py" >/dev/null 2>&1 && "$_py" -c '' >/dev/null 2>&1; then
     PY="$_py"; break
   fi
