@@ -99,6 +99,14 @@ modules/
 - Build an importable tarball with `just wsl-tarball` (run on a Linux Nix host), then on
   Windows `wsl --install --from-file nixos.wsl`. Once running, iterate with `just switch`.
 
+**`bootstrap/`** — disposable non-Nix distro (the low-maintenance WSL alternative)
+- `bootstrap/ubuntu.sh` provisions a fresh Debian/Ubuntu box (or throwaway WSL2 distro)
+  with the *portable* layer only: the git-synced Claude/Codex config (via
+  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, ripgrep/fd/fzf, …).
+- Imperative and apt-based — no NixOS. Use it when the box is disposable; use the
+  `wsl` NixOS host above when you want full, reproducible fleet parity.
+- See `bootstrap/README.md` for usage and base-distro guidance.
+
 ### Home Manager (`modules/home/me.nix`)
 
 User `me` (Maxim Romanyuk) configuration:
