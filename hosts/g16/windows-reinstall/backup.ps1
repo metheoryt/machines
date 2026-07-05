@@ -28,7 +28,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Dst   = "${DriveLetter}:\backup"
-$Distro = 'Ubuntu-24.04'
 $results = [System.Collections.Generic.List[object]]::new()
 
 function Step {
@@ -59,6 +58,16 @@ $freeGB = [math]::Round((Get-Volume -DriveLetter $DriveLetter).SizeRemaining/1GB
 Write-Host "  Free space: $freeGB GB"
 if ($freeGB -lt 80) { throw "Only $freeGB GB free on $DriveLetter — need ~80 GB. Aborting." }
 
+# WSL distros to back up: every installed distro EXCEPT the docker-desktop plumbing.
+# Remove any distros you don't want BEFORE running — whatever remains here is exported.
+$env:WSL_UTF8 = '1'
+$wslDistros = @(
+    (wsl --list --quiet) -split "`r?`n" |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and $_ -notmatch '^docker-desktop' }
+)
+Write-Host "  WSL distros to back up: $(if ($wslDistros) { $wslDistros -join ', ' } else { '(none found)' })"
+
 # Folder structure
 $dirs = 'inventory','wsl','home','repos','Downloads','OneDrive','GoogleDrive','Obsidian','secrets','logs'
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path (Join-Path $Dst $d) | Out-Null }
@@ -68,20 +77,35 @@ if (-not $WhatIf) { Start-Transcript -Path $log -Append | Out-Null }
 Write-Host "Logging to $log`n"
 
 # ---------- 1. Inventory ----------
-Step 'Inventory (winget / vscode / WSL packages)' {
+Step 'Inventory (winget / WSL packages)' {
     winget export -o "$Dst\inventory\winget-packages.json" --disable-interactivity | Out-Null
     winget list --disable-interactivity | Out-File "$Dst\inventory\winget-list-full.txt" -Encoding utf8
-    if (Get-Command code -ErrorAction SilentlyContinue) { code --list-extensions | Out-File "$Dst\inventory\vscode-extensions.txt" -Encoding utf8 }
-    wsl -d $Distro -- bash -c "dpkg --get-selections" | Out-File "$Dst\inventory\wsl-apt-selections.txt" -Encoding utf8
-    wsl -d $Distro -- bash -c "apt-mark showmanual 2>/dev/null" | Out-File "$Dst\inventory\wsl-apt-manual.txt" -Encoding utf8
-    wsl -d $Distro -- bash -c "npm -g ls --depth=0 2>/dev/null; pipx list --short 2>/dev/null; uv tool list 2>/dev/null" | Out-File "$Dst\inventory\wsl-global-tools.txt" -Encoding utf8
+    foreach ($d in $wslDistros) {
+        $safe = $d -replace '[^\w.-]','_'
+        wsl -d $d -- bash -c "dpkg --get-selections"        | Out-File "$Dst\inventory\wsl-apt-selections-$safe.txt" -Encoding utf8
+        wsl -d $d -- bash -c "apt-mark showmanual 2>/dev/null" | Out-File "$Dst\inventory\wsl-apt-manual-$safe.txt"    -Encoding utf8
+        wsl -d $d -- bash -c "npm -g ls --depth=0 2>/dev/null; pipx list --short 2>/dev/null; uv tool list 2>/dev/null" | Out-File "$Dst\inventory\wsl-global-tools-$safe.txt" -Encoding utf8
+    }
 }
 
 # ---------- 2. WSL secrets (tiny, irreplaceable) ----------
-Step 'WSL secrets (.ssh/.gnupg/.gitconfig)' -Critical {
-    wsl -d $Distro -- bash -c "tar cf /tmp/wsl-secrets.tar -C `$HOME .ssh .gnupg .gitconfig 2>/dev/null; echo ok" | Out-Null
-    Copy-Item "\\wsl.localhost\$Distro\tmp\wsl-secrets.tar" "$Dst\secrets\wsl-secrets.tar" -Force
-    wsl -d $Distro -- bash -c "rm -f /tmp/wsl-secrets.tar"
+Step 'WSL secrets (.ssh/.gnupg/.gitconfig, per distro)' -Critical {
+    foreach ($d in $wslDistros) {
+        $safe = $d -replace '[^\w.-]','_'
+        try {
+            wsl -d $d -- bash -c "tar cf /tmp/wsl-secrets.tar -C `$HOME .ssh .gnupg .gitconfig 2>/dev/null; echo ok" | Out-Null
+            $src = "\\wsl.localhost\$d\tmp\wsl-secrets.tar"
+            if (Test-Path $src) {
+                Copy-Item $src "$Dst\secrets\wsl-secrets-$safe.tar" -Force
+                Write-Host "  $d -> secrets\wsl-secrets-$safe.tar"
+            } else {
+                Write-Host "  $d -> no secrets tar produced (skipped)" -ForegroundColor Yellow
+            }
+            wsl -d $d -- bash -c "rm -f /tmp/wsl-secrets.tar"
+        } catch {
+            Write-Host "  $d -> secrets extraction failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
     # Windows SSH keys alongside
     Copy-Item "C:\Users\methe\.ssh\*" "$Dst\secrets\" -Force -ErrorAction SilentlyContinue
 }
@@ -89,11 +113,15 @@ Step 'WSL secrets (.ssh/.gnupg/.gitconfig)' -Critical {
 # (qaz-law DB intentionally NOT backed up — recreatable by re-ingesting after reinstall.)
 
 # ---------- 3. WSL full export ----------
-Step 'WSL export (full distro)' -Critical {
-    $wslTar = "$Dst\wsl\ubuntu-2404.tar"
-    if ((Test-Path $wslTar) -and (Get-Item $wslTar).Length -gt 1GB) { Write-Host "  already present, skipping"; return }
+Step 'WSL export (full distros)' -Critical {
     wsl --shutdown
-    wsl --export $Distro $wslTar
+    foreach ($d in $wslDistros) {
+        $safe = $d -replace '[^\w.-]','_'
+        $wslTar = "$Dst\wsl\$safe.tar"
+        if ((Test-Path $wslTar) -and (Get-Item $wslTar).Length -gt 1GB) { Write-Host "  $d already present, skipping"; continue }
+        Write-Host "  exporting $d -> wsl\$safe.tar"
+        wsl --export $d $wslTar
+    }
 }
 
 # ---------- 5. Windows configs & data ----------

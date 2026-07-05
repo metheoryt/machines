@@ -25,10 +25,10 @@ Run in **PowerShell**. Write outputs to the SSD.
 mkdir R:\backup\inventory -Force
 winget export -o R:\backup\inventory\winget-packages.json          # winget-sourced apps only (used by `winget import`)
 winget list > R:\backup\inventory\winget-list-full.txt              # readable list of EVERYTHING (incl. Steam/ARP/Store apps winget can't reinstall)
-code --list-extensions > R:\backup\inventory\vscode-extensions.txt
-# WSL apt package list (also captured inside the export, this is a readable copy)
-wsl -d Ubuntu-24.04 -- bash -c "dpkg --get-selections" > R:\backup\inventory\wsl-apt-selections.txt
-wsl -d Ubuntu-24.04 -- bash -c "pipx list --short 2>/dev/null; uv tool list 2>/dev/null; npm -g ls --depth=0 2>/dev/null" > R:\backup\inventory\wsl-global-tools.txt
+# WSL apt package list (also captured inside the export, this is a readable copy). The script
+# does this per distro (suffixed with the distro name); one distro shown here for reference.
+wsl -d Ubuntu-24.04 -- bash -c "dpkg --get-selections" > R:\backup\inventory\wsl-apt-selections-Ubuntu-24.04.txt
+wsl -d Ubuntu-24.04 -- bash -c "pipx list --short 2>/dev/null; uv tool list 2>/dev/null; npm -g ls --depth=0 2>/dev/null" > R:\backup\inventory\wsl-global-tools-Ubuntu-24.04.txt
 ```
 
 **⚠️ OneDrive + Google Drive sync is unreliable on this machine — do NOT treat the cloud as a backup.** We copy their local folders to the SSD directly (step 1e). Both are fully present on disk (no online-only stubs), so a copy captures real content.
@@ -48,14 +48,14 @@ Windows repos (`C:\Users\methe\GitHub`) are copied **in full including `.git`** 
 
 ### 1b. WSL — full export (no slim)
 
-With ~700 GB free on the SSD there's no need to slim first — export the whole distro as-is (non-destructive, live env untouched):
+With ~700 GB free on the SSD there's no need to slim first — export each distro as-is (non-destructive, live env untouched). The script **auto-discovers every installed distro except the `docker-desktop*` plumbing** and exports each to `R:\backup\wsl\<distro>.tar` (e.g. `Ubuntu-24.04.tar`). **Delete the distros you don't want BEFORE running** (`wsl --unregister <name>`) — whatever remains is exported. Manual equivalent for one distro:
 
 ```powershell
 wsl --shutdown
-wsl --export Ubuntu-24.04 R:\backup\wsl\ubuntu-2404.tar
+wsl --export Ubuntu-24.04 R:\backup\wsl\Ubuntu-24.04.tar
 ```
 
-One archive = all projects, `~/.ssh`, `~/.gnupg` (GPG keys), `.kube`, dotfiles, apt state. Drop the other distros (Debian, 2nd Ubuntu, docker-desktop) — nothing to save there.
+Each archive = that distro's projects, `~/.ssh`, `~/.gnupg` (GPG keys), `.kube`, dotfiles, apt state. `docker-desktop` (and `docker-desktop-data`) are always skipped — nothing to save there.
 
 ### 1c. qaz-law database — NOT backed up (recreatable)
 
@@ -98,7 +98,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 
 - [ ] `R:\backup\repos\` has all 4 repos (airdrome, nix, qaz-law, vasya), each with a `.git` folder inside (confirms stashes/uncommitted came along)
 - [ ] Open 2–3 files **directly from `R:\`** — a repo file, the Obsidian vault, a Download — they actually open
-- [ ] `R:\backup\wsl\ubuntu-2404.tar` exists and is ~25–31 GB (full export, not 0)
+- [ ] `R:\backup\wsl\*.tar` — one tar per distro you kept (e.g. `Ubuntu-24.04.tar`), each a non-trivial size (full export, not 0); the main Ubuntu is ~25–31 GB. No `docker-desktop*.tar`.
 - [ ] `R:\backup\secrets\` has a **second copy** off the SSD (see 1f) — the one thing whose loss is unrecoverable
 - [ ] `R:\backup\inventory\winget-packages.json` is present and non-empty
 - [ ] `.ssh` keys (id_ed25519, id_rsa) present under `R:\backup\home\.ssh`
@@ -127,7 +127,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
    - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** clone the `nix` repo, then run `just agent-bootstrap` (and `agent-bootstrap-work` if used) to recreate the symlinks + `cyphy` plugin. **Then** restore only the machine-local bits from `R:\backup\home\.claude`: `.credentials.json`, `settings.local.json`, and `projects/` (session history) if you want it. Do NOT overwrite the freshly-bootstrapped `.claude`/`.codex` wholesale.
 3. **WSL:** install WSL + Ubuntu, then either
-   - `wsl --import Ubuntu-24.04 C:\WSL\Ubuntu R:\backup\wsl\ubuntu-2404.tar` to restore wholesale, **or**
+   - `wsl --import Ubuntu-24.04 C:\WSL\Ubuntu R:\backup\wsl\Ubuntu-24.04.tar` to restore wholesale (one `--import` per distro tar you kept), **or**
    - fresh Ubuntu + restore only `~/.ssh`, `~/.gnupg`, dotfiles from the tar and re-clone repos (cleaner). Rebuild venvs (`uv sync` / `pip install`).
 4. **Windows repos:** copy `R:\backup\repos\*` back to `C:\Users\<you>\GitHub\` — they weren't pushed, so this backup **is** the source of truth for their stashes/uncommitted work. Recreate `.venv`s (`uv sync`). (WSL repos come back inside the WSL import in step 3.)
 5. **Docker + qaz-law DB:** install Docker Desktop, `git clone`/restore qaz-law, bring the stack up (empty DB), then **re-run your ingestion** to repopulate. No restore from backup — the DB was intentionally not backed up.
@@ -149,7 +149,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 
 | Path | What | Recoverable elsewhere if lost? |
 |---|---|---|
-| `R:\backup\wsl\ubuntu-2404.tar` | Entire WSL: projects, GPG keys, dotfiles | No |
+| `R:\backup\wsl\*.tar` | Entire WSL per distro: projects, GPG keys, dotfiles | No |
 | `R:\backup\secrets\` (+ 2nd copy off-SSD) | GPG + SSH keys — irreplaceable | No |
 | `R:\backup\home\.ssh` | Windows SSH keys | No |
 | `R:\backup\home\.{kube,gcm,docker,claude,codex,agents}` + gitconfig | Creds/configs | Partly |
@@ -208,7 +208,7 @@ Strip these winget IDs from `winget-packages.json` **before** running `winget im
 
 Not winget-managed (just don't reinstall): **VS Code** · **Chrome Remote Desktop** · **Supersonic** · **Recuva** · **Tablecruncher**
 
-Notes: Windows `Google.CloudSDK` dropped, but WSL keeps `google-cloud-cli` (gcloud still available in Ubuntu). Terminal = Windows Terminal (Warp gone). Since VS Code is dropped, the `vscode-extensions.txt` export is moot — harmless to leave.
+Notes: Windows `Google.CloudSDK` dropped, but WSL keeps `google-cloud-cli` (gcloud still available in Ubuntu). Terminal = Windows Terminal (Warp gone). VS Code is dropped and no longer used — the script does not export a `vscode-extensions.txt`.
 
 ### Cloud storage
 OneDrive · Google Drive (re-add accounts; reconcile against SSD copies per Phase 4.6)
