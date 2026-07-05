@@ -51,10 +51,14 @@ machines/
     homeserver/   # immich-* profiles (g16-2023)
     g16/          # music profile      (was laptop/)
     g16-wsl/      # /home/me profile   (was wsl/)
+  install-media/                                          # shared Win11 install media (all win11 machines)
+    autounattend.xml   # generic answer file (git mv'd from hosts/g16/windows-reinstall/)
+    ventoy.json        # Ventoy Auto Install plugin config (newly tracked; was runbook prose)
+    README.md          # deploy -> P:\unattend\ + P:\ventoy\; ISOs / RST drivers not tracked
   hosts/
     g16/
       nixos/      configuration.nix   hardware-configuration.nix
-      windows/    backup.ps1  restore.ps1  install.ps1  autounattend.xml
+      windows/    backup.ps1  restore.ps1  install.ps1
                   windows-reinstall-runbook.md   git-autofetch.ps1
     latitude5520/
       nixos/      configuration.nix   hardware-configuration.nix
@@ -70,7 +74,8 @@ machines/
 - `hosts/g16/{configuration,hardware-configuration}.nix` → `hosts/g16/nixos/`
 - `hosts/latitude5520/{configuration,hardware-configuration}.nix` → `hosts/latitude5520/nixos/`
 - `hosts/g16/windows-reinstall/` → `hosts/g16/windows/`
-  (backup.ps1, restore.ps1, install.ps1, autounattend.xml, windows-reinstall-runbook.md)
+  (backup.ps1, restore.ps1, install.ps1, windows-reinstall-runbook.md — **not**
+  autounattend.xml, which promotes to shared `install-media/`; see §2b)
 - `scripts/git-autofetch.ps1` → `hosts/g16/windows/` (g16-Windows-only; belongs with its machine)
 - `update-{pycharm,rustdesk,zed}.sh` + `quick-check.sh` → `scripts/`
   (`scripts/` is vacated by `git-autofetch.ps1` moving out; becomes "shared repo tooling")
@@ -103,6 +108,42 @@ machines/
 - **In `vps`:** delete `vps/backup/`; move its README/CLAUDE.md "Backups"
   section out (replace with a one-line pointer: "backup clients live in the
   `machines` repo; this repo runs the restic REST server as a service").
+
+### 2b. Shared Win11 install media (`install-media/`)
+
+The `autounattend.xml` currently at `hosts/g16/windows-reinstall/` is a
+**generic** Win11 answer file (schneegans-generated: interactive computer-name
+via `Read-Host`, `TEMPNAME` placeholder, no `<DiskConfiguration>`, TPM/SecureBoot
+bypass + debloat). Nothing g16-specific — it applies to **every** Win11 machine
+in the fleet (g16 daily driver **and** homeserver). It's mis-filed under a host.
+Promote it to a shared top-level `install-media/`, alongside the Ventoy config
+that currently exists only as prose in the runbook.
+
+- **`git mv`** `hosts/g16/windows-reinstall/autounattend.xml` →
+  `install-media/autounattend.xml`. **Do NOT `cp` the `~/Downloads/autounattend.xml`
+  copy over it** — a normalized diff proves they are the same 803-line file (same
+  embedded schneegans commit hash); the Downloads copy differs only in line
+  endings (CRLF↔LF). Copying it in would flip every line, produce a spurious
+  whole-file diff, and discard git history for a zero-content change. The content
+  is already tracked; the only genuine gap this request exposes is the untracked
+  `ventoy.json`.
+- **New `install-media/ventoy.json`** — extract the Auto Install plugin config
+  the runbook documents verbatim:
+  ```json
+  { "auto_install": [ { "image": "/Win11_25H2_Russian_x64_v2.iso", "template": "/unattend/autounattend.xml" } ] }
+  ```
+- **New `install-media/README.md`** — the Ventoy USB deploy story: repo is source
+  of truth; copy `autounattend.xml` → `P:\unattend\autounattend.xml` and
+  `ventoy.json` → `P:\ventoy\ventoy.json`; ISOs and `P:\rsti\` Intel RST/VMD
+  drivers are recreatable and **not** tracked. Applies to all Win11 machines.
+- **Runbook (now `hosts/g16/windows/windows-reinstall-runbook.md`)**: repoint its
+  `./autounattend.xml` link and the Ventoy prose to the shared
+  `install-media/` location; note `ventoy.json` is now a tracked file (deploy by
+  copy, no longer transcribed from prose).
+
+Flat by intent (YAGNI): homeserver Win11 reinstall is deferred, so there is one
+real consumer (g16's runbook) today — enough to justify a shared location, not a
+nested tree mirroring the USB's `P:\ventoy\` / `P:\unattend\` paths.
 
 ### 3. Wiring the moves force (mechanical; grep-verified before applying)
 
@@ -172,8 +213,24 @@ While editing the moved Windows files, fix old-repo-name references left by the
 - `git grep` in `machines/backup/` confirms restic repository URLs and profile
   names are byte-for-byte unchanged from the `vps` originals (only dir names
   differ).
+- `install-media/autounattend.xml` arrives via `git mv` (history preserved,
+  content byte-identical) — the diff for that file is a pure rename with no
+  content hunk. `ventoy.json` is valid JSON matching the runbook's block.
 - The `.ps1` / `.bat` files are not executed here (no Windows host); correctness
   is by inspection + path consistency.
+
+## Implementation (two plans / PRs)
+
+The change spans two risk profiles; split them so the risky one is isolated:
+
+- **Plan A — `machines`-internal reorg** (low-risk, mechanical): host `nixos/`
+  split, `windows/` rename, `scripts/` tidy, `install-media/` promotion +
+  `ventoy.json`, staleness fixes, homeserver slot, doc coherence. All moves +
+  path rewiring within one repo; verified by `just quick` / `nix flake check`.
+- **Plan B — cross-repo backup relocation** (stateful, higher-risk): move
+  `vps/backup/` → `machines/backup/` with the frozen-repo-URL invariant; edit
+  `vps` docs. Isolated so a mistake here can't entangle the clean reorg, and the
+  restic-URL check gates it alone.
 
 ## Decisions log
 
@@ -189,3 +246,8 @@ While editing the moved Windows files, fix old-repo-name references left by the
 8. Homeserver host: reserve slot (`README.md` + `agents/hosts/<hostname>.md`).
 9. WSL bootstrap: out of scope; follow-on spec; `hosts/g16/wsl/`.
 10. Doc coherence: `README.md` + `CLAUDE.md` (+ `vps` docs) updated.
+11. Win11 install media: shared top-level `install-media/`; `autounattend.xml`
+    `git mv`'d there (content already tracked — the Downloads copy is the same
+    file); `ventoy.json` newly tracked (was runbook prose). Flat, not nested.
+12. Execution split into two plans/PRs: (A) `machines`-internal reorg,
+    (B) cross-repo stateful backup relocation.
