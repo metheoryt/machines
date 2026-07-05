@@ -88,17 +88,17 @@ update:
 # Bump rustdesk-bin.nix to the latest upstream release (also run by `update`)
 update-rustdesk:
     @echo "📦 Checking for new RustDesk release..."
-    {{flake_dir}}/update-rustdesk.sh
+    {{flake_dir}}/scripts/update-rustdesk.sh
 
 # Bump zed-bin.nix to the latest stable upstream release (also run by `update`)
 update-zed:
     @echo "📦 Checking for new Zed release..."
-    {{flake_dir}}/update-zed.sh
+    {{flake_dir}}/scripts/update-zed.sh
 
 # Bump pycharm-bin.nix to the latest upstream release (also run by `update`)
 update-pycharm:
     @echo "📦 Checking for new PyCharm release..."
-    {{flake_dir}}/update-pycharm.sh
+    {{flake_dir}}/scripts/update-pycharm.sh
 
 # Update and set for next boot (safe for Nvidia drivers)
 upgrade:
@@ -155,7 +155,7 @@ check:
 # Quick configuration check
 quick:
     @echo "🔍 Running quick configuration check..."
-    ./quick-check.sh
+    ./scripts/quick-check.sh
 
 # Enter development shell
 shell:

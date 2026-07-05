@@ -18,7 +18,7 @@ All commands run from repo root. System-modifying commands require `sudo` (via `
 ```bash
 # Validate syntax quickly (no build)
 just quick
-# or: bash quick-check.sh
+# or: bash scripts/quick-check.sh
 
 # Full flake evaluation check
 just check
