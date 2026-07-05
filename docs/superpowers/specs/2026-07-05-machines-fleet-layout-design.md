@@ -64,7 +64,7 @@ machines/
       nixos/      configuration.nix   hardware-configuration.nix
     homeserver/
       README.md                                          # fleet peer; runs -> vps repo
-  agents/hosts/<homeserver-hostname>.md                  # per-host agent memory (new)
+  agents/hosts/methe-server.md                           # per-host agent memory (new)
 ```
 
 ## Change set
@@ -176,12 +176,11 @@ While editing the moved Windows files, fix old-repo-name references left by the
 
 - `hosts/homeserver/README.md`: documents it as a fleet peer — ASUS ROG G16
   2023 / RTX 3050 Ti, Win11 + Docker Desktop, `methe` profile; its backup lives
-  at `backup/homeserver/`; **what it runs is defined in the `vps` repo**; OS
-  reinstall runbook TBD (adapt from g16's when written).
-- `agents/hosts/<homeserver-hostname>.md`: per-host agent memory, matching the
-  existing `ME-G614JV.md` / `g16.md` / `latitude5520.md` pattern.
-  **Open input:** the homeserver's Windows hostname. If unavailable at
-  implementation time, defer this one file (create later) rather than guess.
+  at `backup/homeserver/`; **what it runs is defined in the `vps` repo**; its OS
+  reinstall runbook is not yet written (deferred — adapt from g16's).
+- `agents/hosts/methe-server.md`: per-host agent memory (Windows hostname
+  `methe-server`), matching the existing `ME-G614JV.md` / `g16.md` /
+  `latitude5520.md` pattern.
 
 ### 6. Doc coherence
 
