@@ -67,3 +67,10 @@ $restore = Join-Path $Dest 'hosts\g16\windows-reinstall\restore.ps1'
 if (-not (Test-Path $restore)) { throw "restore.ps1 not found at $restore (unexpected repo layout)." }
 Write-Host "`nRepo ready. Handing off to restore.ps1 (dry run - it writes nothing until you pass -Go)...`n" -ForegroundColor Cyan
 & $restore
+
+# 4. Tell the operator how to run the real restore. The dry run above changed
+#    nothing on disk; restore.ps1 only writes when invoked directly with -Go.
+Write-Host "`n=== NEXT STEP: that was a DRY RUN - nothing was written ===" -ForegroundColor Green
+Write-Host "Review the plan above. When ready to actually restore, run:`n" -ForegroundColor Green
+Write-Host "    & '$restore' -Go" -ForegroundColor Cyan
+Write-Host "`n(add -Force to allow overwriting a non-empty .ssh / existing repos.)" -ForegroundColor DarkGray
