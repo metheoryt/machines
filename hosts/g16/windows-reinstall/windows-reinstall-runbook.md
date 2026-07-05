@@ -119,6 +119,13 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 5. Select the unallocated space → Next. Installer creates the partitions and uses the full 2 TB.
 6. Complete setup (local or MS account per preference).
 
+> **🔜 Future automation — `autounattend.xml` (NOT for this reinstall; build + VM-test first).** Add a committed answer file to `hosts/g16/` (or a shared `windows/` dir) to automate the *config* side of future reinstalls. **Scope, decided 2026-07-05:**
+> - **In scope:** OOBE skip, locale + KB layouts (RU/KZ/EN), timezone, local `methe` account, telemetry/privacy defaults, long paths, Explorer/dark-mode tweaks — pure declarative state.
+> - **Hand-off, not reimplement:** a single `FirstLogonCommands` that launches the restore one-liner (`irm …/install.ps1 | iex`) once desktop + network are up. App installs go through restore's `winget import` — **do NOT** `winget install` inline in the installer (winget/App Installer often isn't provisioned yet; it fails on a fresh image).
+> - **Out of scope:** disk partitioning / wipe — keep that the interactive, SSD-unplugged, post-VERIFY human gate (THE ONE RULE). Disk ordering can shift with the USB SSD attached.
+> - **Secrets:** committed version stays passwordless/placeholder — never a real credential in source of truth.
+> - **Test loop:** iterate in Hyper-V before trusting it on real hardware.
+
 ---
 
 ## Phase 4 — Restore
