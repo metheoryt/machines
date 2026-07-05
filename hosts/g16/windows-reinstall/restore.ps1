@@ -272,11 +272,31 @@ if (Test-Path $rd2) {
 }
 $sys = @()
 if (Test-Path (Join-Path $Root 'inventory\hkcu-environment.reg')) {
-    $sys += "     Env vars (review, don't blind-merge):  reg import `"$Root\inventory\hkcu-environment.reg`""
+    # Do NOT 'reg import' the whole file: it pins a user PATH full of tool dirs that
+    # don't exist yet on a fresh install. PATH rebuilds itself as each tool reinstalls;
+    # PSModulePath/TEMP/TMP/OneDrive are set by Windows/installers. Only WSLENV and the
+    # manual .local\bin dir are truly custom - re-apply just those (SetEnvironmentVariable,
+    # NOT setx: setx truncates a >1024-char PATH).
+    $sys += "     Env vars - do NOT 'reg import' the whole file; only re-apply the 2 custom entries:"
+    $sys += "         [Environment]::SetEnvironmentVariable('WSLENV','USERPROFILE/up','User')"
+    $sys += "         `$p=[Environment]::GetEnvironmentVariable('Path','User'); if (`$p -notlike '*\.local\bin*') { [Environment]::SetEnvironmentVariable('Path',`"`$env:USERPROFILE\.local\bin;`$p`",'User') }"
+    $sys += "       (PATH otherwise rebuilds as tools reinstall; full backup kept at $Root\inventory\hkcu-environment.reg)"
 }
 $wifi = @(Get-ChildItem (Join-Path $Root 'secrets\wifi') -Filter '*.xml' -ErrorAction SilentlyContinue)
 if ($wifi.Count) {
-    $sys += "     Wi-Fi ($($wifi.Count) profiles):  netsh wlan add profile filename=`"$Root\secrets\wifi\<name>.xml`""
+    # MS-account 'sync your settings' usually restores Wi-Fi profiles already, so a blind
+    # 'netsh wlan add profile' fails with "already exists in different user scope" - that is
+    # EXPECTED, not an error. List only what is genuinely missing. Parse is locale-agnostic
+    # (matches the ': <name>' column, so it works on RU/EN netsh output alike).
+    $present = @()
+    try { $present = (netsh wlan show profiles 2>$null) | ForEach-Object { if ($_ -match ':\s*(.+?)\s*$') { $Matches[1] } } } catch {}
+    $missing = @($wifi | Where-Object { ($_.BaseName -replace '^.*?-','') -notin $present })
+    if ($missing.Count) {
+        $sys += "     Wi-Fi - $($missing.Count) of $($wifi.Count) profiles missing (the rest are already present via MS-account sync); add per-user:"
+        foreach ($m in $missing) { $sys += "         netsh wlan add profile filename=`"$($m.FullName)`" user=current" }
+    } else {
+        $sys += "     Wi-Fi - all $($wifi.Count) profiles already present (MS-account sync). Nothing to do."
+    }
 }
 if ($sys.Count) { $G += "5. System settings:"; $G += $sys; $G += "" }
 $G += "6. Docker / qaz-law DB: install Docker Desktop, bring the stack up EMPTY, re-run ingestion (DB was not backed up)."
