@@ -215,17 +215,58 @@ if ($sel.WslTars.Count) {
 }
 # App configs - install the app, close it, THEN drop these in
 $appMap = @(
-    @{ n='Windows Terminal'; s='home\AppData\WindowsTerminal'; d='%LOCALAPPDATA%\Packages\<Terminal pkg>\LocalState\ (settings.json)' }
+    @{ n='Windows Terminal'; s='home\AppData\WindowsTerminal\Microsoft.WindowsTerminal_8wekyb3d8bbwe'; d='%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\ (settings.json hot-reloads - safe to copy while WT runs; state.json is just window layout)' }
     @{ n='PowerToys';        s='home\AppData\Local\PowerToys'; d='%LOCALAPPDATA%\Microsoft\PowerToys\' }
     @{ n='NCALayer';         s='home\AppData\NCALayer';        d='%APPDATA%\NCALayer\' }
     @{ n='AIMP';             s='home\AppData\AIMP';            d='%APPDATA%\AIMP\' }
-    @{ n='Telegram tdata';   s='home\AppData\Telegram Desktop';d='point AyuGram import at this, or %APPDATA%\Telegram Desktop\' }
-    @{ n='RustDesk';         s='home\AppData\RustDesk\config'; d='%APPDATA%\RustDesk\config\ (install, CLOSE it, then copy, then start)' }
+    @{ n='Telegram tdata';   s='home\AppData\Telegram Desktop';d='AyuGram is PORTABLE: its tdata sits NEXT TO AyuGram.exe (winget package dir), not %APPDATA%. To use the backup session: CLOSE AyuGram, replace its tdata\ WHOLESALE with this backup tdata\ (two tdata folders cannot be merged), relaunch. Or install stock Telegram -> %APPDATA%\Telegram Desktop\. Caveat: a winget update can wipe the package-dir tdata.' }
+    # RustDesk is handled separately below (4b) - its retranslator is NOT a plain file copy.
 )
 $present = $appMap | Where-Object { Test-Path (Join-Path $Root $_.s) }
 if ($present) {
     $G += "4. App configs - install the app, CLOSE it, then copy back:"
     foreach ($a in $present) { $G += "     $($a.n):  $Root\$($a.s)  ->  $($a.d)" }
+    $G += ""
+}
+
+# RustDesk - the retranslator (custom ID/Relay server) CANNOT be restored by
+# copying config files: RustDesk runs as a LocalSystem *service* that keeps its
+# own master config and OVERWRITES %APPDATA%\RustDesk\config seconds after start.
+# The file copy brings back the address book/peers only; the ID/Relay server + key
+# must be typed into the GUI, which propagates to the service via IPC and sticks.
+# Pull the values out of the backup so they're ready to paste.
+$rdCfg = Join-Path $Root 'home\AppData\RustDesk\config'
+$rd2   = Join-Path $rdCfg 'RustDesk2.toml'
+if (Test-Path $rd2) {
+    $rdText = Get-Content $rd2 -Raw
+    function Get-RdOpt($text, $k) {
+        if ($text -match "(?m)^\s*$([regex]::Escape($k))\s*=\s*'([^']*)'") { $Matches[1] } else { '' }
+    }
+    $idsrv = Get-RdOpt $rdText 'custom-rendezvous-server'
+    $relay = Get-RdOpt $rdText 'relay-server'
+    $api   = Get-RdOpt $rdText 'api-server'
+    $rdkey = Get-RdOpt $rdText 'key'
+    $dport = Get-RdOpt $rdText 'direct-access-port'
+    $vmeth = Get-RdOpt $rdText 'verification-method'
+    $G += "4b. RustDesk retranslator (custom ID/Relay server) - GUI entry, NOT a file copy:"
+    $G += "     RustDesk runs as a LocalSystem service that rewrites the user config on"
+    $G += "     start, so copying RustDesk2.toml/RustDesk.toml does NOT stick. The copy"
+    $G += "     below restores only the address book/peers - run it with RustDesk FULLY"
+    $G += "     stopped (elevated), else robocopy silently skips the locked files:"
+    $G += "       Stop-Service RustDesk -Force; Get-Process RustDesk -EA 0 | Stop-Process -Force"
+    $G += "       robocopy `"$rdCfg`" `"`$env:APPDATA\RustDesk\config`" /E /R:1 /W:1 /NP; Start-Service RustDesk"
+    $G += "     Then type the retranslator into Settings -> Network -> ID/Relay Server:"
+    $G += "       ID Server:    $(if ($idsrv) { $idsrv } else { '(see RustDesk2.toml)' })"
+    $G += "       Relay Server: $(if ($relay) { $relay } else { '(same as ID server)' })"
+    $G += "       API Server:   $(if ($api)   { $api }   else { '(blank)' })"
+    $G += "       Key:          $(if ($rdkey) { $rdkey } else { '(see RustDesk2.toml)' })"
+    if ($dport -or $vmeth) {
+        $G += "     ...and Settings -> Security:"
+        if ($dport) { $G += "       Direct IP access port: $dport" }
+        if ($vmeth) { $G += "       Verification method:   $vmeth" }
+    }
+    $G += "     (The old RustDesk ID is service-managed too - restoring it needs the"
+    $G += "      service master config under the LocalSystem profile; a fresh ID is fine.)"
     $G += ""
 }
 $sys = @()
