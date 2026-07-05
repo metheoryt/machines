@@ -1,9 +1,22 @@
-# NixOS Configuration
+# machines — personal machine fleet
 
-Personal NixOS flake-based system configuration managing two laptops:
+Config, provisioning, and data-backup for a small fleet of physical machines —
+NixOS *and* Windows. The NixOS hosts are a flake (Home Manager integrated); the
+Windows hosts carry their reinstall/backup scripts and shared install media.
 
-- **g16** — ASUS ROG G16, Intel + NVIDIA RTX 40-series (PRIME offload)
-- **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only)
+- **g16** — ASUS ROG G16 2024, Intel + NVIDIA RTX 4060 (PRIME offload). NixOS
+  (`g16`) + a Windows install (`ME-G614JV`).
+- **homeserver** — ASUS ROG G16 2023, RTX 3050 Ti. Windows 11 + Docker Desktop,
+  hostname `methe-server`. Runs the cyphy.kz service platform (defined in the
+  sibling **`vps`** repo — that repo owns the *services*; `machines` owns the
+  *machine* + its data backups).
+- **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only).
+  NixOS.
+
+Top-level layout: `hosts/<host>/{nixos,windows}/` (per-machine OS config),
+`modules/` (shared NixOS modules), `install-media/` (shared Win11 answer file +
+Ventoy config), `backup/` (fleet restic clients), `scripts/` (shared repo
+tooling), `agents/` (agent config, memory, bootstrap).
 
 ## Quick Start
 
@@ -77,13 +90,13 @@ modules/
 
 ### Host Configurations
 
-**`hosts/g16/`** — ASUS ROG G16
+**`hosts/g16/nixos/`** — ASUS ROG G16
 - NVIDIA RTX 40-series via PRIME offload (Intel primary, NVIDIA on-demand)
 - Imports: `base`, `laptop`, `gnome`, `nvidia`, `asus-rog`, `development`, home-manager
 - ASUS services: `asusd`, `supergfxd`
 - Battery charge limit: 85% via `charge-upto <percent>`
 
-**`hosts/latitude5520/`** — Dell Latitude 5520
+**`hosts/latitude5520/nixos/`** — Dell Latitude 5520
 - Intel Tiger Lake with `intel-compute-runtime` (replaces `intel-ocl`)
 - Imports: `base`, `laptop`, `gnome`, `dell-latitude`, `development`, home-manager
 - Thunderbolt authorization via `bolt` service
