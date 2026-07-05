@@ -141,7 +141,7 @@ charge-upto 100   # disable limit
 
 ```bash
 just shell
-# Includes: nixfmt-classic, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
+# Includes: nixfmt, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
 ```
 
 ## Locale & Timezone

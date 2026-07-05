@@ -101,7 +101,7 @@
     devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {
       name = "nixos-config-shell";
       packages = with nixpkgs.legacyPackages.${system}; [
-        nixfmt-classic
+        nixfmt
         nil
         nixd
         alejandra

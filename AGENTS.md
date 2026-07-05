@@ -67,7 +67,7 @@ just clean
 - **Stable overlay:** `pkgs.stable.*` available everywhere — use to pin critical packages (drivers, kernel) to stable while rest runs unstable
 - **`specialArgs`** passes `inputs`, `system`, `nixpkgs-stable` into all modules
 - **Formatter:** alejandra
-- **Dev shell:** nixfmt-classic, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
+- **Dev shell:** nixfmt, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
 
 ### Module structure (`modules/`)
 
