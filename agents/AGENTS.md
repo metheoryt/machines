@@ -228,11 +228,12 @@ delete stale entries rather than letting them pile up.
   + `settings.work.json`, Codex untouched) symlink `memory/global.md`,
   `memory/practices.md`, and `hosts/<hostname>.md` (as `host-memory.md`) into
   the bootstrapped profile. On NixOS, `modules/home/claude.nix` symlinks these
-  files into `~/.claude` (and `modules/home/codex.nix` into `~/.codex`);
-  secondary profiles like `~/.claude-work` are handled ONLY by `bootstrap.sh`.
+  files into BOTH `~/.claude` and `~/.claude-work` (and `modules/home/codex.nix`
+  into `~/.codex`) — applied by `just switch`, NOT by `agent-bootstrap`;
+  `bootstrap.sh` is the portable fallback for non-Nix machines (Windows/macOS).
   The `global-memory-load.sh` SessionStart hook injects them each session.
-  Nothing to set up per repo — commit here, pull (or re-run the relevant
-  `agent-bootstrap*` recipe) on the other machine to propagate.
+  Nothing to set up per repo — commit here, then `git pull` on the other machine
+  (NixOS: `just switch` re-links; non-Nix: the bootstrap git-hook re-links).
 - **Per-project** memory lives *inside the target repo* (its `CLAUDE.md` /
   `.claude/memory/project.md` / `CLAUDE.local.md`) and Claude auto-discovers it
   from the working directory. It is NOT wired through this flake — each repo

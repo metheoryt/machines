@@ -148,7 +148,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 >    - `agents/memory/global.md` (and any memory referencing `github.com/metheoryt/nix`)
 >    - `flake.nix` / `modules/**` self-references, `.gortex.yaml` / `.mcp.json` (gortex active-project name), the `just agent-bootstrap*` recipes
 >    - `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (low priority — history)
-> 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match.
+> 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match. **On NixOS, then repoint `~/nix` at the renamed clone** — `ln -sfn ~/gh/machines ~/nix` — because `modules/home/claude.nix` / `codex.nix` read `~/nix/agents`; leaving `~/nix` dangling makes the next `home-manager` activation write broken symlinks (and the fish `~/nix` helpers break too). `just switch` now hard-fails with a repoint hint if you skip this.
 >
 > **▶ Automated entry point (does step 2 + the restore below).** On the fresh Windows, from an **elevated** PowerShell:
 > ```powershell

@@ -41,7 +41,14 @@ build:
     sudo nixos-rebuild build --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Build complete!"
 
-# Symlink the version-controlled agent config (agents/) into the personal profile.
+# Guard: home-manager (claude.nix/codex.nix) reads ~/nix/agents via mkOutOfStoreSymlink,
+# so ~/nix must resolve to this clone. A dangling ~/nix (e.g. after the nix→machines
+# rename without repointing) silently breaks the agent config — fail loud instead.
+_check-nix-link:
+    @test -e ~/nix/agents/AGENTS.md || { echo "❌ ~/nix is dangling — home-manager reads ~/nix/agents. Repoint it: ln -sfn {{flake_dir}} ~/nix (see hosts/g16/windows-reinstall runbook, Phase 4.0)"; exit 1; }
+
+# NOT run by switch/update on NixOS — claude.nix/codex.nix own the links there,
+# applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.
 agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."
     @env -u CLAUDE_CONFIG_DIR bash {{flake_dir}}/agents/bootstrap.sh
@@ -52,20 +59,19 @@ agent-bootstrap-work:
     @CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash {{flake_dir}}/agents/bootstrap.sh
 
 # Build and switch to new configuration
-switch:
+switch: _check-nix-link
     @echo "🔧 Switching to new NixOS configuration..."
     sudo nixos-rebuild switch --flake {{flake_dir}}#{{hostname}}
-    @just agent-bootstrap
     @echo "✅ System switched successfully!"
 
 # Build and test configuration temporarily
-test:
+test: _check-nix-link
     @echo "🧪 Testing NixOS configuration..."
     sudo nixos-rebuild test --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Test complete! Changes are temporary."
 
 # Build and set for next boot
-boot:
+boot: _check-nix-link
     @echo "🥾 Setting configuration for next boot..."
     sudo nixos-rebuild boot --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Configuration set for next boot!"
@@ -77,7 +83,6 @@ update:
     @just update-rustdesk
     @just update-zed
     @just update-pycharm
-    @just agent-bootstrap
     @echo "✅ Flake inputs updated!"
 
 # Bump rustdesk-bin.nix to the latest upstream release (also run by `update`)
