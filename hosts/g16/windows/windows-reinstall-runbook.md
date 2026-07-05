@@ -6,7 +6,7 @@ Generated 2026-07-05. Machine: single 2 TB NVMe (disk 0), currently C: (976 GB W
 
 **Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD may get a **different drive letter** — check Explorer and substitute in the Phase 4 restore paths.
 
-**Where this runbook + script live:** in the **`nix` repo** at `hosts/g16/windows-reinstall/` (this machine is `g16`). They're committed and pushed to `github.com/metheoryt/nix`, so they survive the wipe — after reinstall, `git clone` nix to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd C:\Users\methe\GitHub\nix\hosts\g16\windows-reinstall`.
+**Where this runbook + script live:** in the **`machines` repo** at `hosts/g16/windows/` (this machine is `g16`). They're committed and pushed to `github.com/metheoryt/machines`, so they survive the wipe — after reinstall, `git clone` machines to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd C:\Users\methe\GitHub\machines\hosts\g16\windows`.
 
 ---
 
@@ -40,7 +40,7 @@ wsl -d Ubuntu-24.04 -- bash -c "pipx list --short 2>/dev/null; uv tool list 2>/d
 
 ## Phase 1 — Preserve
 
-> **All of Phase 1 is automated by `backup.ps1`** (in this folder: `nix/hosts/g16/windows-reinstall/`). Run it from an elevated PowerShell — `cd C:\Users\methe\GitHub\nix\hosts\g16\windows-reinstall`, then `.\backup.ps1 -WhatIf` first, then `.\backup.ps1`. The steps below document what it does and why. Backup target is `R:\backup` (the Kingston USB SSD, Disk 1 — survives the wipe; the script hard-stops if pointed at Disk 0).
+> **All of Phase 1 is automated by `backup.ps1`** (in this folder: `machines/hosts/g16/windows/`). Run it from an elevated PowerShell — `cd C:\Users\methe\GitHub\machines\hosts\g16\windows`, then `.\backup.ps1 -WhatIf` first, then `.\backup.ps1`. The steps below document what it does and why. Backup target is `R:\backup` (the Kingston USB SSD, Disk 1 — survives the wipe; the script hard-stops if pointed at Disk 0).
 
 ### 1a. Git repos — full copy, no push
 
@@ -65,14 +65,14 @@ The 100 GB qaz-law Postgres volume is **dropped**: the data can be re-ingested a
 
 **Inclusive sweep with a blocklist:** every dotfile/dotdir in the profile is copied (`.ssh` incl. `config`+`known_hosts`, `.claude.json`, `.config`, `.kube`, `.gcm`, `.agents`, `.claude`, `.codex`, shell histories, etc.), so no config is missed — minus `node_modules`/`.venv` inside them. Plus loose `AGENTS.md`. (Repos → 1a; WSL secrets → 1f.)
 
-> **Agent config symlinks:** `.claude`/`.codex` contain symlinks into the **`nix` repo** (`agents/…`: `CLAUDE.md`, `settings.json`, `memory/*`, `hooks/*`, `skills/*`, `cyphy` plugin). Those are the source of truth and are backed up via the nix repo in 1a — the sweep uses `/XJ` so it does **not** duplicate them. The backup keeps only the **machine-local** real files in `.claude`/`.codex` (`.credentials.json`, `settings.local.json`, `projects/` history). See Phase 4.2 for the restore order.
+> **Agent config symlinks:** `.claude`/`.codex` contain symlinks into the **`machines` repo** (`agents/…`: `CLAUDE.md`, `settings.json`, `memory/*`, `hooks/*`, `skills/*`, `cyphy` plugin). Those are the source of truth and are backed up via the machines repo in 1a — the sweep uses `/XJ` so it does **not** duplicate them. The backup keeps only the **machine-local** real files in `.claude`/`.codex` (`.credentials.json`, `settings.local.json`, `projects/` history). See Phase 4.2 for the restore order.
 
 **Excluded** (recreatable caches, dropped apps, or explicitly not wanted): `.cache`, `.lmstudio`, `.vscode`, `.codeium`, `.windsurf`, `.zcode`, `.zed_server`, `.openclaude`(+`.json`), `.marvin`, `.junie`, `.gortex`, `.boto`, `.gsutil`, `.gemini`, `.k8slens`, `.docker` (Docker Desktop rebuilds it; re-`docker login` for registries).
 
 ### 1e. User data + cloud folders (sync is unreliable — backed up directly)
 
 Copied to `R:\backup`: **Downloads**; **OneDrive** — ⚠️ **sync is broken on this PC, so the cloud is NOT trusted**; the script copies the local `C:\Users\methe\OneDrive` folder **directly** (incl. your redirected **Documents**, **Pictures**, and **Desktop** = `OneDrive\Рабочий стол`). Currently **all 13,527 files / 3.6 GB are fully on disk, 0 online-only stubs**, so the direct copy is complete. The step re-checks for stubs at backup time and, if any appear (a broken engine may dehydrate files), writes `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` and warns — those must be pulled from onedrive.live.com before wiping. Also: **GoogleDrive**; **Obsidian** vault(s) (path read from `%APPDATA%\obsidian\obsidian.json`); and **RustDesk config** (`%APPDATA%\RustDesk\config` → `R:\backup\home\AppData\RustDesk\config` — your RustDesk ID, private key/device identity, saved peers, and relay/ID-server settings; the noisy `log\` folder is skipped). The script also drops a copy of this runbook onto the SSD.
-> Keep the runbook readable while the PC is down — it's pushed to `github.com/metheoryt/nix` (`hosts/g16/windows-reinstall/`), so you can open it there from your phone or any device. The SSD also has a copy at `R:\backup\windows-reinstall-runbook.md`. (Do **not** rely on the broken OneDrive to deliver it.)
+> Keep the runbook readable while the PC is down — it's pushed to `github.com/metheoryt/machines` (`hosts/g16/windows/`), so you can open it there from your phone or any device. The SSD also has a copy at `R:\backup\windows-reinstall-runbook.md`. (Do **not** rely on the broken OneDrive to deliver it.)
 
 **App configs** (`AppData`, not caught by the profile-root dotfile sweep) → `R:\backup\home\AppData\…`:
 - **Windows Terminal** `settings.json` (profiles, color schemes, keybinds)
@@ -104,7 +104,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 - [ ] `.ssh` keys (id_ed25519, id_rsa) present under `R:\backup\home\.ssh`
 - [ ] `R:\backup\OneDrive` and `R:\backup\GoogleDrive` copied — open a file from each on the SSD to confirm real content (not 0-byte). OneDrive folder includes your Documents + Pictures + **Desktop** (`Рабочий стол`) — confirm the Desktop subfolder is there.
 - [ ] **OneDrive sync is broken** → confirm **no** `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` was created (its presence means some files were online-only and got missed — recover them from onedrive.live.com first). Ideally also spot-check the SSD's OneDrive file count ≈ 13,527.
-- [ ] **This runbook is readable from a device other than this PC** — confirm it's on `github.com/metheoryt/nix` (`hosts/g16/windows-reinstall/`, pushed) AND at `R:\backup\windows-reinstall-runbook.md` on the SSD (don't trust OneDrive to deliver it)
+- [ ] **This runbook is readable from a device other than this PC** — confirm it's on `github.com/metheoryt/machines` (`hosts/g16/windows/`, pushed) AND at `R:\backup\windows-reinstall-runbook.md` on the SSD (don't trust OneDrive to deliver it)
 
 **Belt-and-suspenders:** optionally `rsync`/copy the whole `R:\backup` folder to methe-server too. Costs little, means the network *and* the SSD would both have to fail to lose anything.
 
@@ -143,22 +143,22 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 > 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. **(done 2026-07-05.)** GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.
 > 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`. **(The one-liner below does this for you.)**
 > 3. Sweep the hard-coded `nix` references (then commit + push):
->    - This runbook + `hosts/g16/windows-reinstall/backup.ps1` (`GitHub\nix` paths, `github.com/metheoryt/nix`, "the nix repo")
->    - `scripts\git-autofetch.ps1` (the `…\GitHub\nix\…` scheduled-task path) — and re-register the Scheduled Task with the new path
->    - `agents/memory/global.md` (and any memory referencing `github.com/metheoryt/nix`)
+>    - This runbook + `hosts/g16/windows/backup.ps1` (`GitHub\machines` paths, `github.com/metheoryt/machines`, "the nix repo")
+>    - `scripts\git-autofetch.ps1` (the `…\GitHub\machines\…` scheduled-task path) — and re-register the Scheduled Task with the new path
+>    - `agents/memory/global.md` (and any memory referencing `github.com/metheoryt/machines`)
 >    - `flake.nix` / `modules/**` self-references, `.gortex.yaml` / `.mcp.json` (gortex active-project name), the `just agent-bootstrap*` recipes
 >    - `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (low priority — history)
 > 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match. **On NixOS, then repoint `~/nix` at the renamed clone** — `ln -sfn ~/gh/machines ~/nix` — because `modules/home/claude.nix` / `codex.nix` read `~/nix/agents`; leaving `~/nix` dangling makes the next `home-manager` activation write broken symlinks (and the fish `~/nix` helpers break too). `just switch` now hard-fails with a repoint hint if you skip this.
 >
 > **▶ Automated entry point (does step 2 + the restore below).** On the fresh Windows, from an **elevated** PowerShell:
 > ```powershell
-> irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows-reinstall/install.ps1 | iex
+> irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows/install.ps1 | iex
 > ```
-> Installs git if missing, clones `machines`, and runs `restore.ps1` — which **discovers the backup on the SSD, lets you pick one, and prints the plan (dry run; writes nothing)**. Re-run `hosts\g16\windows-reinstall\restore.ps1 -Go` to apply the **automatic** items (repos, dotfiles, `.ssh`+perms, Downloads, Obsidian, cloud→`*-from-backup`), and `-Go -Force` to also overwrite a non-empty `.ssh`/repo. The numbered steps 1–9 below are exactly what it automates or prints as **guided** commands (winget, agent bootstrap, WSL import, app configs, cloud reconcile). The reference sweep (step 3 above) stays manual.
+> Installs git if missing, clones `machines`, and runs `restore.ps1` — which **discovers the backup on the SSD, lets you pick one, and prints the plan (dry run; writes nothing)**. Re-run `hosts\g16\windows\restore.ps1 -Go` to apply the **automatic** items (repos, dotfiles, `.ssh`+perms, Downloads, Obsidian, cloud→`*-from-backup`), and `-Go -Force` to also overwrite a non-empty `.ssh`/repo. The numbered steps 1–9 below are exactly what it automates or prints as **guided** commands (winget, agent bootstrap, WSL import, app configs, cloud reconcile). The reference sweep (step 3 above) stays manual.
 
 1. **Windows apps:** first delete the dropped IDs from `winget-packages.json` (see Appendix B → *Dropped*), then `winget import R:\backup\inventory\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer) by hand.
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
-   - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** clone the `nix` repo, then run `just agent-bootstrap` (and `agent-bootstrap-work` if used) to recreate the symlinks + `cyphy` plugin. **Then** restore only the machine-local bits from `R:\backup\home\.claude`: `.credentials.json`, `settings.local.json`, and `projects/` (session history) if you want it. Do NOT overwrite the freshly-bootstrapped `.claude`/`.codex` wholesale.
+   - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** clone the `machines` repo, then run `just agent-bootstrap` (and `agent-bootstrap-work` if used) to recreate the symlinks + `cyphy` plugin. **Then** restore only the machine-local bits from `R:\backup\home\.claude`: `.credentials.json`, `settings.local.json`, and `projects/` (session history) if you want it. Do NOT overwrite the freshly-bootstrapped `.claude`/`.codex` wholesale.
 3. **WSL:** install WSL + Ubuntu, then either
    - `wsl --import Ubuntu-24.04 C:\WSL\Ubuntu R:\backup\wsl\Ubuntu-24.04.tar` to restore wholesale (one `--import` per distro tar you kept), **or**
    - fresh Ubuntu + restore only `~/.ssh`, `~/.gnupg`, dotfiles from the tar and re-clone repos (cleaner). Rebuild venvs (`uv sync` / `pip install`).

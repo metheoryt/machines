@@ -45,7 +45,7 @@ build:
 # so ~/nix must resolve to this clone. A dangling ~/nix (e.g. after the nix→machines
 # rename without repointing) silently breaks the agent config — fail loud instead.
 _check-nix-link:
-    @test -e ~/nix/agents/AGENTS.md || { echo "❌ ~/nix is dangling — home-manager reads ~/nix/agents. Repoint it: ln -sfn {{flake_dir}} ~/nix (see hosts/g16/windows-reinstall runbook, Phase 4.0)"; exit 1; }
+    @test -e ~/nix/agents/AGENTS.md || { echo "❌ ~/nix is dangling — home-manager reads ~/nix/agents. Repoint it: ln -sfn {{flake_dir}} ~/nix (see hosts/g16/windows runbook, Phase 4.0)"; exit 1; }
 
 # NOT run by switch/update on NixOS — claude.nix/codex.nix own the links there,
 # applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.

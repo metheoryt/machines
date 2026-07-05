@@ -4,7 +4,7 @@
   Run on a freshly reinstalled Windows (elevated PowerShell recommended, so the
   restore's icacls / WSL / robocopy steps behave). One-liner:
 
-      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows-reinstall/install.ps1 | iex
+      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows/install.ps1 | iex
 
   It ensures git is present, clones the `machines` repo, and hands off to
   restore.ps1 (discover backup -> select -> verify -> guided restore).
@@ -63,7 +63,7 @@ if (Test-Path (Join-Path $Dest '.git')) {
 }
 
 # 3. Hand off to restore.ps1
-$restore = Join-Path $Dest 'hosts\g16\windows-reinstall\restore.ps1'
+$restore = Join-Path $Dest 'hosts\g16\windows\restore.ps1'
 if (-not (Test-Path $restore)) { throw "restore.ps1 not found at $restore (unexpected repo layout)." }
 Write-Host "`nRepo ready. Handing off to restore.ps1 (dry run - it writes nothing until you pass -Go)...`n" -ForegroundColor Cyan
 & $restore

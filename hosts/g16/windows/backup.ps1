@@ -8,12 +8,12 @@
   preserved), minus .venv/node_modules/caches. Nothing is pushed. WSL-side repos ride along
   inside the full WSL export.
 
-  Canonical location: nix repo, hosts/g16/windows-reinstall/ (this file). It is version-
-  controlled and pushed, so it survives the wipe — after reinstall, `git clone` nix to get
+  Canonical location: machines repo, hosts/g16/windows/ (this file). It is version-
+  controlled and pushed, so it survives the wipe — after reinstall, `git clone` machines to get
   it back. The run also drops a standalone copy on the SSD (R:\windows-reinstall\backup.ps1).
 
   Usage (from an ELEVATED PowerShell, so WSL/robocopy behave):
-      cd C:\Users\methe\GitHub\nix\hosts\g16\windows-reinstall
+      cd C:\Users\methe\GitHub\machines\hosts\g16\windows
       .\backup.ps1                 # do the backup
       .\backup.ps1 -WhatIf         # dry run: print what it would do
 
@@ -137,7 +137,7 @@ Step 'Windows config — ALL dotfiles/dirs (except big caches & dropped apps)' {
         ForEach-Object {
             if ($_.PSIsContainer) {
                 # /XJ = don't follow junctions/dir-symlinks. .claude & .codex contain symlinks into the
-                # nix repo (agent config, source of truth = the nix repo, backed up separately in 1a);
+                # machines repo (agent config, source of truth = the machines repo, backed up separately in 1a);
                 # /XJ keeps us from duplicating those trees. Machine-local real files still copy.
                 robocopy $_.FullName "$Dst\home\$($_.Name)" @rc /XJ /XD node_modules .venv | Out-Null
             } else {
@@ -246,8 +246,8 @@ Step 'Repo copies (all Windows GitHub repos, full incl .git, minus .venv/caches)
 }
 
 # ---------- 7. Copy runbook + this script onto the SSD ----------
-# Both live in the nix repo alongside this script; the repos step already backs up the whole
-# nix repo, but we also drop standalone copies at the SSD root so the runbook is readable
+# Both live in the machines repo alongside this script; the repos step already backs up the whole
+# machines repo, but we also drop standalone copies at the SSD root so the runbook is readable
 # without digging into repos\nix\hosts\g16\ (and before repos are restored).
 Step 'Copy runbook + script to SSD' {
     Copy-Item "$PSScriptRoot\windows-reinstall-runbook.md" "$Dst\" -Force -ErrorAction SilentlyContinue

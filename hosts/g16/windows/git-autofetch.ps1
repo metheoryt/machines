@@ -20,7 +20,7 @@
 
 .EXAMPLE
   # Register the Scheduled Task (run once, in an elevated-or-normal PowerShell):
-  $ps1 = "$env:USERPROFILE\GitHub\nix\scripts\git-autofetch.ps1"
+  $ps1 = "$env:USERPROFILE\GitHub\machines\hosts\g16\windows\git-autofetch.ps1"
   $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
       -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$ps1`""
   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
