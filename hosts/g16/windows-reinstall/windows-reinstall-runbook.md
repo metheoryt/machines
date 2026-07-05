@@ -125,8 +125,8 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 
 > ### 🔤 Phase 4.0 — Rename this repo `nix` → `machines` (do this FIRST, before re-cloning)
 > This repo outgrew the `nix` name — it holds every host's config (NixOS modules *and* Windows `hosts/g16`), the agent environment, memory, and bootstrap. Rename it now, while re-cloning is unavoidable anyway (so there's no local `git mv` to do — just clone under the new name).
-> 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. (GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.)
-> 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`.
+> 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. **(done 2026-07-05.)** GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.
+> 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`. **(The one-liner below does this for you.)**
 > 3. Sweep the hard-coded `nix` references (then commit + push):
 >    - This runbook + `hosts/g16/windows-reinstall/backup.ps1` (`GitHub\nix` paths, `github.com/metheoryt/nix`, "the nix repo")
 >    - `scripts\git-autofetch.ps1` (the `…\GitHub\nix\…` scheduled-task path) — and re-register the Scheduled Task with the new path
@@ -134,6 +134,12 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 >    - `flake.nix` / `modules/**` self-references, `.gortex.yaml` / `.mcp.json` (gortex active-project name), the `just agent-bootstrap*` recipes
 >    - `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (low priority — history)
 > 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match.
+>
+> **▶ Automated entry point (does step 2 + the restore below).** On the fresh Windows, from an **elevated** PowerShell:
+> ```powershell
+> irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows-reinstall/install.ps1 | iex
+> ```
+> Installs git if missing, clones `machines`, and runs `restore.ps1` — which **discovers the backup on the SSD, lets you pick one, and prints the plan (dry run; writes nothing)**. Re-run `hosts\g16\windows-reinstall\restore.ps1 -Go` to apply the **automatic** items (repos, dotfiles, `.ssh`+perms, Downloads, Obsidian, cloud→`*-from-backup`), and `-Go -Force` to also overwrite a non-empty `.ssh`/repo. The numbered steps 1–9 below are exactly what it automates or prints as **guided** commands (winget, agent bootstrap, WSL import, app configs, cloud reconcile). The reference sweep (step 3 above) stays manual.
 
 1. **Windows apps:** first delete the dropped IDs from `winget-packages.json` (see Appendix B → *Dropped*), then `winget import R:\backup\inventory\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer) by hand.
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
