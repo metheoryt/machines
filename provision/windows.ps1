@@ -64,7 +64,7 @@ function Find-BackupRoot {
     $found
 }
 
-# ---- Resolve the repo root (this script lives in <repo>\hosts\g16\windows) ----
+# ---- Resolve the repo root (this script lives in <repo>\provision) ----
 if (-not $RepoDir) {
     $guess = Resolve-Path (Join-Path $PSScriptRoot '..') -ErrorAction SilentlyContinue
     $RepoDir = if ($guess) { $guess.Path } else { Join-Path $env:USERPROFILE 'GitHub\machines' }
