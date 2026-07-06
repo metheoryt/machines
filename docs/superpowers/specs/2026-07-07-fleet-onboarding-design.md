@@ -91,8 +91,8 @@ Added near the top of `README.md`:
 > `agents/bootstrap.sh`). To re-link only that — e.g. after editing config — run
 > `bash agents/bootstrap.sh` (or `just agent-bootstrap`); on NixOS `just switch`
 > handles it. To clone your working repos into the `~/my` · `~/pure` ·
-> `~/cyphy671` layout, run `bash provision/repos.sh` (also offered as the last,
-> best-effort step of `linux.sh` / `windows.ps1`).*
+> `~/cyphy671` layout, run `bash provision/repos.sh <groups>` (e.g. `my cyphy671`
+> on a personal box, `pure` on a work box).*
 
 ## Change set
 
@@ -182,6 +182,31 @@ unauthed, warn and continue (like `linux.sh`'s other optional steps).
 
 `exactly` is intentionally absent — archived namespace, no access.
 
+**Per-box selection.** The fleet currently splits personal (Ubuntu-26.04) and
+work (Ubuntu-24.04) across two WSL distros. `repos.sh [group…]` clones only the
+named groups (default: all). A personal box runs `repos.sh my cyphy671`; a work
+box runs `repos.sh pure`. Because the right groups are box-specific, provisioning
+does **not** auto-run `repos.sh` — it's a standalone step the routing note points
+to (or called explicitly with groups).
+
+### Migration from `~/gh/`
+
+Host memory (`agents/hosts/G614JV.md`) shows real clones already under `~/gh/`
+(personal flat; `~/gh/pure/`, `~/gh/exactly/` on the work box). The new layout
+**supersedes** `~/gh/`: for each selected group, `repos.sh` first migrates
+existing clones into the new dir, then discovery/clone fills the rest.
+
+- Migration is driven by each clone's **actual remote owner**, not its path:
+  `git -C <clone> remote get-url origin` → parse `owner` + host alias →
+  map `metheoryt→my`, `thepureapp→pure`, `cyphy671→cyphy671`.
+- Action is a plain **`mv <clone> ~/<dir>/<repo>`** — preserves `.git`, branches,
+  and uncommitted work untouched (safe on dirty trees; same-filesystem move).
+- **Skip if the target already exists** (warn, never clobber). Skip clones whose
+  owner isn't a selected group (e.g. `~/gh/exactly/*` is left alone). The
+  `machines` config clone is never migrated.
+- After migration, `G614JV.md` is updated to describe the new layout (follow-up
+  edit, same PR).
+
 ### Discovery
 
 For an all-non-archived group: `gh repo list <owner> --no-archived --json name`
@@ -215,9 +240,10 @@ remote-alias identity from the existing machinery. The identity *wiring* lives i
 
 ### Invocation
 
-Standalone (`bash provision/repos.sh`) and, best-effort, the last step of
-`provision/linux.sh` and `provision/windows.ps1` (after `gh` auth). Optional on a
-Windows host where you may only want repos inside WSL — never forced.
+Standalone: `bash provision/repos.sh [group…]` (no args = all groups;
+`DRY_RUN=1` prints intended migrations + clone URLs without acting). Not
+auto-run by provisioning — per-box group selection makes an unconditional call
+wrong; the README routing note points at it as a follow-up step.
 
 ## Explicitly out of scope
 
@@ -275,3 +301,9 @@ Windows host where you may only want repos inside WSL — never forced.
     gitignore/`repos.local` seam. Only names, never tokens.
 11. Commit identity for `pure` (`gitdir:~/pure/` include) flagged, out of scope
     unless requested — `my`/`pure` share the `github.com` alias.
+12. `repos.sh` **migrates** existing `~/gh/` clones into the new layout (owner-
+    driven `mv`, skip-if-target-exists, dirty-tree-safe), then discovers/clones
+    the rest. `~/gh/exactly/*` and the `machines` clone are left alone.
+13. **Per-box group selection**: `repos.sh [group…]` (default all). Personal box
+    → `my cyphy671`; work box → `pure`. Provisioning does not auto-run it.
+    `agents/hosts/G614JV.md` updated to the new layout in the same PR.
