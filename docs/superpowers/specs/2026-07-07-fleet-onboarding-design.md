@@ -67,8 +67,7 @@ machines/
     README.md                #   git mv  bootstrap/README.md                     (reframed: not "disposable-only")
     .gitattributes           #   git mv  bootstrap/.gitattributes
     repos.sh                 #   NEW — clone repos into ~/my, ~/pure, ~/cyphy671 via gh discovery
-    repos.local.example      #   NEW — committed template for the gitignored repos.local (private subset lists)
-  .gitignore                 # ADD  /provision/repos.local  (private thepureapp repo names; public repo)
+    repos.txt                #   NEW — committed; the curated thepureapp ("pure") repo list (names public-safe)
   agents/bootstrap.sh        # UNCHANGED — the portable core both scripts call (links agent config)
   install-media/             # UNCHANGED — the OS-install phase; peer of provision/
   hosts/
@@ -178,7 +177,7 @@ unauthed, warn and continue (like `linux.sh`'s other optional steps).
 | Dir (`~/…`) | GitHub owner | gh account / SSH alias | Selection |
 |---|---|---|---|
 | `my`       | `metheoryt` (personal) | metheoryt / `github.com`   | all non-archived |
-| `pure`     | `thepureapp` (org)     | metheoryt / `github.com`   | curated few (see constraint) |
+| `pure`     | `thepureapp` (org)     | metheoryt / `github.com`   | curated few (committed `repos.txt`) |
 | `cyphy671` | `cyphy671` (2nd acct)  | cyphy671 / `github-cyphy`  | all non-archived (its one project) |
 
 `exactly` is intentionally absent — archived namespace, no access.
@@ -193,17 +192,16 @@ be authed as the owning account; the script runs `gh auth switch --user
 declared table at the top of the script, in the same style as `linux.sh`'s
 `SSH_ACCOUNTS` / `GIT_IDENTITIES` arrays.
 
-### Public-repo constraint (the `pure` list)
+### The `pure` list (`repos.txt`)
 
-`machines` is **public**, so private repo names must not be committed. The two
-all-non-archived groups (`my`, `cyphy671`) commit **zero** names — discovery
-reads them live from GitHub. The `pure` curated few are private `thepureapp`
-names → they live in a **gitignored `provision/repos.local`** (committed
-`provision/repos.local.example` shows the format), the same seam as
-`settings.local.json`. Trade-off: that short list is not git-synced via this
-public repo — re-list the few per box (they are few), or restore it from the
-machine-local backup alongside `.credentials.json`. `repos.sh` sources
-`repos.local` if present and skips the `pure` group silently if absent.
+The two all-non-archived groups (`my`, `cyphy671`) commit **zero** names —
+discovery reads them live from GitHub. The `pure` group is a curated few, listed
+in a committed **`provision/repos.txt`** (one `owner/repo` or bare repo name per
+line; comments with `#`). Decision: the `thepureapp` repo names are **public-safe**,
+so the list is tracked normally and syncs across machines like the rest of the
+config — no gitignore/`repos.local` seam. `repos.sh` reads `repos.txt` for the
+`pure` group and skips it cleanly if the file is empty/absent. (Only repo *names*
+live here — never tokens or credentials.)
 
 ### Commit-identity note (flagged, not built here)
 
@@ -249,10 +247,9 @@ Windows host where you may only want repos inside WSL — never forced.
 - README routing table lists exactly one command per box kind, each pointing at
   a path that now exists.
 - `provision/repos.sh`: dry-run prints the intended `git@<alias>:<owner>/<name>`
-  clone URLs per group and target dir without cloning; `git check-ignore
-  provision/repos.local` confirms it is ignored; no private repo name appears in
-  any committed file (grep `thepureapp` across tracked files → only this spec's
-  generic mentions, never a repo name).
+  clone URLs per group and target dir without cloning; `provision/repos.txt`
+  parses (comments/blank lines skipped); no token/credential appears in any
+  committed file (grep for token-shaped strings across tracked files → none).
 
 ## Decisions log
 
@@ -273,8 +270,8 @@ Windows host where you may only want repos inside WSL — never forced.
 9. New `provision/repos.sh`: clone repos into `~/my` (metheoryt, all),
    `~/pure` (thepureapp, curated few), `~/cyphy671` (cyphy671 acct, all). `gh`
    discovery for the "all" groups → zero names committed. `exactly` dropped.
-10. Public-repo constraint: the private `thepureapp` subset lives in a gitignored
-    `provision/repos.local` (committed `.example`), same seam as
-    `settings.local.json`. Not git-synced; carried per-box / via backup.
+10. The `thepureapp` ("pure") subset is committed to `provision/repos.txt`
+    (names deemed public-safe) and syncs like the rest of the config — no
+    gitignore/`repos.local` seam. Only names, never tokens.
 11. Commit identity for `pure` (`gitdir:~/pure/` include) flagged, out of scope
     unless requested — `my`/`pure` share the `github.com` alias.
