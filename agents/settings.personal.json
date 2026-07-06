@@ -17,7 +17,7 @@
     "enabled": true,
     "mode": "hold"
   },
+  "theme": "auto",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "model": "opus"
+  "voiceEnabled": true
 }

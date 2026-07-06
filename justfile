@@ -1,6 +1,13 @@
 # Justfile for NixOS system management
 # Run `just --list` to see all available commands
 
+# On Windows there is no POSIX `sh` on PATH, so just can't run backticks/recipes
+# (it dies on `hostname := ...` below). Point it at Git Bash. Ignored on
+# Linux/macOS, which use the default `sh`. If Git is installed elsewhere, either
+# fix this path or skip just entirely and run the PS bootstrap:
+#   hosts\g16\windows\bootstrap-agents.ps1
+set windows-shell := ['C:/Program Files/Git/bin/bash.exe', '-cu']
+
 # Default recipe - show help
 default:
     @echo "🚀 NixOS System Management Commands"
@@ -49,14 +56,19 @@ _check-nix-link:
 
 # NOT run by switch/update on NixOS — claude.nix/codex.nix own the links there,
 # applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.
+# Relative path (not {{flake_dir}}): just runs recipes with cwd = justfile dir,
+# and on Windows {{flake_dir}} is a backslash path bash mangles (C:Users… → not
+# found). No-just fallbacks: `bash agents/bootstrap.sh`, or on Windows the PS
+# script hosts\g16\windows\bootstrap-agents.ps1.
+# Bootstrap personal agent config (~/.claude + ~/.codex)
 agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."
-    @env -u CLAUDE_CONFIG_DIR bash {{flake_dir}}/agents/bootstrap.sh
+    @env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
 
 # Bootstrap the work profile (~/.claude-work) — shared set only, settings untouched.
 agent-bootstrap-work:
     @echo "🔗 Bootstrapping agent config (work ~/.claude-work)..."
-    @CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash {{flake_dir}}/agents/bootstrap.sh
+    @CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh
 
 # Build and switch to new configuration
 switch: _check-nix-link

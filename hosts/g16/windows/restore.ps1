@@ -29,6 +29,10 @@ $rc = '/E','/R:1','/W:1','/NP','/NFL','/NDL','/MT:8'
 # Repos that ARE this config repo: the fresh clone (from install.ps1) is
 # authoritative, so we don't overlay the backup's copy of it.
 $ConfigRepoNames = 'machines','nix'
+# This repo's checkout root, derived from the script's own location
+# (<repo>\hosts\g16\windows\restore.ps1) so the printed guidance points
+# at wherever the repo was cloned — not a hard-coded ~\GitHub\machines.
+$RepoRoot = try { (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path } catch { Join-Path $TargetHome 'GitHub\machines' }
 
 function Restore-Dir($src, $dst) {
     robocopy $src $dst @rc | Out-Null
@@ -188,37 +192,40 @@ if (Test-Path $stubCsv) {
 Write-Host "`n================ GUIDED steps (do these by hand - order matters) ================" -ForegroundColor Yellow
 $G = @()
 $G += "1. Windows apps (winget):"
-$G += "     - Prune the dropped IDs from the JSON first (runbook Appendix B), then:"
-$G += "       winget import `"$Root\inventory\winget-packages.json`""
-$G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer."
+$G += "     - Curated keeper list is version-controlled in the repo (already pruned - no manual editing):"
+$G += "       winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable ``"
+$G += "         `"$RepoRoot\hosts\g16\windows\winget-packages.json`""
+$G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer, RustDesk, Intel DSA."
 $G += ""
 $G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
-$G += "     cd $TargetHome\GitHub\machines; just agent-bootstrap   # (+ agent-bootstrap-work if used)"
-$G += "   Then restore ONLY machine-local bits from the backup (not the symlinked trees):"
-foreach ($p in '.claude','.codex') {
-    $mp = Join-Path $Root "home\$p"
-    if (Test-Path $mp) {
-        $G += "     copy $mp\.credentials.json , settings.local.json , projects\  ->  $TargetHome\$p\"
-    }
-}
+$G += "     One script does it all (Developer Mode, Claude Code install, bootstrap, machine-local restore):"
+$G += "       cd $RepoRoot"
+$G += "       .\hosts\g16\windows\bootstrap-agents.ps1 -BackupRoot $Root   # (+ -Work if the work profile is used)"
+$G += "     (On NixOS/macOS use 'just agent-bootstrap' instead; Windows needs the .ps1 - it enables Developer Mode for symlinks.)"
 $G += ""
 if ($sel.WslTars.Count) {
     $G += "3. WSL:  wsl --install   (reboot if prompted), then per distro:"
+    $G += "     # --import creates only the leaf folder; C:\ root needs admin, so import under the profile"
     foreach ($t in $sel.WslTars) {
         $name = [IO.Path]::GetFileNameWithoutExtension($t)
-        $G += "     wsl --import $name C:\WSL\$name `"$Root\wsl\$t`""
+        $G += "     New-Item -ItemType Directory -Force `$env:USERPROFILE\WSL | Out-Null"
+        $G += "     wsl --import $name `$env:USERPROFILE\WSL\$name `"$Root\wsl\$t`""
+        $G += "     # imported distro boots as root -> set default user (portable, rides along on re-export):"
+        $G += "     wsl -d $name -u root -- bash -c `"printf '\n[user]\ndefault=me\n' >> /etc/wsl.conf`""
+        $G += "     # make the VHD sparse so it auto-shrinks (shutdown releases the disk; --terminate alone errors):"
+        $G += "     wsl --shutdown; wsl --manage $name --set-sparse true --allow-unsafe"
     }
     $G += "   GPG/SSH inside WSL ride along in the tar; loose copies are in $Root\secrets\ if needed."
     $G += ""
 }
 # App configs - install the app, close it, THEN drop these in
 $appMap = @(
-    @{ n='Windows Terminal'; s='home\AppData\WindowsTerminal'; d='%LOCALAPPDATA%\Packages\<Terminal pkg>\LocalState\ (settings.json)' }
+    @{ n='Windows Terminal'; s='home\AppData\WindowsTerminal\Microsoft.WindowsTerminal_8wekyb3d8bbwe'; d='%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\ (settings.json hot-reloads - safe to copy while WT runs; state.json is just window layout)' }
     @{ n='PowerToys';        s='home\AppData\Local\PowerToys'; d='%LOCALAPPDATA%\Microsoft\PowerToys\' }
     @{ n='NCALayer';         s='home\AppData\NCALayer';        d='%APPDATA%\NCALayer\' }
     @{ n='AIMP';             s='home\AppData\AIMP';            d='%APPDATA%\AIMP\' }
-    @{ n='Telegram tdata';   s='home\AppData\Telegram Desktop';d='point AyuGram import at this, or %APPDATA%\Telegram Desktop\' }
-    @{ n='RustDesk';         s='home\AppData\RustDesk\config'; d='%APPDATA%\RustDesk\config\ (install, CLOSE it, then copy, then start)' }
+    @{ n='Telegram tdata';   s='home\AppData\Telegram Desktop';d='AyuGram is PORTABLE: its tdata sits NEXT TO AyuGram.exe (winget package dir), not %APPDATA%. To use the backup session: CLOSE AyuGram, replace its tdata\ WHOLESALE with this backup tdata\ (two tdata folders cannot be merged), relaunch. Or install stock Telegram -> %APPDATA%\Telegram Desktop\. Caveat: a winget update can wipe the package-dir tdata.' }
+    # RustDesk is handled separately below (4b) - its retranslator is NOT a plain file copy.
 )
 $present = $appMap | Where-Object { Test-Path (Join-Path $Root $_.s) }
 if ($present) {
@@ -226,13 +233,74 @@ if ($present) {
     foreach ($a in $present) { $G += "     $($a.n):  $Root\$($a.s)  ->  $($a.d)" }
     $G += ""
 }
+
+# RustDesk - the retranslator (custom ID/Relay server) CANNOT be restored by
+# copying config files: RustDesk runs as a LocalSystem *service* that keeps its
+# own master config and OVERWRITES %APPDATA%\RustDesk\config seconds after start.
+# The file copy brings back the address book/peers only; the ID/Relay server + key
+# must be typed into the GUI, which propagates to the service via IPC and sticks.
+# Pull the values out of the backup so they're ready to paste.
+$rdCfg = Join-Path $Root 'home\AppData\RustDesk\config'
+$rd2   = Join-Path $rdCfg 'RustDesk2.toml'
+if (Test-Path $rd2) {
+    $rdText = Get-Content $rd2 -Raw
+    function Get-RdOpt($text, $k) {
+        if ($text -match "(?m)^\s*$([regex]::Escape($k))\s*=\s*'([^']*)'") { $Matches[1] } else { '' }
+    }
+    $idsrv = Get-RdOpt $rdText 'custom-rendezvous-server'
+    $relay = Get-RdOpt $rdText 'relay-server'
+    $api   = Get-RdOpt $rdText 'api-server'
+    $rdkey = Get-RdOpt $rdText 'key'
+    $dport = Get-RdOpt $rdText 'direct-access-port'
+    $vmeth = Get-RdOpt $rdText 'verification-method'
+    $G += "4b. RustDesk retranslator (custom ID/Relay server) - GUI entry, NOT a file copy:"
+    $G += "     RustDesk runs as a LocalSystem service that rewrites the user config on"
+    $G += "     start, so copying RustDesk2.toml/RustDesk.toml does NOT stick. The copy"
+    $G += "     below restores only the address book/peers - run it with RustDesk FULLY"
+    $G += "     stopped (elevated), else robocopy silently skips the locked files:"
+    $G += "       Stop-Service RustDesk -Force; Get-Process RustDesk -EA 0 | Stop-Process -Force"
+    $G += "       robocopy `"$rdCfg`" `"`$env:APPDATA\RustDesk\config`" /E /R:1 /W:1 /NP; Start-Service RustDesk"
+    $G += "     Then type the retranslator into Settings -> Network -> ID/Relay Server:"
+    $G += "       ID Server:    $(if ($idsrv) { $idsrv } else { '(see RustDesk2.toml)' })"
+    $G += "       Relay Server: $(if ($relay) { $relay } else { '(same as ID server)' })"
+    $G += "       API Server:   $(if ($api)   { $api }   else { '(blank)' })"
+    $G += "       Key:          $(if ($rdkey) { $rdkey } else { '(see RustDesk2.toml)' })"
+    if ($dport -or $vmeth) {
+        $G += "     ...and Settings -> Security:"
+        if ($dport) { $G += "       Direct IP access port: $dport" }
+        if ($vmeth) { $G += "       Verification method:   $vmeth" }
+    }
+    $G += "     (The old RustDesk ID is service-managed too - restoring it needs the"
+    $G += "      service master config under the LocalSystem profile; a fresh ID is fine.)"
+    $G += ""
+}
 $sys = @()
 if (Test-Path (Join-Path $Root 'inventory\hkcu-environment.reg')) {
-    $sys += "     Env vars (review, don't blind-merge):  reg import `"$Root\inventory\hkcu-environment.reg`""
+    # Do NOT 'reg import' the whole file: it pins a user PATH full of tool dirs that
+    # don't exist yet on a fresh install. PATH rebuilds itself as each tool reinstalls;
+    # PSModulePath/TEMP/TMP/OneDrive are set by Windows/installers. Only WSLENV and the
+    # manual .local\bin dir are truly custom - re-apply just those (SetEnvironmentVariable,
+    # NOT setx: setx truncates a >1024-char PATH).
+    $sys += "     Env vars - do NOT 'reg import' the whole file; only re-apply the 2 custom entries:"
+    $sys += "         [Environment]::SetEnvironmentVariable('WSLENV','USERPROFILE/up','User')"
+    $sys += "         `$p=[Environment]::GetEnvironmentVariable('Path','User'); if (`$p -notlike '*\.local\bin*') { [Environment]::SetEnvironmentVariable('Path',`"`$env:USERPROFILE\.local\bin;`$p`",'User') }"
+    $sys += "       (PATH otherwise rebuilds as tools reinstall; full backup kept at $Root\inventory\hkcu-environment.reg)"
 }
 $wifi = @(Get-ChildItem (Join-Path $Root 'secrets\wifi') -Filter '*.xml' -ErrorAction SilentlyContinue)
 if ($wifi.Count) {
-    $sys += "     Wi-Fi ($($wifi.Count) profiles):  netsh wlan add profile filename=`"$Root\secrets\wifi\<name>.xml`""
+    # MS-account 'sync your settings' usually restores Wi-Fi profiles already, so a blind
+    # 'netsh wlan add profile' fails with "already exists in different user scope" - that is
+    # EXPECTED, not an error. List only what is genuinely missing. Parse is locale-agnostic
+    # (matches the ': <name>' column, so it works on RU/EN netsh output alike).
+    $present = @()
+    try { $present = (netsh wlan show profiles 2>$null) | ForEach-Object { if ($_ -match ':\s*(.+?)\s*$') { $Matches[1] } } } catch {}
+    $missing = @($wifi | Where-Object { ($_.BaseName -replace '^.*?-','') -notin $present })
+    if ($missing.Count) {
+        $sys += "     Wi-Fi - $($missing.Count) of $($wifi.Count) profiles missing (the rest are already present via MS-account sync); add per-user:"
+        foreach ($m in $missing) { $sys += "         netsh wlan add profile filename=`"$($m.FullName)`" user=current" }
+    } else {
+        $sys += "     Wi-Fi - all $($wifi.Count) profiles already present (MS-account sync). Nothing to do."
+    }
 }
 if ($sys.Count) { $G += "5. System settings:"; $G += $sys; $G += "" }
 $G += "6. Docker / qaz-law DB: install Docker Desktop, bring the stack up EMPTY, re-run ingestion (DB was not backed up)."

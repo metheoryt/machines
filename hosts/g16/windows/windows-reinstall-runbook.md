@@ -4,9 +4,9 @@ Generated 2026-07-05. Machine: single 2 TB NVMe (disk 0), currently C: (976 GB W
 
 **End state:** one Windows 11 install on the full 2 TB disk, Linux dual-boot gone, WSL for Linux work.
 
-**Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD may get a **different drive letter** — check Explorer and substitute in the Phase 4 restore paths.
+**Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD **usually gets a different drive letter** — it came back as **`H:`** after the 2026-07 reinstall, and this is expected. You don't hand-substitute: **`restore.ps1` and `bootstrap-agents.ps1` auto-discover the backup on *any* drive letter** (they scan every volume for `<L>:\backup`). The literal `R:\backup` paths in the Phase 4 steps below are illustrative — only substitute the real letter if you run a raw manual copy instead of the scripts.
 
-**Where this runbook + script live:** in the **`machines` repo** at `hosts/g16/windows/` (this machine is `g16`). They're committed and pushed to `github.com/metheoryt/machines`, so they survive the wipe — after reinstall, `git clone` machines to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd C:\Users\methe\GitHub\machines\hosts\g16\windows`.
+**Where this runbook + script live:** in the **`machines` repo** at `hosts/g16/windows/` (this machine is `g16`). They're committed and pushed to `github.com/metheoryt/machines`, so they survive the wipe — after reinstall, `git clone` machines to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd <your machines checkout>\hosts\g16\windows`.
 
 ---
 
@@ -23,7 +23,7 @@ Run in **PowerShell**. Write outputs to the SSD.
 
 ```powershell
 mkdir R:\backup\inventory -Force
-winget export -o R:\backup\inventory\winget-packages.json          # winget-sourced apps only (used by `winget import`)
+winget export -o R:\backup\inventory\winget-packages-snapshot.json # point-in-time snapshot for DIFFING (restore uses the curated repo file, not this)
 winget list > R:\backup\inventory\winget-list-full.txt              # readable list of EVERYTHING (incl. Steam/ARP/Store apps winget can't reinstall)
 # WSL apt package list (also captured inside the export, this is a readable copy). The script
 # does this per distro (suffixed with the distro name); one distro shown here for reference.
@@ -40,7 +40,7 @@ wsl -d Ubuntu-24.04 -- bash -c "pipx list --short 2>/dev/null; uv tool list 2>/d
 
 ## Phase 1 — Preserve
 
-> **All of Phase 1 is automated by `backup.ps1`** (in this folder: `machines/hosts/g16/windows/`). Run it from an elevated PowerShell — `cd C:\Users\methe\GitHub\machines\hosts\g16\windows`, then `.\backup.ps1 -WhatIf` first, then `.\backup.ps1`. The steps below document what it does and why. Backup target is `R:\backup` (the Kingston USB SSD, Disk 1 — survives the wipe; the script hard-stops if pointed at Disk 0).
+> **All of Phase 1 is automated by `backup.ps1`** (in this folder: `machines/hosts/g16/windows/`). Run it from an elevated PowerShell — `cd <your machines checkout>\hosts\g16\windows`, then `.\backup.ps1 -WhatIf` first, then `.\backup.ps1`. The steps below document what it does and why. Backup target is `R:\backup` (the Kingston USB SSD, Disk 1 — survives the wipe; the script hard-stops if pointed at Disk 0).
 
 ### 1a. Git repos — full copy, no push
 
@@ -100,7 +100,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 - [ ] Open 2–3 files **directly from `R:\`** — a repo file, the Obsidian vault, a Download — they actually open
 - [ ] `R:\backup\wsl\*.tar` — one tar per distro you kept (e.g. `Ubuntu-24.04.tar`), each a non-trivial size (full export, not 0); the main Ubuntu is ~25–31 GB. No `docker-desktop*.tar`.
 - [ ] `R:\backup\secrets\` has a **second copy** off the SSD (see 1f) — the one thing whose loss is unrecoverable
-- [ ] `R:\backup\inventory\winget-packages.json` is present and non-empty
+- [ ] `R:\backup\inventory\winget-packages-snapshot.json` is present and non-empty (restore uses the curated repo file; this is the diff snapshot)
 - [ ] `.ssh` keys (id_ed25519, id_rsa) present under `R:\backup\home\.ssh`
 - [ ] `R:\backup\OneDrive` and `R:\backup\GoogleDrive` copied — open a file from each on the SSD to confirm real content (not 0-byte). OneDrive folder includes your Documents + Pictures + **Desktop** (`Рабочий стол`) — confirm the Desktop subfolder is there.
 - [ ] **OneDrive sync is broken** → confirm **no** `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` was created (its presence means some files were online-only and got missed — recover them from onedrive.live.com first). Ideally also spot-check the SSD's OneDrive file count ≈ 13,527.
@@ -122,13 +122,13 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 6. Select Disk 0's unallocated space → Next. Setup uses the full 2 TB.
 7. OOBE: `autounattend.xml` handles locale/debloat/config; you set the account + Wi-Fi interactively.
 
-> **💿 Ventoy (as configured on the Kingston, 2026-07-05).** The plugin config is now the tracked file `install-media/ventoy.json` (deploy by copy to `P:\ventoy\ventoy.json`, no longer transcribed from prose). Its contents:
+> **💿 Ventoy (as configured on the Kingston, 2026-07-05).** `P:\ventoy\ventoy.json` uses the Auto Install plugin:
 > ```json
 > { "auto_install": [ { "image": "/Win11_25H2_Russian_x64_v2.iso", "template": "/unattend/autounattend.xml" } ] }
 > ```
-> Booting that ISO through Ventoy auto-offers our answer file. **`install-media/autounattend.xml` is source of truth; deploy = copy it to `P:\unattend\autounattend.xml`** after any edit (they must stay in sync). The other ISOs on P: (NixOS, Ubuntu, Fedora, Kali, GParted, Acronis) are unaffected — the mapping is Win11-only. `P:\rsti\` = Intel RST/VMD storage drivers for step 4 (recreatable from Intel/ASUS; not in the repo).
+> Booting that ISO through Ventoy auto-offers our answer file. **The repo's `autounattend.xml` is source of truth; deploy = copy it to `P:\unattend\autounattend.xml`** after any edit (they must stay in sync). The other ISOs on P: (NixOS, Ubuntu, Fedora, Kali, GParted, Acronis) are unaffected — the mapping is Win11-only. `P:\rsti\` = Intel RST/VMD storage drivers for step 4 (recreatable from Intel/ASUS; not in the repo).
 
-> **🔧 `autounattend.xml` (committed at [`install-media/autounattend.xml`](../../../install-media/autounattend.xml)) — automates the *config* side of the install.** Generated by the [schneegans unattend-generator](https://schneegans.de/windows/unattend-generator/); the exact config URL is embedded as a comment at the top of the file, so it's regenerable. **Usage:** copy it to the **root of the Windows 11 install USB** as `autounattend.xml` (exact name) — Setup auto-detects it. **Verified 2026-07-05:** no secrets (product key is the public generic Win11-Pro edition selector; account + Wi-Fi are interactive), and **no `<DiskConfiguration>`** → the disk-selection screen still appears, so the manual SSD-unplugged, post-VERIFY wipe gate (THE ONE RULE) is preserved.
+> **🔧 `autounattend.xml` (committed at [`./autounattend.xml`](./autounattend.xml)) — automates the *config* side of the install.** Generated by the [schneegans unattend-generator](https://schneegans.de/windows/unattend-generator/); the exact config URL is embedded as a comment at the top of the file, so it's regenerable. **Usage:** copy it to the **root of the Windows 11 install USB** as `autounattend.xml` (exact name) — Setup auto-detects it. **Verified 2026-07-05:** no secrets (product key is the public generic Win11-Pro edition selector; account + Wi-Fi are interactive), and **no `<DiskConfiguration>`** → the disk-selection screen still appears, so the manual SSD-unplugged, post-VERIFY wipe gate (THE ONE RULE) is preserved.
 > - **Does:** TPM/SecureBoot/RAM bypass, debloat (Copilot/Recall/Teams/OneNote/etc.), locale RU-UI + EN/KZ keyboards, privacy/telemetry off, long paths, RDP, Explorer tweaks.
 > - **Restore is a SEPARATE manual step:** `FirstLogon.ps1` only cleans up — it does *not* auto-run restore. After first login, run the one-liner yourself (`irm …/install.ps1 | iex`, Phase 4.0). Keeps the file regenerable and avoids an unattended restore touching secrets.
 > - **Still VM-test** (Hyper-V) before trusting it on real hardware — not hardware-tested yet.
@@ -142,12 +142,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 > This repo outgrew the `nix` name — it holds every host's config (NixOS modules *and* Windows `hosts/g16`), the agent environment, memory, and bootstrap. Rename it now, while re-cloning is unavoidable anyway (so there's no local `git mv` to do — just clone under the new name).
 > 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. **(done 2026-07-05.)** GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.
 > 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`. **(The one-liner below does this for you.)**
-> 3. Sweep the hard-coded `nix` references (then commit + push):
->    - This runbook + `hosts/g16/windows/backup.ps1` (`GitHub\machines` paths, `github.com/metheoryt/machines`, "the nix repo")
->    - `scripts\git-autofetch.ps1` (the `…\GitHub\machines\…` scheduled-task path) — and re-register the Scheduled Task with the new path
->    - `agents/memory/global.md` (and any memory referencing `github.com/metheoryt/machines`)
->    - `flake.nix` / `modules/**` self-references, `.gortex.yaml` / `.mcp.json` (gortex active-project name), the `just agent-bootstrap*` recipes
->    - `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (low priority — history)
+> 3. Sweep the hard-coded `nix` references (then commit + push). **(done 2026-07-06.)** The active path/URL refs in `backup.ps1`, `scripts\git-autofetch.ps1`, `install.ps1`, and this runbook now say `machines`. The **restore-side scripts** (`restore.ps1`, `bootstrap-agents.ps1`, `git-autofetch.ps1`) now derive the repo root from their **own location** (`$PSScriptRoot`) instead of assuming `~\GitHub\machines`, so the checkout can live anywhere (this box keeps it at `~\machines`). `agents/memory/global.md`, `flake.nix` / `modules/**`, `.gortex.yaml` / `.mcp.json`, and the `just agent-bootstrap*` recipes were already clean. Only historical mentions remain and are intentionally left: the `repos\nix\` backup-folder name (correct as of the pre-rename backup) and the `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (history, low priority).
 > 4. On the *other* machine(s): `git remote set-url origin git@github.com:metheoryt/machines.git` and rename the local clone dir to match. **On NixOS, then repoint `~/nix` at the renamed clone** — `ln -sfn ~/gh/machines ~/nix` — because `modules/home/claude.nix` / `codex.nix` read `~/nix/agents`; leaving `~/nix` dangling makes the next `home-manager` activation write broken symlinks (and the fish `~/nix` helpers break too). `just switch` now hard-fails with a repoint hint if you skip this.
 >
 > **▶ Automated entry point (does step 2 + the restore below).** On the fresh Windows, from an **elevated** PowerShell:
@@ -156,22 +151,31 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 > ```
 > Installs git if missing, clones `machines`, and runs `restore.ps1` — which **discovers the backup on the SSD, lets you pick one, and prints the plan (dry run; writes nothing)**. Re-run `hosts\g16\windows\restore.ps1 -Go` to apply the **automatic** items (repos, dotfiles, `.ssh`+perms, Downloads, Obsidian, cloud→`*-from-backup`), and `-Go -Force` to also overwrite a non-empty `.ssh`/repo. The numbered steps 1–9 below are exactly what it automates or prints as **guided** commands (winget, agent bootstrap, WSL import, app configs, cloud reconcile). The reference sweep (step 3 above) stays manual.
 
-1. **Windows apps:** first delete the dropped IDs from `winget-packages.json` (see Appendix B → *Dropped*), then `winget import R:\backup\inventory\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer) by hand.
+1. **Windows apps:** the curated keeper list is version-controlled in the repo at `hosts\g16\windows\winget-packages.json` (already pruned — dropped apps removed, Store/forgotten apps added), so no manual editing: `winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable hosts\g16\windows\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer, RustDesk, Intel DSA) by hand. *(The SSD `inventory\winget-packages-snapshot.json` is only a point-in-time capture for diffing new installs back into the curated list — not the restore source.)*
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
-   - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** clone the `machines` repo, then run `just agent-bootstrap` (and `agent-bootstrap-work` if used) to recreate the symlinks + `cyphy` plugin. **Then** restore only the machine-local bits from `R:\backup\home\.claude`: `.credentials.json`, `settings.local.json`, and `projects/` (session history) if you want it. Do NOT overwrite the freshly-bootstrapped `.claude`/`.codex` wholesale.
+   - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** run `hosts\g16\windows\bootstrap-agents.ps1 -BackupRoot R:\backup` (add `-Work` if the work profile is used). One script enables **Developer Mode** (native symlinks fail without it — the agent config is all symlinks into this repo), ensures Git + Claude Code, runs `agents/bootstrap.sh` (via Git Bash — the `just agent-bootstrap` recipe and the bare `bash` on PATH both misbehave on Windows), and restores only the machine-local bits (`.credentials.json`, `settings.local.json`, `projects/`) without clobbering the freshly-bootstrapped symlink trees. On NixOS/macOS the equivalent is `just agent-bootstrap`.
+   - **Background git-sync (`git-autofetch`) — register the Scheduled Task (⚠️ easy to forget: it was NOT auto-installed after the 2026-07 restore).** The fleet relies on a per-machine timer that fetches every repo's refs every ~10 min, so `git status` / the shell prompt show "behind by N" without anyone fetching first (NixOS gets this from `services.gitAutoFetch`). On Windows it's a Scheduled Task wrapping `scripts\git-autofetch.ps1`; register it **once**, from the machines repo root, using the snippet in that script's header `.EXAMPLE` block. It auto-includes this repo's own checkout as a scan root (plus `~\GitHub`), so it works wherever the repo lives. Verify: `Get-ScheduledTask git-autofetch`.
 3. **WSL:** install WSL + Ubuntu, then either
-   - `wsl --import Ubuntu-24.04 C:\WSL\Ubuntu R:\backup\wsl\Ubuntu-24.04.tar` to restore wholesale (one `--import` per distro tar you kept), **or**
+   - `wsl --import Ubuntu-24.04 C:\Users\<you>\WSL\Ubuntu-24.04 R:\backup\wsl\Ubuntu-24.04.tar` to restore wholesale (one `--import` per distro tar you kept), **or**
    - fresh Ubuntu + restore only `~/.ssh`, `~/.gnupg`, dotfiles from the tar and re-clone repos (cleaner). Rebuild venvs (`uv sync` / `pip install`).
+   - **`--import` gotchas (learned the hard way):**
+     - **The install-location's *parent* must already exist** — `--import` creates only the leaf folder, so a missing `C:\WSL\` fails with `Wsl/ERROR_PATH_NOT_FOUND`. Creating a folder at the **root of `C:\` needs admin**; import under the user profile (`C:\Users\<you>\WSL\`) to avoid elevation.
+     - **Imported distros boot as `root`** (no default user is carried in the tar). Set it inside the distro so it's portable and survives re-export — append to `/etc/wsl.conf`, then `wsl --terminate <distro>`:
+       ```ini
+       [user]
+       default=me
+       ```
+     - **Make the VHD sparse so it auto-shrinks and doesn't bloat the SSD:** `wsl --shutdown` first (the whole WSL VM must release the disk — `--terminate <distro>` alone hits `ERROR_SHARING_VIOLATION` while other distros/Docker Desktop hold the VM), then `wsl --manage <distro> --set-sparse true --allow-unsafe`. Verify: the distro's `Flags` under `HKCU\...\Lxss\<guid>` gains the `+8` bit (7 → 15). For *new* distros instead, set `[experimental] sparseVhd=true` in `.wslconfig`.
 4. **Windows repos:** copy `R:\backup\repos\*` back to `C:\Users\<you>\GitHub\` — they weren't pushed, so this backup **is** the source of truth for their stashes/uncommitted work. Recreate `.venv`s (`uv sync`). (WSL repos come back inside the WSL import in step 3.)
 5. **Docker + qaz-law DB:** install Docker Desktop, `git clone`/restore qaz-law, bring the stack up (empty DB), then **re-run your ingestion** to repopulate. No restore from backup — the DB was intentionally not backed up.
-6. **User data:** copy `Downloads` and the Obsidian vault back. **RustDesk:** install it, close it, then copy `R:\backup\home\AppData\RustDesk\config\*` into `%APPDATA%\RustDesk\config\` (overwrite), and start it — your ID, saved peers, and server settings come back. (If you'd rather keep a fresh ID, restore only `peers.toml` + `peers\` + `RustDesk2.toml` for the peer list and custom server.)
+6. **User data:** copy `Downloads` and the Obsidian vault back. **RustDesk:** install it, then **fully stop it** — elevated `Stop-Service RustDesk -Force` + kill the `RustDesk` processes (it runs as a **LocalSystem service** that keeps the config files locked) — copy `R:\backup\home\AppData\RustDesk\config\*` into `%APPDATA%\RustDesk\config\`, then start it. That restores the **address book / saved peers**, but **not** the retranslator: the service rewrites the user config on start, so `RustDesk2.toml`/`RustDesk.toml` don't stick. Re-enter the custom server by hand in **Settings → Network → ID/Relay Server** — ID Server + Relay Server = the `custom-rendezvous-server`/`relay-server` host, plus the `key`, all read from `RustDesk2.toml` (`restore.ps1` prints these ready-to-paste). The GUI propagates it to the service and it holds. The old RustDesk ID is service-managed too — a fresh ID is fine unless you specifically need the old one.
    - **App configs** (install each app first, close it, then drop files back into the matching `%APPDATA%`/`%LOCALAPPDATA%` path):
      - **Windows Terminal:** `…\home\AppData\WindowsTerminal\Microsoft.WindowsTerminal_*\settings.json` → its `…\LocalState\`.
      - **PowerToys:** `…\home\AppData\Local\PowerToys\*` → `%LOCALAPPDATA%\Microsoft\PowerToys\`.
      - **NCALayer / AIMP:** copy back into `%APPDATA%\NCALayer` and `%APPDATA%\AIMP` (reinstall regenerates the `jre`/caches that were skipped).
-     - **AyuGram:** point its "import from Telegram Desktop" at `…\home\AppData\Telegram Desktop\tdata` (or drop it where AyuGram expects tdata).
-   - **Wi-Fi:** re-add networks by hand from `R:\backup\secrets\wifi\*.xml`, or `netsh wlan add profile filename="…\WiFi-<name>.xml"`.
-   - **Env vars:** review `R:\backup\inventory\hkcu-environment.reg` and re-apply the custom entries you still want (don't blindly merge — some paths won't exist yet).
+     - **AyuGram (Telegram):** AyuGram is **portable** — its `tdata` sits **next to `AyuGram.exe`** (the winget package dir), not `%APPDATA%`. To reuse the backup session, **close AyuGram**, replace its `tdata\` **wholesale** with `…\home\AppData\Telegram Desktop\tdata` (two `tdata` folders can't be merged), and relaunch. A winget update can wipe the package-dir tdata. (Or install stock Telegram Desktop and drop the tdata into `%APPDATA%\Telegram Desktop\`.)
+   - **Wi-Fi:** if you signed in with the Microsoft account, "sync your settings" usually **restores the profiles already** — a blind `netsh wlan add profile` then fails with *"a profile with this name already exists in group policy or different user scope"*, which is **expected, not an error**. Check what's genuinely missing first (`netsh wlan show profiles`) and only re-add those, per-user: `netsh wlan add profile filename="R:\backup\secrets\wifi\<name>.xml" user=current`. (`restore.ps1` prints the exact missing-only list.)
+   - **Env vars:** do **not** `reg import` the whole `R:\backup\inventory\hkcu-environment.reg` — it pins a user `PATH` full of tool dirs that don't exist yet on a fresh install. The user `PATH` rebuilds itself as you reinstall each tool, and `PSModulePath`/`TEMP`/`TMP`/`OneDrive` are set by Windows/installers. Only two entries are truly custom — re-apply just these: `WSLENV=USERPROFILE/up`, and prepend your manual `C:\Users\<you>\.local\bin` to the user `PATH`. Use `[Environment]::SetEnvironmentVariable(...,'User')`, **not** `setx` (setx truncates a `PATH` longer than 1024 chars). Keep the `.reg` for reference.
 7. **Cloud folders:** **OneDrive was broken — the SSD copy is the source of truth, not the cloud.** After reinstall, set OneDrive up fresh; once it settles, compare its folder against `R:\backup\OneDrive` and copy back anything missing (a broken account may still be missing files in the cloud). If OneDrive stays unreliable, just restore `R:\backup\OneDrive\*` into a plain local folder and stop depending on it. Re-install Google Drive and let it sync, then compare against `R:\backup\GoogleDrive` the same way. In all cases the SSD copy is authoritative.
 8. **Sign back in:** Chrome (sync pulls bookmarks/passwords/extensions), JetBrains Settings Sync.
 9. Reconnect the SSD only after the fresh OS is trusted; keep the backup until you've confirmed everything restored (including cloud-folder comparison in step 7), then reclaim the space.
@@ -208,7 +212,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 Curated from `winget list` + WSL packages on 2026-07-05. **Excluded as auto/noise** (don't reinstall by hand): NVIDIA/Intel/Realtek/Thunderbolt drivers, VC++ redistributables, .NET runtimes, WindowsAppRuntimes, UI.Xaml, codec/video extensions, and built-in Store apps (Photos, Paint, Calculator, Xbox, etc.).
 
 ### Restored automatically
-- **`winget import R:\backup\inventory\winget-packages.json`** → everything winget-sourced below.
+- **`winget import` the curated repo list** (`hosts\g16\windows\winget-packages.json`, version-controlled) → all winget keepers below **plus** the four Store apps (WhatsApp, NetSpot, NVIDIA App, MyASUS) via its `msstore` source block. Already pruned, so no pre-edit — just import.
 - **Chrome / JetBrains** → account sync (bookmarks, passwords, IDE settings).
 
 ### Dev — IDEs & editors
@@ -235,8 +239,8 @@ Shutter Encoder · VLC · AIMP · Spotify · MusicBrainz Picard · Elgato Camera
 ### Utilities
 7-Zip · CrystalDiskInfo · WizTree · NetSpot · Logitech G HUB · NVIDIA App · MyASUS · Intel DSA
 
-### ✂️ Dropped — do NOT reinstall
-Strip these winget IDs from `winget-packages.json` **before** running `winget import` (or just skip them):
+### ✂️ Dropped — already excluded from the curated list
+These winget IDs are **not** in `winget-packages.json` (kept out on purpose — don't re-add them when folding in a fresh snapshot):
 `Warp.Warp` · `SublimeHQ.SublimeText.4` · `Exafunction.Windsurf` · `ZhipuAI.ZCode` · `Google.CloudSDK` · `GitHub.GitHubDesktop` · `Telegram.TelegramDesktop` · `TeamViewer.TeamViewer` · `Proton.ProtonVPN` · `OpenVPNTechnologies.OpenVPNConnect` · `WireGuard.WireGuard` · `OBSProject.OBSStudio` · `CrystalDewWorld.CrystalDiskMark.AoiEdition` · `WinDirStat.WinDirStat` · `Fastfetch-cli.Fastfetch`
 
 Not winget-managed (just don't reinstall): **VS Code** · **Chrome Remote Desktop** · **Supersonic** · **Recuva** · **Tablecruncher**

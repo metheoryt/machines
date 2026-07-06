@@ -13,7 +13,7 @@
   it back. The run also drops a standalone copy on the SSD (R:\windows-reinstall\backup.ps1).
 
   Usage (from an ELEVATED PowerShell, so WSL/robocopy behave):
-      cd C:\Users\methe\GitHub\machines\hosts\g16\windows
+      cd <your machines checkout>\hosts\g16\windows   # wherever you cloned it
       .\backup.ps1                 # do the backup
       .\backup.ps1 -WhatIf         # dry run: print what it would do
 
@@ -22,6 +22,10 @@
 #>
 [CmdletBinding()]
 param(
+    # WRITE target for the backup (pre-wipe, where you know the letter). Not
+    # auto-detected on purpose - picking a write destination is a footgun. The
+    # RESTORE side (restore.ps1 / bootstrap-agents.ps1) auto-discovers the backup
+    # on any letter, so it doesn't matter which letter the SSD gets later.
     [string]$DriveLetter = 'R',
     [switch]$WhatIf
 )
@@ -78,7 +82,12 @@ Write-Host "Logging to $log`n"
 
 # ---------- 1. Inventory ----------
 Step 'Inventory (winget / WSL packages)' {
-    winget export -o "$Dst\inventory\winget-packages.json" --disable-interactivity | Out-Null
+    # Point-in-time snapshot of what's actually installed — for DIFFING against the
+    # curated keeper list, not for restore. The importable source of truth is the
+    # version-controlled hosts/g16/windows/winget-packages.json in the repo
+    # (curated: dropped apps removed, Store/forgotten apps added). After a backup,
+    # diff this snapshot against that file and fold in anything new you want to keep.
+    winget export -o "$Dst\inventory\winget-packages-snapshot.json" --disable-interactivity | Out-Null
     winget list --disable-interactivity | Out-File "$Dst\inventory\winget-list-full.txt" -Encoding utf8
     foreach ($d in $wslDistros) {
         $safe = $d -replace '[^\w.-]','_'
@@ -132,7 +141,7 @@ Step 'Windows config — ALL dotfiles/dirs (except big caches & dropped apps)' {
     $blocklist = '.cache','.lmstudio','.vscode','.codeium','.windsurf','.zcode',
                  '.zed_server','.openclaude','.openclaude.json','.marvin','.junie',
                  '.gortex','.boto','.gsutil','.gemini','.k8slens','.docker'
-    Get-ChildItem 'C:\Users\methe' -Force |
+    Get-ChildItem $env:USERPROFILE -Force |
         Where-Object { $_.Name -like '.*' -and $_.Name -notin $blocklist } |
         ForEach-Object {
             if ($_.PSIsContainer) {
@@ -237,7 +246,7 @@ Step 'Obsidian vault(s)' {
 # ---------- 6. Repo folder copies — ALL Windows repos, full incl .git, minus .venv/caches ----------
 Step 'Repo copies (all Windows GitHub repos, full incl .git, minus .venv/caches)' {
     $repoExclude = '.venv','node_modules','__pycache__','.mypy_cache','.pytest_cache','.ruff_cache'
-    $repos = Get-ChildItem "C:\Users\methe\GitHub" -Directory -Force | Where-Object { Test-Path (Join-Path $_.FullName '.git') }
+    $repos = Get-ChildItem (Join-Path $env:USERPROFILE 'GitHub') -Directory -Force | Where-Object { Test-Path (Join-Path $_.FullName '.git') }
     foreach ($r in $repos) {
         Write-Host "  $($r.Name)"
         robocopy $r.FullName "$Dst\repos\$($r.Name)" @rc /XD $repoExclude | Out-Null
@@ -248,7 +257,7 @@ Step 'Repo copies (all Windows GitHub repos, full incl .git, minus .venv/caches)
 # ---------- 7. Copy runbook + this script onto the SSD ----------
 # Both live in the machines repo alongside this script; the repos step already backs up the whole
 # machines repo, but we also drop standalone copies at the SSD root so the runbook is readable
-# without digging into repos\nix\hosts\g16\ (and before repos are restored).
+# without digging into repos\machines\hosts\g16\ (and before repos are restored).
 Step 'Copy runbook + script to SSD' {
     Copy-Item "$PSScriptRoot\windows-reinstall-runbook.md" "$Dst\" -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path "$Dst\..\windows-reinstall" | Out-Null

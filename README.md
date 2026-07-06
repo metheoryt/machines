@@ -18,6 +18,9 @@ Top-level layout: `hosts/<host>/{nixos,windows}/` (per-machine OS config),
 Ventoy config), `backup/` (fleet restic clients), `scripts/` (shared repo
 tooling), `agents/` (agent config, memory, bootstrap).
 
+For a Linux dev environment on Windows, `bootstrap/` provisions a disposable
+Debian/Ubuntu WSL box with the portable layer (synced agent config + CLI tools).
+
 ## Quick Start
 
 ```bash
@@ -101,6 +104,13 @@ modules/
 - Imports: `base`, `laptop`, `gnome`, `dell-latitude`, `development`, home-manager
 - Thunderbolt authorization via `bolt` service
 - Battery charge limit: 85% via `charge-upto <percent>`
+
+**`bootstrap/`** — disposable non-Nix distro (Linux dev environment on Windows)
+- `bootstrap/ubuntu.sh` provisions a fresh Debian/Ubuntu box (or throwaway WSL2 distro)
+  with the *portable* layer only: the git-synced Claude/Codex config (via
+  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, gh, ripgrep/fd/fzf, …).
+- Imperative and apt-based — no NixOS. See `bootstrap/README.md` for usage and
+  base-distro guidance.
 
 ### Home Manager (`modules/home/me.nix`)
 
