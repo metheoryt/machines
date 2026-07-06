@@ -40,6 +40,7 @@
 				{ "PackageIdentifier" : "Python.Python.3.13" },
 				{ "PackageIdentifier" : "RadolynLabs.AyuGramDesktop" },
 				{ "PackageIdentifier" : "restic.restic" },
+				{ "PackageIdentifier" : "seerge.g-helper" },
 				{ "PackageIdentifier" : "SlackTechnologies.Slack" },
 				{ "PackageIdentifier" : "Spotify.Spotify" },
 				{ "PackageIdentifier" : "Valve.Steam" },
