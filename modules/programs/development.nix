@@ -103,6 +103,7 @@
     # File utilities
     fd
     ripgrep
+    ast-grep # structural / AST-aware code search — invoke as `ast-grep` (NOT `sg`)
     bat
     eza
     fzf

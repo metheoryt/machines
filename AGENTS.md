@@ -81,7 +81,7 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `hardware/asus-rog.nix` | `charge-upto` command + systemd service, ROG keyboard evdev fixes (mic mute, Fn+arrows), DPCD backlight kernel params |
 | `hardware/dell-latitude.nix` | `charge-upto` command + systemd service, Intel compute runtime, Thunderbolt (bolt service), fstrim |
 | `nvidia.nix` | NVIDIA open kernel modules, PRIME offload mode (Intel primary, NVIDIA on-demand), fine-grained power mgmt, Wayland env vars, Vulkan/OpenCL, nvidia-container-toolkit |
-| `programs/development.nix` | nix-ld, Docker (auto-start + auto-prune), Python 3.13 + uv, dev tools (git, gh, jq, ripgrep, fd, bat, etc.), direnv + nix-direnv, Fish + Zsh |
+| `programs/development.nix` | nix-ld, Docker (auto-start + auto-prune), Python 3.13 + uv, dev tools (git, gh, jq, ripgrep, ast-grep, fd, bat, etc.), direnv + nix-direnv, Fish + Zsh |
 | `home/me.nix` | Home Manager for user `me`: packages, git config, Fish aliases/functions, Starship prompt, Ghostty config, GNOME dconf settings, fastfetch |
 
 ### Host configurations
