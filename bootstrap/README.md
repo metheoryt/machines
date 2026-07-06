@@ -22,8 +22,8 @@ minutes.
   `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
   `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`. Shell hooks are
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
-  installed). Per-box SSH keys + `~/.ssh/config` for the declared GitHub accounts
-  (see **Multi-account SSH** below).
+  installed). Per-box SSH keys + `~/.ssh/config` + per-account commit identity
+  for the declared GitHub accounts (see **Multi-account SSH** below).
 
 It deliberately does **not** reproduce the full `modules/home/me.nix` shell
 experience or `development.nix` toolchain (docker, language servers, ghostty,
@@ -81,6 +81,33 @@ separate `gh auth refresh`). Or paste `~/.ssh/id_<user>.pub` at
 `github.com/settings/keys`. The script prints a reminder for any key it just
 generated. `gh` itself stays logged into every account; `gh auth switch --user
 <name>` picks which one `gh pr`/`gh issue` act as.
+
+### Commit identity (author name/email)
+
+The SSH key decides *which account receives a push*; the commit's author
+name/email is separate. The script also wires per-account **commit identity** so
+the two never drift — via the `GIT_IDENTITIES` array next to `SSH_ACCOUNTS`
+(`ssh-alias|author-name|author-email`):
+
+```bash
+GIT_IDENTITIES=(
+  "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+)
+```
+
+It keys off the **remote URL**, not a directory: git's
+`includeIf "hasconfig:remote.*.url:git@<alias>:*/**"` applies the identity to any
+repo whose remote uses that account's SSH alias, wherever it sits on disk. So a
+repo cloned as `git@github-cyphy:cyphy671/qaz-law.git` authors commits as
+`cyphy671`, while everything else keeps the global `metheoryt@gmail.com`. No
+fixed clone directory, nothing to remember per repo. (Needs git ≥ 2.36; the
+default `github.com` account is the global identity, so list only the *others*.)
+
+Emails use GitHub's private **noreply** form
+(`<numeric-id>+<user>@users.noreply.github.com`) so a real address is never
+leaked into a corpus repo's history and pushes are never rejected by the
+account's "keep my email address private" setting. The identity files land at
+`~/.config/git/identity-<alias>`.
 
 > Isolation rationale: `cyphy671` is a separate personal account used to keep
 > certain repos (e.g. a large corpus like `qaz-law`) off the main account, to

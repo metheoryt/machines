@@ -247,6 +247,39 @@ if [ "${#SSH_ACCOUNTS[@]}" -gt 0 ]; then
   fi
 fi
 
+# ── BEST-EFFORT: per-account commit identity ──────────────────────────────────
+# Author name/email per GitHub account, with NO fixed on-disk directory: git's
+# includeIf "hasconfig:remote.*.url:…" matches on the repo's remote URL, so ANY
+# repo cloned through an account's SSH alias (git@<alias>:owner/repo) authors its
+# commits with that account's identity, wherever it lives on disk. The default
+# github.com account keeps the global identity set above; list only the *other*
+# accounts here. Format "ssh-alias|author-name|author-email" — the alias must
+# match one in SSH_ACCOUNTS. Emails use GitHub's private noreply form
+# (<id>+<user>@users.noreply.github.com) so a real address is never leaked and
+# pushes aren't rejected by "keep my email address private". Needs git ≥ 2.36.
+GIT_IDENTITIES=(
+  "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+)
+if [ "${#GIT_IDENTITIES[@]}" -gt 0 ]; then
+  info "Wiring per-account commit identity…"
+  _incdir="$HOME/.config/git"; mkdir -p "$_incdir"
+  for _row in "${GIT_IDENTITIES[@]}"; do
+    IFS='|' read -r _alias _name _email <<<"$_row"
+    _idfile="$_incdir/identity-${_alias}"
+    {
+      printf '[user]\n'
+      printf '\tname = %s\n'  "$_name"
+      printf '\temail = %s\n' "$_email"
+    } > "$_idfile"
+    # Match on the remote URL; idempotent — add the include only if absent.
+    _key="includeIf.hasconfig:remote.*.url:git@${_alias}:*/**.path"
+    if ! git config --global --get-all "$_key" 2>/dev/null | grep -qxF "$_idfile"; then
+      git config --global --add "$_key" "$_idfile"
+    fi
+    ok "commit identity for git@${_alias}: ${_name} <${_email}>"
+  done
+fi
+
 # ── BEST-EFFORT: shell init (WSL-safe — no chsh) ──────────────────────────────
 # Append PATH + starship/direnv hooks to ~/.bashrc, guarded so re-runs don't
 # duplicate. We do NOT chsh (unreliable in WSL); to live in fish, add the exec
