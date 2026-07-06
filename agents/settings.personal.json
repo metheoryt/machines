@@ -18,6 +18,5 @@
     "mode": "hold"
   },
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "model": "opus"
+  "voiceEnabled": true
 }
