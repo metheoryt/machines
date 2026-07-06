@@ -2,19 +2,15 @@
 
 Provision a **fresh, non-Nix Linux box** — most often a throwaway WSL2 distro —
 into this fleet's *portable* dev layer, without NixOS. It's the low-maintenance
-counterpart to the `wsl` NixOS host (`hosts/wsl/`):
+way to get a Linux dev environment on a Windows machine: the **same git-synced
+Claude/Codex config** the NixOS laptops run (via `agents/bootstrap.sh`, which
+produces identical symlinks on any OS) plus the core CLI tools — installed
+imperatively with `apt` + official installers instead of `nixos-rebuild`.
 
-| | `hosts/wsl/` (NixOS-WSL) | `bootstrap/ubuntu.sh` (this) |
-|---|---|---|
-| Base | NixOS | Debian / Ubuntu |
-| Config | Declarative, reproducible, drift-free | Imperative, apt + official installers |
-| Dev toolchain | Full (`development.nix`) | Core CLIs only |
-| Agent config sync | `modules/home/claude.nix` | `agents/bootstrap.sh` (identical symlinks) |
-| Upkeep | `just switch` | Re-run the script; `apt`/`claude` self-update |
-| Use when | It's a primary, reproducible dev box | It's disposable / you want zero Nix |
-
-Both give you the **same git-synced Claude/Codex config** — that part is shared
-via `agents/bootstrap.sh` either way.
+It's deliberately *not* a reproduction of the full fleet: no declarative
+guarantees, no `development.nix` toolchain, no `me.nix` desktop shell. That's the
+trade for zero Nix and a box you can `wsl --unregister` and re-provision in
+minutes.
 
 ## What it installs
 
@@ -30,8 +26,8 @@ via `agents/bootstrap.sh` either way.
 
 It deliberately does **not** reproduce the full `modules/home/me.nix` shell
 experience or `development.nix` toolchain (docker, language servers, ghostty,
-GNOME). If you want that, use the NixOS-WSL host — imperatively re-creating it
-here would just re-introduce the config drift the disposable track avoids.
+GNOME) — imperatively re-creating those would just re-introduce the config drift
+a disposable box is meant to avoid.
 
 ## Usage
 

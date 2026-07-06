@@ -275,15 +275,6 @@ iso:
     nix build {{flake_dir}}#nixosConfigurations.{{hostname}}.config.system.build.isoImage
     @echo "✅ ISO built successfully!"
 
-# Build a WSL2 tarball (nixos.wsl) for the `wsl` host. Run on a Linux Nix host
-# (or an existing NixOS-WSL instance); needs sudo to set rootfs ownership.
-# Import on Windows:  wsl --install --from-file nixos.wsl   (WSL >= 2.4.4)
-#            older:   wsl --import NixOS <dir> nixos.wsl --version 2
-wsl-tarball:
-    @echo "📦 Building WSL2 tarball (nixos.wsl)..."
-    sudo nix run {{flake_dir}}#nixosConfigurations.wsl.config.system.build.tarballBuilder
-    @echo "✅ Wrote ./nixos.wsl — import: wsl --install --from-file nixos.wsl"
-
 # Quick system health check
 health:
     @echo "🏥 System Health Check"

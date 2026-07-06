@@ -22,12 +22,6 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    # NixOS-WSL — run this flake as a WSL2 distro (the `wsl` host).
-    nixos-wsl = {
-      url = "github:nix-community/NixOS-WSL/main";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs = {
@@ -97,13 +91,6 @@
       latitude5520 = mkHost "latitude5520" [
         nixos-hardware.nixosModules.dell-latitude-5520
       ];
-
-      # WSL2 distro: the portable dev layer (development.nix + a lean CLI home
-      # profile) on top of the NixOS-WSL module. No bootloader / desktop /
-      # laptop-hardware stack — WSL provides the kernel and init.
-      wsl = mkHost "wsl" [
-        inputs.nixos-wsl.nixosModules.default
-      ];
     };
 
     homeConfigurations = {
@@ -133,7 +120,6 @@
     checks.${system} = {
       nixos-g16 = self.nixosConfigurations.g16.config.system.build.toplevel;
       nixos-latitude5520 = self.nixosConfigurations.latitude5520.config.system.build.toplevel;
-      nixos-wsl = self.nixosConfigurations.wsl.config.system.build.toplevel;
       home-g16 = self.homeConfigurations."me@g16".activationPackage;
       home-latitude5520 = self.homeConfigurations."me@latitude5520".activationPackage;
     };

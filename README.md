@@ -1,10 +1,12 @@
 # NixOS Configuration
 
-Personal NixOS flake-based system configuration managing two laptops plus a WSL2 distro:
+Personal NixOS flake-based system configuration managing two laptops:
 
 - **g16** — ASUS ROG G16, Intel + NVIDIA RTX 40-series (PRIME offload)
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only)
-- **wsl** — NixOS-WSL distro: the portable dev layer, no desktop/hardware stack
+
+For a Linux dev environment on Windows, `bootstrap/` provisions a disposable
+Debian/Ubuntu WSL box with the portable layer (synced agent config + CLI tools).
 
 ## Quick Start
 
@@ -56,7 +58,6 @@ just upgrade
 | `home-manager` | unstable | User-level config |
 | `nixos-hardware` | latest | Hardware-specific modules |
 | `claude-code-nix` | latest | Claude Code package |
-| `nixos-wsl` | main | WSL2 module for the `wsl` host |
 
 ### Module Structure
 
@@ -71,8 +72,7 @@ modules/
 │   ├── asus-rog.nix      # Battery charge threshold, ROG keyboard fixes, DPCD backlight
 │   └── dell-latitude.nix # Battery charge threshold, Thunderbolt, Intel GPU
 ├── home/
-│   ├── me.nix            # Home Manager: packages, git, Fish, Starship, Ghostty, GNOME dconf
-│   └── me-wsl.nix        # Lean CLI Home Manager profile for WSL (no GUI): claude/codex, git, Fish, gortex
+│   └── me.nix            # Home Manager: packages, git, Fish, Starship, Ghostty, GNOME dconf
 ├── nvidia.nix            # NVIDIA open modules, PRIME offload, fine-grained power, Wayland vars
 └── programs/
     └── development.nix   # Dev tools, Docker, Python 3.13, nix-ld, direnv
@@ -92,20 +92,12 @@ modules/
 - Thunderbolt authorization via `bolt` service
 - Battery charge limit: 85% via `charge-upto <percent>`
 
-**`hosts/wsl/`** — NixOS-WSL distro
-- No bootloader / desktop / laptop-hardware stack — WSL supplies the kernel and init
-- Imports: `nixos-wsl` module, `development`, home-manager with the lean `me-wsl` profile
-- `wsl.enable = true; wsl.defaultUser = "me";`; `hardware-configuration.nix` is an empty stub
-- Build an importable tarball with `just wsl-tarball` (run on a Linux Nix host), then on
-  Windows `wsl --install --from-file nixos.wsl`. Once running, iterate with `just switch`.
-
-**`bootstrap/`** — disposable non-Nix distro (the low-maintenance WSL alternative)
+**`bootstrap/`** — disposable non-Nix distro (Linux dev environment on Windows)
 - `bootstrap/ubuntu.sh` provisions a fresh Debian/Ubuntu box (or throwaway WSL2 distro)
   with the *portable* layer only: the git-synced Claude/Codex config (via
-  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, ripgrep/fd/fzf, …).
-- Imperative and apt-based — no NixOS. Use it when the box is disposable; use the
-  `wsl` NixOS host above when you want full, reproducible fleet parity.
-- See `bootstrap/README.md` for usage and base-distro guidance.
+  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, gh, ripgrep/fd/fzf, …).
+- Imperative and apt-based — no NixOS. See `bootstrap/README.md` for usage and
+  base-distro guidance.
 
 ### Home Manager (`modules/home/me.nix`)
 
