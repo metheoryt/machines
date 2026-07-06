@@ -29,6 +29,10 @@ $rc = '/E','/R:1','/W:1','/NP','/NFL','/NDL','/MT:8'
 # Repos that ARE this config repo: the fresh clone (from install.ps1) is
 # authoritative, so we don't overlay the backup's copy of it.
 $ConfigRepoNames = 'machines','nix'
+# This repo's checkout root, derived from the script's own location
+# (<repo>\hosts\g16\windows-reinstall\restore.ps1) so the printed guidance points
+# at wherever the repo was cloned — not a hard-coded ~\GitHub\machines.
+$RepoRoot = try { (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path } catch { Join-Path $TargetHome 'GitHub\machines' }
 
 function Restore-Dir($src, $dst) {
     robocopy $src $dst @rc | Out-Null
@@ -190,12 +194,12 @@ $G = @()
 $G += "1. Windows apps (winget):"
 $G += "     - Curated keeper list is version-controlled in the repo (already pruned - no manual editing):"
 $G += "       winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable ``"
-$G += "         `"$TargetHome\GitHub\machines\hosts\g16\windows-reinstall\winget-packages.json`""
+$G += "         `"$RepoRoot\hosts\g16\windows-reinstall\winget-packages.json`""
 $G += "     - Reinstall non-winget keepers by hand: JetBrains Toolbox -> PyCharm, NCALayer, RustDesk, Intel DSA."
 $G += ""
 $G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
 $G += "     One script does it all (Developer Mode, Claude Code install, bootstrap, machine-local restore):"
-$G += "       cd $TargetHome\GitHub\machines"
+$G += "       cd $RepoRoot"
 $G += "       .\hosts\g16\windows-reinstall\bootstrap-agents.ps1 -BackupRoot $Root   # (+ -Work if the work profile is used)"
 $G += "     (On NixOS/macOS use 'just agent-bootstrap' instead; Windows needs the .ps1 - it enables Developer Mode for symlinks.)"
 $G += ""

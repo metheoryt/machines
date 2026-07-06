@@ -13,14 +13,15 @@
   prunes heavy vendored trees, and stops descending once a repo is found.
 
 .PARAMETER Roots
-  Directories scanned (up to -MaxDepth) for git repos. Default: %USERPROFILE%\GitHub.
+  Directories scanned (up to -MaxDepth) for git repos. Default: this repo's own
+  checkout (wherever it's cloned) + %USERPROFILE%\GitHub.
 
 .PARAMETER MaxDepth
   How deep under each root to look for a repo. Default: 4.
 
 .EXAMPLE
-  # Register the Scheduled Task (run once, in an elevated-or-normal PowerShell):
-  $ps1 = "$env:USERPROFILE\GitHub\nix\scripts\git-autofetch.ps1"
+  # Register the Scheduled Task (run once, from the machines repo root):
+  $ps1 = (Resolve-Path .\scripts\git-autofetch.ps1).Path
   $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
       -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$ps1`""
   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
@@ -39,6 +40,12 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# Always include the repo THIS script ships in, so the machines checkout is
+# fetched wherever it lives (~\machines, ~\GitHub\machines, anywhere) — not just
+# under the conventional ~\GitHub fleet root. $PSScriptRoot = <repo>\scripts.
+$repoRoot = Split-Path $PSScriptRoot -Parent
+if ($repoRoot -and ($Roots -notcontains $repoRoot)) { $Roots += $repoRoot }
 
 # Never block on a credential / host-key prompt — skip unreachable repos silently.
 $env:GIT_TERMINAL_PROMPT = '0'

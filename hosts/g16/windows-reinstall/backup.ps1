@@ -8,12 +8,12 @@
   preserved), minus .venv/node_modules/caches. Nothing is pushed. WSL-side repos ride along
   inside the full WSL export.
 
-  Canonical location: nix repo, hosts/g16/windows-reinstall/ (this file). It is version-
-  controlled and pushed, so it survives the wipe — after reinstall, `git clone` nix to get
+  Canonical location: machines repo, hosts/g16/windows-reinstall/ (this file). It is version-
+  controlled and pushed, so it survives the wipe — after reinstall, `git clone` machines to get
   it back. The run also drops a standalone copy on the SSD (R:\windows-reinstall\backup.ps1).
 
   Usage (from an ELEVATED PowerShell, so WSL/robocopy behave):
-      cd C:\Users\methe\GitHub\nix\hosts\g16\windows-reinstall
+      cd <your machines checkout>\hosts\g16\windows-reinstall   # wherever you cloned it
       .\backup.ps1                 # do the backup
       .\backup.ps1 -WhatIf         # dry run: print what it would do
 
@@ -141,12 +141,12 @@ Step 'Windows config — ALL dotfiles/dirs (except big caches & dropped apps)' {
     $blocklist = '.cache','.lmstudio','.vscode','.codeium','.windsurf','.zcode',
                  '.zed_server','.openclaude','.openclaude.json','.marvin','.junie',
                  '.gortex','.boto','.gsutil','.gemini','.k8slens','.docker'
-    Get-ChildItem 'C:\Users\methe' -Force |
+    Get-ChildItem $env:USERPROFILE -Force |
         Where-Object { $_.Name -like '.*' -and $_.Name -notin $blocklist } |
         ForEach-Object {
             if ($_.PSIsContainer) {
                 # /XJ = don't follow junctions/dir-symlinks. .claude & .codex contain symlinks into the
-                # nix repo (agent config, source of truth = the nix repo, backed up separately in 1a);
+                # machines repo (agent config, source of truth = the machines repo, backed up separately in 1a);
                 # /XJ keeps us from duplicating those trees. Machine-local real files still copy.
                 robocopy $_.FullName "$Dst\home\$($_.Name)" @rc /XJ /XD node_modules .venv | Out-Null
             } else {
@@ -246,7 +246,7 @@ Step 'Obsidian vault(s)' {
 # ---------- 6. Repo folder copies — ALL Windows repos, full incl .git, minus .venv/caches ----------
 Step 'Repo copies (all Windows GitHub repos, full incl .git, minus .venv/caches)' {
     $repoExclude = '.venv','node_modules','__pycache__','.mypy_cache','.pytest_cache','.ruff_cache'
-    $repos = Get-ChildItem "C:\Users\methe\GitHub" -Directory -Force | Where-Object { Test-Path (Join-Path $_.FullName '.git') }
+    $repos = Get-ChildItem (Join-Path $env:USERPROFILE 'GitHub') -Directory -Force | Where-Object { Test-Path (Join-Path $_.FullName '.git') }
     foreach ($r in $repos) {
         Write-Host "  $($r.Name)"
         robocopy $r.FullName "$Dst\repos\$($r.Name)" @rc /XD $repoExclude | Out-Null
@@ -255,9 +255,9 @@ Step 'Repo copies (all Windows GitHub repos, full incl .git, minus .venv/caches)
 }
 
 # ---------- 7. Copy runbook + this script onto the SSD ----------
-# Both live in the nix repo alongside this script; the repos step already backs up the whole
-# nix repo, but we also drop standalone copies at the SSD root so the runbook is readable
-# without digging into repos\nix\hosts\g16\ (and before repos are restored).
+# Both live in the machines repo alongside this script; the repos step already backs up the whole
+# machines repo, but we also drop standalone copies at the SSD root so the runbook is readable
+# without digging into repos\machines\hosts\g16\ (and before repos are restored).
 Step 'Copy runbook + script to SSD' {
     Copy-Item "$PSScriptRoot\windows-reinstall-runbook.md" "$Dst\" -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path "$Dst\..\windows-reinstall" | Out-Null
