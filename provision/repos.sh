@@ -10,18 +10,22 @@
 #   bash provision/repos.sh pure            # work box
 #   DRY_RUN=1 bash provision/repos.sh my    # print clone/migrate actions without doing them
 #                                           # (note: still queries gh + switches gh's active account, restored to metheoryt at end)
+#
+# Interactive selection: every group discovers its non-archived repos via gh,
+# then you pick which ones to clone in an fzf multi-select (TAB to mark, ENTER
+# to clone the marked ones). Only repos not already present are offered. Without
+# a usable terminal (piped output, DRY_RUN, or fzf not installed) it prints the
+# clonable list and clones NOTHING.
 set -u
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN="${DRY_RUN:-0}"
 GH_ROOT="$HOME/gh"                 # legacy layout to migrate FROM
-REPOS_TXT="$SCRIPT_DIR/repos.txt"  # curated 'list'-mode entries (owner/repo/line)
 
-# key | dir | owner | ssh-alias | gh-account | mode   (mode: all=gh discovery, list=repos.txt)
+# key | dir | owner | ssh-alias | gh-account
 REPO_GROUPS=(
-  "my|my|metheoryt|github.com|metheoryt|all"
-  "pure|pure|thepureapp|github.com|metheoryt|list"
-  "cyphy671|cyphy671|cyphy671|github-cyphy|cyphy671|all"
+  "my|my|metheoryt|github.com|metheoryt"
+  "pure|pure|thepureapp|github.com|metheoryt"
+  "cyphy671|cyphy671|cyphy671|github-cyphy|cyphy671"
 )
 
 info() { printf '  %s\n' "$*"; }
@@ -71,32 +75,46 @@ discover_all() {  # <owner> <account> -> non-archived repo names, one per line
   gh repo list "$owner" --no-archived --limit 1000 --json name -q '.[].name' 2>/dev/null
 }
 
-list_repos_for() {  # <owner> -> repo names from repos.txt whose owner matches
-  [ -f "$REPOS_TXT" ] || return 0
-  local line
-  while IFS= read -r line; do
-    line="${line%%#*}"; line="$(printf '%s' "$line" | tr -d '[:space:]')"
-    [ -n "$line" ] || continue
-    case "$line" in "$1"/*) printf '%s\n' "${line#*/}";; esac
-  done < "$REPOS_TXT"
+# select_repos <label> <repo…> -> prints chosen repo names, one per line.
+# Interactive fzf multi-select when a terminal is available; otherwise (DRY_RUN,
+# no TTY, or no fzf) prints the clonable list to stderr and selects NOTHING.
+select_repos() {
+  local label="$1"; shift
+  [ "$#" -eq 0 ] && return 0
+  if [ "$DRY_RUN" = 1 ] || ! have fzf || ! { : >/dev/tty; } 2>/dev/null; then
+    local why="no TTY"; have fzf || why="fzf missing"; [ "$DRY_RUN" = 1 ] && why="DRY_RUN"
+    { warn "$label: not selecting interactively ($why) — cloning nothing; $# clonable repo(s):"
+      printf '       %s\n' "$@"; } >&2
+    return 0
+  fi
+  printf '%s\n' "$@" | fzf --multi --no-sort --height=80% --border \
+    --prompt="clone from $label > " \
+    --header="TAB mark · ENTER clone marked · ESC clone none  ($# available)"
 }
 
 main() {
   local selected=("$@")
   [ ${#selected[@]} -eq 0 ] && selected=(my pure cyphy671)
-  local key row g dir owner alias account mode repo
+  local key row g dir owner alias account repo _absent
   for key in "${selected[@]}"; do
     row=""; for g in "${REPO_GROUPS[@]}"; do [ "${g%%|*}" = "$key" ] && row="$g"; done
     [ -n "$row" ] || { warn "unknown group: $key"; continue; }
-    IFS='|' read -r _ dir owner alias account mode <<< "$row"
-    printf '\n== group %s  (~/%s <- %s, mode=%s)\n' "$key" "$dir" "$owner" "$mode"
+    IFS='|' read -r _ dir owner alias account <<< "$row"
+    printf '\n== group %s  (~/%s <- %s)\n' "$key" "$dir" "$owner"
     migrate_group "$dir" "$owner"
-    case "$mode" in
-      all)  discover_all "$owner" "$account" | while IFS= read -r repo; do
-              [ -n "$repo" ] && clone_one "$alias" "$owner" "$repo" "$dir"; done ;;
-      list) list_repos_for "$owner"          | while IFS= read -r repo; do
-              [ -n "$repo" ] && clone_one "$alias" "$owner" "$repo" "$dir"; done ;;
-    esac
+    _absent=()
+    while IFS= read -r repo; do
+      [ -n "$repo" ] || continue
+      case "$repo" in machines|nix) continue;; esac
+      [ -e "$HOME/$dir/$repo" ] || _absent+=("$repo")
+    done < <(discover_all "$owner" "$account")
+    if [ "${#_absent[@]}" -eq 0 ]; then
+      info "nothing to clone for $owner (all present or none discovered)"
+      continue
+    fi
+    while IFS= read -r repo; do
+      [ -n "$repo" ] && clone_one "$alias" "$owner" "$repo" "$dir"
+    done < <(select_repos "$owner" "${_absent[@]}")
   done
   have gh && gh auth switch --user metheoryt >/dev/null 2>&1 || true   # restore default gh account
   printf '\nDone.%s\n' "$([ "$DRY_RUN" = 1 ] && printf ' (dry-run — nothing changed)')"

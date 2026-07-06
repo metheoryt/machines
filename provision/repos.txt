@@ -1,8 +1,0 @@
-# provision/repos.txt — curated repo list for "list"-mode groups (currently: pure).
-# One `owner/repo` per line; matched to a group by owner. Comments start with #.
-#
-# NOTE: machines is a PUBLIC repo. List only repo NAMES that are OK to expose
-# publicly, and NEVER put tokens or credentials here.
-#
-# Replace the example below with your actual thepureapp repos:
-# thepureapp/example-repo
