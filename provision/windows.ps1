@@ -23,10 +23,10 @@
   Idempotent. Re-run any time - each step detects "already done" and skips.
 
   Usage (normal PowerShell - it elevates itself only for Developer Mode):
-      .\bootstrap-agents.ps1                                # auto-discovers the backup on any drive + restores creds/history
-      .\bootstrap-agents.ps1 -BackupRoot H:\backup          # or point it at a specific <L>:\backup
-      .\bootstrap-agents.ps1 -Work                          # + work profile
-      .\bootstrap-agents.ps1 -Force                         # overwrite existing creds/settings.local
+      .\provision\windows.ps1                                # auto-discovers the backup on any drive + restores creds/history
+      .\provision\windows.ps1 -BackupRoot H:\backup          # or point it at a specific <L>:\backup
+      .\provision\windows.ps1 -Work                          # + work profile
+      .\provision\windows.ps1 -Force                         # overwrite existing creds/settings.local
 
   ASCII-only on purpose (runs under Windows PowerShell 5.1 on a fresh box).
 #>
@@ -66,7 +66,7 @@ function Find-BackupRoot {
 
 # ---- Resolve the repo root (this script lives in <repo>\hosts\g16\windows) ----
 if (-not $RepoDir) {
-    $guess = Resolve-Path (Join-Path $PSScriptRoot '..\..\..') -ErrorAction SilentlyContinue
+    $guess = Resolve-Path (Join-Path $PSScriptRoot '..') -ErrorAction SilentlyContinue
     $RepoDir = if ($guess) { $guess.Path } else { Join-Path $env:USERPROFILE 'GitHub\machines' }
 }
 if (-not (Test-Path (Join-Path $RepoDir 'agents\bootstrap.sh'))) {
