@@ -22,7 +22,7 @@ tooling), `agents/` (agent config, memory, bootstrap).
 
 | Box kind | One command |
 |---|---|
-| **NixOS** — g16, latitude5520 | `just switch` |
+| **NixOS** — latitude5520 | `just switch` |
 | **Windows** — ME-G614JV, methe-server | `provision\windows.ps1` (`-Work` adds the work profile) |
 | **WSL / any glibc Linux** — persisted or throwaway | `bash provision/linux.sh` |
 
