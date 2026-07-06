@@ -190,6 +190,63 @@ fi
 # gh credential helper for HTTPS remotes (SSH remotes don't need it).
 have gh && git config --global credential."https://github.com".helper '!gh auth git-credential'
 
+# ── BEST-EFFORT: multi-account SSH wiring ─────────────────────────────────────
+# Per-box SSH keys + ~/.ssh/config for multiple GitHub accounts, so each remote
+# uses the right key regardless of gh's active account. Used here to keep the
+# `cyphy671` account (isolated repos, e.g. qaz-law) separate from `metheoryt`.
+#
+# Declared as "host-alias:github-user". The FIRST entry owns the default
+# `github.com` host; the rest get their alias (clone via git@<alias>:owner/repo).
+# One ed25519 key per account is generated as ~/.ssh/id_<user>. Edit this list to
+# add/remove accounts, or blank it to skip the whole section.
+SSH_ACCOUNTS=(
+  "github.com:metheoryt"    # personal — default host
+  "github-cyphy:cyphy671"   # isolated personal account (qaz-law etc.)
+)
+if [ "${#SSH_ACCOUNTS[@]}" -gt 0 ]; then
+  info "Wiring multi-account SSH…"
+  mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+  _block="$(mktemp)"
+  _need_register=""
+  for _entry in "${SSH_ACCOUNTS[@]}"; do
+    _alias="${_entry%%:*}"; _user="${_entry##*:}"
+    _key="$HOME/.ssh/id_${_user}"
+    if [ -e "$_key" ]; then
+      ok "key ~/.ssh/id_${_user} exists"
+    else
+      if ssh-keygen -t ed25519 -f "$_key" -C "${_user}@$(uname -n)-wsl" -N "" >/dev/null 2>&1; then
+        ok "generated ~/.ssh/id_${_user}"
+        _need_register="${_need_register} ${_user}"
+      else
+        warn "ssh-keygen for ${_user} failed"
+        continue
+      fi
+    fi
+    {
+      printf 'Host %s\n'                 "$_alias"
+      printf '    HostName github.com\n'
+      printf '    User git\n'
+      printf '    IdentityFile ~/.ssh/id_%s\n' "$_user"
+      printf '    IdentitiesOnly yes\n\n'
+    } >> "$_block"
+  done
+  # Replace our managed block in ~/.ssh/config (between markers), keep the rest.
+  _cfg="$HOME/.ssh/config"; touch "$_cfg"
+  _B="# >>> machines-bootstrap ssh accounts >>>"
+  _E="# <<< machines-bootstrap ssh accounts <<<"
+  _rest="$(mktemp)"
+  awk -v b="$_B" -v e="$_E" '$0==b{skip=1} !skip{print} $0==e{skip=0}' "$_cfg" > "$_rest"
+  { printf '%s\n' "$_B"; cat "$_block"; printf '%s\n' "$_E"; cat "$_rest"; } > "$_cfg"
+  chmod 600 "$_cfg"
+  rm -f "$_block" "$_rest"
+  ok "wrote ~/.ssh/config account blocks"
+  if [ -n "$_need_register" ]; then
+    for _user in $_need_register; do
+      warn "register id_${_user} on GitHub → run: gh auth login  (SSH → select ~/.ssh/id_${_user}.pub)"
+    done
+  fi
+fi
+
 # ── BEST-EFFORT: shell init (WSL-safe — no chsh) ──────────────────────────────
 # Append PATH + starship/direnv hooks to ~/.bashrc, guarded so re-runs don't
 # duplicate. We do NOT chsh (unreliable in WSL); to live in fish, add the exec

@@ -22,7 +22,8 @@ minutes.
   `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
   `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`. Shell hooks are
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
-  installed).
+  installed). Per-box SSH keys + `~/.ssh/config` for the declared GitHub accounts
+  (see **Multi-account SSH** below).
 
 It deliberately does **not** reproduce the full `modules/home/me.nix` shell
 experience or `development.nix` toolchain (docker, language servers, ghostty,
@@ -44,6 +45,46 @@ Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`, `codex
 It's idempotent — re-run any time (e.g. after `git pull`) to pick up changes.
 Meant to be **exercised, not trusted**: smoke-test in a throwaway distro
 (`wsl --unregister <name>` to reset).
+
+## Multi-account SSH
+
+The script generates a per-box ed25519 key per declared GitHub account and writes
+a managed block in `~/.ssh/config`, so each remote uses the right key
+independently of which account `gh` is currently switched to. The accounts live
+in the `SSH_ACCOUNTS` array near the top of that section (`host-alias:github-user`):
+
+```bash
+SSH_ACCOUNTS=(
+  "github.com:metheoryt"    # personal — the default host
+  "github-cyphy:cyphy671"   # isolated personal account (e.g. qaz-law)
+)
+```
+
+The **first** entry owns the default `github.com` host; the rest get their alias.
+Clone accordingly:
+
+```bash
+git clone git@github.com:metheoryt/repo.git        # personal (default key)
+git clone git@github-cyphy:cyphy671/qaz-law.git    # isolated account (its own key)
+```
+
+Keys land at `~/.ssh/id_<user>` and must be **registered on the matching account**
+(the script can't — uploading needs an interactive scope grant). Easiest path, per
+account:
+
+```bash
+gh auth login          # GitHub.com → SSH → "select existing key" → ~/.ssh/id_<user>.pub
+```
+
+(the login flow carries the `admin:public_key` scope, so it uploads without a
+separate `gh auth refresh`). Or paste `~/.ssh/id_<user>.pub` at
+`github.com/settings/keys`. The script prints a reminder for any key it just
+generated. `gh` itself stays logged into every account; `gh auth switch --user
+<name>` picks which one `gh pr`/`gh issue` act as.
+
+> Isolation rationale: `cyphy671` is a separate personal account used to keep
+> certain repos (e.g. a large corpus like `qaz-law`) off the main account, to
+> limit blast radius. Separate key + separate remote = the two never cross.
 
 ## Choosing a base distro
 
