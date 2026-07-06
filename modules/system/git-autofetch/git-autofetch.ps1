@@ -3,7 +3,7 @@
   Fetch refs (no pull) for every git repo under the given roots.
 
 .DESCRIPTION
-  The Windows counterpart of modules/system/git-autofetch.nix. Registered as a
+  The Windows counterpart of default.nix in this directory (services.gitAutoFetch). Registered as a
   Scheduled Task that runs every ~10 minutes (see "Register" below). It only
   refreshes remote-tracking refs, so `git status` / the shell prompt can show
   "behind by N" without anyone fetching first. It NEVER pulls/merges/rebases and
@@ -21,7 +21,7 @@
 
 .EXAMPLE
   # Register the Scheduled Task (run once, from the machines repo root):
-  $ps1 = (Resolve-Path .\scripts\git-autofetch.ps1).Path
+  $ps1 = (Resolve-Path .\modules\system\git-autofetch\git-autofetch.ps1).Path
   $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
       -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$ps1`""
   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
@@ -41,12 +41,6 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-# Always include the repo THIS script ships in, so the machines checkout is
-# fetched wherever it lives (~\machines, ~\GitHub\machines, anywhere) — not just
-# under the conventional ~\GitHub fleet root. $PSScriptRoot = <repo>\scripts.
-$repoRoot = Split-Path $PSScriptRoot -Parent
-if ($repoRoot -and ($Roots -notcontains $repoRoot)) { $Roots += $repoRoot }
-
 # Never block on a credential / host-key prompt — skip unreachable repos silently.
 $env:GIT_TERMINAL_PROMPT = '0'
 if (-not $env:GIT_SSH_COMMAND) {
@@ -56,6 +50,15 @@ if (-not $env:GIT_SSH_COMMAND) {
 $git = Get-Command git -ErrorAction SilentlyContinue
 if (-not $git) { Write-Error 'git not found on PATH'; exit 1 }
 $gitExe = $git.Source
+
+# Always include the repo THIS script ships in, so the machines checkout is
+# fetched wherever it lives (~\machines, ~\GitHub\machines, anywhere) and no
+# matter where in the tree this script sits — not just under the ~\GitHub fleet
+# root. Ask git for the repo root from the script's own dir, so it survives any
+# future move (this file lives under modules/system/git-autofetch/, not scripts/).
+$repoRoot = & $gitExe -C $PSScriptRoot rev-parse --show-toplevel 2>$null
+if ($repoRoot) { $repoRoot = ($repoRoot -replace '/', '\').Trim() }
+if ($repoRoot -and ($Roots -notcontains $repoRoot)) { $Roots += $repoRoot }
 
 # Breadth-first scan that prunes heavy dirs and stops descending into a repo
 # once its .git is found (so we never crawl a repo's own history / node_modules).

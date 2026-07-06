@@ -11,7 +11,7 @@
     ../../../modules/system/base.nix
     ../../../modules/system/laptop.nix
     ../../../modules/system/self-update.nix
-    ../../../modules/system/git-autofetch.nix
+    ../../../modules/system/git-autofetch
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
