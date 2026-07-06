@@ -190,6 +190,93 @@ fi
 # gh credential helper for HTTPS remotes (SSH remotes don't need it).
 have gh && git config --global credential."https://github.com".helper '!gh auth git-credential'
 
+# ── BEST-EFFORT: git-autofetch (fetch-only refresh of all repos under $HOME) ──
+# Mirrors modules/system/git-autofetch on the Nix fleet: a periodic `git fetch`
+# — refs only, NEVER pull/merge/rebase and never touching a work tree — so
+# `git status` / the prompt show an accurate "behind by N" without fetching
+# first. The actual pull stays deliberate. Installs a small script, then
+# schedules it via a systemd *user* timer when this distro runs systemd
+# (modern WSL2 default), else a cron entry.
+info "Installing git-autofetch…"
+AF="$HOME/.local/bin/git-autofetch"
+cat > "$AF" <<'AUTOFETCH'
+#!/usr/bin/env sh
+# git-autofetch — fetch-only refresh of every git repo under $GIT_AUTOFETCH_ROOTS
+# (default $HOME) so ahead/behind counts are accurate without fetching first.
+# NEVER pulls/merges/rebases; never touches a working tree. Installed by
+# bootstrap/ubuntu.sh; mirrors modules/system/git-autofetch on the Nix fleet.
+set -u
+: "${GIT_AUTOFETCH_ROOTS:=$HOME}"
+export GIT_TERMINAL_PROMPT=0                                  # never block on auth
+export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+for root in $GIT_AUTOFETCH_ROOTS; do
+  [ -d "$root" ] || continue
+  # -prune stops find descending into a repo's own .git; skip heavy vendored
+  # trees. Match .git as dir (normal repo) or file (submodule/linked worktree).
+  find "$root" -maxdepth 4 \
+    \( -path '*/node_modules' -o -path '*/.cache' -o -name '.direnv' \) -prune -o \
+    -name .git -prune -print 2>/dev/null \
+  | while IFS= read -r gitentry; do
+      repo=$(dirname "$gitentry")
+      timeout 60 git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
+        || echo "fetch failed/skipped: $repo" >&2
+    done
+done
+AUTOFETCH
+chmod +x "$AF"
+ok "git-autofetch → ~/.local/bin/git-autofetch"
+
+_scheduled=""
+# Preferred: a systemd *user* timer. `show-environment` fails cleanly on a WSL
+# distro without systemd ("System has not been booted with systemd"), so it
+# doubles as the availability probe.
+if systemctl --user show-environment >/dev/null 2>&1; then
+  _ud="$HOME/.config/systemd/user"; mkdir -p "$_ud"
+  cat > "$_ud/git-autofetch.service" <<'UNIT'
+[Unit]
+Description=Fetch all git repos under HOME (refs only, no pull)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/git-autofetch
+UNIT
+  cat > "$_ud/git-autofetch.timer" <<'UNIT'
+[Unit]
+Description=Periodic git fetch of all repos under HOME
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
+UNIT
+  if systemctl --user daemon-reload >/dev/null 2>&1 \
+     && systemctl --user enable --now git-autofetch.timer >/dev/null 2>&1; then
+    # Keep the user manager (and its timers) running without an open session.
+    $SUDO loginctl enable-linger "$(id -un)" >/dev/null 2>&1 || true
+    _scheduled="systemd user timer (every ~10 min)"
+  fi
+fi
+# Fallback: cron, if a crontab is available.
+if [ -z "$_scheduled" ] && have crontab; then
+  _cur="$(crontab -l 2>/dev/null || true)"
+  if printf '%s\n' "$_cur" | grep -qF "$AF"; then
+    _scheduled="cron (already scheduled)"
+  elif { printf '%s\n' "$_cur"; printf '%s\n' "*/10 * * * * $AF >/dev/null 2>&1"; } \
+         | crontab - >/dev/null 2>&1; then
+    _scheduled="cron (every 10 min)"
+  fi
+fi
+if [ -n "$_scheduled" ]; then
+  ok "git-autofetch scheduled — $_scheduled"
+else
+  warn "git-autofetch installed but not scheduled (no systemd user manager or cron) — run ~/.local/bin/git-autofetch manually, or enable systemd in /etc/wsl.conf"
+fi
+
 # ── BEST-EFFORT: multi-account SSH wiring ─────────────────────────────────────
 # Per-box SSH keys + ~/.ssh/config for multiple GitHub accounts, so each remote
 # uses the right key regardless of gh's active account. Used here to keep the

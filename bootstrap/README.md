@@ -24,6 +24,9 @@ minutes.
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
   installed). Per-box SSH keys + `~/.ssh/config` + per-account commit identity
   for the declared GitHub accounts (see **Multi-account SSH** below).
+  `git-autofetch` (fetch-only refresh of every repo under `$HOME`, mirroring
+  `modules/system/git-autofetch` on the Nix fleet) — scheduled via a systemd
+  *user* timer, or cron where systemd is off.
 
 It deliberately does **not** reproduce the full `modules/home/me.nix` shell
 experience or `development.nix` toolchain (docker, language servers, ghostty,
