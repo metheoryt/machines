@@ -10,7 +10,7 @@ tree is safe. Both platform implementations of this one concept live here.
 |---|---|---|
 | NixOS | `default.nix` | `services.gitAutoFetch.enable = true;` (imported per host) — installs a systemd timer running every ~10 min. |
 | Windows | `git-autofetch.ps1` | Register a Scheduled Task once using the snippet in the script's header `.EXAMPLE` block (run from the repo root). |
-| Ubuntu/WSL (disposable box) | inlined in `bootstrap/ubuntu.sh` | Installed automatically: drops `~/.local/bin/git-autofetch` and schedules it via a systemd *user* timer (every ~10 min), falling back to cron. Scans `$HOME`. |
+| Ubuntu/WSL (persisted or disposable) | inlined in `provision/linux.sh` | Installed automatically: drops `~/.local/bin/git-autofetch` and schedules it via a systemd *user* timer (every ~10 min), falling back to cron. Scans `$HOME`. |
 
 The script derives its own repo root via `git rev-parse` from `$PSScriptRoot`, so
 it always adds this checkout as a scan root regardless of where the repo lives or

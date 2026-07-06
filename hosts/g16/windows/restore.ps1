@@ -200,7 +200,7 @@ $G += ""
 $G += "2. Agent config (.claude/.codex) - BOOTSTRAP, don't copy verbatim:"
 $G += "     One script does it all (Developer Mode, Claude Code install, bootstrap, machine-local restore):"
 $G += "       cd $RepoRoot"
-$G += "       .\hosts\g16\windows\bootstrap-agents.ps1 -BackupRoot $Root   # (+ -Work if the work profile is used)"
+$G += "       .\provision\windows.ps1 -BackupRoot $Root   # (+ -Work if the work profile is used)"
 $G += "     (On NixOS/macOS use 'just agent-bootstrap' instead; Windows needs the .ps1 - it enables Developer Mode for symlinks.)"
 $G += ""
 if ($sel.WslTars.Count) {

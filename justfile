@@ -5,7 +5,7 @@
 # (it dies on `hostname := ...` below). Point it at Git Bash. Ignored on
 # Linux/macOS, which use the default `sh`. If Git is installed elsewhere, either
 # fix this path or skip just entirely and run the PS bootstrap:
-#   hosts\g16\windows\bootstrap-agents.ps1
+#   provision\windows.ps1
 set windows-shell := ['C:/Program Files/Git/bin/bash.exe', '-cu']
 
 # Default recipe - show help
@@ -59,7 +59,7 @@ _check-nix-link:
 # Relative path (not {{flake_dir}}): just runs recipes with cwd = justfile dir,
 # and on Windows {{flake_dir}} is a backslash path bash mangles (C:Users… → not
 # found). No-just fallbacks: `bash agents/bootstrap.sh`, or on Windows the PS
-# script hosts\g16\windows\bootstrap-agents.ps1.
+# script provision\windows.ps1.
 # Bootstrap personal agent config (~/.claude + ~/.codex)
 agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."

@@ -18,8 +18,23 @@ Top-level layout: `hosts/<host>/{nixos,windows}/` (per-machine OS config),
 Ventoy config), `backup/` (fleet restic clients), `scripts/` (shared repo
 tooling), `agents/` (agent config, memory, bootstrap).
 
-For a Linux dev environment on Windows, `bootstrap/` provisions a disposable
-Debian/Ubuntu WSL box with the portable layer (synced agent config + CLI tools).
+## Onboarding — start here
+
+| Box kind | One command |
+|---|---|
+| **NixOS** — g16, latitude5520 | `just switch` |
+| **Windows** — ME-G614JV, methe-server | `provision\windows.ps1` (`-Work` adds the work profile) |
+| **WSL / any glibc Linux** — persisted or throwaway | `bash provision/linux.sh` |
+
+All three link your synced agent config for you (via `agents/bootstrap.sh`); to
+re-link only that, run `bash agents/bootstrap.sh` (or `just agent-bootstrap`; on
+NixOS `just switch`). To clone your repos into the `~/my` · `~/pure` ·
+`~/cyphy671` layout, run `bash provision/repos.sh <groups>` (e.g. `my cyphy671`
+on a personal box, `pure` on a work box).
+
+For a Linux dev environment on Windows, `provision/linux.sh` provisions a
+persisted or disposable Debian/Ubuntu WSL box with the portable layer (synced
+agent config + CLI tools) — a peer of `install-media/`.
 
 ## Quick Start
 
@@ -105,11 +120,11 @@ modules/
 - Thunderbolt authorization via `bolt` service
 - Battery charge limit: 85% via `charge-upto <percent>`
 
-**`bootstrap/`** — disposable non-Nix distro (Linux dev environment on Windows)
-- `bootstrap/ubuntu.sh` provisions a fresh Debian/Ubuntu box (or throwaway WSL2 distro)
+**`provision/`** — persisted or disposable non-Nix distro (Linux dev environment on Windows), a peer of `install-media/`
+- `provision/linux.sh` provisions a fresh Debian/Ubuntu box (or persisted/throwaway WSL2 distro)
   with the *portable* layer only: the git-synced Claude/Codex config (via
   `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, gh, ripgrep/fd/fzf, …).
-- Imperative and apt-based — no NixOS. See `bootstrap/README.md` for usage and
+- Imperative and apt-based — no NixOS. See `provision/README.md` for usage and
   base-distro guidance.
 
 ### Home Manager (`modules/home/me.nix`)

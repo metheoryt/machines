@@ -24,7 +24,7 @@
 param(
     # WRITE target for the backup (pre-wipe, where you know the letter). Not
     # auto-detected on purpose - picking a write destination is a footgun. The
-    # RESTORE side (restore.ps1 / bootstrap-agents.ps1) auto-discovers the backup
+    # RESTORE side (restore.ps1 / provision\windows.ps1) auto-discovers the backup
     # on any letter, so it doesn't matter which letter the SSD gets later.
     [string]$DriveLetter = 'R',
     [switch]$WhatIf
