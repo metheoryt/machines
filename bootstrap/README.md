@@ -23,6 +23,7 @@ via `agents/bootstrap.sh` either way.
   `agents/bootstrap.sh`; `git config --global` identity + aliases.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
   `pkgs/gortex.nix`), `claude` + `codex` (native installers, no Node.js),
+  `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
   `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`. Shell hooks are
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
   installed).

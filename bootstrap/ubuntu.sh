@@ -165,7 +165,29 @@ if have delta; then
   git config --global delta.navigate true
   git config --global delta.line-numbers true
 fi
-# gh credential helper (only if gh is present — not installed by default here).
+
+# gh (GitHub CLI) — NOT in Debian/Ubuntu's default repos, so add GitHub's
+# official apt source. Powers `gh auth login` (the recommended per-box auth) and
+# the statusline PR segment.
+if have gh; then
+  ok "gh already installed"
+else
+  info "Installing GitHub CLI (gh)…"
+  if $SUDO mkdir -p -m 755 /etc/apt/keyrings \
+     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null \
+     && $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+          | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null \
+     && $SUDO apt-get update -qq \
+     && $SUDO apt-get install -y gh >/dev/null 2>&1; then
+    ok "gh installed"
+  else
+    warn "gh install failed — see github.com/cli/cli/blob/trunk/docs/install_linux.md"
+  fi
+fi
+
+# gh credential helper for HTTPS remotes (SSH remotes don't need it).
 have gh && git config --global credential."https://github.com".helper '!gh auth git-credential'
 
 # ── BEST-EFFORT: shell init (WSL-safe — no chsh) ──────────────────────────────
