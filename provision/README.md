@@ -1,16 +1,17 @@
-# Disposable-distro bootstrap
+# Non-Nix Linux / WSL provisioning (persisted or disposable)
 
-Provision a **fresh, non-Nix Linux box** — most often a throwaway WSL2 distro —
-into this fleet's *portable* dev layer, without NixOS. It's the low-maintenance
-way to get a Linux dev environment on a Windows machine: the **same git-synced
-Claude/Codex config** the NixOS laptops run (via `agents/bootstrap.sh`, which
-produces identical symlinks on any OS) plus the core CLI tools — installed
-imperatively with `apt` + official installers instead of `nixos-rebuild`.
+Provision a **fresh, non-Nix Linux box** — any glibc apt Linux, persisted or
+disposable — into this fleet's *portable* dev layer. It works the same whether
+you're provisioning a throwaway WSL2 distro (ephemeral, `wsl --unregister` to
+reset) or a long-lived daily driver: the **same git-synced Claude/Codex config**
+the NixOS laptops run (via `agents/bootstrap.sh`, which produces identical
+symlinks on any OS) plus the core CLI tools — installed imperatively with `apt`
++ official installers instead of `nixos-rebuild`.
 
 It's deliberately *not* a reproduction of the full fleet: no declarative
 guarantees, no `development.nix` toolchain, no `me.nix` desktop shell. That's the
 trade for zero Nix and a box you can `wsl --unregister` and re-provision in
-minutes.
+minutes, or keep running indefinitely.
 
 ## What it installs
 
@@ -35,19 +36,14 @@ a disposable box is meant to avoid.
 
 ## Usage
 
-Inside a fresh Ubuntu/Debian WSL distro:
-
 ```bash
-sudo apt-get update && sudo apt-get install -y git
 git clone https://github.com/<you>/machines ~/nix
-bash ~/nix/bootstrap/ubuntu.sh
+bash ~/nix/provision/linux.sh
 ```
 
 Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`, `codex`.
 
 It's idempotent — re-run any time (e.g. after `git pull`) to pick up changes.
-Meant to be **exercised, not trusted**: smoke-test in a throwaway distro
-(`wsl --unregister <name>` to reset).
 
 ## Multi-account SSH
 

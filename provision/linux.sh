@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bootstrap/ubuntu.sh — provision a fresh Debian/Ubuntu box (especially a
+# provision/linux.sh — provision a fresh Debian/Ubuntu box (especially a
 # disposable WSL2 distro) into the fleet's PORTABLE dev layer:
 #   • the git-synced Claude Code / Codex agent config (via agents/bootstrap.sh)
 #   • the core CLI dev tools (gortex, claude, codex, ripgrep/fd/fzf, …)
@@ -17,9 +17,9 @@
 # Idempotent; safe to re-run. Usage inside a fresh Ubuntu/Debian WSL:
 #   sudo apt-get update && sudo apt-get install -y git
 #   git clone <this-repo> ~/nix
-#   bash ~/nix/bootstrap/ubuntu.sh
+#   bash ~/nix/provision/linux.sh
 #
-# See bootstrap/README.md for base-distro guidance and post-install steps.
+# See provision/README.md for base-distro guidance and post-install steps.
 set -u
 
 # ── Pretty output ─────────────────────────────────────────────────────────────
@@ -30,15 +30,15 @@ die()  { printf '\033[0;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 WARNINGS=0
 
-# ── Locate the repo (this script lives in <repo>/bootstrap/) ──────────────────
+# ── Locate the repo (this script lives in <repo>/provision/) ──────────────────
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$REPO/agents/bootstrap.sh" ] || die "can't find agents/bootstrap.sh under $REPO — run this from inside the machines repo"
 
 # ── Preconditions ─────────────────────────────────────────────────────────────
-have apt-get || die "this script targets Debian/Ubuntu (apt-get not found). See bootstrap/README.md for other bases."
+have apt-get || die "this script targets Debian/Ubuntu (apt-get not found). See provision/README.md for other bases."
 case "$(uname -m)" in
   x86_64 | amd64) : ;;
-  *) die "gortex ships x86_64-linux only; this box is $(uname -m). See bootstrap/README.md." ;;
+  *) die "gortex ships x86_64-linux only; this box is $(uname -m). See provision/README.md." ;;
 esac
 
 SUDO=""
@@ -204,7 +204,7 @@ cat > "$AF" <<'AUTOFETCH'
 # git-autofetch — fetch-only refresh of every git repo under $GIT_AUTOFETCH_ROOTS
 # (default $HOME) so ahead/behind counts are accurate without fetching first.
 # NEVER pulls/merges/rebases; never touches a working tree. Installed by
-# bootstrap/ubuntu.sh; mirrors modules/system/git-autofetch on the Nix fleet.
+# provision/linux.sh; mirrors modules/system/git-autofetch on the Nix fleet.
 set -u
 : "${GIT_AUTOFETCH_ROOTS:=$HOME}"
 export GIT_TERMINAL_PROMPT=0                                  # never block on auth
