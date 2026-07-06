@@ -2,8 +2,10 @@
 
 **Date:** 2026-07-07
 **Status:** approved (design), pending implementation plan
-**Scope:** one repo — `machines`. Renames/moves + doc coherence. No behaviour
-change to the provisioning scripts themselves (beyond self-reference fixes).
+**Scope:** one repo — `machines`. (1) Renames/moves + doc coherence for the
+provisioning tier — no behaviour change to the moved scripts beyond
+self-reference fixes. (2) A new `provision/repos.sh` that clones your repos into
+a declared per-account home-dir layout.
 **Supersedes:** decision #9 of `2026-07-05-machines-fleet-layout-design.md`
 (WSL provisioning home `hosts/g16/wsl/`).
 
@@ -64,6 +66,9 @@ machines/
     linux.sh                 #   git mv  bootstrap/ubuntu.sh                      (any glibc apt Linux; persisted or throwaway; incl. git-autofetch)
     README.md                #   git mv  bootstrap/README.md                     (reframed: not "disposable-only")
     .gitattributes           #   git mv  bootstrap/.gitattributes
+    repos.sh                 #   NEW — clone repos into ~/my, ~/pure, ~/cyphy671 via gh discovery
+    repos.local.example      #   NEW — committed template for the gitignored repos.local (private subset lists)
+  .gitignore                 # ADD  /provision/repos.local  (private thepureapp repo names; public repo)
   agents/bootstrap.sh        # UNCHANGED — the portable core both scripts call (links agent config)
   install-media/             # UNCHANGED — the OS-install phase; peer of provision/
   hosts/
@@ -82,7 +87,13 @@ Added near the top of `README.md`:
 | **NixOS** — g16, latitude5520 | `just switch` (home-manager owns the agent links) |
 | **Windows** — ME-G614JV, methe-server | `provision\windows.ps1` (`-Work` adds the work profile) |
 | **WSL / any glibc Linux** — persisted *or* throwaway (incl. Ubuntu 26.04) | `bash provision/linux.sh` |
-| **Agent config only** (box already set up) | `bash agents/bootstrap.sh` |
+
+> *All three already link your synced agent config for you (via
+> `agents/bootstrap.sh`). To re-link only that — e.g. after editing config — run
+> `bash agents/bootstrap.sh` (or `just agent-bootstrap`); on NixOS `just switch`
+> handles it. To clone your working repos into the `~/my` · `~/pure` ·
+> `~/cyphy671` layout, run `bash provision/repos.sh` (also offered as the last,
+> best-effort step of `linux.sh` / `windows.ps1`).*
 
 ## Change set
 
@@ -154,9 +165,67 @@ what was decided at their date; this spec supersedes #9 in prose above).
   replace the old `bootstrap/` bullet/section with a `provision/` one; note
   `provision/` is a peer of `install-media/` (post-install vs install phase).
 
+## Component: `provision/repos.sh` — clone repos into a declared layout
+
+Host-agnostic bash (Git Bash on Windows, native on Linux/macOS). Clones the repos
+you work in into a per-account home-dir layout, each via the SSH alias that
+matches its GitHub account so key **and** commit identity line up. Clone-if-absent
+only — git-autofetch keeps them current after. Best-effort: if `gh` is missing or
+unauthed, warn and continue (like `linux.sh`'s other optional steps).
+
+### Groups
+
+| Dir (`~/…`) | GitHub owner | gh account / SSH alias | Selection |
+|---|---|---|---|
+| `my`       | `metheoryt` (personal) | metheoryt / `github.com`   | all non-archived |
+| `pure`     | `thepureapp` (org)     | metheoryt / `github.com`   | curated few (see constraint) |
+| `cyphy671` | `cyphy671` (2nd acct)  | cyphy671 / `github-cyphy`  | all non-archived (its one project) |
+
+`exactly` is intentionally absent — archived namespace, no access.
+
+### Discovery
+
+For an all-non-archived group: `gh repo list <owner> --no-archived --json name`
+→ clone each as `git@<alias>:<owner>/<name>.git` into `~/<dir>/<name>`. `gh` must
+be authed as the owning account; the script runs `gh auth switch --user
+<account>` before listing a group whose account differs from the current one
+(`linux.sh` already logs `gh` into every declared account). Config is a small
+declared table at the top of the script, in the same style as `linux.sh`'s
+`SSH_ACCOUNTS` / `GIT_IDENTITIES` arrays.
+
+### Public-repo constraint (the `pure` list)
+
+`machines` is **public**, so private repo names must not be committed. The two
+all-non-archived groups (`my`, `cyphy671`) commit **zero** names — discovery
+reads them live from GitHub. The `pure` curated few are private `thepureapp`
+names → they live in a **gitignored `provision/repos.local`** (committed
+`provision/repos.local.example` shows the format), the same seam as
+`settings.local.json`. Trade-off: that short list is not git-synced via this
+public repo — re-list the few per box (they are few), or restore it from the
+machine-local backup alongside `.credentials.json`. `repos.sh` sources
+`repos.local` if present and skips the `pure` group silently if absent.
+
+### Commit-identity note (flagged, not built here)
+
+`my` and `pure` share the `github.com` SSH alias, so the existing remote-URL
+`includeIf` cannot separate them. If `thepureapp` commits need a distinct author
+email, that requires a directory-based `includeIf "gitdir:~/pure/"`; otherwise
+`pure` uses the global `metheoryt@gmail.com` identity. `cyphy671` keeps its
+remote-alias identity from the existing machinery. The identity *wiring* lives in
+`linux.sh`'s SSH/identity section — `repos.sh` only places the clones. Adding the
+`gitdir:~/pure/` include is out of scope unless requested.
+
+### Invocation
+
+Standalone (`bash provision/repos.sh`) and, best-effort, the last step of
+`provision/linux.sh` and `provision/windows.ps1` (after `gh` auth). Optional on a
+Windows host where you may only want repos inside WSL — never forced.
+
 ## Explicitly out of scope
 
 - **No Nix on WSL / no home-manager-standalone** (decided).
+- **`exactly` namespace** — archived, no access; not cloned.
+- **`gitdir:~/pure/` commit identity** — flagged above; add only if requested.
 - **No `just onboard`** universal command (rejected — `just` is finicky on
   Windows, NixOS needs the flake path; over-engineered for the goal).
 - **`linux.sh` contents unchanged** beyond self-reference fixes — it already
@@ -179,6 +248,11 @@ what was decided at their date; this spec supersedes #9 in prose above).
 - `just quick` still passes (the justfile edits are comment-only).
 - README routing table lists exactly one command per box kind, each pointing at
   a path that now exists.
+- `provision/repos.sh`: dry-run prints the intended `git@<alias>:<owner>/<name>`
+  clone URLs per group and target dir without cloning; `git check-ignore
+  provision/repos.local` confirms it is ignored; no private repo name appears in
+  any committed file (grep `thepureapp` across tracked files → only this spec's
+  generic mentions, never a repo name).
 
 ## Decisions log
 
@@ -196,3 +270,11 @@ what was decided at their date; this spec supersedes #9 in prose above).
 7. A README "start here" routing table is the primary deliverable — one command
    per box kind.
 8. No `just onboard`; no Nix on WSL. YAGNI.
+9. New `provision/repos.sh`: clone repos into `~/my` (metheoryt, all),
+   `~/pure` (thepureapp, curated few), `~/cyphy671` (cyphy671 acct, all). `gh`
+   discovery for the "all" groups → zero names committed. `exactly` dropped.
+10. Public-repo constraint: the private `thepureapp` subset lives in a gitignored
+    `provision/repos.local` (committed `.example`), same seam as
+    `settings.local.json`. Not git-synced; carried per-box / via backup.
+11. Commit identity for `pure` (`gitdir:~/pure/` include) flagged, out of scope
+    unless requested — `my`/`pure` share the `github.com` alias.
