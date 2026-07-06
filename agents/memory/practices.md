@@ -53,3 +53,12 @@ Deltas are opinions, not laws. Don't restate what global.md / CLAUDE.md cover.
   coordinated rename over manual find-replace. See `CLAUDE.md` tool-routing.
 - **Trust by tier** — never act on gortex's "0 usages / dead code" for
   framework-invoked code; verify by confidence tier. Details in `global.md`.
+- **Check freshness before trusting a query** — the graph lags the working
+  tree. The daemon re-indexes on HEAD change (branch switch / commit / rebase)
+  and after edits, with a warmup window where results are partial and the MCP
+  connection can flap. Before relying on a query, confirm the index is current:
+  `gortex repos` (FRESHNESS `fresh` + INDEXED == current HEAD) or `graph_stats` /
+  `gortex daemon status` (state `ready`, not `warming up`). If `stale`/warming,
+  wait for re-warm or fall back to `rg`/`ast-grep` rather than acting on a stale
+  graph. Uncommitted working-tree edits and worktrees aren't in the base index —
+  use `detect_changes` / an overlay for those.
