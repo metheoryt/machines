@@ -8,7 +8,8 @@
 #   bash provision/repos.sh                 # all groups
 #   bash provision/repos.sh my cyphy671     # personal box
 #   bash provision/repos.sh pure            # work box
-#   DRY_RUN=1 bash provision/repos.sh my    # print actions, do nothing
+#   DRY_RUN=1 bash provision/repos.sh my    # print clone/migrate actions without doing them
+#                                           # (note: still queries gh + switches gh's active account, restored to metheoryt at end)
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,6 +58,7 @@ migrate_group() {
 
 clone_one() {  # <alias> <owner> <repo> <dir>
   local alias="$1" owner="$2" repo="$3" dir="$4" target="$HOME/$4/$3"
+  case "$repo" in machines|nix) return;; esac   # never clone the config repo itself
   [ -e "$target" ] && { info "exists: $target"; return; }
   run "mkdir -p '$HOME/$dir'"
   run "git clone 'git@$alias:$owner/$repo.git' '$target'"

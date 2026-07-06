@@ -1,4 +1,4 @@
-# ubuntu.sh is executed by bash on the target Linux/WSL box. Force LF in the
+# linux.sh is executed by bash on the target Linux/WSL box. Force LF in the
 # working tree on every platform — CRLF breaks the shebang (`#!/usr/bin/env
 # bash\r`) and shell parsing. Everything here is text; no binaries.
 * text eol=lf
