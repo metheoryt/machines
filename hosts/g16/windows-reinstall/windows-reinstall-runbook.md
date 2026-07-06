@@ -4,7 +4,7 @@ Generated 2026-07-05. Machine: single 2 TB NVMe (disk 0), currently C: (976 GB W
 
 **End state:** one Windows 11 install on the full 2 TB disk, Linux dual-boot gone, WSL for Linux work.
 
-**Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD may get a **different drive letter** — check Explorer and substitute in the Phase 4 restore paths.
+**Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD **usually gets a different drive letter** — it came back as **`H:`** after the 2026-07 reinstall, and this is expected. You don't hand-substitute: **`restore.ps1` and `bootstrap-agents.ps1` auto-discover the backup on *any* drive letter** (they scan every volume for `<L>:\backup`). The literal `R:\backup` paths in the Phase 4 steps below are illustrative — only substitute the real letter if you run a raw manual copy instead of the scripts.
 
 **Where this runbook + script live:** in the **`nix` repo** at `hosts/g16/windows-reinstall/` (this machine is `g16`). They're committed and pushed to `github.com/metheoryt/nix`, so they survive the wipe — after reinstall, `git clone` nix to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd C:\Users\methe\GitHub\nix\hosts\g16\windows-reinstall`.
 

@@ -14,16 +14,18 @@
                          stub, NOT `just` - the justfile recipe mangles the path
                          on Windows). Personal profile always; -Work adds the
                          work profile too.
-    6. machine-local   - if -BackupRoot is given, restore ONLY the non-symlinked
-                         bits (.credentials.json, settings.local.json, projects\)
-                         into .claude/.codex. The symlinked trees are left alone.
+    6. machine-local   - if a backup is found (auto-discovered on ANY drive
+                         letter, or via -BackupRoot), restore ONLY the
+                         non-symlinked bits (.credentials.json,
+                         settings.local.json, projects\) into .claude/.codex.
+                         The symlinked trees are left alone.
 
   Idempotent. Re-run any time - each step detects "already done" and skips.
 
   Usage (normal PowerShell - it elevates itself only for Developer Mode):
-      .\bootstrap-agents.ps1
-      .\bootstrap-agents.ps1 -BackupRoot R:\backup          # + restore creds/history
-      .\bootstrap-agents.ps1 -BackupRoot R:\backup -Work    # + work profile
+      .\bootstrap-agents.ps1                                # auto-discovers the backup on any drive + restores creds/history
+      .\bootstrap-agents.ps1 -BackupRoot H:\backup          # or point it at a specific <L>:\backup
+      .\bootstrap-agents.ps1 -Work                          # + work profile
       .\bootstrap-agents.ps1 -Force                         # overwrite existing creds/settings.local
 
   ASCII-only on purpose (runs under Windows PowerShell 5.1 on a fresh box).
@@ -31,7 +33,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoDir,                    # repo clone; default: this script's repo root
-    [string]$BackupRoot,                 # <L>:\backup - enables the machine-local restore
+    [string]$BackupRoot,                 # explicit <L>:\backup; omitted => auto-discover on any drive
     [switch]$Work,                       # also bootstrap the ~/.claude-work profile
     [switch]$Force,                      # overwrite existing .credentials.json / settings.local.json
     [switch]$SkipInstall                 # skip the Claude Code / Codex install steps
@@ -46,6 +48,20 @@ function Update-PathFromRegistry {
     $m = [Environment]::GetEnvironmentVariable('Path','Machine')
     $u = [Environment]::GetEnvironmentVariable('Path','User')
     $env:Path = (@($m, $u) | Where-Object { $_ }) -join ';'
+}
+function Find-BackupRoot {
+    # Scan every lettered volume for <L>:\backup - the SSD often remaps to a
+    # different letter after a reinstall (e.g. it came back as H: in 2026-07), so
+    # never assume one. Marker: the runbook copy, or the logs\/repos\ structure
+    # backup.ps1 produces. Returns the matching root(s); the caller decides.
+    $found = @()
+    foreach ($v in (Get-Volume -ErrorAction SilentlyContinue | Where-Object DriveLetter | Sort-Object DriveLetter)) {
+        $root = "$($v.DriveLetter):\backup"
+        $isBackup = (Test-Path (Join-Path $root 'windows-reinstall-runbook.md')) -or
+                    (Test-Path (Join-Path $root 'logs')) -or (Test-Path (Join-Path $root 'repos'))
+        if ((Test-Path $root) -and $isBackup) { $found += $root }
+    }
+    $found
 }
 
 # ---- Resolve the repo root (this script lives in <repo>\hosts\g16\windows-reinstall) ----
@@ -144,10 +160,18 @@ function Invoke-Bootstrap($envPrefix, $label) {
 Invoke-Bootstrap 'env -u CLAUDE_CONFIG_DIR' 'personal'
 if ($Work) { Invoke-Bootstrap 'CLAUDE_CONFIG_DIR="$HOME/.claude-work"' 'work' }
 
-# ---- 6. Restore machine-local bits (only with -BackupRoot) -------------------
+# ---- 6. Restore machine-local bits (auto-discovers the backup; -BackupRoot overrides) ----
 Step "6. Machine-local restore"
 if (-not $BackupRoot) {
-    Info "no -BackupRoot given - skipped. Pass -BackupRoot <L>:\backup to restore .credentials.json / settings.local.json / projects\."
+    $hits = @(Find-BackupRoot)
+    if ($hits.Count -eq 1) {
+        $BackupRoot = $hits[0]; Info "auto-discovered backup on any drive: $BackupRoot"
+    } elseif ($hits.Count -gt 1) {
+        Warn "multiple backups found ($($hits -join ', ')) - pass -BackupRoot <L>:\backup to pick one."
+    }
+}
+if (-not $BackupRoot) {
+    Info "no backup given or auto-discovered - skipped. Pass -BackupRoot <L>:\backup to restore .credentials.json / settings.local.json / projects\."
 } elseif (-not (Test-Path $BackupRoot)) {
     Warn "BackupRoot '$BackupRoot' not found - skipping machine-local restore."
 } else {
