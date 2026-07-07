@@ -6,15 +6,17 @@
 
 **Architecture:** A cross-repo relocation (two repos, two commits). Because `git mv` cannot cross repo boundaries, content is byte-copied from `~/gh/vps/backup/` into `machines/backup/`, profile *directories* are renamed to fleet machine names, and the originals are `git rm`'d from `vps`. The only couplings are a network endpoint (`rest://…`, unaffected by a repo move) and a soft semantic link to Immich (edits together, not a build break). This plan is independent of Plan A — either can land first.
 
+**Update 2026-07-07:** g16's `laptop/` profile (`music`) has already been retired from `vps/backup/` — music is no longer stored on g16, so there's nothing left to relocate for it. Only two profile dirs remain to move: `homeserver/` and `wsl/` (→ `g16-wsl/`). Steps below are updated accordingly.
+
 **Tech Stack:** restic + resticprofile (YAML profiles inheriting a shared `base.yaml`), Windows `.bat` / WSL `.sh` scheduled-task installers, git across two repos.
 
 ## Global Constraints
 
 - **Reference spec:** `docs/superpowers/specs/2026-07-05-machines-fleet-layout-design.md` §2, §2b-adjacent.
-- **FROZEN — never change:** the restic **repository URLs/paths** inside `profiles.yaml` (`G:\backup-homeserver\…`, `rest:http://server.lan:8001/laptop-music`, `rest:http://server.lan:8001/wsl`) and the **profile names**. These name stateful backends and scheduled tasks; changing them orphans existing snapshots. Only *directory* names change.
+- **FROZEN — never change:** the restic **repository URLs/paths** inside `profiles.yaml` (`G:\backup-homeserver\…`, `rest:http://server.lan:8001/wsl`) and the **profile names**. These name stateful backends and scheduled tasks; changing them orphans existing snapshots. Only *directory* names change.
 - **Content is copied byte-for-byte** from `vps`; the machines copy of each file (other than the dir path) must be identical to the vps original. Verify with `diff`.
 - **Repos:** source `~/gh/vps`, destination `/home/me/gh/machines`.
-- **Machine mapping:** `homeserver/` = g16-2023 (Immich); `laptop/` → `g16/` = g16-2024 daily driver (music); `wsl/` → `g16-wsl/` = WSL inside the g16-2024.
+- **Machine mapping:** `homeserver/` = g16-2023 (Immich); `wsl/` → `g16-wsl/` = WSL inside g16-2024 (daily driver). (g16's own `laptop/` music profile was retired — no longer relocated.)
 
 ---
 
@@ -23,24 +25,22 @@
 **Files:**
 - Create (copied from `~/gh/vps/backup/`): `machines/backup/base.yaml`, `machines/backup/restic-install.bat`, `machines/backup/restic-install.sh`
 - Create: `machines/backup/homeserver/{install-tasks.bat,profiles.yaml}`
-- Create (renamed from `laptop/`): `machines/backup/g16/{install-tasks.bat,profiles.yaml}`
 - Create (renamed from `wsl/`): `machines/backup/g16-wsl/{.resticignore,install-tasks.sh,profiles.yaml}`
 - Modify: `machines/.gitignore` (backup secret globs, if missing)
 
 **Interfaces:**
 - Consumes: the `vps` repo's `backup/` subtree as read-only source.
-- Produces: `machines/backup/` with `base.yaml`, `restic-install.*`, and profile dirs `homeserver/`, `g16/`, `g16-wsl/`. Profile names and repo URLs inside are unchanged from `vps`.
+- Produces: `machines/backup/` with `base.yaml`, `restic-install.*`, and profile dirs `homeserver/`, `g16-wsl/`. Profile names and repo URLs inside are unchanged from `vps`.
 
-- [ ] **Step 1: Copy the whole subtree, then rename the two dirs**
+- [ ] **Step 1: Copy the whole subtree, then rename the one dir**
 
 ```bash
 cd /home/me/gh/machines
 cp -r /home/me/gh/vps/backup ./backup
-git mv backup/laptop backup/g16
 git mv backup/wsl     backup/g16-wsl
 ```
 
-(`cp` first so untracked files like `.resticignore` come along; the `git mv` on the two subdirs both renames and stages them. `git add` in step 4 picks up the rest.)
+(`cp` first so untracked files like `.resticignore` come along; the `git mv` renames+stages the subdir. `git add` in step 4 picks up the rest.)
 
 - [ ] **Step 2: Prove the copied content is byte-identical to the vps originals**
 
@@ -52,7 +52,6 @@ diff /home/me/gh/vps/backup/base.yaml           backup/base.yaml           && ec
 diff /home/me/gh/vps/backup/restic-install.bat  backup/restic-install.bat  && echo "restic-install.bat OK"
 diff /home/me/gh/vps/backup/restic-install.sh   backup/restic-install.sh   && echo "restic-install.sh OK"
 diff -r /home/me/gh/vps/backup/homeserver backup/homeserver && echo "homeserver/ OK"
-diff -r /home/me/gh/vps/backup/laptop     backup/g16        && echo "g16/ (was laptop) OK"
 diff -r /home/me/gh/vps/backup/wsl        backup/g16-wsl    && echo "g16-wsl/ (was wsl) OK"
 ```
 
@@ -62,22 +61,21 @@ Expected: every `diff` empty, every `... OK` printed.
 
 ```bash
 cd /home/me/gh/machines
-git grep -n 'rest:http://server.lan:8001/laptop-music' backup/g16/     ; echo "^ URL preserved (label stays 'laptop-music')"
 git grep -n 'rest:http://server.lan:8001/wsl'          backup/g16-wsl/  ; echo "^ URL preserved"
 git grep -nE 'backup-homeserver' backup/homeserver/                     ; echo "^ URL preserved"
 # Profile names must be unchanged — spot-check the profile keys still match vps:
-grep -hE '^\s*[a-z0-9-]+:\s*$' /home/me/gh/vps/backup/laptop/profiles.yaml
-grep -hE '^\s*[a-z0-9-]+:\s*$' backup/g16/profiles.yaml
+grep -hE '^\s*[a-z0-9-]+:\s*$' /home/me/gh/vps/backup/wsl/profiles.yaml
+grep -hE '^\s*[a-z0-9-]+:\s*$' backup/g16-wsl/profiles.yaml
 # ^ the two profile-name lists must be identical
 ```
 
 - [ ] **Step 4: Confirm base.yaml inheritance path still resolves**
 
-The profile dirs stayed at the same depth (`backup/<name>/`), so any `../base.yaml`-style include in a `profiles.yaml` is unaffected by the sibling rename. Verify no `profiles.yaml` references `base.yaml` by an *absolute* or `laptop/`/`wsl/`-embedded path:
+The profile dirs stayed at the same depth (`backup/<name>/`), so any `../base.yaml`-style include in a `profiles.yaml` is unaffected by the sibling rename. Verify no `profiles.yaml` references `base.yaml` by an *absolute* or `wsl/`-embedded path:
 
 ```bash
 cd /home/me/gh/machines
-git grep -nE 'base\.yaml|/laptop/|/wsl/' backup/*/profiles.yaml
+git grep -nE 'base\.yaml|/wsl/' backup/*/profiles.yaml
 # any base.yaml include must be relative (e.g. ../base.yaml) and contain no old dir name
 ```
 
@@ -97,7 +95,7 @@ git check-ignore backup/homeserver/pass.txt   # expect it to print the path (i.e
 ```bash
 cd /home/me/gh/machines
 git add -A
-git commit -m "backup: relocate restic system from vps into machines/backup/ (laptop->g16, wsl->g16-wsl); freeze repo URLs + profile names"
+git commit -m "backup: relocate restic system from vps into machines/backup/ (wsl->g16-wsl); freeze repo URLs + profile names"
 ```
 
 ---
@@ -136,7 +134,7 @@ Verify no stale references to the deleted paths remain in vps docs:
 
 ```bash
 cd /home/me/gh/vps
-git grep -nE 'backup/(base\.yaml|homeserver|laptop|wsl)|restic-install' -- '*.md' ; echo "^ must be EMPTY"
+git grep -nE 'backup/(base\.yaml|homeserver|wsl)|restic-install' -- '*.md' ; echo "^ must be EMPTY"
 ```
 
 - [ ] **Step 3: Confirm the restic server service is untouched**
@@ -159,13 +157,13 @@ git commit -m "backup: move restic clients to the machines repo; keep restic-ser
 
 ## Post-deploy operational note (not a repo step)
 
-On each affected machine (g16-2024, and the homeserver for Immich), the restic
-scheduled tasks were registered against the old working-copy path
-(`…\vps\backup\…` and, for the daily driver, the `laptop\` dir name). After that
-machine pulls this relocation, **re-run the installer from the new location** so
-the scheduled tasks point at `…\machines\backup\<machine>\`:
+On each affected machine (g16-2024's WSL, and the homeserver for Immich), the
+restic scheduled tasks were registered against the old working-copy path
+(`…\vps\backup\…`). After that machine pulls this relocation, **re-run the
+installer from the new location** so the scheduled tasks point at
+`…\machines\backup\<machine>\`:
 
-- Windows (g16, homeserver): from the new dir, `install-tasks.bat`.
+- Windows (homeserver): from the new dir, `install-tasks.bat`.
 - WSL (g16-wsl): from the new dir, `bash install-tasks.sh`.
 
 Existing snapshots are untouched — the repository URLs never changed, so restic
