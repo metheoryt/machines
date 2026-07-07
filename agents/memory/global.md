@@ -119,6 +119,25 @@ elsewhere to sync. Do NOT put secrets here.
   wiring) is absent — symlink/copy it in on worktree creation or the agent
   silently loses it.
 
+## Docker Desktop shares one engine across all WSL distros
+
+- **One Docker Desktop backend serves every WSL distro, and compose project name
+  defaults to the checkout's dir basename — so the *same* repo cloned into two
+  distros resolves to the same container/volume/network names and collides.** A
+  `docker compose down -v` (or `--rmi all`) run in one distro's copy tears down
+  the OTHER distro's live container, named volume, and image — they're the same
+  objects. (Learned the hard way, 2026-07-07: cleaning up an old `qaz-code`
+  checkout in Ubuntu-24.04 with `compose down -v` deleted the `qaz-code_db_data`
+  volume out from under an in-progress overnight ingest running against the
+  Ubuntu-26.04 copy. A deleted Docker named volume is unrecoverable — no trash.)
+  - **How to apply:** pin an explicit `name:` at the top of each `compose.yml`
+    (done for qaz-law) so a stack gets its own namespace instead of the generic
+    dir-basename one; for two live checkouts of the *same* repo, give each a
+    distinct `COMPOSE_PROJECT_NAME`. Before any `down -v`/prune in a duplicate
+    checkout, confirm nothing else (another distro, another agent) is using that
+    engine's volumes. Same dir-basename→project-name footgun as the worktree
+    compose note above, different trigger.
+
 ## Gortex
 
 - Gortex's Python resolution is near-compiler-grade for the STATIC OO layer
