@@ -28,8 +28,8 @@
   lib,
   ...
 }: let
-  # Repo agents/ dir on this machine (fish helpers cd to ~/nix, which is the flake).
-  agents = "${config.home.homeDirectory}/nix/agents";
+  # Repo agents/ dir on this machine (fish helpers cd to ~/machines, which is the flake).
+  agents = "${config.home.homeDirectory}/machines/agents";
   link = config.lib.file.mkOutOfStoreSymlink;
 
   # All shared links for one profile dir (".claude" or ".claude-work"),

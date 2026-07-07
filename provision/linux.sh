@@ -16,8 +16,8 @@
 #
 # Idempotent; safe to re-run. Usage inside a fresh Ubuntu/Debian WSL:
 #   sudo apt-get update && sudo apt-get install -y git
-#   git clone <this-repo> ~/nix
-#   bash ~/nix/provision/linux.sh
+#   git clone <this-repo> ~/machines
+#   bash ~/machines/provision/linux.sh
 #
 # See provision/README.md for base-distro guidance and post-install steps.
 set -u

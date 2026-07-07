@@ -12,7 +12,7 @@
   lib,
   ...
 }: let
-  agents = "${config.home.homeDirectory}/nix/agents";
+  agents = "${config.home.homeDirectory}/machines/agents";
   codex = "${agents}/codex";
   link = config.lib.file.mkOutOfStoreSymlink;
 

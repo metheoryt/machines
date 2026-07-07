@@ -48,11 +48,12 @@ build:
     sudo nixos-rebuild build --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Build complete!"
 
-# Guard: home-manager (claude.nix/codex.nix) reads ~/nix/agents via mkOutOfStoreSymlink,
-# so ~/nix must resolve to this clone. A dangling ~/nix (e.g. after the nix→machines
-# rename without repointing) silently breaks the agent config — fail loud instead.
-_check-nix-link:
-    @test -e ~/nix/agents/AGENTS.md || { echo "❌ ~/nix is dangling — home-manager reads ~/nix/agents. Repoint it: ln -sfn {{flake_dir}} ~/nix (see hosts/g16/windows runbook, Phase 4.0)"; exit 1; }
+# Guard: home-manager (claude.nix/codex.nix) reads ~/machines/agents via
+# mkOutOfStoreSymlink, so ~/machines must resolve to this clone. If the repo
+# isn't cloned there directly, a dangling/missing ~/machines silently breaks
+# the agent config — fail loud instead.
+_check-machines-link:
+    @test -e ~/machines/agents/AGENTS.md || { echo "❌ ~/machines is missing or dangling — home-manager reads ~/machines/agents. If this clone lives elsewhere, symlink it: ln -sfn {{flake_dir}} ~/machines (see hosts/g16/windows runbook, Phase 4.0)"; exit 1; }
 
 # NOT run by switch/update on NixOS — claude.nix/codex.nix own the links there,
 # applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.
@@ -71,19 +72,19 @@ agent-bootstrap-work:
     @CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh
 
 # Build and switch to new configuration
-switch: _check-nix-link
+switch: _check-machines-link
     @echo "🔧 Switching to new NixOS configuration..."
     sudo nixos-rebuild switch --flake {{flake_dir}}#{{hostname}}
     @echo "✅ System switched successfully!"
 
 # Build and test configuration temporarily
-test: _check-nix-link
+test: _check-machines-link
     @echo "🧪 Testing NixOS configuration..."
     sudo nixos-rebuild test --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Test complete! Changes are temporary."
 
 # Build and set for next boot
-boot: _check-nix-link
+boot: _check-machines-link
     @echo "🥾 Setting configuration for next boot..."
     sudo nixos-rebuild boot --flake {{flake_dir}}#{{hostname}}
     @echo "✅ Configuration set for next boot!"

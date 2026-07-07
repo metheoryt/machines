@@ -37,8 +37,8 @@ a disposable box is meant to avoid.
 ## Usage
 
 ```bash
-git clone https://github.com/<you>/machines ~/nix
-bash ~/nix/provision/linux.sh
+git clone https://github.com/<you>/machines ~/machines
+bash ~/machines/provision/linux.sh
 ```
 
 Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`, `codex`.

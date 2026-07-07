@@ -116,8 +116,8 @@ Never put secrets in any tracked memory file.
 ## Set up on a new machine
 
 ```bash
-git clone <this repo> ~/nix      # or wherever you keep it
-bash ~/nix/agents/bootstrap.sh
+git clone <this repo> ~/machines      # or wherever you keep it
+bash ~/machines/agents/bootstrap.sh
 ```
 
 `bootstrap.sh` honors `$CLAUDE_CONFIG_DIR` (defaults to `~/.claude`), backs up
@@ -164,7 +164,7 @@ identical symlinks via `mkOutOfStoreSymlink`. It's imported by
 just switch        # or: sudo nixos-rebuild switch --flake .#<host>
 ```
 
-It assumes the repo is checked out at `~/nix`; edit the `claude = …` path in
+It assumes the repo is checked out at `~/machines`; edit the `agents = …` path in
 `modules/home/claude.nix` if you clone elsewhere. home-manager backs up any
 pre-existing real file (`backupFileExtension = "backup"`). `bootstrap.sh` and
 the nix module produce the same links — use whichever you prefer on Linux/macOS;
@@ -176,7 +176,7 @@ The links are live, so the loop is just normal git:
 
 1. Edit a skill/agent/statusline/etc. — either here, or via `~/.claude/...`
    while working in *any* other repo (it's the same file through the symlink).
-2. `cd ~/nix && git add agents/ && git commit && git push`.
+2. `cd ~/machines && git add agents/ && git commit && git push`.
 3. On the other machines: `git pull`. Edits to already-linked files are live
    immediately (no step). New *files* need their symlink created — but that's
    now automatic (see below).

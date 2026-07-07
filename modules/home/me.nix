@@ -115,7 +115,8 @@ in {
       navigate = true; # n/N to jump between files/hunks
       line-numbers = true;
       side-by-side = true;
-      # follow ghostty's dark:Dracula / light:GitHub theme split
+      # delta has no dark/light auto-switch of its own (unlike ghostty's
+      # theme below), so this stays fixed to a dark-friendly theme.
       syntax-theme = "Dracula";
     };
   };
@@ -197,7 +198,7 @@ in {
         description = "Rebuild NixOS configuration";
         body = ''
           set current_dir (pwd)
-          cd ~/nix
+          cd ~/machines
           sudo nixos-rebuild switch --flake .#${hostname}
           cd $current_dir
         '';
@@ -206,7 +207,7 @@ in {
         description = "Update NixOS flake";
         body = ''
           set current_dir (pwd)
-          cd ~/nix
+          cd ~/machines
           nix flake update
           cd $current_dir
         '';
@@ -215,7 +216,7 @@ in {
         description = "Cleanup NixOS system";
         body = ''
           sudo nix-collect-garbage -d
-          sudo nixos-rebuild switch --flake ~/nix#${hostname}
+          sudo nixos-rebuild switch --flake ~/machines#${hostname}
         '';
       };
       ghostty-theme = {
@@ -347,6 +348,13 @@ in {
       quit-after-last-window-closed = true;
       desktop-notifications = false;
       gtk-titlebar = false;
+      # sudo: preserve $TERMINFO under sudo (every `just` rebuild command runs
+      # through sudo, so this keeps xterm-ghostty terminfo instead of falling
+      # back to a degraded TERM for anything full-screen run as root).
+      # ssh-env/ssh-terminfo: forward color env vars and auto-install the
+      # xterm-ghostty terminfo entry (cached per-host) when sshing to other
+      # fleet machines.
+      shell-integration-features = "sudo,ssh-env,ssh-terminfo";
       keybind = [
         "ctrl+w=close_tab"
         "alt+shift+left=goto_split:left"
@@ -359,12 +367,14 @@ in {
 
   # Seed the mutable theme include ONCE (never overwrites a user-set value), so a
   # fresh machine gets the default theme. Switch it later with `ghostty-theme <name>`.
+  # Default pairs Ghostty's native dark/light auto-switch (follows GNOME's
+  # color-scheme setting) with delta's dark:Dracula/light:GitHub split above.
   home.activation.ghosttyThemeSeed =
     config.lib.dag.entryAfter ["writeBoundary"] ''
       cfg="$HOME/.config/ghostty/theme.conf"
       if [ ! -e "$cfg" ]; then
         mkdir -p "$(dirname "$cfg")"
-        printf 'theme = %s\n' 'Belafonte Day' > "$cfg"
+        printf 'theme = %s\n' 'dark:Matrix,light:GitHub' > "$cfg"
       fi
     '';
 
