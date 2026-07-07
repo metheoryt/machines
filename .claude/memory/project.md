@@ -8,30 +8,46 @@ global + per-host memory). One bullet per fact under a topical heading.
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
-- AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`); static peers baked into
-  `vps/vps/setup-awg.sh` are homeserver (`10.0.0.2`) — g16 (`10.0.0.6`) was
-  added ad-hoc. `vps/vps/manage-peers.sh` adds roaming peers (keys gitignored
-  in `vps/vps/peers/`, never committed).
-- Fleet mesh + SSH-over-mesh is CODIFIED (2026-07-07, on `main`) but NOT yet
-  ACTIVATED: `modules/system/mesh-vpn.nix` + `mesh-vpn-params.nix` (spoke +
-  non-secret constants), `provision/mesh-authorized-keys` (committed pubkeys),
-  `modules/home/ssh.nix` (matchBlocks incl. `ssh vps`→cyphy.kz), avahi
-  `publish`, Windows OpenSSH step in `provision/windows.ps1`; VPS-side hairpin
-  FORWARD rule + interactive `manage-peers.sh` (in the vps repo).
-  `fleet.meshVpn.enable = true` on both NixOS hosts BUT with PLACEHOLDER
-  vpsPublicKey/obfuscation-params/latitude5520-IP in `mesh-vpn-params.nix` —
-  so a `just switch` will FAIL `awg0` activation, and `ssh <host>` over the
-  mesh does NOT work, until the Runbook is done (place real keys at
-  `/etc/amnezia-wg/awg0.key`, copy real values from `vps/vps/awg.env`, run
-  `manage-peers.sh add latitude5520`, apply the hairpin live on the VPS). Full
-  ordered Runbook: `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md`.
+- AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`). Verified live peer map
+  (2026-07-08, `awg show` + `peers/*.key`): `.2`=homeserver, `.6`=`me-g614jv`
+  (the ROG G16's Windows/app side), `.8`=`nix-lat5520` (latitude5520's NixOS
+  side, already handshaking). `.7` is a FRIEND's device (`ilya-romanyuk`) — the
+  mesh also carries friends' peers, so never disturb existing ones. The live
+  `wg0` has DRIFTED from on-disk `/etc/wireguard/wg0.conf` (the file lists peers
+  not in the running interface — hand-edited live). `vps/vps/manage-peers.sh`
+  adds roaming peers (keys gitignored in `vps/vps/peers/`, never committed).
+- Fleet mesh + SSH-over-mesh is CODIFIED but only PARTIALLY activated. As of
+  2026-07-08 the non-secret AmneziaWG params in `mesh-vpn-params.nix` are REAL
+  (filled from the live VPS: vpsPublicKey, port 64531, obfuscation) and
+  latitude5520's mesh IP is corrected to `.8` (commit `c33f391`, "Phase 0").
+  Still NOT activated: no `switch` has run and no private key is placed at
+  `/etc/amnezia-wg/awg0.key` on any host, so `ssh <host>` over the mesh does not
+  work yet. Live VPS `FORWARD` policy is already `ACCEPT`, so the old plan's
+  hairpin rule is optional hardening, not a prerequisite. The mesh work is now
+  reframed as "Phase 0" of the unified provisioner (see below); the old Runbook
+  `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md` is superseded. NOTE:
+  the Phase 0 param edit was NOT dry-built (done on Windows) — run `nix build
+  --dry-run` on a NixOS box before `switch`.
+- Unified fleet provisioner: DESIGN APPROVED 2026-07-08, spec at
+  `docs/superpowers/specs/2026-07-08-unified-fleet-provisioner-design.md`
+  (commit `5cc7a94`). Convergence-first single front door over one role-based
+  fleet (every owned machine is a member; "VPS" is just a public-IP role);
+  machine layer only (services stay the vps repo's job). Composes existing
+  engines — home-manager (NixOS dotfiles), chezmoi (non-Nix dotfiles, intentional
+  divergence, retires the bare `~/.dotfiles`), restic (backup), age/agenix
+  (secrets) — behind a thin dispatcher over a `fleet.json` manifest (JSON so a
+  fresh Windows box reads it natively). NixOS role membership will be GENERATED
+  from the manifest by the flake (single source of truth). NOT built yet; phased
+  (Phase 0 = the mesh param fix above). Next: user reviews spec → writing-plans.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
-- No secrets-management framework (sops-nix/agenix) in this repo — the
-  existing convention is to keep secrets out of git entirely (fixed
-  out-of-store paths provisioned manually once, or gitignored files), not to
-  encrypt them in-repo.
+- Secrets convention is CHANGING. Historically: no framework, keep secrets out
+  of git entirely (out-of-store paths / gitignored). The approved unified-
+  provisioner design (2026-07-08) REVERSES this — plans age-encrypted secrets
+  in-repo via chezmoi (non-Nix boxes) + agenix (NixOS), one age identity for the
+  fleet. Designed, NOT yet implemented — agenix would be the repo's first
+  secrets framework.
 - User keeps a separate bare-repo dotfiles tracker at `~/.dotfiles`
   (`git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME`, alias `dotfiles`,
   github.com/metheoryt/dotfiles, private), one branch per machine. Plain
