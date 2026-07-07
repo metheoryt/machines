@@ -48,6 +48,16 @@ elsewhere to sync. Do NOT put secrets here.
   one place `settings.local.json` is honored). Test with a throwaway
   `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
 
+## Repo layout (WSL boxes)
+
+- **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
+  grouped by GitHub owner into per-namespace folders at the home root: `~/my`
+  (`metheoryt`), `~/pure` (`thepureapp`), `~/cyphy671`, and `~/exactly`
+  (`exactly-ai`, archived — kept for reference only). `~/gh/` is the **retired
+  legacy location**; migrate any stragglers out of it. Each box clones only its
+  relevant namespaces (personal distro: `my`, `cyphy671`; work distro: `pure`,
+  `exactly`), wired by `provision/repos.sh`.
+
 ## Shipping & deployment defaults
 
 - **Default on push: ship to production, not just to git — overridable per
