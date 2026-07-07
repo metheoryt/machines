@@ -8,10 +8,23 @@ global + per-host memory). One bullet per fact under a topical heading.
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
-- AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`); homeserver is the only
-  peer today (`10.0.0.2`, static, baked into `vps/vps/setup-awg.sh`).
-  `vps/vps/manage-peers.sh` already supports adding arbitrary roaming peers
-  (keys stored gitignored in `vps/vps/peers/`, never committed).
+- AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`); static peers baked into
+  `vps/vps/setup-awg.sh` are homeserver (`10.0.0.2`) — g16 (`10.0.0.6`) was
+  added ad-hoc. `vps/vps/manage-peers.sh` adds roaming peers (keys gitignored
+  in `vps/vps/peers/`, never committed).
+- Fleet mesh + SSH-over-mesh is CODIFIED (2026-07-07, on `main`) but NOT yet
+  ACTIVATED: `modules/system/mesh-vpn.nix` + `mesh-vpn-params.nix` (spoke +
+  non-secret constants), `provision/mesh-authorized-keys` (committed pubkeys),
+  `modules/home/ssh.nix` (matchBlocks incl. `ssh vps`→cyphy.kz), avahi
+  `publish`, Windows OpenSSH step in `provision/windows.ps1`; VPS-side hairpin
+  FORWARD rule + interactive `manage-peers.sh` (in the vps repo).
+  `fleet.meshVpn.enable = true` on both NixOS hosts BUT with PLACEHOLDER
+  vpsPublicKey/obfuscation-params/latitude5520-IP in `mesh-vpn-params.nix` —
+  so a `just switch` will FAIL `awg0` activation, and `ssh <host>` over the
+  mesh does NOT work, until the Runbook is done (place real keys at
+  `/etc/amnezia-wg/awg0.key`, copy real values from `vps/vps/awg.env`, run
+  `manage-peers.sh add latitude5520`, apply the hairpin live on the VPS). Full
+  ordered Runbook: `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md`.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
