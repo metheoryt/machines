@@ -19,6 +19,19 @@ global + per-host memory). One bullet per fact under a topical heading.
   existing convention is to keep secrets out of git entirely (fixed
   out-of-store paths provisioned manually once, or gitignored files), not to
   encrypt them in-repo.
+- User keeps a separate bare-repo dotfiles tracker at `~/.dotfiles`
+  (`git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME`, alias `dotfiles`,
+  github.com/metheoryt/dotfiles, private), one branch per machine. Plain
+  files, no encryption. Secret files (SSH keys, VPN keys, etc.) are never
+  committed but ARE listed in that machine's branch `.gitignore` — the
+  ignore entry itself is the "you need to restore/regenerate this on a fresh
+  box" checklist, without ever storing the secret content. When adding a new
+  per-machine secret (e.g. an AmneziaWG private key), add its path to that
+  machine's `.dotfiles` branch `.gitignore` too, not just to this repo.
+- SSH keys are per-host, not shared (e.g. latitude5520's is
+  `ssh-ed25519 ...  me-nixos-latitude5520`) — each fleet machine has its own
+  keypair; cross-machine SSH trust needs each host's *public* key collected
+  centrally (see fleet-mesh-vpn-ssh-design.md), not one key copied around.
 
 ## Backups
 
