@@ -28,7 +28,7 @@
     "pure-team": {
       "source": {
         "source": "directory",
-        "path": "/home/me/gh/pure/claude-plugins"
+        "path": "/home/me/pure/claude-plugins"
       },
       "autoUpdate": true
     }

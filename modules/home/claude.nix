@@ -22,6 +22,17 @@
 # full list). settings.local.json in particular is deliberately absent from both
 # profiles below: it stays machine-local (personal: gortex hooks; work:
 # PURE_SENTRY_TOKEN secret), owned by neither this module nor bootstrap.sh.
+#
+# settings.json is NOT linked via home.file/mkOutOfStoreSymlink like the rest —
+# home.file routes every source through the Nix store, so a mkOutOfStoreSymlink
+# there ends up as dest -> store-symlink -> store-symlink -> repo file (a
+# 3-hop chain, first two hops inside the read-only store). Claude Code's
+# settings writer (`/plugin marketplace add`, `/config`, etc.) resolves only
+# one level of symlink before writing its `settings.json.tmp.*` beside that
+# target — landing inside the immutable store and failing with EROFS. Instead
+# settings.json is linked directly by an activation script below: dest -> repo
+# file in one hop, always writable. See `agents/bootstrap.sh`'s `link()` for
+# the non-Nix machines, which already does a plain one-hop `ln -s`.
 {
   config,
   osConfig,
@@ -32,29 +43,30 @@
   agents = "${config.home.homeDirectory}/machines/agents";
   link = config.lib.file.mkOutOfStoreSymlink;
 
-  # All shared links for one profile dir (".claude" or ".claude-work"),
-  # parameterized by which committed settings file becomes settings.json.
-  # settings.local.json is intentionally NOT managed here — it stays machine-local
-  # (personal: gortex hooks; work: PURE_SENTRY_TOKEN secret), owned by neither
-  # this module nor bootstrap.sh.
-  profileFiles = profileDir: settingsFile:
-    {
-      "${profileDir}/settings.json".source = link "${agents}/${settingsFile}";
-      "${profileDir}/statusline-command.sh".source = link "${agents}/statusline-command.sh";
-      "${profileDir}/balance-refresh.py".source = link "${agents}/balance-refresh.py";
-      # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
-      "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
-      "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
-      "${profileDir}/memory/practices.md".source = link "${agents}/memory/practices.md";
-      "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
-      # cyphy plugin: one whole-directory symlink replaces the four per-entry
-      # linkEntries calls that used to wire skills/agents/commands/hooks
-      # individually — they all live inside agents/plugin/ now, discovered by
-      # Claude Code as a skills-directory plugin (cyphy@skills-dir).
-      "${profileDir}/skills/cyphy".source = link "${agents}/plugin";
-    };
+  # Shared (non-settings.json) links for one profile dir (".claude" or ".claude-work").
+  profileFiles = profileDir: {
+    "${profileDir}/statusline-command.sh".source = link "${agents}/statusline-command.sh";
+    "${profileDir}/balance-refresh.py".source = link "${agents}/balance-refresh.py";
+    # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
+    "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
+    "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
+    "${profileDir}/memory/practices.md".source = link "${agents}/memory/practices.md";
+    "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
+    # cyphy plugin: one whole-directory symlink replaces the four per-entry
+    # linkEntries calls that used to wire skills/agents/commands/hooks
+    # individually — they all live inside agents/plugin/ now, discovered by
+    # Claude Code as a skills-directory plugin (cyphy@skills-dir).
+    "${profileDir}/skills/cyphy".source = link "${agents}/plugin";
+  };
 in {
-  home.file =
-    profileFiles ".claude" "settings.personal.json"
-    // profileFiles ".claude-work" "settings.work.json";
+  home.file = profileFiles ".claude" // profileFiles ".claude-work";
+
+  # settings.json committed per-profile: personal -> settings.personal.json,
+  # work -> settings.work.json. Direct one-hop symlink (see comment above) —
+  # runs after writeBoundary so the profile dirs already exist.
+  home.activation.linkClaudeSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    $DRY_RUN_CMD mkdir -p "$HOME/.claude" "$HOME/.claude-work"
+    $DRY_RUN_CMD ln -sfn "${agents}/settings.personal.json" "$HOME/.claude/settings.json"
+    $DRY_RUN_CMD ln -sfn "${agents}/settings.work.json" "$HOME/.claude-work/settings.json"
+  '';
 }
