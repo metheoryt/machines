@@ -188,7 +188,7 @@ else
 fi
 
 # gh credential helper for HTTPS remotes (SSH remotes don't need it).
-have gh && git config --global credential."https://github.com".helper '!gh auth git-credential'
+have gh && git config --global --replace-all credential."https://github.com".helper '!gh auth git-credential'
 
 # ── BEST-EFFORT: git-autofetch (fetch-only refresh of all repos under $HOME) ──
 # Mirrors modules/system/git-autofetch on the Nix fleet: a periodic `git fetch`
