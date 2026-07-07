@@ -68,7 +68,11 @@ global + per-host memory). One bullet per fact under a topical heading.
   is relative). NOT session-verifiable, deferred to real boxes (Runbook): literal
   `just provision` on a jq+just box, and per-box no-arg auto-detect on
   latitude5520/g16/homeserver/vps — needs a `git pull` there first, so PUSH is the
-  gating next step. Follow-ups: `provision/README.md` still documents only the
+  gating next step. VALIDATED on latitude5520 2026-07-08: `just provision` (no
+  args) ran the full just→bash→jq chain, live-auto-detected `latitude5520`, and
+  printed all 10 nixos-role dry-run plans — mechanism now proven on BOTH platforms
+  (windows/g614jv + nixos/latitude5520); only per-box no-arg detect on
+  g16/homeserver/vps remains as trivial confirmation. Follow-ups: `provision/README.md` still documents only the
   non-Nix `linux.sh` flow (update when the front door does real work, Phase 2+);
   LATENT — manifest gives g16 (nixos) and g614jv (windows) the SAME mesh IP
   `10.0.0.6` but the verified peer map only confirms `.6`=g614jv; inert in Phase 1
