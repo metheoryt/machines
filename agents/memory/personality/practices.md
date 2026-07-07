@@ -2,7 +2,8 @@
 
 <!--
 Always-loaded coding guidelines: brief universal principles + personal
-(debatable) opinions + a gortex-tuned layer. Injected every session by the
+(debatable) opinions + a gortex-tuned layer. One facet of the portable
+personality bundle (memory/personality/), loaded every session by the
 global-memory-load.sh hook, synced across machines. Keep it concise and curated — edit/cut freely; the
 Deltas are opinions, not laws. Don't restate what global.md / CLAUDE.md cover.
 -->

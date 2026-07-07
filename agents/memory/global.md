@@ -11,33 +11,7 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## User
 
-## Preferences & feedback
-
-- **Git-sync protocol — keep work synced across machines, agents do it
-  themselves.** Applies to every branch in every repo:
-  - **Before acting on code:** a background timer fetches every repo every ~10
-    min (NixOS: `services.gitAutoFetch`; Windows: the `git-autofetch` Scheduled
-    Task), so `git status` / the prompt already show "behind by N" without you
-    fetching. Check that, and if behind, pull+rebase before working (`git pull
-    --rebase`). Start from an up-to-date base — never commit on a stale branch.
-    The timer is fetch-only (refs); it never pulls, so the actual pull is yours.
-  - **After making changes:** commit and push the work yourself, without waiting
-    to be told. Don't leave work uncommitted between turns.
-  - **Cooldown ~10 min:** throttle these sync operations — don't pull or
-    commit+push more than about once every 10 minutes. Batch changes within a
-    cooldown window into a single commit rather than thrashing git on every
-    micro-edit. If &lt;10 min since the last sync and nothing is mid-break, keep
-    working and let the next window catch it up.
-  - Scope commits to coherent units; don't sweep unrelated in-progress work into
-    one commit. If the tree mixes concerns, surface it rather than lumping.
-
-- **Never destroy the last copy of a secret.** Don't delete a backup/stash of a
-  credential on the reasoning that it's "reconstructable" from other files —
-  those other files can change or vanish too. Keep at least one intact copy
-  until the secret is verified in its new home. (Learned the hard way: deleted
-  a `settings.json.backup` holding a Sentry token, then the sibling
-  `settings.local.json` copy also disappeared → token lost, user had to
-  regenerate.)
+## Harness behavior (empirical)
 
 - **Verify Claude Code's file-reading before designing around it.** Empirically
   confirmed for a user config dir (`CLAUDE_CONFIG_DIR`): only `settings.json` is
@@ -48,17 +22,6 @@ elsewhere to sync. Do NOT put secrets here.
   one place `settings.local.json` is honored). Test with a throwaway
   `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
 
-- **Reflect between work chunks, then file learnings by scope.** At natural
-  breakpoints (a task finished, before switching context), pause and look back
-  over the session: pull out the durable learnings, and for each decide scope
-  and write it there — cross-project → `memory/global.md` (facts/prefs) or
-  `memory/practices.md` (coding practice); repo-specific → that repo's project
-  memory (`.claude/memory/project.md`, or its `CLAUDE.md`/`AGENTS.md`). A
-  proactive ritual, not only opportunistic capture when something happens to
-  stand out. Skip anything derivable from code/git history or that only matters
-  to the current conversation. Keep the step quiet — do the reflection and
-  writes, then report in a couple of notes, not a page-long summary.
-
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
@@ -68,50 +31,6 @@ elsewhere to sync. Do NOT put secrets here.
   legacy location**; migrate any stragglers out of it. Each box clones only its
   relevant namespaces (personal distro: `my`, `cyphy671`; work distro: `pure`,
   `exactly`), wired by `provision/repos.sh`.
-
-## Shipping & deployment defaults
-
-- **Default on push: ship to production, not just to git — overridable per
-  repo.** When work lands on a repo's main branch, "ship it" defaults to
-  getting the change actually running in prod if that's reachable from the
-  current session, not merely landing the commit.
-  - **Why:** confirmed default, 2026-07-04 (embedthat-bot audio-pager
-    delete-and-resend work) — the user's "ship it" meant deploy, not just
-    push. A repo's own `CLAUDE.md` / project memory can override this (e.g.
-    team repos with staging gates or an explicit manual-deploy process).
-  - **How to apply:**
-    - After pushing, check for an existing deploy path in the repo (a CI
-      workflow, `docker-compose` targeting a prod host, a known running
-      container) and use it if reachable this session.
-    - If no ship-on-push automation exists yet, **offer** (don't silently
-      set one up) to wire a GitHub Actions workflow that ships on every
-      push/merge to main. This fits mostly personal projects — hold off on
-      team repos with review/staging gates unless asked.
-    - If prod runs a container image watched by an auto-updater, prefer
-      shipping via the registry: build + push the image (via CI when
-      feasible, not a manual local `docker push`) so the watcher pulls the
-      new tag and restarts the container. The concrete registry + watcher
-      belong in that repo's own project memory.
-
-## Communication — professional tone (outward-facing)
-
-- **Applies to everything a human other than me reads** — PR titles/bodies,
-  commit messages, Jira/Confluence comments, Slack, email, review comments.
-  NOT in-session chat replies to me. This generalizes the pure-dev
-  review-voice card + the PR "why, not what" rule into one tone for all such
-  output; the plugin's `review-voice.md` stays the detailed, review-specific
-  version.
-- **Lean.** As few sentences as carry the point; cut preamble, restatement,
-  and ceremony. Say *why*, not *what* — the diff / thread / artifact already
-  shows the what.
-- **No hype, no padding.** Don't inflate praise; no marketing gloss,
-  superlatives, or filler adjectives. Plain over clever; obvious beats terse.
-- **Honest and humble.** When I might be missing context, say so — it invites
-  correction. Don't overstate confidence or paper over unknowns.
-- **Opinion, not orders — but direct when it's clear.** For judgment calls,
-  convey a view and let the reader decide. When something is plainly right or
-  broken, say it directly. Directness tracks stakes: soft/optional on
-  low-stakes, unambiguous on important. Courteous throughout.
 
 ## Worktree agents under docker-compose
 
