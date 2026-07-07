@@ -100,6 +100,35 @@ global + per-host memory). One bullet per fact under a topical heading.
   link path is still unexercised (all session tests force a temp = secondary
   profile). NEXT: Phase 3 (next role executor, e.g. dotfiles/repos or the
   mesh-applying phase that resolves the g16/g614jv `.6` collision).
+- Phase 3 EXECUTED + PUSHED 2026-07-08 (commits `b9fa0e6`..`b4b11ef`, on
+  `origin/main`): `dotfiles` = second real role executor, chezmoi in stateless
+  `--source` mode over an in-repo source `dotfiles/dot_gitconfig.tmpl` (universal
+  tooling-independent git core; OS-templated `autocrlf` = windows→true /
+  else→input; machine-/tooling-specifics — delta pager, `credentialStore=dpapi`,
+  git-lfs filter, work email — deferred to UNtracked `~/.gitconfig.local`,
+  `[include]`d last so it overrides; NEVER commit those to the template).
+  Executors `provision/roles/dotfiles.{sh,ps1}`: nixos = home-manager no-op;
+  wsl/debian → `_dotfiles_ensure_chezmoi` (apply installs via
+  `get.chezmoi.io`→`~/.local/bin`, dry-run prints `~ would install chezmoi` and
+  mutates NOTHING) then `chezmoi diff`/`apply --source`; windows → winget
+  `twpayne.chezmoi` (id verified, v2.70.5), throws on apply non-zero. `chezmoi`
+  runs fully stateless — every call passes `--source "$repo/dotfiles"`, no
+  `chezmoi init`, no `~/.config/chezmoi`, updates come via `git pull`.
+  `provision.sh` UNCHANGED (Phase 2 generic `role_<name>` dispatch picks up
+  `role_dotfiles`); `provision.ps1` got one `$RoleExecutors` map entry. Verified
+  session-side: WSL Ubuntu-26.04 (chezmoi v2.71.0 via the same installer) —
+  render (`autocrlf=input` on linux), dry-run mutates nothing, apply writes
+  `~/.gitconfig`, converged re-run diff EMPTY; a CRLF-line-ending source template
+  (Windows working tree read over `/mnt/c`) still converges — no `.gitattributes`
+  pin needed. g614jv pwsh — dry-run `would install`, apply-confirm gate skips on
+  `n` rc=0. GOTCHA: the plan's no-leak grep (`delta|dpapi|filter "lfs"`)
+  FALSE-matches the word "delta" in the template's HEADER COMMENT — scope any
+  leak check to non-comment lines (`grep -v '^[[:space:]]*#'`). age secrets still
+  deferred (secrets phase). Runbook (real-box, needs `git pull` first): seed each
+  box's `~/.gitconfig.local` BEFORE first real apply or `chezmoi apply` drops the
+  machine-specifics; then `-Apply`/`--apply` answering `y`. NEXT: Phase 4 — the
+  `repos` executor, or the mesh-applying phase (g16/g614jv `.6` collision), or
+  the secrets phase (agenix + age, the repo's first secrets framework).
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
