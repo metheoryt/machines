@@ -20,14 +20,27 @@ global + per-host memory). One bullet per fact under a topical heading.
   2026-07-08 the non-secret AmneziaWG params in `mesh-vpn-params.nix` are REAL
   (filled from the live VPS: vpsPublicKey, port 64531, obfuscation) and
   latitude5520's mesh IP is corrected to `.8` (commit `c33f391`, "Phase 0").
-  Still NOT activated: no `switch` has run and no private key is placed at
-  `/etc/amnezia-wg/awg0.key` on any host, so `ssh <host>` over the mesh does not
-  work yet. Live VPS `FORWARD` policy is already `ACCEPT`, so the old plan's
+  PARTIALLY activated: a `switch` HAS now run on latitude5520 (2026-07-08) — the
+  new generation activated (kernel 6.18.38 staged for next boot) but `awg0` did
+  NOT come up because the box is still running the old 7.1.3 kernel (`modprobe:
+  Module amneziawg not found in .../7.1.3`); it needs a REBOOT into 6.18.38. The
+  private key at `/etc/amnezia-wg/awg0.key` is still not placed either, so `ssh
+  <host>` over the mesh does not work yet. Live VPS `FORWARD` policy is already `ACCEPT`, so the old plan's
   hairpin rule is optional hardening, not a prerequisite. The mesh work is now
   reframed as "Phase 0" of the unified provisioner (see below); the old Runbook
-  `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md` is superseded. NOTE:
-  the Phase 0 param edit was NOT dry-built (done on Windows) — run `nix build
-  --dry-run` on a NixOS box before `switch`.
+  `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md` is superseded. The
+  Phase 0 param edit is now DRY-BUILT GREEN on latitude5520 (full toplevel
+  builds with the LTS kernel pin below).
+- Kernel is PINNED to LTS `pkgs.linuxPackages` (6.18.38) in
+  `modules/system/base.nix` (commit `e2345ba`, 2026-07-08), off
+  `linuxPackages_latest` (7.1.3): the out-of-tree AmneziaWG module does NOT
+  compile on 7.x (`socket.c: 'ipv6_stub' undeclared`) but builds clean on the
+  LTS — verified with NVIDIA 595.84 and the full latitude5520 toplevel. So the
+  mesh REQUIRES the LTS kernel fleet-wide; don't bump back to `_latest` until
+  amneziawg supports 7.x. And an out-of-tree module only loads under the kernel
+  it was built for — after a kernel-changing `switch`, `wireguard-awg0` fails
+  (`Module amneziawg not found in .../<old-kernel>`) until you REBOOT into the
+  new kernel.
 - Unified fleet provisioner: DESIGN APPROVED 2026-07-08, spec at
   `docs/superpowers/specs/2026-07-08-unified-fleet-provisioner-design.md`
   (commit `5cc7a94`). Convergence-first single front door over one role-based
