@@ -68,9 +68,13 @@ The bare `~/.dotfiles` repo is **retired** (only ever held 4 files across `main`
 `latitude5520` branches — nothing meaningful to migrate).
 
 **Secrets (reverses the old "never in git" convention):** age-encrypted secrets live
-in-repo, decrypted on apply. One age identity for the fleet: **chezmoi's age** on
-non-Nix boxes, **agenix** (also age) on NixOS. `agenix` is a **new dependency** for
-this repo (which today has no secrets framework) — introduced deliberately here.
+in-repo, decrypted on apply — **chezmoi's age** on non-Nix boxes, **agenix** (also age)
+on NixOS. **Per-host age keys (decided 2026-07-08):** each machine generates its own age
+identity on first provision; only the *public* recipients are committed (like
+`mesh-authorized-keys`), and each secret is encrypted to just the hosts that need it —
+matching the fleet's existing "SSH keys are per-host, not shared" convention and
+containing blast radius. `agenix` is a **new dependency** (the repo's first secrets
+framework), introduced deliberately here.
 
 ## 5. The manifest — `fleet.json`
 
@@ -95,7 +99,7 @@ native `ConvertFrom-Json` but no TOML parser; Nix has `builtins.fromJSON`; bash 
       "detect": { "hostname": "g614jv" }
     },
     "vps": {
-      "platform": "nixos",                   // or debian; TBD in review
+      "platform": "debian",                  // DECIDED: stays Debian/Ubuntu (imperative role steps)
       "mesh": { "ip": "10.0.0.1", "role": "hub" },
       "roles": ["base","mesh-hub","ssh-server","agents","dotfiles","backup-client"],
       "detect": { "hostname": "cyphy" }
@@ -205,11 +209,15 @@ config; `mesh-vpn-params.nix` gets the real values above; latitude5520's
 
 ## 11. Risks & open questions
 
-- **VPS platform (`nixos` vs stay Debian):** the VPS is Debian today; making it a
-  `platform: nixos` member is a larger migration than the rest. **Decide in review** —
-  the manifest can carry it as `debian` with imperative role steps instead.
-- **agenix introduction:** first secrets framework in the repo; needs an age identity
-  strategy (per-host keys vs one fleet key) — parked for the plan.
+- **VPS platform — DECIDED (2026-07-08): stays Debian/Ubuntu.** The manifest carries it
+  as `platform: debian`; its roles (`base`, `mesh-hub`, `ssh-server`, …) resolve to
+  imperative bash executors (the `~/my/vps` repo's existing `setup-awg.sh` /
+  `manage-peers.sh` patterns), not nixos modules. No NixOS migration. This makes
+  `debian` a fourth platform the dispatcher/role-catalog must handle (alongside nixos /
+  windows / wsl).
+- **agenix — DECIDED (2026-07-08): per-host age keys.** Each host owns its identity;
+  commit only public recipients; encrypt each secret to the hosts that need it. agenix
+  is still a new dependency to wire (Phase 4).
 - **NixOS import generation** (§7) is the highest-implementation-risk piece; prototype
   it early in Phase 1/3.
 - **Windows AmneziaWG as a declarative-ish role:** the app is GUI-oriented; the
