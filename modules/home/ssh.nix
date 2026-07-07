@@ -24,9 +24,9 @@ in {
       };
       homeserver = {
         hostname = params.hosts.homeserver;
-        # CONFIRM: the Windows account name on the homeserver, NOT necessarily
-        # "me". A wrong User silently breaks `ssh homeserver`. Verify on the box.
-        user = "me";
+        # Windows account on the homeserver, confirmed via the existing
+        # `server-lan` ssh alias which connects as `methe`.
+        user = "methe";
         extraOptions.StrictHostKeyChecking = "accept-new";
       };
       # The hub is a fleet member too. Points at the public domain (not the
@@ -35,7 +35,7 @@ in {
       # vps repo and is NOT in provision/mesh-authorized-keys.
       vps = {
         hostname = params.endpoint; # cyphy.kz
-        user = "root"; # CONFIRM: whatever admin account you SSH the VPS as.
+        user = "debian"; # confirmed: the ~/.ssh/config `cyphy` host connects as debian.
         extraOptions.StrictHostKeyChecking = "accept-new";
       };
     };

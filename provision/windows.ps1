@@ -236,8 +236,16 @@ if (Test-Path $srcKeys) {
     # Strip comment/blank lines; write with no BOM (sshd rejects a BOM).
     $keyLines = Get-Content $srcKeys | Where-Object { $_ -and ($_ -notmatch '^\s*#') }
     [System.IO.File]::WriteAllLines($adminKeys, $keyLines, (New-Object System.Text.UTF8Encoding($false)))
-    icacls $adminKeys /inheritance:r /grant 'Administrators:F' 'SYSTEM:F' | Out-Null
-    Info "wrote $($keyLines.Count) key(s) to administrators_authorized_keys (ACL locked)."
+    # Use well-known SIDs, not English group names: on a non-English Windows
+    # (e.g. the ru-locale homeserver) 'Administrators' does not resolve, icacls
+    # fails to lock the ACL, and OpenSSH then REFUSES the file. *S-1-5-32-544 =
+    # Administrators, *S-1-5-18 = SYSTEM (locale-independent).
+    icacls $adminKeys /inheritance:r /grant '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Warn "icacls failed to lock administrators_authorized_keys ACL (exit $LASTEXITCODE) - OpenSSH will reject it."
+    } else {
+        Info "wrote $($keyLines.Count) key(s) to administrators_authorized_keys (ACL locked)."
+    }
 } else {
     Warn "provision\mesh-authorized-keys not found - skipped authorized_keys."
 }
