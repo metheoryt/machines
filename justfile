@@ -325,3 +325,11 @@ run PACKAGE:
 shell-with PACKAGE:
     @echo "🐚 Entering shell with {{PACKAGE}}..."
     nix shell nixpkgs#{{PACKAGE}}
+
+# Fleet front door: detect this machine and show its provisioning plan.
+# Pass extra args through, e.g. `just provision --machine vps` or `--apply`.
+# Relative path (not {{justfile_directory()}}): just runs recipes with cwd =
+# justfile dir, and on Windows the absolute {{...}} is a backslash path bash
+# mangles (C:Users… → not found) — same reason agent-bootstrap stays relative.
+provision *ARGS:
+    bash provision/provision.sh {{ARGS}}
