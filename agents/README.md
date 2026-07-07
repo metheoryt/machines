@@ -89,7 +89,8 @@ Two distinct things load into every session:
 | **Per-project** | each repo's own `CLAUDE.md` | that repo's `.claude/memory/project.md` (or `CLAUDE.local.md`) | per repo |
 
 The `global-memory-load.sh` SessionStart hook injects `memory/global.md`,
-`memory/practices.md`, and `host-memory.md` into every session — so all three
+the `memory/personality/` facets (`tone.md`, `habits.md`, `values.md`,
+`practices.md`), and `host-memory.md` into every session — so all of them
 load regardless of cwd, in both Claude Code and Codex (it derives the config dir
 from its own path, so the one script serves `~/.claude` and `~/.codex`).
 `host-memory.md` is a symlink to `hosts/<hostname>.md` chosen per machine

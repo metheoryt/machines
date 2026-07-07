@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SessionStart hook — inject the synced global + practices + per-host memory
-# stores into the session.
+# SessionStart hook — inject the synced global + personality facets + per-host
+# memory stores into the session.
 #
 # Replaces the `@memory/...` imports that used to sit at the end of AGENTS.md /
 # CLAUDE.md. Claude Code resolves `@file` imports, but Codex (and most other

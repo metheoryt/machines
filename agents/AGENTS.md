@@ -177,7 +177,8 @@ Once the daemon is up, **call** `distill_session` next — surfaces decisions / 
 
 # Persistent memory (synced & version-controlled)
 
-The memory stores (`memory/global.md`, `memory/practices.md`, and the per-host
+The memory stores (`memory/global.md`, the `memory/personality/` facets
+(`tone.md`, `habits.md`, `values.md`, `practices.md`), and the per-host
 `host-memory.md`) are git-tracked in this repo (`agents/`) and belong to the
 SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory.md`),
 `statusline-command.sh`, and `balance-refresh.py` as loose files, plus
@@ -206,6 +207,10 @@ of feedback, long-running project context, a learned constraint), APPEND it to
 the scoped file below instead of the default per-project memory dir:
 
 - **Global** — true on every machine and project → `~/.claude/memory/global.md`
+- **Personality** — not a fact but a *behavioral trait* (how you act, not what
+  you know) → the matching `~/.claude/memory/personality/` facet: outward
+  voice → `tone.md`; a ritual/workflow → `habits.md`; a cross-cutting
+  disposition → `values.md`; a coding-craft opinion → `practices.md`.
 - **Per-host** — specific to THIS machine (installed tooling, local paths,
   hardware quirks) → `~/.claude/host-memory.md`
 - **Per-project** — specific to one repo → that repo's own `CLAUDE.md`, or
@@ -226,9 +231,10 @@ delete stale entries rather than letting them pile up.
   agent-bootstrap` (personal profile: `~/.claude` + `~/.codex`) / `just
   agent-bootstrap-work` (secondary profile, e.g. `~/.claude-work` — SHARED set
   + `settings.work.json`, Codex untouched) symlink `memory/global.md`,
-  `memory/practices.md`, and `hosts/<hostname>.md` (as `host-memory.md`) into
-  the bootstrapped profile. On NixOS, `modules/home/claude.nix` symlinks these
-  files into BOTH `~/.claude` and `~/.claude-work` (and `modules/home/codex.nix`
+  the `memory/personality/` facets, and `hosts/<hostname>.md` (as
+  `host-memory.md`) into the bootstrapped profile. On NixOS,
+  `modules/home/claude.nix` symlinks these files into BOTH `~/.claude` and
+  `~/.claude-work` (and `modules/home/codex.nix`
   into `~/.codex`) — applied by `just switch`, NOT by `agent-bootstrap`;
   `bootstrap.sh` is the portable fallback for non-Nix machines (Windows/macOS).
   The `global-memory-load.sh` SessionStart hook injects them each session.

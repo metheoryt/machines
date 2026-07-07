@@ -32,8 +32,9 @@ Keep curated. No secrets.
 - **Reflect between work chunks, then file learnings by scope.** At natural
   breakpoints (a task finished, before switching context), pause and look back
   over the session: pull out the durable learnings, and for each decide scope
-  and write it there — cross-project → `memory/global.md` (facts/prefs) or
-  `memory/practices.md` (coding practice); repo-specific → that repo's project
+  and write it there — cross-project → `memory/global.md` (facts/prefs) or the
+  matching `memory/personality/` facet (behavioral learnings; coding-craft →
+  `memory/personality/practices.md`); repo-specific → that repo's project
   memory (`.claude/memory/project.md`, or its `CLAUDE.md`/`AGENTS.md`). A
   proactive ritual, not only opportunistic capture when something happens to
   stand out. Skip anything derivable from code/git history or that only matters
