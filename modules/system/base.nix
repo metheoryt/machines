@@ -146,6 +146,12 @@
       enable = true;
       nssmdns4 = true;
       openFirewall = true;
+      # Announce THIS host's hostname/addresses on the LAN, so other machines
+      # can resolve <host>.local (the direct-LAN SSH path when the VPN is off).
+      publish = {
+        enable = true;
+        addresses = true;
+      };
     };
 
     # DBus
