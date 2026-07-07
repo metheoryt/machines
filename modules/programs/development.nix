@@ -107,6 +107,7 @@
     bat
     eza
     fzf
+    glow
 
     # System monitoring
     htop
