@@ -1,0 +1,34 @@
+{
+  "machines": {
+    "latitude5520": {
+      "platform": "nixos",
+      "mesh": { "ip": "10.0.0.8", "role": "member" },
+      "roles": ["base", "mesh-member", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client"],
+      "detect": { "hostname": "latitude5520" }
+    },
+    "g16": {
+      "platform": "nixos",
+      "mesh": { "ip": "10.0.0.6", "role": "member" },
+      "roles": ["base", "mesh-member", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client"],
+      "detect": { "hostname": "g16" }
+    },
+    "g614jv": {
+      "platform": "windows",
+      "mesh": { "ip": "10.0.0.6", "role": "member" },
+      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "repos"],
+      "detect": { "hostname": "g614jv" }
+    },
+    "homeserver": {
+      "platform": "windows",
+      "mesh": { "ip": "10.0.0.2", "role": "member" },
+      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client"],
+      "detect": { "hostname": "methe-server" }
+    },
+    "vps": {
+      "platform": "debian",
+      "mesh": { "ip": "10.0.0.1", "role": "hub" },
+      "roles": ["base", "mesh-hub", "ssh-server", "agents", "dotfiles", "backup-client"],
+      "detect": { "hostname": "27608" }
+    }
+  }
+}
