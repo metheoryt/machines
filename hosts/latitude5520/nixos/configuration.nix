@@ -75,14 +75,15 @@
   systemd.packages = [ pkgs.amnezia-vpn ];
   systemd.services.AmneziaVPN.wantedBy = [ "multi-user.target" ];
 
-  # AmneziaWG mesh spoke + SSH over mesh/LAN. address MUST match
-  # mesh-vpn-params.nix `hosts.latitude5520` (+ /32). PLACEHOLDER until
-  # `manage-peers.sh add latitude5520` on the VPS assigns the real IP.
-  # NOTE: do NOT `switch` until the private key exists at privateKeyFile
-  # (default /etc/amnezia-wg/awg0.key) — see the plan's Runbook.
+  # AmneziaWG mesh spoke + SSH over mesh/LAN. address matches
+  # mesh-vpn-params.nix `hosts.latitude5520` (+ /32). The peer already exists on
+  # the VPS as `nix-lat5520` (10.0.0.8) and has handshaked. NOTE: do NOT `switch`
+  # until the private key exists at privateKeyFile (default
+  # /etc/amnezia-wg/awg0.key) — use the existing nix-lat5520 key (from the VPS
+  # peers/nix-lat5520.key), placed off-store. See the design spec's Phase 0.
   fleet.meshVpn = {
     enable = true;
-    address = "10.0.0.7/32";
+    address = "10.0.0.8/32";
   };
 
   # Host-specific packages
