@@ -1,0 +1,21 @@
+# ~/.gitconfig — managed by chezmoi (fleet-wide, tooling-independent core).
+# Source: machines/dotfiles/dot_gitconfig.tmpl.
+# Machine-/OS-/tooling-specific settings (work email, credential helper, delta
+# pager, git-lfs filter, …) go in ~/.gitconfig.local (untracked), included last
+# so they override. See the Runbook for this box's ~/.gitconfig.local seed.
+
+[user]
+	name = Maxim
+	email = metheoryt@gmail.com
+
+[init]
+	defaultBranch = main
+
+[merge]
+	conflictStyle = zdiff3
+
+[core]
+	autocrlf = {{ if eq .chezmoi.os "windows" }}true{{ else }}input{{ end }}
+
+[include]
+	path = ~/.gitconfig.local
