@@ -9,6 +9,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'lib/Fleet.psm1') -Force
 
+# Role executors (each defines Invoke-Role<Name>). Optional — absent dir is fine.
+Get-ChildItem -Path (Join-Path $PSScriptRoot 'roles') -Filter '*.ps1' -ErrorAction SilentlyContinue |
+    ForEach-Object { . $_.FullName }
+
+# role name -> executor scriptblock. A map avoids function-name mangling for
+# hyphenated roles (e.g. a future 'mesh-member').
+$RoleExecutors = @{
+    'agents' = { param($Mode, $Platform, $Machine) Invoke-RoleAgents -Mode $Mode -Platform $Platform -Machine $Machine }
+}
+
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }
 
 if (-not $Machine) {
@@ -28,15 +38,37 @@ if (-not $Machine) { Write-Error "no machine selected"; exit 2 }
 $platform = Get-FleetPlatform -Machine $Machine
 Write-Host "> Machine: $Machine   platform: $platform   mode: $mode"
 Write-Host "> Roles:"
+$rc = 0
 foreach ($role in (Get-FleetRoles -Machine $Machine)) {
-    if ($mode -eq 'apply') {
-        Write-Host "  x $role - apply: not yet implemented (later phase)"
+    if ($RoleExecutors.ContainsKey($role)) {
+        $exec = $RoleExecutors[$role]
+        if ($mode -eq 'apply') {
+            Write-Host "  > $role - preview:"
+            & $exec 'dry-run' $platform $Machine
+            $ans = Read-Host "  Apply $role? [y/N]"
+            if ($ans -match '^(y|yes)$') {
+                Write-Host "  applying $role..."
+                try {
+                    & $exec 'apply' $platform $Machine
+                    Write-Host "  $role applied."
+                } catch {
+                    Write-Warning "  $role failed: $_"
+                    $rc = 1
+                }
+            } else {
+                Write-Host "  - $role skipped."
+            }
+        } else {
+            Write-Host "  > $role - plan:"
+            & $exec 'dry-run' $platform $Machine
+        }
     } else {
-        Write-Host "  * $role - plan: would converge via the $platform executor for '$role'"
+        if ($mode -eq 'apply') {
+            Write-Host "  x $role - apply: not yet implemented (skipped)"
+        } else {
+            Write-Host "  * $role - plan: would converge via the $platform executor for '$role'"
+        }
     }
 }
 
-if ($mode -eq 'apply') {
-    Write-Error "apply is not implemented in Phase 1; run without -Apply."
-    exit 1
-}
+exit $rc
