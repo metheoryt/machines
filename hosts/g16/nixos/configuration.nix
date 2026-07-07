@@ -12,6 +12,7 @@
     ../../../modules/system/laptop.nix
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
+    ../../../modules/system/mesh-vpn.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
@@ -59,6 +60,15 @@
   # Background `git fetch` of all repos under /home/me every 10 min, so
   # "behind by N" is visible without fetching first (no pull — refs only).
   services.gitAutoFetch.enable = true;
+
+  # AmneziaWG mesh spoke + SSH over mesh/LAN. g16 is already peer 10.0.0.6 on
+  # the VPS; this codifies it. address MUST match mesh-vpn-params.nix
+  # `hosts.g16` (+ /32). Reuse g16's existing key at privateKeyFile; do NOT
+  # regenerate. Do NOT `switch` until the key is in place — see the Runbook.
+  fleet.meshVpn = {
+    enable = true;
+    address = "10.0.0.6/32";
+  };
 
   # Host-specific packages
   environment.systemPackages = with pkgs; [

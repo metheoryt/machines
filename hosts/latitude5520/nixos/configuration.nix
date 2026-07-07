@@ -13,6 +13,7 @@
     ../../../modules/system/laptop.nix
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
+    ../../../modules/system/mesh-vpn.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
@@ -73,6 +74,16 @@
   # AmneziaVPN background service (required for VPN connections)
   systemd.packages = [ pkgs.amnezia-vpn ];
   systemd.services.AmneziaVPN.wantedBy = [ "multi-user.target" ];
+
+  # AmneziaWG mesh spoke + SSH over mesh/LAN. address MUST match
+  # mesh-vpn-params.nix `hosts.latitude5520` (+ /32). PLACEHOLDER until
+  # `manage-peers.sh add latitude5520` on the VPS assigns the real IP.
+  # NOTE: do NOT `switch` until the private key exists at privateKeyFile
+  # (default /etc/amnezia-wg/awg0.key) — see the plan's Runbook.
+  fleet.meshVpn = {
+    enable = true;
+    address = "10.0.0.7/32";
+  };
 
   # Host-specific packages
   environment.systemPackages = with pkgs; [
