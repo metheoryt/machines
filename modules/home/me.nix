@@ -191,6 +191,11 @@ in {
       free = "free -h";
       ps = "ps aux";
       top = "htop";
+
+      # Bare-repo-as-$HOME dotfiles tracker (github.com/metheoryt/dotfiles, private).
+      # Plain files, no encryption — don't add real secrets (SSH/GPG keys, tokens),
+      # just personal + work config overrides.
+      dotfiles = "git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME";
     };
 
     functions = {
