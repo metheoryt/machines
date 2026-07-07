@@ -10,7 +10,7 @@
 set -euo pipefail
 
 repo="rustdesk/rustdesk"
-file="$(cd "$(dirname "$0")" && pwd)/modules/home/rustdesk-bin.nix"
+file="$(cd "$(dirname "$0")/.." && pwd)/modules/home/rustdesk-bin.nix"
 
 latest=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | jq -r '.tag_name')
 current=$(sed -nE 's/^[[:space:]]*version = "([^"]+)";.*/\1/p' "$file" | head -1)

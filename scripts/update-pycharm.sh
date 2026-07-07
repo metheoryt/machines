@@ -9,7 +9,7 @@
 # Requires: curl, jq, nix (all present in the dev shell / system).
 set -euo pipefail
 
-file="$(cd "$(dirname "$0")" && pwd)/modules/home/pycharm-bin.nix"
+file="$(cd "$(dirname "$0")/.." && pwd)/modules/home/pycharm-bin.nix"
 api="https://data.services.jetbrains.com/products/releases?code=PCP&latest=true&type=release"
 
 latest=$(curl -fsSL "$api" | jq -r '.PCP[0].version')

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 repo="zed-industries/zed"
-file="$(cd "$(dirname "$0")" && pwd)/modules/home/zed-bin.nix"
+file="$(cd "$(dirname "$0")/.." && pwd)/modules/home/zed-bin.nix"
 
 tag=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | jq -r '.tag_name')
 latest=${tag#v}
