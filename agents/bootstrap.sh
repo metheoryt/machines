@@ -169,7 +169,7 @@ fi
 link "$SRC_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
 mkdir -p "$CLAUDE_DIR/memory"
 link "$SRC_DIR/memory/global.md" "$CLAUDE_DIR/memory/global.md"
-link "$SRC_DIR/memory/practices.md" "$CLAUDE_DIR/memory/practices.md"
+link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
 
 # Per-host memory: link agents/hosts/<host>.md -> ~/.claude/host-memory.md. Seed
 # an empty stub in the repo the first time a new host runs this, so the import
@@ -207,7 +207,7 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
 
   mkdir -p "$CODEX_DIR/memory"
   link "$SRC_DIR/memory/global.md"    "$CODEX_DIR/memory/global.md"
-  link "$SRC_DIR/memory/practices.md" "$CODEX_DIR/memory/practices.md"
+  link "$SRC_DIR/memory/personality" "$CODEX_DIR/memory/personality"
   link "$host_src"                    "$CODEX_DIR/host-memory.md"
 
   link "$CODEX_SRC/hooks.json" "$CODEX_DIR/hooks.json"

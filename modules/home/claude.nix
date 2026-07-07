@@ -50,7 +50,7 @@
     # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
     "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
     "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
-    "${profileDir}/memory/practices.md".source = link "${agents}/memory/practices.md";
+    "${profileDir}/memory/personality".source = link "${agents}/memory/personality";
     "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
     # cyphy plugin: one whole-directory symlink replaces the four per-entry
     # linkEntries calls that used to wire skills/agents/commands/hooks
