@@ -1,7 +1,9 @@
 # Fleet AmneziaWG mesh + SSH access (for agents and humans) — design
 
 **Date:** 2026-07-07
-**Status:** approved (design), pending implementation plan
+**Status:** approved (design), revised after senior review (2026-07-07 —
+folded in keepalive, existing-peer preconditions, dual-path LAN+mesh sshd,
+host-key pinning, and VPS/first-switch ordering), pending implementation plan
 **Scope:** two repos — `machines` (this repo, owns the NixOS/Windows machine
 config) and `~/my/vps` (owns the VPS-side AmneziaWG hub + RustDesk server).
 Each repo's changes are additive to its existing scripts/modules — no
@@ -107,7 +109,32 @@ latitude5520, had no path to g16 or the VPS).
 
 Each spoke's client config: `AllowedIPs = 10.0.0.0/24` (split tunnel) +
 `Endpoint = cyphy.kz:<port>`. sshd on every spoke is firewalled to the mesh
-interface only — never reachable from the public/LAN interface directly.
+interface *and* the LAN interface (never the public interface) — see §4 for
+why the LAN interface is included.
+
+## Preconditions on the *existing* peers (verify, don't assume)
+
+The design declares "don't regenerate g16's/homeserver's already-working peer
+configs" out of scope — but the full-mesh + roaming-to-homeserver goals
+depend on two properties of those *existing, ad-hoc-generated* configs that
+were never checked. These are **preconditions to verify**, and to fix in
+place if they're wrong (which is *not* a full regeneration):
+
+1. **Each existing spoke's client-side `AllowedIPs` must cover
+   `10.0.0.0/24`.** The VPS hairpin rule (§1) is necessary but not
+   sufficient: for a roaming laptop to reach the homeserver, the
+   *homeserver's own* config (the `[Peer]` on the Windows box pointing at the
+   VPS) must route the whole `/24`, not just the hub or its own `/32`. Same
+   for g16. An ad-hoc peer added with `0.0.0.0/0` already satisfies this
+   (superset); one added with a narrow value silently breaks peer↔peer. If
+   narrow, widen that one line to `10.0.0.0/24` — no key regeneration needed.
+2. **The homeserver's AWG tunnel must be persistently up (autostart on
+   boot), not a hand-toggled GUI connection.** "A `[Peer]` for the homeserver
+   exists on the VPS" is *not* the same as "the tunnel is up on the Windows
+   box." `ssh homeserver` only works while that tunnel is connected; for an
+   always-reachable target it must come up on boot and stay up (pairs with
+   the `persistentKeepalive` requirement in §3). Verify it runs as a service,
+   not via the AmneziaVPN GUI clicked by hand.
 
 ## Components
 
@@ -138,14 +165,33 @@ Follow-ups; comment references `vps/vps/awg.env` as the source of truth.
 
 ### 3. `modules/system/mesh-vpn.nix` (new, `machines` repo)
 
-Options: `fleet.meshVpn.enable`, `.address` (per-host, e.g. `"10.0.0.7/32"`),
-`.privateKeyFile` (defaults to an out-of-store path like
+Options: `fleet.meshVpn.enable`, `.address` (per-host, e.g.
+`"10.0.0.<n>/32"` — a placeholder; the real IP comes from `manage-peers.sh`,
+Follow-up #2), `.privateKeyFile` (defaults to an out-of-store path like
 `/etc/amnezia-wg/awg0.key`, provisioned manually once — never in git).
 Declares `networking.wireguard.interfaces.awg0` with `type = "amneziawg"`,
 the shared obfuscation params from `mesh-vpn-params.nix`, and one `[Peer]`
 block for the VPS. Imported by both `hosts/g16/nixos/configuration.nix` and
 `hosts/latitude5520/nixos/configuration.nix`, each setting its own
 `address`.
+
+- **The VPS `[Peer]` block MUST set `persistentKeepalive = 25`.** These hosts
+  sit behind home/coffee-shop NAT. Peer↔peer traffic is forwarded by the VPS
+  *into* each spoke's tunnel, which only works while that spoke's
+  NAT mapping toward the VPS is alive. Without a keepalive, a spoke that
+  hasn't sent traffic recently becomes unreachable for *inbound* (forwarded)
+  connections even though `awg show` still lists it — the classic
+  WireGuard-mesh footgun. 25 s is the standard value. This is non-optional
+  for any host that must be an SSH *target* while idle (the homeserver above
+  all, but also either laptop when the other wants to reach it).
+- **`AllowedIPs = 10.0.0.0/24` on this VPS `[Peer]`** (not `/32`): the spoke
+  must route the *whole* mesh through the tunnel, or it can reach the hub but
+  not other spokes. With `allowedIPsAsRoutes` (default `true`) NixOS installs
+  the `10.0.0.0/24` route from this automatically; the `/32` on `.address`
+  only sets the interface's own address, it does not gate reachability.
+- Interface is named `awg0` on spokes vs `wg0` on the VPS — deliberate, they
+  are independent interfaces; a code comment should say so, so nobody
+  "corrects" the mismatch.
 
 ### 4. SSH — trust via one committed keys file, not one shared key
 
@@ -161,13 +207,42 @@ small mesh of public keys, not one key copied everywhere.
   homeserver's, if it ever initiates outbound) appended when reachable
   (follow-up).
 - **NixOS (both hosts):** `services.openssh.enable = true;` with
-  `openFirewall = false;` + `networking.firewall.interfaces.awg0.
-  allowedTCPPorts = [ 22 ];` (sshd reachable only over the mesh), and
-  `users.users.me.openssh.authorizedKeys.keyFiles = [
-  ../../provision/mesh-authorized-keys ];` — no per-host key duplication.
+  `openFirewall = false;`, then allow port 22 on **both** the mesh and the
+  LAN — never the public interface:
+  - mesh: `networking.firewall.interfaces.awg0.allowedTCPPorts = [ 22 ];`
+  - LAN: `networking.firewall.extraInputRules = "ip saddr 192.168.8.0/24 tcp
+    dport 22 accept";` (source-CIDR scoped, so it's independent of the
+    per-host wlan/eth interface name; nftables backend, the NixOS default).
+
+  **Why the LAN interface is included** (correcting the original
+  "mesh-only"): with mesh-only, when both boxes are home the *only* path to
+  port 22 is `laptop → VPS → box`, hairpinning local SSH across the WAN — a
+  latency/bandwidth tax *and* it makes the VPS a single point of failure for
+  SSH'ing a machine sitting next to you. Allowing the LAN subnet too keeps a
+  direct home path and a working fallback when the VPS is down. It stays off
+  the public interface, so no exposure is added.
+- `users.users.me.openssh.authorizedKeys.keyFiles = [
+  ../../provision/mesh-authorized-keys ];` — one committed file, no per-host
+  key duplication.
 - **`modules/home/me.nix`:** `programs.ssh.matchBlocks` for `g16`,
-  `latitude5520`, `homeserver` (hostnames from `mesh-vpn-params.nix`, correct
-  `User` per host, `StrictHostKeyChecking = accept-new`).
+  `latitude5520`, `homeserver` — `HostName` = the host's **mesh IP** (from
+  `mesh-vpn-params.nix`), because that's the one address that resolves both
+  at home and while roaming and is what an agent's non-interactive `ssh g16`
+  needs. A human wanting the fast direct path at home can still use
+  `ssh <host>.local` (existing mDNS, now that port 22 is open on the LAN).
+- **Host-key trust — pin, don't blind-TOFU.** `StrictHostKeyChecking =
+  accept-new` is the transitional fallback, but the durable answer is to
+  **pin each host's public host key declaratively** via NixOS
+  `programs.ssh.knownHosts.<host> = { hostNames = [ "<mesh-ip>" "<host>"
+  "<host>.local" ]; publicKey = "<ssh_host_ed25519_key.pub contents>"; };`
+  (public host keys are safe to commit, same as the authorized-keys file).
+  This gives real host authentication instead of blind trust-on-first-use.
+  It also removes the reinstall footgun **provided the host's SSH *host*
+  keypair is preserved across reinstalls** — restore `ssh_host_ed25519_key*`
+  from backup rather than regenerating, so the committed pin stays valid and
+  no `known_hosts` "IDENTIFICATION HAS CHANGED" wall ever appears. The host
+  *private* key path therefore joins the per-host `~/.dotfiles` restore
+  checklist (§7). Hosts not yet pinned fall through to `accept-new`.
 
 ### 5. Windows homeserver — baked into `provision/windows.ps1`, not a manual runbook
 
@@ -188,10 +263,23 @@ there instead of a separate hand-followed runbook:
    with `icacls` (OpenSSH refuses that file unless it's locked to
    Administrators/SYSTEM only) — re-run-safe (rewrite + re-ACL each time,
    matching the script's existing idempotent style).
-4. Add a Windows Firewall inbound rule for port 22 scoped to remote address
-   `10.0.0.0/24` (create-if-absent, so re-running doesn't duplicate it).
-5. Homeserver's AWG peer already exists (`10.0.0.2`) — no new VPN client
-   needed there.
+4. Add a Windows Firewall inbound rule for port 22 scoped to remote addresses
+   `10.0.0.0/24,192.168.8.0/24` (mesh + LAN, matching the NixOS hosts'
+   dual-path rule — never the open internet), create-if-absent so re-running
+   doesn't duplicate it.
+5. Homeserver's AWG *peer* already exists on the VPS (`10.0.0.2`) — but that
+   is not enough (see Preconditions): the script/runbook must confirm the AWG
+   **tunnel autostarts on boot and stays up** (a persistent client/service,
+   not the AmneziaVPN GUI toggled by hand) and that its client-side
+   `AllowedIPs` covers `10.0.0.0/24`, or the homeserver is unreachable while
+   the laptop roams. No *new* VPN client is needed, only these two checks.
+6. Host-key pinning (§4) for the homeserver is best-effort: Windows OpenSSH
+   generates `ssh_host_ed25519_key` on first `sshd` start; capture its
+   `.pub` for `programs.ssh.knownHosts` if you want the NixOS clients to pin
+   it, otherwise they fall through to `accept-new`. Preserving that host key
+   across a Windows reinstall is out of scope for now (the reinstall runbook
+   is deferred) — a one-time `accept-new` re-pin after reinstall is
+   acceptable for the single Windows box.
 
 ### 6. RustDesk — no code change now
 
@@ -203,8 +291,14 @@ in `modules/home/rustdesk-config.nix` (same shape as the existing entries).
 
 The user's separate bare-repo dotfiles tracker (one branch per machine,
 secrets never committed but their paths listed in that branch's
-`.gitignore` as a "restore this on a fresh box" checklist) should get an
-entry for the new AmneziaWG private key path on each NixOS host's branch.
+`.gitignore` as a "restore this on a fresh box" checklist) should get two new
+entries on each NixOS host's branch:
+- the new AmneziaWG private key path (e.g. `/etc/amnezia-wg/awg0.key`);
+- the SSH **host** private key(s) (`/etc/ssh/ssh_host_ed25519_key*`) — so a
+  reinstall *restores* rather than regenerates the host identity, keeping the
+  committed `programs.ssh.knownHosts` pins (§4) valid and avoiding the
+  "IDENTIFICATION HAS CHANGED" friction.
+
 Windows' `administrators_authorized_keys` doesn't need one — it's fully
 regenerated by `provision/windows.ps1` from the committed
 `mesh-authorized-keys` file, nothing machine-local to remember there.
@@ -223,22 +317,46 @@ regenerated by `provision/windows.ps1` from the committed
 
 ## Follow-ups (need user action outside this session)
 
-1. **Fill in real values in `mesh-vpn-params.nix`** — this session has no
-   VPS SSH access and no local copy of `awg.env`; the module ships with
-   clearly marked placeholders for VPS pubkey/port/obfuscation params until
-   the user copies them from the VPS.
-2. **Run `manage-peers.sh add latitude5520` on the VPS** to get its real
-   mesh IP + private key; update `mesh-vpn-params.nix` and latitude5520's
-   `mesh-vpn.nix` `address` to match, and place the private key at the
-   configured path.
-3. **Apply the codified config to g16** (reusing its already-generated key,
+**VPS side (do first — the mesh is inert until these are live):**
+
+1. **Apply the hairpin rule to the *running* VPS**, not just the file.
+   Editing `wg0.dist.conf`'s `PostUp` only takes effect on interface
+   bring-up, and `setup-awg.sh` has already run. Either restart the tunnel
+   (`wg-quick down wg0 && wg-quick up wg0`, or the systemd unit) or add it
+   live once: `iptables -A FORWARD -i wg0 -o wg0 -j ACCEPT`. Without this,
+   peer↔peer forwarding is dead even after both repos merge.
+2. **Verify the two existing peers meet the Preconditions:**
+   - homeserver's *and* g16's client-side `AllowedIPs` cover `10.0.0.0/24`
+     (widen the one line in place if narrow — not a full regen);
+   - the homeserver's AWG tunnel autostarts on boot and stays up.
+3. **Run `manage-peers.sh add latitude5520` on the VPS** to get its real mesh
+   IP + private key.
+
+**latitude5520 bring-up — strict order (skipping ahead brings up a broken
+`awg0` at `switch` time):**
+
+4. (a) place latitude5520's private key at the configured path
+   (`/etc/amnezia-wg/awg0.key`); (b) fill real values into
+   `mesh-vpn-params.nix` — VPS pubkey/port/obfuscation params from `awg.env`,
+   copied *verbatim* (one wrong digit = silent no-handshake) — and set
+   latitude5520's `.address` to the IP from step 3; (c) **only then**
+   `just switch`. Enabling the module before the key exists fails the wg
+   systemd unit on activation.
+5. **Pin host keys (optional but recommended):** collect each host's
+   `ssh_host_ed25519_key.pub` into `programs.ssh.knownHosts` (§4); until then
+   `accept-new` covers it.
+
+**Other machines / deferred:**
+
+6. **Apply the codified config to g16** (reusing its already-generated key,
    not regenerating) next time it's reachable/on-site; also append g16's
    public key to `provision/mesh-authorized-keys`.
-4. **Run `provision/windows.ps1` on homeserver** to pick up the new SSH step.
-5. **latitude5520's RustDesk peer entry** — once it has a RustDesk ID.
-6. **Add the AWG private-key path to latitude5520's (and later g16's)
-   `~/.dotfiles` branch `.gitignore`** — the "restore this on reinstall"
-   checklist entry.
+7. **Run `provision/windows.ps1` on homeserver** to pick up the new SSH step.
+8. **latitude5520's RustDesk peer entry** — once it has a RustDesk ID.
+9. **Add to each NixOS host's `~/.dotfiles` branch `.gitignore`:** the AWG
+   private-key path *and* the SSH host private key path
+   (`/etc/ssh/ssh_host_ed25519_key*`) — the "restore this on reinstall"
+   checklist entries (§7).
 
 ## Verification
 
@@ -248,6 +366,16 @@ regenerated by `provision/windows.ps1` from the committed
   without a host-key prompt and land as the right user.
 - From g16 (once codified): `ssh latitude5520` works the same way, proving
   the hairpin rule enables peer↔peer, not just peer↔hub.
+- **Marquee test — roaming reaches the homeserver:** from a laptop *off* the
+  home LAN (tether/other network), `ssh homeserver` connects. This is the
+  whole point and exercises the hairpin + both peers' `AllowedIPs` at once.
+- **Inbound-after-idle (proves `persistentKeepalive`):** leave the homeserver
+  idle for a few minutes, then `ssh homeserver` from the roaming laptop — it
+  must still connect. If it only works right after the homeserver has sent
+  traffic, keepalive is missing on the homeserver peer.
+- **LAN direct path (proves port 22 is open on the LAN, not mesh-only):** with
+  both boxes at home, `ssh g16.local` connects *without* the VPN up, and a
+  traceroute/RTT check shows it isn't hairpinning through the VPS.
 - `ssh homeserver` reaches a PowerShell prompt, not `cmd.exe`.
 - Turning the VPN off doesn't break `ssh <name>.local`-style LAN access
   (mDNS) or `192.168.8.x` reachability — confirms split-tunnel didn't
@@ -279,4 +407,21 @@ regenerated by `provision/windows.ps1` from the committed
     on both g16 and homeserver.
 12. The user's `~/.dotfiles` bare-repo tracker (per-machine branches,
     secrets gitignored but their paths listed as a restore checklist) gets
-    an entry for the new AWG private-key path per NixOS host.
+    entries for the new AWG private-key path *and* the SSH host private key
+    path per NixOS host.
+13. Every peer that must be an SSH target while idle sets
+    `persistentKeepalive = 25`, and every spoke's client-side `AllowedIPs`
+    covers `10.0.0.0/24` — the VPS hairpin alone does not make peer↔peer or
+    roaming-inbound work (added after review).
+14. The two existing ad-hoc peers (g16, homeserver) are treated as
+    *preconditions to verify* (AllowedIPs breadth, homeserver tunnel
+    autostart), not assumed-correct — the original "don't touch them" scope
+    silently gated the primary use case on unchecked properties.
+15. sshd is reachable on the **mesh and the LAN** interfaces (source-CIDR
+    scoped, never public), not mesh-only — mesh-only hairpinned same-LAN SSH
+    through the VPS and made the VPS a SPOF for local SSH, conflicting with
+    the stated LAN-reachability requirement.
+16. Host-key trust is declaratively **pinned** via `programs.ssh.knownHosts`
+    with host keys *preserved across reinstall*, with `accept-new` as the
+    transitional fallback — real host auth instead of blind TOFU, and no
+    reinstall "IDENTIFICATION HAS CHANGED" friction.
