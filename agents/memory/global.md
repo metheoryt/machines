@@ -59,11 +59,6 @@ elsewhere to sync. Do NOT put secrets here.
   to the current conversation. Keep the step quiet — do the reflection and
   writes, then report in a couple of notes, not a page-long summary.
 
-- **In-session replies to me: be terse.** A couple of words when that carries
-  it ("noted", "done"). Skip preamble, recaps, and explaining reasoning I
-  didn't ask for. (Distinct from the outward-facing professional-tone rule,
-  which is about content others read.)
-
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
