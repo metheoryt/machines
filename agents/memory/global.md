@@ -56,7 +56,8 @@ elsewhere to sync. Do NOT put secrets here.
   memory (`.claude/memory/project.md`, or its `CLAUDE.md`/`AGENTS.md`). A
   proactive ritual, not only opportunistic capture when something happens to
   stand out. Skip anything derivable from code/git history or that only matters
-  to the current conversation.
+  to the current conversation. Keep the step quiet — do the reflection and
+  writes, then report in a couple of notes, not a page-long summary.
 
 - **In-session replies to me: be terse.** A couple of words when that carries
   it ("noted", "done"). Skip preamble, recaps, and explaining reasoning I
