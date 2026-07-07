@@ -55,10 +55,27 @@ global + per-host memory). One bullet per fact under a topical heading.
   age keys. Phase 1 plan (fleet.json manifest + per-platform dispatcher skeleton,
   applies nothing yet) written:
   `docs/superpowers/plans/2026-07-08-fleet-provisioner-phase1-manifest-dispatcher.md`.
-  NEXT: execute Phase 1 (subagent-driven or executing-plans); cross-platform smoke
-  needs the real boxes (nixos `just provision` + bash on latitude5520/g16). Phase 0
-  SSH stopgap ~done: params real, latitude5520=.8, reciprocal trust wired
-  (homeserver pubkey in mesh-authorized-keys) — awaiting the on-box switch/reboot.
+  Phase 1 EXECUTED 2026-07-08 (commits `f1d0b90`..`7e5052d`): `fleet.json`
+  manifest (5 machines), shared libs (`provision/lib/fleet.sh` via jq,
+  `provision/lib/Fleet.psm1` via ConvertFrom-Json), launchers
+  (`provision/provision.sh`, `provision/provision.ps1`), and a `just provision`
+  recipe — all detect the host, resolve roles, and print a dry-run plan; `--apply`
+  is a safe stub (exits 1). Applies nothing yet. Verified on g614jv (native pwsh
+  no-arg auto-detect) + WSL Ubuntu-26.04 (bash+jq smoke). Also added root
+  `.gitattributes *.sh text eol=lf` (box is `core.autocrlf=true`). The plan's
+  `{{justfile_directory()}}` was CHANGED to a relative path — the absolute
+  backslash path breaks under Git Bash on Windows (same reason `agent-bootstrap`
+  is relative). NOT session-verifiable, deferred to real boxes (Runbook): literal
+  `just provision` on a jq+just box, and per-box no-arg auto-detect on
+  latitude5520/g16/homeserver/vps — needs a `git pull` there first, so PUSH is the
+  gating next step. Follow-ups: `provision/README.md` still documents only the
+  non-Nix `linux.sh` flow (update when the front door does real work, Phase 2+);
+  LATENT — manifest gives g16 (nixos) and g614jv (windows) the SAME mesh IP
+  `10.0.0.6` but the verified peer map only confirms `.6`=g614jv; inert in Phase 1
+  (applies nothing), resolve when writing the mesh-applying phase. NEXT: Phase 2
+  (first real role executor). Phase 0 SSH stopgap ~done: params real,
+  latitude5520=.8, reciprocal trust wired (homeserver pubkey in
+  mesh-authorized-keys) — awaiting the on-box switch/reboot.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
