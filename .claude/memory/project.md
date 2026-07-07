@@ -76,10 +76,30 @@ global + per-host memory). One bullet per fact under a topical heading.
   non-Nix `linux.sh` flow (update when the front door does real work, Phase 2+);
   LATENT — manifest gives g16 (nixos) and g614jv (windows) the SAME mesh IP
   `10.0.0.6` but the verified peer map only confirms `.6`=g614jv; inert in Phase 1
-  (applies nothing), resolve when writing the mesh-applying phase. NEXT: Phase 2
-  (first real role executor). Phase 0 SSH stopgap ~done: params real,
+  (applies nothing), resolve when writing the mesh-applying phase. Phase 0 SSH stopgap ~done: params real,
   latitude5520=.8, reciprocal trust wired (homeserver pubkey in
   mesh-authorized-keys) — awaiting the on-box switch/reboot.
+- Phase 2 EXECUTED + PUSHED 2026-07-08 (commits `cb78503`..`5e4cab1`, on
+  `origin/main`): the `agents` role is the first REAL executor that mutates a
+  box. Added a `DRY_RUN` mode to `agents/bootstrap.sh` (detection runs, all
+  `ln`/`mv`/`rm`/`mkdir`/host-stub/git-config mutation suppressed; default unset
+  behavior byte-unchanged; converged re-run clean) + per-platform executors
+  `provision/roles/agents.{sh,ps1}` (nixos = home-manager-owned no-op; wsl/debian
+  → `bootstrap.sh`; windows → `bootstrap.sh` under Git Bash, throws on non-zero) +
+  dispatch wiring in both launchers (per-role `Apply <role>? [y/N]` confirm gate,
+  exits with worst executor status). Established the role→executor pattern later
+  phases reuse. Verified session-side on WSL Ubuntu-26.04 (bash+jq) + g614jv
+  (native pwsh): syntax/parse, dry-run mutates nothing (incl. a DIRTY-dir test
+  proving `rm`/`mv` suppression on wrong-symlink + real-file targets), apply
+  confirm skips on "n" with rc=0. GOTCHA: the PowerShell tool runs
+  `-NonInteractive`, so `Read-Host` throws — drive the ps1 confirm-gate smoke via
+  Git Bash `echo n | pwsh -File …` (a real, non-NonInteractive pwsh reading piped
+  stdin), NOT the PowerShell tool. Runbook (real-box, needs `git pull` first):
+  real `--apply`/`-Apply` answering `y` on g614jv/homeserver (Windows symlinks
+  need Developer Mode) + vps (Debian); the personal-profile/Codex (`~/.codex`)
+  link path is still unexercised (all session tests force a temp = secondary
+  profile). NEXT: Phase 3 (next role executor, e.g. dotfiles/repos or the
+  mesh-applying phase that resolves the g16/g614jv `.6` collision).
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
