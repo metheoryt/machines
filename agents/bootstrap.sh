@@ -31,7 +31,7 @@ CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # inside skills/ would be picked up by Claude as a stray duplicate skill).
 BAK_ROOT="$CLAUDE_DIR/.bootstrap-bak"
 
-mkdir -p "$CLAUDE_DIR"
+[ -n "${DRY_RUN:-}" ] || mkdir -p "$CLAUDE_DIR"
 
 # Both profiles get the SHARED set + a committed per-profile settings.json
 # (personal -> settings.personal.json, secondary -> settings.work.json). Codex
@@ -49,6 +49,11 @@ linked=0
 skipped=0
 backed=0
 failed=0
+would_link=0
+would_backup=0
+
+# In DRY_RUN, create no directories (detection below tolerates missing dirs).
+_mkdir() { [ -n "${DRY_RUN:-}" ] || mkdir -p "$@"; }
 
 # Move an existing real target into BAK_ROOT, mirroring its path under
 # CLAUDE_DIR. If a backup already exists, the repo copy is canonical so we just
@@ -80,18 +85,15 @@ restore_target() {
 }
 
 # link <abs-src> <abs-dest>: symlink dest -> src, backing up any real target
-# first and restoring it if the symlink can't be created.
+# first and restoring it if the symlink can't be created. In DRY_RUN, detect
+# and report what WOULD happen without touching anything.
 link() {
   local src="$1" dest="$2"
   if [ ! -e "$src" ]; then
     printf '  ! missing in repo, skipping: %s\n' "$src"
     return
   fi
-  # Already pointing at the repo file — possibly via a chain (home-manager links
-  # dest -> /nix/store/.../home-manager-files -> repo). `-ef` compares the final
-  # inode, so we skip (and crucially do NOT replace) Nix-managed symlinks; a
-  # direct readlink check would only match our own one-hop links and would clobber
-  # the HM ones, breaking the next `nixos-rebuild switch`.
+  # Already pointing at the repo file (possibly via a home-manager chain) — skip.
   if [ "$dest" -ef "$src" ]; then
     printf '  = already linked: %s\n' "$dest"
     skipped=$((skipped + 1))
@@ -103,9 +105,26 @@ link() {
       skipped=$((skipped + 1))
       return
     fi
+    if [ -n "${DRY_RUN:-}" ]; then
+      printf '  ~ would relink: %s -> %s\n' "$dest" "$src"
+      would_link=$((would_link + 1))
+      return
+    fi
     rm -f "$dest"  # wrong/old symlink target — replace it
   elif [ -e "$dest" ]; then
+    if [ -n "${DRY_RUN:-}" ]; then
+      printf '  ~ would back up + link: %s -> %s\n' "$dest" "$src"
+      would_backup=$((would_backup + 1))
+      would_link=$((would_link + 1))
+      return
+    fi
     backup_target "$dest" && backed=$((backed + 1))
+  else
+    if [ -n "${DRY_RUN:-}" ]; then
+      printf '  ~ would link: %s -> %s\n' "$dest" "$src"
+      would_link=$((would_link + 1))
+      return
+    fi
   fi
   if ln -s "$src" "$dest" 2>/dev/null && [ -L "$dest" ]; then
     printf '  + linked: %s -> %s\n' "$dest" "$src"
@@ -134,7 +153,7 @@ host_id() {
 link_entries_into() {
   local src_sub="$1" dest_sub="$2"
   [ -d "$src_sub" ] || return
-  mkdir -p "$dest_sub"
+  _mkdir "$dest_sub"
   local entry base
   for entry in "$src_sub"/* "$src_sub"/.[!.]*; do
     [ -e "$entry" ] || continue           # no matches → skip the literal glob
@@ -167,7 +186,7 @@ fi
 # session — see README.md "Memory & knowledge base".
 # Instruction file: AGENTS.md is canonical; link ~/.claude/CLAUDE.md to it directly.
 link "$SRC_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
-mkdir -p "$CLAUDE_DIR/memory"
+_mkdir "$CLAUDE_DIR/memory"
 link "$SRC_DIR/memory/global.md" "$CLAUDE_DIR/memory/global.md"
 link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
 
@@ -177,35 +196,44 @@ link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
 HOST_ID="$(host_id)"
 host_src="$SRC_DIR/hosts/$HOST_ID.md"
 if [ ! -e "$host_src" ]; then
-  mkdir -p "$SRC_DIR/hosts"
-  {
-    printf '# Host: %s\n\n' "$HOST_ID"
-    printf '<!--\nPer-host memory + instructions for this machine. Symlinked to\n'
-    printf '~/.claude/host-memory.md and imported by ~/.claude/CLAUDE.md, so it loads ONLY\n'
-    printf 'when the hostname matches. Tracked in git, synced everywhere, inert on other\n'
-    printf 'hosts. Do NOT put secrets here.\n-->\n\n## Notes\n'
-  } > "$host_src"
-  printf '  + seeded host memory stub: %s\n' "$host_src"
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would seed host memory stub: %s\n' "$host_src"
+  else
+    mkdir -p "$SRC_DIR/hosts"
+    {
+      printf '# Host: %s\n\n' "$HOST_ID"
+      printf '<!--\nPer-host memory + instructions for this machine. Symlinked to\n'
+      printf '~/.claude/host-memory.md and imported by ~/.claude/CLAUDE.md, so it loads ONLY\n'
+      printf 'when the hostname matches. Tracked in git, synced everywhere, inert on other\n'
+      printf 'hosts. Do NOT put secrets here.\n-->\n\n## Notes\n'
+    } > "$host_src"
+    printf '  + seeded host memory stub: %s\n' "$host_src"
+  fi
 fi
-link "$host_src" "$CLAUDE_DIR/host-memory.md"
+if [ -n "${DRY_RUN:-}" ] && [ ! -e "$host_src" ]; then
+  printf '  ~ would link: %s -> (seeded stub)\n' "$CLAUDE_DIR/host-memory.md"
+  would_link=$((would_link + 1))
+else
+  link "$host_src" "$CLAUDE_DIR/host-memory.md"
+fi
 
 # cyphy plugin: one whole-directory symlink replaces the four entry-by-entry
 # loops above. skills/agents/commands/hooks all live inside agents/plugin/ now,
 # discovered by Claude Code as a skills-directory plugin (cyphy@skills-dir) —
 # live, in place, no copy-to-cache, no install/update step.
-mkdir -p "$CLAUDE_DIR/skills"
+_mkdir "$CLAUDE_DIR/skills"
 link "$SRC_DIR/plugin" "$CLAUDE_DIR/skills/cyphy"
 
 # ── Codex config (~/.codex) — rides with the personal run only ───────────────
 if [ "$IS_PERSONAL" -eq 1 ]; then
   CODEX_SRC="$SRC_DIR/codex"
   CODEX_DIR="${CODEX_CONFIG_DIR:-$HOME/.codex}"
-  mkdir -p "$CODEX_DIR"
+  _mkdir "$CODEX_DIR"
   printf '\nBootstrapping Codex config\n  live:  %s\n\n' "$CODEX_DIR"
 
   link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 
-  mkdir -p "$CODEX_DIR/memory"
+  _mkdir "$CODEX_DIR/memory"
   link "$SRC_DIR/memory/global.md"    "$CODEX_DIR/memory/global.md"
   link "$SRC_DIR/memory/personality" "$CODEX_DIR/memory/personality"
   link "$host_src"                    "$CODEX_DIR/host-memory.md"
@@ -234,6 +262,8 @@ install_git_hooks() {
   elif [ -n "$cur" ]; then
     # Respect a hooksPath the user set themselves — don't clobber it.
     printf '  ! core.hooksPath already set to %s — leaving it; auto-refresh not installed\n' "$cur"
+  elif [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would install git hooks (core.hooksPath -> %s)\n' "$hp"
   else
     git -C "$repo" config --local core.hooksPath "$hp" \
       && printf '  + git hooks installed (core.hooksPath -> %s)\n' "$hp"
@@ -242,10 +272,15 @@ install_git_hooks() {
 install_git_hooks
 
 # Prune empty backup dirs left behind by restores (keeps real backups).
-[ -d "$BAK_ROOT" ] && find "$BAK_ROOT" -type d -empty -delete 2>/dev/null
+[ -z "${DRY_RUN:-}" ] && [ -d "$BAK_ROOT" ] && find "$BAK_ROOT" -type d -empty -delete 2>/dev/null
 
-printf '\nDone. linked=%d  skipped=%d  backed-up=%d  failed=%d\n' \
-  "$linked" "$skipped" "$backed" "$failed"
+if [ -n "${DRY_RUN:-}" ]; then
+  printf '\n(dry-run) would-link=%d  would-back-up=%d  already-linked=%d\n' \
+    "$would_link" "$would_backup" "$skipped"
+else
+  printf '\nDone. linked=%d  skipped=%d  backed-up=%d  failed=%d\n' \
+    "$linked" "$skipped" "$backed" "$failed"
+fi
 [ -d "$BAK_ROOT" ] && printf 'Previous real files saved under %s\n' "$BAK_ROOT"
 
 if [ "$failed" -gt 0 ]; then
