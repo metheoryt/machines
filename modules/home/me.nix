@@ -22,6 +22,8 @@ in {
     ./codex.nix
     # RustDesk: seed self-hosted server + known peers (seed-only, see module)
     ./rustdesk-config.nix
+    # SSH client config for the fleet (mesh matchBlocks) — see ./ssh.nix
+    ./ssh.nix
   ];
 
   home.username = "me";
