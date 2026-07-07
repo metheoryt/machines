@@ -50,8 +50,15 @@ global + per-host memory). One bullet per fact under a topical heading.
   divergence, retires the bare `~/.dotfiles`), restic (backup), age/agenix
   (secrets) — behind a thin dispatcher over a `fleet.json` manifest (JSON so a
   fresh Windows box reads it natively). NixOS role membership will be GENERATED
-  from the manifest by the flake (single source of truth). NOT built yet; phased
-  (Phase 0 = the mesh param fix above). Next: user reviews spec → writing-plans.
+  from the manifest by the flake (single source of truth). Decisions resolved: VPS
+  stays Debian (imperative role executors, a 4th platform), secrets use PER-HOST
+  age keys. Phase 1 plan (fleet.json manifest + per-platform dispatcher skeleton,
+  applies nothing yet) written:
+  `docs/superpowers/plans/2026-07-08-fleet-provisioner-phase1-manifest-dispatcher.md`.
+  NEXT: execute Phase 1 (subagent-driven or executing-plans); cross-platform smoke
+  needs the real boxes (nixos `just provision` + bash on latitude5520/g16). Phase 0
+  SSH stopgap ~done: params real, latitude5520=.8, reciprocal trust wired
+  (homeserver pubkey in mesh-authorized-keys) — awaiting the on-box switch/reboot.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
