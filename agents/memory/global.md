@@ -48,6 +48,16 @@ elsewhere to sync. Do NOT put secrets here.
   one place `settings.local.json` is honored). Test with a throwaway
   `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
 
+- **Reflect between work chunks, then file learnings by scope.** At natural
+  breakpoints (a task finished, before switching context), pause and look back
+  over the session: pull out the durable learnings, and for each decide scope
+  and write it there — cross-project → `memory/global.md` (facts/prefs) or
+  `memory/practices.md` (coding practice); repo-specific → that repo's project
+  memory (`.claude/memory/project.md`, or its `CLAUDE.md`/`AGENTS.md`). A
+  proactive ritual, not only opportunistic capture when something happens to
+  stand out. Skip anything derivable from code/git history or that only matters
+  to the current conversation.
+
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
