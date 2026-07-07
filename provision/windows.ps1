@@ -199,6 +199,59 @@ if (-not $BackupRoot) {
     }
 }
 
+# ---- 7. OpenSSH server (agent/human SSH into this box over mesh+LAN) --------
+Step "7. OpenSSH server"
+# 7a. Ensure the OpenSSH.Server capability is present. The '~~~~0.0.1.0' suffix
+#     is a FIXED Windows-capability identifier, not a version to bump.
+$sshCap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue |
+          Where-Object Name -like 'OpenSSH.Server*' | Select-Object -First 1
+if ($sshCap -and $sshCap.State -eq 'Installed') {
+    Info "OpenSSH.Server already installed."
+} else {
+    Warn "installing OpenSSH.Server capability..."
+    Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null
+}
+# 7b. Service: start now + start on boot.
+Set-Service -Name sshd -StartupType Automatic
+if ((Get-Service sshd).Status -ne 'Running') { Start-Service sshd }
+Info "sshd: $((Get-Service sshd).Status), startup Automatic."
+
+# 7c. Default shell = PowerShell, so an agent's commands land somewhere
+#     scriptable rather than cmd.exe. Idempotent (rewrite each run).
+$pwshExe = (Get-Command powershell.exe).Source
+New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
+New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
+    -Value $pwshExe -PropertyType String -Force | Out-Null
+Info "default shell: $pwshExe"
+
+# 7d. Authorized keys. For an admin user, OpenSSH on Windows reads
+#     ProgramData\ssh\administrators_authorized_keys and REFUSES it unless the
+#     ACL is locked to Administrators/SYSTEM. Rewrite + re-ACL each run.
+$adminKeys = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
+$srcKeys   = Join-Path $RepoDir 'provision\mesh-authorized-keys'
+if (Test-Path $srcKeys) {
+    # Strip comment/blank lines; write with no BOM (sshd rejects a BOM).
+    $keyLines = Get-Content $srcKeys | Where-Object { $_ -and ($_ -notmatch '^\s*#') }
+    [System.IO.File]::WriteAllLines($adminKeys, $keyLines, (New-Object System.Text.UTF8Encoding($false)))
+    icacls $adminKeys /inheritance:r /grant 'Administrators:F' 'SYSTEM:F' | Out-Null
+    Info "wrote $($keyLines.Count) key(s) to administrators_authorized_keys (ACL locked)."
+} else {
+    Warn "provision\mesh-authorized-keys not found - skipped authorized_keys."
+}
+
+# 7e. Firewall: inbound 22 from mesh + LAN only (never the open internet).
+#     Create-if-absent so re-running doesn't duplicate the rule.
+$fwRule = 'OpenSSH-Server-Mesh-LAN'
+if (-not (Get-NetFirewallRule -Name $fwRule -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -Name $fwRule -DisplayName 'OpenSSH Server (mesh+LAN)' `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 `
+        -RemoteAddress @('10.0.0.0/24','192.168.8.0/24') | Out-Null
+    Info "firewall rule '$fwRule' created (22 from 10.0.0.0/24, 192.168.8.0/24)."
+} else {
+    Info "firewall rule '$fwRule' already present."
+}
+Warn "Reachable over the mesh only while this box's AmneziaWG tunnel is up (autostart on boot) and its AllowedIPs covers 10.0.0.0/24 - verify separately."
+
 # ---- Done --------------------------------------------------------------------
 Write-Host "`n=== agent environment ready ===" -ForegroundColor Green
 Info "Verify: claude --version ; ls ~\.claude (CLAUDE.md, settings.json, skills\cyphy should be symlinks into $RepoDir\agents)."
