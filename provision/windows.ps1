@@ -201,6 +201,9 @@ if (-not $BackupRoot) {
 
 # ---- 7. OpenSSH server (agent/human SSH into this box over mesh+LAN) --------
 Step "7. OpenSSH server"
+$isAdmin7 = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+            ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+if (-not $isAdmin7) { throw "Step 7 (OpenSSH server) needs an elevated session. Re-run provision\windows.ps1 from an elevated PowerShell (see hosts\g16\windows\windows-reinstall-runbook.md)." }
 # 7a. Ensure the OpenSSH.Server capability is present. The '~~~~0.0.1.0' suffix
 #     is a FIXED Windows-capability identifier, not a version to bump.
 $sshCap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue |
@@ -250,6 +253,32 @@ if (-not (Get-NetFirewallRule -Name $fwRule -ErrorAction SilentlyContinue)) {
 } else {
     Info "firewall rule '$fwRule' already present."
 }
+# Neutralize the default 'allow 22 from Any' rule the capability install adds
+# (Windows Firewall allow-rules union, so the scoped rule above restricts
+# nothing while this one is enabled). Idempotent; -ErrorAction SilentlyContinue
+# in case the rule name varies or is already gone.
+Disable-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
+Info "disabled default 'OpenSSH-Server-In-TCP' (Any) rule; only mesh+LAN remains."
+
+# 7f. Key-only auth (parity with the NixOS spokes' PasswordAuthentication=false).
+$sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
+if (Test-Path $sshdConfig) {
+    $cfg = Get-Content $sshdConfig -Raw
+    foreach ($kv in @(@('PasswordAuthentication','no'), @('KbdInteractiveAuthentication','no'))) {
+        $key = $kv[0]; $val = $kv[1]
+        if ($cfg -match "(?im)^\s*#?\s*$key\b.*$") {
+            $cfg = [regex]::Replace($cfg, "(?im)^\s*#?\s*$key\b.*$", "$key $val")
+        } else {
+            $cfg = $cfg.TrimEnd() + "`r`n$key $val`r`n"
+        }
+    }
+    [System.IO.File]::WriteAllText($sshdConfig, $cfg, (New-Object System.Text.UTF8Encoding($false)))
+    Restart-Service sshd
+    Info "sshd_config: PasswordAuthentication no, KbdInteractiveAuthentication no (restarted)."
+} else {
+    Warn "sshd_config not found at $sshdConfig - skipped auth hardening."
+}
+
 Warn "Reachable over the mesh only while this box's AmneziaWG tunnel is up (autostart on boot) and its AllowedIPs covers 10.0.0.0/24 - verify separately."
 
 # ---- Done --------------------------------------------------------------------
