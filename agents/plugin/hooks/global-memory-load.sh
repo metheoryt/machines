@@ -30,7 +30,14 @@ emit() {
 
 emit "$config_dir/memory/global.md" \
   "Global memory (synced, git-tracked, loaded every session) — treat as your loaded memory:"
-emit "$config_dir/memory/practices.md" \
-  "Code practices (synced, git-tracked, loaded every session):"
+# Personality facets (tone / habits / values / practices) — one file each,
+# loaded in deterministic (alphabetical) order. nullglob so an empty or missing
+# personality/ dir expands to nothing instead of a literal '*.md' path.
+shopt -s nullglob
+for facet in "$config_dir"/memory/personality/*.md; do
+  emit "$facet" \
+    "Personality — $(basename "$facet" .md) (synced, git-tracked, loaded every session):"
+done
+shopt -u nullglob
 emit "$config_dir/host-memory.md" \
   "Per-host memory for THIS machine (synced, git-tracked, loaded every session):"
