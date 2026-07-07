@@ -58,6 +58,11 @@ elsewhere to sync. Do NOT put secrets here.
   stand out. Skip anything derivable from code/git history or that only matters
   to the current conversation.
 
+- **In-session replies to me: be terse.** A couple of words when that carries
+  it ("noted", "done"). Skip preamble, recaps, and explaining reasoning I
+  didn't ask for. (Distinct from the outward-facing professional-tone rule,
+  which is about content others read.)
+
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
