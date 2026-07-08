@@ -1,6 +1,6 @@
 ---
 name: gortex-align
-description: Use when the user wants to align, onboard, or tune a repository for Gortex — improve its code-graph resolution quality, commit the gortex wiring (.gortex.yaml / .mcp.json), or set up pyright governance on a Python project so its type annotations feed gortex's native type-aware Python resolver. Configures per-repo wiring; does NOT install the gortex binary (that's a machine-level concern).
+description: Use when the user wants to align, onboard, or tune a repository for Gortex — improve its code-graph resolution quality, commit the gortex wiring (.gortex.yaml / .mcp.json), or set up type-information governance on a Python project (a type checker — ty / pyright / mypy — plus ruff annotation rules) so its type annotations feed gortex's native type-aware Python resolver. Configures per-repo wiring; does NOT install the gortex binary (that's a machine-level concern).
 ---
 
 # Align a repo for Gortex
@@ -16,10 +16,11 @@ two things:
 1. **Wire it** — commit the gortex config so the integration is reproducible for
    teammates/CI, and confirm the daemon is tracking and has indexed it.
 2. **Tune the type view** — make the code carry the type information the native
-   provider keys off. For Python this is pyright governance: pyright is a
-   standalone type checker, and the annotations/stubs it forces you to add feed
-   gortex's type-aware provider (plus pyright surfaces every unresolved spot as a
-   diagnostic). Bundled config below.
+   provider keys off. That means *type information in the source* (annotations +
+   installed stubs), not any one tool: a **type checker** (ty / pyright / mypy)
+   measures whether names resolve, and **ruff** enforces annotation presence on
+   leaf code. Use whichever checker the repo already has; default to **ty** when
+   it has none. Bundled config blocks below.
 
 **Scope boundary:** this skill *configures* per-repo wiring. It does **not**
 install the `gortex` binary itself — that's machine provisioning (declarative on
@@ -95,29 +96,40 @@ queries — use the `gortex://index-health` resource or `index_health` tool. Not
 the gortex MCP tools only register in a Claude Code session whose cwd was covered
 at session start — after first-time wiring, they appear on the next session reload.
 
-### 4. Align the stack (Python → pyright governance)
+### 4. Align the type view (Python) — detection-driven
 
-Detect the language. **For Python:**
+Detect the language. **For Python**, align two halves — *resolution* (a type
+checker) and *annotation presence* (a linter):
 
-1. Copy the bundled reference config into the repo root as `pyrightconfig.json`
-   (or fold its keys into `[tool.pyright]` in `pyproject.toml`):
-   ```bash
-   cp ~/.claude/skills/gortex-align/pyrightconfig.json ./pyrightconfig.json
-   ```
-2. Adapt it to the repo: fix `include` to the real source roots, point
-   `venv`/`venvPath` (or `pythonPath`) at the env where deps are **installed**,
-   set `pythonVersion`. Pyright can't resolve imports it can't see, so without a
-   deps-installed env its diagnostics are useless.
-3. Run pyright (or read the diagnostics) and act on them:
-   - `reportMissingTypeStubs` → install the stubs (`django-stubs`,
-     `djangorestframework-stubs`, `celery-types`, `types-requests`, …).
-   - `reportMissing*Type` / `reportUnknown*` → add annotations. Each fix gives
-     the native type-aware provider more type information to resolve against.
-4. Once clean, suggest ratcheting `typeCheckingMode` from `standard` to
-   `strict`.
+1. **Detect what's already there.** Scan `pyproject.toml` / config files for a
+   type checker (`[tool.ty]`·`ty.toml`, `[tool.mypy]`·`mypy.ini`,
+   `[tool.pyright]`·`pyrightconfig.json`) and a linter (`[tool.ruff]`·`ruff.toml`).
+   Confirm a **deps-installed env** (`.venv` with dependencies) — no env and every
+   checker degrades to unresolved-import noise.
 
-See `pyright-reference.md` (next to this file) for the rationale, the
-`[tool.pyright]` variant, and the honest limits.
+2. **Type checker (resolution).**
+   - One is **already configured** → use it; don't impose another.
+   - **None** → set up **ty** by default (Astral-native, matches uv, fastest):
+     add the `[tool.ty]` block from `type-governance-reference.md`, then
+     `uvx ty check`. Note ty is **pre-1.0 (v0.0.x)** — surface still churns.
+     Offer **pyright** (mature, best stubs) or **mypy** (loads the `django-stubs`
+     plugin → resolves more Django magic) as alternatives.
+
+3. **Ruff (annotation presence), always-on complement.**
+   - ruff present → ensure `ANN` is in `select`.
+   - a different linter present → add its annotation rules.
+   - none → offer the full `[tool.ruff]` block from the reference (lint + format
+     + `ANN` + isort).
+
+4. **Act on the diagnostics.** Install the stubs the checker flags; add missing
+   parameter/return annotations; kill `unknown`/`Any` at boundaries. Each fix
+   gives the native type-aware provider more to resolve against.
+
+5. **Ratchet** strictness once clean (ty: promote `[tool.ty.rules]` to `error`;
+   pyright: `standard` → `strict`).
+
+See `type-governance-reference.md` (next to this file) for the copy-paste
+`pyproject.toml` blocks, the rationale, and the honest limits.
 
 ### 5. Re-index and report
 
@@ -128,13 +140,14 @@ follow-ups.
 
 ## Honest limits
 
-Pyright does **not** load the `django-stubs` *mypy plugin*, so plugin-driven
-Django magic (manager/queryset return types, dynamic model attrs) stays partly
-unresolved even with stubs installed. The "often missed" tier from the global
+No static checker is the framework. ty and pyright do **not** load the
+`django-stubs` *mypy plugin*, so plugin-driven Django magic (manager/queryset
+return types, dynamic model attrs) stays partly unresolved even with stubs
+installed — mypy + the plugin resolves the most. The "often missed" tier from the global
 Gortex memory note still holds — signals (`@receiver`/`.connect`), Celery
 `@shared_task`, admin auto-registration, settings string lists, template→`.html`.
 **Never act on gortex's "0 usages / dead code" for any of those**; it's a false
-positive on framework-invoked code regardless of how clean pyright is.
+positive on framework-invoked code regardless of how clean the checker is.
 
 ## Common mistakes
 
@@ -148,6 +161,6 @@ positive on framework-invoked code regardless of how clean pyright is.
   (allowlist-style `*` gitignores do).
 - **Assuming `init` tracks the repo** — it indexes once; run `gortex daemon reload`
   to pick it up for persistent tracking.
-- **Pointing pyright at an env without deps installed** — resolution silently
-  degrades to `text_matched`; the config can't help if imports don't resolve.
+- **Pointing the checker at an env without deps installed** — resolution silently
+  degrades to `text_matched`; no config helps if imports don't resolve.
 - **Trusting graph queries mid-warmup** — confirm index health is `ready` first.
