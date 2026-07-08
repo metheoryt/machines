@@ -159,10 +159,17 @@ libs), called by both executors:
   constants (`vpsPublicKey`, `port`, `endpoint`, `obfuscation`). The drift and
   the dead `g16` line disappear structurally.
 - **`modules/home/ssh.nix`** stops enumerating `matchBlocks` by hand and
-  **generates** them from the derived members, with per-host `User` from a new
+  **generates** one block per mesh member (all of them — incl. Windows members
+  like homeserver — not just NixOS hosts), with per-host `User` from a new
   optional `ssh.user` field in `fleet.json` (default `me`; `methe` for
   homeserver, `debian` for vps). `ssh <name>` keeps working; g16 vanishes for
   free. (Windows ssh_config name aliases: small addition / follow-up.)
+- **Hub keeps its public hostname (do not regress).** The generator's
+  `HostName` rule is: `mesh.role == "hub"` → `params.endpoint` (cyphy.kz);
+  else → `mesh.ip`. This preserves the existing deliberate choice that the `vps`
+  block points at the public domain, *not* `10.0.0.1`, so managing the VPS never
+  depends on the tunnel it hosts. A naive "hostname = mesh.ip for every member"
+  generator would silently regress this — the rule must key on `mesh.role`.
 - **New `fleet.json` fields:** optional `ssh.user` (per above) and
   `mesh.peerName` (the VPS-side `# <name>`; defaults to the machine key, set
   explicitly for existing peers: `g614jv`→`me-g614jv`, `latitude5520`→
@@ -230,6 +237,9 @@ Runbook (real-box, cross-repo):
   `6.18.38`**, then `awg show awg0` shows a handshake and the verifier is green.
 - Windows (`g614jv`/`homeserver`): import the fetched `awg0.conf` into
   AmneziaVPN, enable, confirm `ping 10.0.0.1` and `ssh homeserver`/`ssh g614jv`.
+  These boxes already have a hand-made AmneziaVPN tunnel whose key may differ
+  from what `show` returns — the fetched conf must **replace** that tunnel, not
+  run alongside it (two tunnels for one peer/IP will fight).
 
 ## Open risks / notes
 
