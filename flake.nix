@@ -82,19 +82,12 @@
       };
   in {
     nixosConfigurations = {
-      g16 = mkHost "g16" [
-        nixos-hardware.nixosModules.common-cpu-intel
-        nixos-hardware.nixosModules.common-pc-laptop
-        nixos-hardware.nixosModules.common-pc-laptop-ssd
-      ];
-
       latitude5520 = mkHost "latitude5520" [
         nixos-hardware.nixosModules.dell-latitude-5520
       ];
     };
 
     homeConfigurations = {
-      "me@g16" = mkHome "g16";
       "me@latitude5520" = mkHome "latitude5520";
     };
 
@@ -118,9 +111,7 @@
     formatter.${system} = nixpkgs.legacyPackages.${system}.alejandra;
 
     checks.${system} = {
-      nixos-g16 = self.nixosConfigurations.g16.config.system.build.toplevel;
       nixos-latitude5520 = self.nixosConfigurations.latitude5520.config.system.build.toplevel;
-      home-g16 = self.homeConfigurations."me@g16".activationPackage;
       home-latitude5520 = self.homeConfigurations."me@latitude5520".activationPackage;
     };
   };
