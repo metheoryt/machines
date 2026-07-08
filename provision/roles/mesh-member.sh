@@ -32,8 +32,14 @@ role_mesh_member() {
                         echo "  mesh-member: fetched conf had no PrivateKey — aborting (nothing written)." >&2
                         return 1
                     fi
-                    sudo install -m 600 -o root -g root /dev/null "$key"
-                    printf '%s\n' "$priv" | sudo tee "$key" >/dev/null
+                    if ! sudo install -m 600 -o root -g root -D /dev/null "$key"; then
+                        echo "  mesh-member: could not create $key (install failed) — nothing written." >&2
+                        return 1
+                    fi
+                    if ! printf '%s\n' "$priv" | sudo tee "$key" >/dev/null; then
+                        echo "  mesh-member: could not write $key (tee failed)." >&2
+                        return 1
+                    fi
                     echo "  mesh-member: wrote $key (root:600). PrivateKey not shown."
                 else
                     mesh_manual_hint "$machine"
@@ -42,7 +48,11 @@ role_mesh_member() {
             else
                 mesh_dryrun_line "$machine" "$key"
             fi
-            [ "$mode" = apply ] && _mesh_member_nixos_verify || echo "  ~ would verify awg0 handshake + kernel module after install."
+            if [ "$mode" = apply ]; then
+                _mesh_member_nixos_verify
+            else
+                echo "  ~ would verify awg0 handshake + kernel module after install."
+            fi
             return 0
             ;;
         wsl)
