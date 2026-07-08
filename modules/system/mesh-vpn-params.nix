@@ -1,15 +1,22 @@
 # modules/system/mesh-vpn-params.nix
 #
-# Non-secret AmneziaWG mesh constants + host -> mesh-IP map. Plain data
-# (imported by modules/system/mesh-vpn.nix and modules/home/ssh.nix), NOT a
-# NixOS module.
+# Non-secret AmneziaWG mesh constants + the fleet's machine records / mesh-IP
+# map, the latter DERIVED from the repo-root fleet.json (the single source of
+# truth for mesh IPs — Phase 5a). Plain data (imported by
+# modules/system/mesh-vpn.nix and modules/home/ssh.nix), NOT a NixOS module.
 #
-# Values below are the REAL non-secret AmneziaWG constants, read from the live
-# VPS (`awg show`) + ~/my/vps/vps/awg.env on 2026-07-08. They are interface-
-# level and safe to commit (public key, port, obfuscation params). Only the
-# per-host PRIVATE keys are secret and never live here. The obfuscation params
-# MUST match the VPS exactly — one wrong digit = silent no-handshake, no error.
-{
+# The constants below are the REAL non-secret AmneziaWG values, read from the
+# live VPS (`awg show`) + ~/my/vps/vps/awg.env on 2026-07-08. They are
+# interface-level and safe to commit (public key, port, obfuscation params).
+# Only the per-host PRIVATE keys are secret and never live here. The obfuscation
+# params MUST match the VPS exactly — one wrong digit = silent no-handshake, no
+# error.
+let
+  # Single fromJSON site for the whole repo: every mesh-IP consumer derives from
+  # here, so a box's IP is changed in exactly one place (fleet.json).
+  fleet = builtins.fromJSON (builtins.readFile ../../fleet.json);
+  machines = fleet.machines;
+in {
   # VPS_PUBLIC_KEY (public — safe to commit).
   vpsPublicKey = "Hm4m5Cce1RdzpbcOezzliDBxV4ZY2tp9mIMWXNivY1s=";
 
@@ -32,15 +39,11 @@
     H4 = 330186316;
   };
 
-  # Bare mesh IPs (no /32), verified against the live VPS peer table (2026-07-08).
-  # - latitude5520 = .8: its NixOS side already meshes as peer `nix-lat5520`.
-  # - g16 = .6: currently the `me-g614jv` peer (the ROG G16's Windows/app side);
-  #   the NixOS g16 spoke shares this slot for now (one OS booted at a time) —
-  #   revisit when g16-NixOS gets its own peer/key.
-  # - homeserver = .2 (static baked peer on the VPS).
-  hosts = {
-    g16 = "10.0.0.6";
-    homeserver = "10.0.0.2";
-    latitude5520 = "10.0.0.8";
-  };
+  # Raw fleet machine records (platform/roles/mesh/ssh/detect), for consumers
+  # that need role or ssh.user — e.g. the ssh.nix matchBlocks generator.
+  inherit machines;
+
+  # Derived name -> bare mesh IP (no /32), from fleet.json. Replaces the old
+  # hand-maintained map that had drifted (missing g614jv/vps, listed dead g16).
+  hosts = builtins.mapAttrs (_name: m: m.mesh.ip) machines;
 }
