@@ -208,6 +208,39 @@ global + per-host memory). One bullet per fact under a topical heading.
   (`add <name> <ip>` + `--conf-only`) + the mesh-member/mesh-hub executors
   (real-box only). Windows boxes' existing hand-made AmneziaVPN tunnel must be
   REPLACED by the fetched conf, not run alongside it.
+- **Phase 5b EXECUTED (session-verified) 2026-07-09:** `~/my/vps`
+  `manage-peers.sh` gained non-interactive `add <name> <ip>` + `--conf-only`
+  (the fleet-provisioner contract); this repo has `provision/lib/mesh.sh` +
+  `Mesh.psm1` (VPS conf-fetch: `show`-then-`add` over SSH to
+  `debian@cyphy.kz`, add-only/self-only, private key never logged),
+  `provision/roles/mesh-member.{sh,ps1}` (NixOS key-fetch+verifier / Windows
+  conf-fetch+verifier) and `mesh-hub.{sh,ps1}` (no-op pointer), wired into
+  `provision.ps1` (`provision.sh` unchanged — generic `role_<name>` dispatch).
+  `fleet.json` gained `vps.ssh.host=cyphy.kz` + `vps.mesh.managePeers`.
+  Session acceptance sweep GREEN: posix parse + `mesh.sh` unit test + dry-run
+  dispatch (NixOS member plan, hub pointer), Windows dry-run plan + apply
+  confirm-gate (rc=0 answering "n").
+- Hardening added beyond the 5b plan during review: the NixOS key install
+  uses `sudo install -m600 -o root -g root -D` (error-guarded, not a bare
+  cp/mv) so `/etc/amnezia-wg/awg0.key` lands `root:600` even off a non-root
+  fetch step; the Windows conf write locks
+  `C:\ProgramData\amnezia-wg\awg0.conf` down via `icacls` (inheritance
+  disabled, ACL limited to the current user + Administrators) so the private
+  key isn't left world-readable under ProgramData's default ACL.
+- **Real-box pending** (runbook — Task 7 Step 3 / plan
+  `docs/superpowers/plans/2026-07-09-fleet-provisioner-phase5b-mesh-executors.md`):
+  (0) confirm the VPS `manage-peers.sh` path
+  (`ssh debian@cyphy.kz 'ls -l /home/debian/my/vps/vps/manage-peers.sh'`), fix
+  `fleet.json` if it differs; (1) land+pull the vps change on the VPS,
+  smoke-test `add smoke 10.0.0.99 --conf-only` + `remove smoke`; (2)
+  latitude5520: `--apply` the mesh-member role (answer y), confirm
+  `/etc/amnezia-wg/awg0.key` is `root:600`, then REBOOT into `6.18.38`,
+  `awg show awg0` for a recent handshake; (3) Windows (g614jv, homeserver):
+  `-Apply` (answer y), import `C:\ProgramData\amnezia-wg\awg0.conf` into
+  AmneziaVPN REPLACING the existing tunnel, enable, verify over the mesh.
+  `homeserver`'s `mesh.peerName` is still DEFAULTED — confirm via
+  `manage-peers.sh list` first; if it has no stored key, use the printed
+  manual fallback rather than blindly `add` (risks "IP in use").
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
