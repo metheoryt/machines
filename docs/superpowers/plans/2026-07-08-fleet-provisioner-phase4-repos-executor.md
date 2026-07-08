@@ -262,9 +262,9 @@ Expected: `exit=0`; `repos-dispatched-ok` (dispatched through the executor, not 
 
 Run (Windows pwsh):
 ```powershell
-pwsh -NoProfile -Command "./provision/provision.ps1 -Machine g614jv 2>&1 | Select-String 'agents - plan','dotfiles - plan','repos - plan'"
+pwsh -NoProfile -Command "./provision/provision.ps1 -Machine g614jv *>&1 | Select-String 'agents - plan','dotfiles - plan','repos - plan'"
 ```
-Expected: three lines — `> agents - plan:`, `> dotfiles - plan:`, `> repos - plan:` (repos dispatched via the map to the real executor).
+Expected: three lines — `> agents - plan:`, `> dotfiles - plan:`, `> repos - plan:` (repos dispatched via the map to the real executor). NOTE: use `*>&1`, not `2>&1` — provision.ps1 emits role-plan lines via `Write-Host` (PowerShell Information stream 6), which `2>&1` (stderr-only) does not merge into the pipeline, so `Select-String` would filter nothing; `*>&1` merges all streams so the filter works.
 
 - [ ] **Step 5: Smoke — ps1 apply-confirm gate for repos, answer "n" ⇒ skipped, rc=0.** Driven through Git Bash so `Read-Host` reads piped stdin (the PowerShell tool's `-NonInteractive` mode makes `Read-Host` throw — Phase 2 gotcha). Three executor-backed roles now (agents, dotfiles, repos) ⇒ three `n`s.
 
