@@ -35,7 +35,20 @@ function Invoke-RoleMeshMember {
         if ($conf) {
             New-Item -ItemType Directory -Force (Split-Path $confPath) | Out-Null
             Set-Content -Path $confPath -Value $conf -NoNewline
-            Write-Host "  mesh-member: wrote $confPath."
+            # Lock the key-bearing conf: C:\ProgramData inherits Users:Read+Write,
+            # so a private key would be world-readable. Disable inheritance and
+            # grant only THIS user (R,W — the AmneziaVPN GUI imports it as this
+            # user) + Administrators (F). Mirrors the posix root:600 install.
+            # SIDs, not names, to stay domain/locale-independent
+            # (*S-1-5-32-544 = BUILTIN\Administrators).
+            $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            icacls $confPath /inheritance:r /grant:r "*${me}:(R,W)" "*S-1-5-32-544:(F)" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Remove-Item $confPath -Force -ErrorAction SilentlyContinue
+                Write-Warning "  mesh-member: could not restrict $confPath ACL — removed it (never leave an unprotected key). Write it by hand and lock its permissions."
+                return
+            }
+            Write-Host "  mesh-member: wrote $confPath (locked: this user + Administrators only)."
             Write-Host "  mesh-member: import it into AmneziaVPN (File -> Import config) and enable the tunnel."
             Write-Host "  mesh-member: REPLACE any existing tunnel for this peer — two tunnels for one IP fight."
         } else {
