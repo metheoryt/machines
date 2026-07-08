@@ -59,4 +59,24 @@ echo "$dry" | grep -q "would ssh debian@cyphy.kz" || fail "dryrun target"
 echo "$dry" | grep -q "/etc/amnezia-wg/awg0.key" || fail "dryrun path"
 echo "$dry" | grep -qi "SECRETKEY" && fail "dryrun leaked key"
 
+# 4) successful show suppresses add entirely (no-rotation invariant)
+cat > "$tmp/ssh2" <<'STUB2'
+#!/usr/bin/env bash
+echo "$*" >> "$SSH_CALLS2"
+case "$*" in
+    *"show "*) printf '[Interface]\nPrivateKey = STOREDKEY\nAddress = 10.0.0.9/32\n[Peer]\n'; exit 0 ;;
+    *"add "*)  printf '[Interface]\nPrivateKey = NEWKEY\nAddress = 10.0.0.9/32\n[Peer]\n'; exit 0 ;;
+    *) exit 2 ;;
+esac
+STUB2
+chmod +x "$tmp/ssh2"
+
+export SSH_CALLS2="$tmp/calls2"
+: > "$SSH_CALLS2"
+
+conf2="$(MESH_SSH="$tmp/ssh2" mesh_ssh_fetch testbox)" || fail "fetch rc (success-show)"
+printf '%s' "$conf2" | grep -q "STOREDKEY" || fail "stored key not reused"
+grep -q "show 'nix-test' --conf-only" "$SSH_CALLS2" || fail "show attempted (success-show)"
+grep -q "add " "$SSH_CALLS2" && fail "add ran despite successful show (rotation!)"
+
 echo "ALL TESTS PASS"
