@@ -48,15 +48,25 @@
     };
 
     # python-lsp-server 1.14.0 crashes in pylsp_definitions on builtin/compiled
-    # definitions (d.line is None). gortex drives pylsp for Python resolution and
-    # logs the traceback on every hit. Drop until nixpkgs ships a fixed version.
-    pylspFixOverlay = _: prev: {
+    # definitions (d.line is None), which gortex hits constantly driving pylsp
+    # for Python resolution. Build from our fork commit carrying the upstream fix
+    # (PR https://github.com/python-lsp/python-lsp-server/pull/715, fixes
+    # #623/#624). The fix is in-tree, so we override src only and keep nixpkgs'
+    # own patches (jedi-compat test fix). Revert to plain nixpkgs once the PR
+    # merges and ships in a release.
+    pylspFixOverlay = final: prev: {
       pythonPackagesExtensions =
         prev.pythonPackagesExtensions
         ++ [
           (_: pyprev: {
-            python-lsp-server = pyprev.python-lsp-server.overrideAttrs (old: {
-              patches = (old.patches or []) ++ [./patches/pylsp-definition-none-guard.patch];
+            python-lsp-server = pyprev.python-lsp-server.overrideAttrs (_: {
+              version = "1.14.1.dev0+pr715";
+              src = final.fetchFromGitHub {
+                owner = "metheoryt";
+                repo = "python-lsp-server";
+                rev = "e4ee21862ba0b2abdfde43f583b0a709d2f9bfb9";
+                hash = "sha256-F0mqDcjBT9DvTiJhDMWEKfDODdqDB+cY25mG5ZbcFAA=";
+              };
             });
           })
         ];
