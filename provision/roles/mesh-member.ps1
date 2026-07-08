@@ -33,21 +33,26 @@ function Invoke-RoleMeshMember {
         Write-Host "  mesh-member: $confPath absent — fetching this box's conf from the hub…"
         $conf = Invoke-MeshSshFetch -Machine $Machine
         if ($conf) {
+            # Parity with the posix side: the fetched conf must actually carry a
+            # PrivateKey before we install it. A keyless conf is a hub/fetch fault.
+            if ($conf -notmatch '(?m)^\s*PrivateKey\s*=') {
+                Write-Warning "  mesh-member: fetched conf had no PrivateKey — not writing $confPath."
+                return
+            }
             New-Item -ItemType Directory -Force (Split-Path $confPath) | Out-Null
-            Set-Content -Path $confPath -Value $conf -NoNewline
-            # Lock the key-bearing conf: C:\ProgramData inherits Users:Read+Write,
-            # so a private key would be world-readable. Disable inheritance and
-            # grant only THIS user (R,W — the AmneziaVPN GUI imports it as this
-            # user) + Administrators (F). Mirrors the posix root:600 install.
-            # SIDs, not names, to stay domain/locale-independent
-            # (*S-1-5-32-544 = BUILTIN\Administrators).
+            # Create the file EMPTY and lock its ACL BEFORE the key is written, so
+            # the key is never briefly world-readable (C:\ProgramData inherits
+            # Users:Read). Grant this user (R,W — AmneziaVPN GUI imports as this
+            # user) + Administrators (F); *S-1-5-32-544 = BUILTIN\Administrators.
+            # Mirrors the posix `install -m 600 /dev/null` create-then-write order.
+            New-Item -ItemType File -Path $confPath -Force | Out-Null
             $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
             icacls $confPath /inheritance:r /grant:r "*${me}:(R,W)" "*S-1-5-32-544:(F)" | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 Remove-Item $confPath -Force -ErrorAction SilentlyContinue
-                Write-Warning "  mesh-member: could not restrict $confPath ACL — removed it (never leave an unprotected key). Write it by hand and lock its permissions."
-                return
+                throw "mesh-member: could not restrict $confPath ACL — removed it (never leave an unprotected key). Write it by hand and lock its permissions."
             }
+            Set-Content -Path $confPath -Value $conf -NoNewline
             Write-Host "  mesh-member: wrote $confPath (locked: this user + Administrators only)."
             Write-Host "  mesh-member: import it into AmneziaVPN (File -> Import config) and enable the tunnel."
             Write-Host "  mesh-member: REPLACE any existing tunnel for this peer — two tunnels for one IP fight."
