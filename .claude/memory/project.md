@@ -188,8 +188,15 @@ global + per-host memory). One bullet per fact under a topical heading.
   matchBlocks (hub keeps `endpoint`/cyphy.kz hostname, not `.1`). (3) VPS peer
   names DIFFER from fleet keys (`g614jv`→`me-g614jv`, `latitude5520`→
   `nix-lat5520`) — manifest carries `mesh.peerName`. Split: **5a** = the Nix
-  single-source refactor + g16 removal (session-verifiable via `nix eval`/
-  dry-build); **5b** = a `~/my/vps` `manage-peers.sh` non-interactive prereq
+  single-source refactor + g16 removal — Nix acceptance gates VERIFIED GREEN on
+  latitude5520 2026-07-09 (`nix eval` hosts map is g16-free + `.6`=g614jv/`.1`=vps;
+  generated ssh matchBlocks correct incl. hub keeping `cyphy.kz`; `nix flake check`
+  "all checks passed"; NixOS + standalone-home dry-builds clean). Fix needed to
+  get `flake check`/standalone-home green: `codex.nix`+`claude.nix` keyed the
+  host-memory link off `osConfig.networking.hostName`, which is `null` in the
+  standalone `homeManagerConfiguration` context — repointed both at the `hostname`
+  specialArg (already threaded via `extraSpecialArgs` in both paths). **5b** = a
+  `~/my/vps` `manage-peers.sh` non-interactive prereq
   (`add <name> <ip>` + `--conf-only`) + the mesh-member/mesh-hub executors
   (real-box only). Windows boxes' existing hand-made AmneziaVPN tunnel must be
   REPLACED by the fetched conf, not run alongside it.
