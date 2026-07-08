@@ -5,26 +5,49 @@
 # host-key policy (TOFU-then-pin, safe on a private self-controlled mesh).
 # Imported by me.nix.
 #
-# matchBlocks are GENERATED from fleet.json (via mesh-vpn-params.nix) — one
-# block per fleet member, so adding/removing a machine or changing its IP is a
-# one-line fleet.json edit. HostName keys on mesh.role: the hub (vps) points at
+# The per-host blocks are GENERATED from fleet.json (via mesh-vpn-params.nix) —
+# one block per fleet member, so adding/removing a machine or changing its IP is
+# a one-line fleet.json edit. HostName keys on mesh.role: the hub (vps) points at
 # its public domain so managing it never depends on the tunnel it hosts; every
 # other member points at its mesh IP.
+#
+# Uses the current `programs.ssh.settings` API (upstream OpenSSH directive names
+# directly), NOT the deprecated `matchBlocks`/`extraOptions`. `enableDefaultConfig`
+# is turned off and the old implicit `Host *` defaults re-declared verbatim under
+# `settings."*"` (rendered last), so behaviour is unchanged and no home-manager
+# deprecation warnings fire.
 #
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
 _: let
   params = import ../system/mesh-vpn-params.nix;
   mkBlock = name: m: {
-    hostname =
+    HostName =
       if m.mesh.role == "hub"
       then params.endpoint # e.g. cyphy.kz — never the 10.0.0.1 mesh IP
       else params.hosts.${name};
-    user = m.ssh.user or "me";
-    extraOptions.StrictHostKeyChecking = "accept-new";
+    User = m.ssh.user or "me";
+    StrictHostKeyChecking = "accept-new";
   };
 in {
   programs.ssh = {
     enable = true;
-    matchBlocks = builtins.mapAttrs mkBlock params.machines;
+    enableDefaultConfig = false;
+    settings =
+      {
+        # Home Manager's former `enableDefaultConfig = true` defaults, kept explicit.
+        "*" = {
+          ForwardAgent = false;
+          AddKeysToAgent = "no";
+          Compression = false;
+          ServerAliveInterval = 0;
+          ServerAliveCountMax = 3;
+          HashKnownHosts = false;
+          UserKnownHostsFile = "~/.ssh/known_hosts";
+          ControlMaster = "no";
+          ControlPath = "~/.ssh/master-%r@%n:%p";
+          ControlPersist = "no";
+        };
+      }
+      // builtins.mapAttrs mkBlock params.machines;
   };
 }
