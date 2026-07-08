@@ -18,6 +18,7 @@ Get-ChildItem -Path (Join-Path $PSScriptRoot 'roles') -Filter '*.ps1' -ErrorActi
 $RoleExecutors = @{
     'agents'   = { param($Mode, $Platform, $Machine) Invoke-RoleAgents   -Mode $Mode -Platform $Platform -Machine $Machine }
     'dotfiles' = { param($Mode, $Platform, $Machine) Invoke-RoleDotfiles -Mode $Mode -Platform $Platform -Machine $Machine }
+    'repos'    = { param($Mode, $Platform, $Machine) Invoke-RoleRepos    -Mode $Mode -Platform $Platform -Machine $Machine }
 }
 
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }
