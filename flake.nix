@@ -47,8 +47,24 @@
       };
     };
 
+    # python-lsp-server 1.14.0 crashes in pylsp_definitions on builtin/compiled
+    # definitions (d.line is None). gortex drives pylsp for Python resolution and
+    # logs the traceback on every hit. Drop until nixpkgs ships a fixed version.
+    pylspFixOverlay = _: prev: {
+      pythonPackagesExtensions =
+        prev.pythonPackagesExtensions
+        ++ [
+          (_: pyprev: {
+            python-lsp-server = pyprev.python-lsp-server.overrideAttrs (old: {
+              patches = (old.patches or []) ++ [./patches/pylsp-definition-none-guard.patch];
+            });
+          })
+        ];
+    };
+
     overlays = [
       stableOverlay
+      pylspFixOverlay
       inputs.claude-code-nix.overlays.default
     ];
 
