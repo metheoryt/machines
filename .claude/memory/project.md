@@ -129,6 +129,31 @@ global + per-host memory). One bullet per fact under a topical heading.
   machine-specifics; then `-Apply`/`--apply` answering `y`. NEXT: Phase 4 — the
   `repos` executor, or the mesh-applying phase (g16/g614jv `.6` collision), or
   the secrets phase (agenix + age, the repo's first secrets framework).
+- Phase 4 EXECUTED + PUSHED 2026-07-08 (commits `201e6d3`..`78da327`, on
+  `origin/main`): `repos` = third real role executor, a PURE WRAP of the existing
+  `provision/repos.sh` (host-agnostic, DRY_RUN-capable, interactive fzf select on
+  apply) behind the Phase 2 dispatcher — zero edits to `repos.sh`. Executors
+  `provision/roles/repos.{sh,ps1}` invoke it with NO group args (defaults to all
+  three groups `my pure cyphy671`; interactive select is the per-box filter);
+  `provision.ps1` got one `$RoleExecutors` map entry; `provision.sh` UNCHANGED
+  (generic `role_<name>` dispatch picks up `role_repos`). Unlike agents/dotfiles,
+  `repos` is NOT a nixos no-op — cloning working repos is imperative, so
+  `role_repos` runs `repos.sh` on nixos|wsl|debian (unknown platform skips);
+  `fleet.json` carries `repos` on latitude5520/g16 (nixos) + g614jv (windows),
+  NOT vps/methe-server. GOTCHA: `repos.sh` dry-run is NOT inert — even
+  `DRY_RUN=1` queries `gh` (network) and transiently switches gh's active account
+  (restored to `metheoryt` at end); it clones nothing. No gh/fzf auto-install
+  (repos.sh degrades gracefully). Built via subagent-driven-development (haiku
+  implementers for the transcription tasks, sonnet for the integration task +
+  reviews, opus final review = "ready to merge, no Critical/Important"). GOTCHA:
+  in the ps1 dry-run smoke, `provision.ps1 ... 2>&1 | Select-String` does NOT
+  filter — role-plan lines go via `Write-Host` (Information stream 6), which
+  `2>&1` (stderr-only) doesn't merge; use `*>&1` (plan Step 4 corrected). Runbook
+  (real-box): needs `gh` authed for `metheoryt`+`cyphy671`, `fzf`, and SSH aliases
+  `github.com`/`github-cyphy`; real interactive apply (`y` at the gate → fzf
+  multi-select) from a REAL terminal, not the PowerShell tool. NEXT: Phase 5 — the
+  mesh-applying phase (g16/g614jv `.6` collision) or the secrets phase (agenix +
+  age). Remaining stub roles: base, mesh-member/mesh-hub, ssh-server, backup-*.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
