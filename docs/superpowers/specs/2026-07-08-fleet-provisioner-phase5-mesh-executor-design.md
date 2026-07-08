@@ -27,6 +27,19 @@ NixOS `g16`.
 Phase 5 spans **two repos**: a small prerequisite change in `~/my/vps`
 (non-interactive `manage-peers.sh`), then the executors in this repo.
 
+**Phasing (two plans).** This spec is implemented in two independently-landable
+plans:
+- **Phase 5a — Nix single-source-of-truth refactor** (fully session-verifiable):
+  `fleet.json` as the mesh-IP source of truth via `mesh-vpn-params.nix`
+  `fromJSON` derivation; the `modules/home/ssh.nix` generator (with the
+  hub-hostname rule); the new `fleet.json` `ssh.user`/`mesh.peerName` fields;
+  and the `g16` removal. Verified with `nix eval` / dry-build.
+- **Phase 5b — mesh conf-fetch executors** (real-box-verifiable): the `~/my/vps`
+  non-interactive prerequisite, the shared VPS conf-fetch helper, the
+  `mesh-member`/`mesh-hub` executors, and dispatch wiring.
+
+Sections below are labelled 5a/5b where the split matters.
+
 ## Context / current state
 
 - **NixOS members** (`latitude5520`, mesh `.8`): `modules/system/mesh-vpn.nix`
