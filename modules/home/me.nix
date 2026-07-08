@@ -522,10 +522,12 @@ in {
       After = ["default.target"];
     };
     Service = {
-      # `gortex daemon start` spawns the daemon and the launcher exits, so the
-      # supervisor must treat it as forking (Type=simple would tear the daemon
-      # down when the launcher exits).
-      Type = "forking";
+      # `gortex daemon start` (no --detach) runs the daemon in the foreground —
+      # the launcher process IS the daemon and never exits. Type=forking waits
+      # for a parent to fork+exit that never comes, hits TimeoutStartSec (90s)
+      # mid-warmup, SIGTERMs the daemon, then Restart=on-failure loops forever.
+      # Type=simple supervises the foreground process directly — the correct fit.
+      Type = "simple";
       ExecStart = "${gortex}/bin/gortex daemon start --no-progress";
       Restart = "on-failure";
       RestartSec = 5;
