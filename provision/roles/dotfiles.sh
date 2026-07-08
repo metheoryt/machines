@@ -5,6 +5,7 @@
 # machines/dotfiles/ (stateless --source mode; updates come via `git pull`, not
 # `chezmoi update`). On nixos it is owned by home-manager, so the dispatcher
 # must NOT run chezmoi there.
+# shellcheck shell=bash
 
 # _dotfiles_ensure_chezmoi <mode>: returns 0 if chezmoi is usable afterward.
 # apply: install via get.chezmoi.io -> ~/.local/bin if missing. dry-run: if
@@ -30,6 +31,7 @@ _dotfiles_ensure_chezmoi() {
 # role_dotfiles <mode> <platform> <machine>
 #   mode: dry-run | apply
 role_dotfiles() {
+    # shellcheck disable=SC2034  # machine: kept for role-signature parity
     local mode="$1" platform="$2" machine="$3"
     local repo; repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local src="$repo/dotfiles"

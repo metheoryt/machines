@@ -376,14 +376,13 @@ in {
   # fresh machine gets the default theme. Switch it later with `ghostty-theme <name>`.
   # Default pairs Ghostty's native dark/light auto-switch (follows GNOME's
   # color-scheme setting) with delta's dark:Dracula/light:GitHub split above.
-  home.activation.ghosttyThemeSeed =
-    config.lib.dag.entryAfter ["writeBoundary"] ''
-      cfg="$HOME/.config/ghostty/theme.conf"
-      if [ ! -e "$cfg" ]; then
-        mkdir -p "$(dirname "$cfg")"
-        printf 'theme = %s\n' 'dark:Matrix,light:GitHub' > "$cfg"
-      fi
-    '';
+  home.activation.ghosttyThemeSeed = config.lib.dag.entryAfter ["writeBoundary"] ''
+    cfg="$HOME/.config/ghostty/theme.conf"
+    if [ ! -e "$cfg" ]; then
+      mkdir -p "$(dirname "$cfg")"
+      printf 'theme = %s\n' 'dark:Matrix,light:GitHub' > "$cfg"
+    fi
+  '';
 
   dconf = {
     enable = true;

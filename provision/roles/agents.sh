@@ -4,10 +4,12 @@
 # agents = the synced Claude/Codex config produced by agents/bootstrap.sh.
 # On nixos it is owned by home-manager (claude.nix/codex.nix) and applied by
 # `just switch`, so the dispatcher must NOT run bootstrap.sh there.
+# shellcheck shell=bash
 
 # role_agents <mode> <platform> <machine>
 #   mode: dry-run | apply
 role_agents() {
+    # shellcheck disable=SC2034  # machine: kept for role-signature parity
     local mode="$1" platform="$2" machine="$3"
     # repo root = two levels up from provision/roles/ .
     local repo; repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

@@ -31,10 +31,8 @@ in {
 
     # System packages for ROG functionality
     environment.systemPackages = with pkgs;
-      [
+      lib.optionals cfg.enableChargeUptoScript [
         # Battery charge control script
-      ]
-      ++ lib.optionals cfg.enableChargeUptoScript [
         (pkgs.writeScriptBin "charge-upto" ''
           #!${pkgs.bash}/bin/bash
           echo ''${1:-${toString cfg.chargeUpto}} > /sys/class/power_supply/BAT?/charge_control_end_threshold

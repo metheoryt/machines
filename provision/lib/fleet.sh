@@ -1,5 +1,6 @@
 # provision/lib/fleet.sh — shared manifest helpers (source me; do not execute).
 # Requires: jq. Consumers: provision.sh, the `just provision` recipe.
+# shellcheck shell=bash
 
 # Repo root = two levels up from this file (provision/lib/ -> repo).
 _fleet_lib_dir() { cd "$(dirname "${BASH_SOURCE[0]}")" && pwd; }

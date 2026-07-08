@@ -6,10 +6,12 @@
 # apply). Wrapped here UNCHANGED. Unlike agents/dotfiles this is NOT a nixos
 # no-op — cloning working repos is imperative and not home-manager-managed, so
 # repos.sh runs on nixos too.
+# shellcheck shell=bash
 
 # role_repos <mode> <platform> <machine>
 #   mode: dry-run | apply
 role_repos() {
+    # shellcheck disable=SC2034  # machine: kept for role-signature parity
     local mode="$1" platform="$2" machine="$3"
     # repo root = two levels up from provision/roles/ .
     local repo; repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

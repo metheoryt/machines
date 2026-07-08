@@ -10,8 +10,8 @@
 # To bump: run `just update-pycharm` (also triggered by `just update`/`just
 # upgrade`), which rewrites `version` + `hash` below from the JetBrains release
 # API. Manual: edit `version`, then `nix store prefetch-file <url>`.
-{ pkgs }:
-pkgs.jetbrains.pycharm.overrideAttrs (old: rec {
+{pkgs}:
+pkgs.jetbrains.pycharm.overrideAttrs (_: rec {
   version = "2026.1.4";
 
   src = pkgs.fetchurl {

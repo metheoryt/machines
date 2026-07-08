@@ -1,5 +1,4 @@
-{ pkgs, ... }:
-{
+{pkgs, ...}: {
   # Enable nix-ld for compatibility with dynamically linked executables
   programs.nix-ld = {
     enable = true;
@@ -58,8 +57,8 @@
     gh # GitHub CLI
 
     # AI coding agents / code intelligence (packaged locally, see ../../pkgs)
-    (callPackage ../../pkgs/gortex.nix { }) # code-intelligence engine / MCP server
-    (callPackage ../../pkgs/openclaude { }) # multi-provider Claude Code fork
+    (callPackage ../../pkgs/gortex.nix {}) # code-intelligence engine / MCP server
+    (callPackage ../../pkgs/openclaude {}) # multi-provider Claude Code fork
 
     # Text editors and IDEs
     vim
@@ -203,10 +202,9 @@
   # bin dir to PATH so installed CLIs (e.g. gitnexus) are runnable.
   environment.sessionVariables = {
     NPM_CONFIG_PREFIX = "$HOME/.npm-global";
-    PATH = [ "$HOME/.npm-global/bin" ];
+    PATH = ["$HOME/.npm-global/bin"];
   };
 
   # User groups for development
-  users.groups.docker = { };
-
+  users.groups.docker = {};
 }

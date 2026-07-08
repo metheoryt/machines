@@ -40,8 +40,8 @@ in {
     # --- AmneziaWG spoke interface ---
     networking.wireguard.interfaces.awg0 = {
       type = "amneziawg";
-      ips = [ cfg.address ];
-      privateKeyFile = cfg.privateKeyFile;
+      ips = [cfg.address];
+      inherit (cfg) privateKeyFile;
       mtu = 1280;
       # Interface-level obfuscation (module lowercases these keys on render —
       # write them capitalised as the nixpkgs example does).
@@ -52,7 +52,7 @@ in {
           # Whole mesh through the tunnel (split tunnel + full mesh). With
           # allowedIPsAsRoutes (default true) this installs the 10.0.0.0/24
           # route automatically.
-          allowedIPs = [ "10.0.0.0/24" ];
+          allowedIPs = ["10.0.0.0/24"];
           endpoint = "${params.endpoint}:${toString params.port}";
           # Keep the NAT mapping open so the VPS can forward inbound packets to
           # us while we're idle (required for this host to be an SSH target).
@@ -70,7 +70,7 @@ in {
     };
 
     # Mesh: allow 22 on the awg0 interface.
-    networking.firewall.interfaces.awg0.allowedTCPPorts = [ 22 ];
+    networking.firewall.interfaces.awg0.allowedTCPPorts = [22];
 
     # LAN: allow 22 only from the home subnet. Uses the iptables escape hatch
     # (extraCommands) rather than extraInputRules — the latter requires

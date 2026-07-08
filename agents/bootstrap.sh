@@ -203,6 +203,7 @@ if [ ! -e "$host_src" ]; then
     {
       printf '# Host: %s\n\n' "$HOST_ID"
       printf '<!--\nPer-host memory + instructions for this machine. Symlinked to\n'
+      # shellcheck disable=SC2088  # literal tilde: this is documentation text, not a path to expand
       printf '~/.claude/host-memory.md and imported by ~/.claude/CLAUDE.md, so it loads ONLY\n'
       printf 'when the hostname matches. Tracked in git, synced everywhere, inert on other\n'
       printf 'hosts. Do NOT put secrets here.\n-->\n\n## Notes\n'

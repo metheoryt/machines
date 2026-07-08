@@ -15,7 +15,7 @@ let
   # Single fromJSON site for the whole repo: every mesh-IP consumer derives from
   # here, so a box's IP is changed in exactly one place (fleet.json).
   fleet = builtins.fromJSON (builtins.readFile ../../fleet.json);
-  machines = fleet.machines;
+  inherit (fleet) machines;
 in {
   # VPS_PUBLIC_KEY (public — safe to commit).
   vpsPublicKey = "Hm4m5Cce1RdzpbcOezzliDBxV4ZY2tp9mIMWXNivY1s=";

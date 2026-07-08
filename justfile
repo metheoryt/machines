@@ -153,10 +153,10 @@ optimize:
     sudo nix-store --optimise
     @echo "✅ Store optimization complete!"
 
-# Format all Nix files
+# Format all Nix files (alejandra — matches the flake formatter + pre-commit hook)
 fmt:
     @echo "🎨 Formatting Nix files..."
-    find {{flake_dir}} -name "*.nix" -type f -exec nixfmt {} \;
+    alejandra {{flake_dir}}
     @echo "✅ Formatting complete!"
 
 # Check configuration syntax

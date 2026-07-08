@@ -1,0 +1,8 @@
+# statix lint config for this repo. See `just check` / the pre-commit hook.
+#
+# repeated_keys: disabled. statix flags collision-style config such as
+#   services.foo.enable = true;
+#   services.bar.enable = true;
+# suggesting a nested `services = { ... }`. In NixOS modules the flat form is
+# the idiomatic house style across the fleet, so this lint fights the grain.
+disabled = ["repeated_keys"]

@@ -12,7 +12,7 @@
 # other member points at its mesh IP.
 #
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
-{...}: let
+_: let
   params = import ../system/mesh-vpn-params.nix;
   mkBlock = name: m: {
     hostname =

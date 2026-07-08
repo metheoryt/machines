@@ -72,8 +72,8 @@
   services.gitAutoFetch.enable = true;
 
   # AmneziaVPN background service (required for VPN connections)
-  systemd.packages = [ pkgs.amnezia-vpn ];
-  systemd.services.AmneziaVPN.wantedBy = [ "multi-user.target" ];
+  systemd.packages = [pkgs.amnezia-vpn];
+  systemd.services.AmneziaVPN.wantedBy = ["multi-user.target"];
 
   # AmneziaWG mesh spoke + SSH over mesh/LAN. address matches
   # mesh-vpn-params.nix `hosts.latitude5520` (+ /32). The peer already exists on

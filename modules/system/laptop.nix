@@ -59,7 +59,7 @@
   # Laptop-specific kernel parameters
   boot.kernelParams = [
     "intel_pstate=active" # Better Intel CPU power management
-"mem_sleep_default=deep" # Use S3 (deep) sleep instead of s2idle — better battery on suspend
+    "mem_sleep_default=deep" # Use S3 (deep) sleep instead of s2idle — better battery on suspend
   ];
 
   # Hardware specific optimizations

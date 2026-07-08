@@ -131,7 +131,7 @@ stdenv.mkDerivation (finalAttrs: {
       --set GDK_BACKEND x11 \
       --set QT_QPA_PLATFORM xcb \
       --set WAYLAND_DISPLAY "" \
-      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ libva ]}" \
+      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [libva]}" \
       --set-default LIBVA_DRIVERS_PATH "/run/opengl-driver/lib/dri" \
       "''${gappsWrapperArgs[@]}"
   '';
@@ -140,8 +140,8 @@ stdenv.mkDerivation (finalAttrs: {
     description = "Open source virtual / remote desktop infrastructure (upstream Flutter build)";
     homepage = "https://rustdesk.com";
     license = lib.licenses.agpl3Plus;
-    platforms = [ "x86_64-linux" ];
+    platforms = ["x86_64-linux"];
     mainProgram = "rustdesk";
-    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
+    sourceProvenance = [lib.sourceTypes.binaryNativeCode];
   };
 })
