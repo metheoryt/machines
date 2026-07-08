@@ -1122,3 +1122,26 @@ Two execution options:
 2. **Inline Execution** — execute in this session with checkpoints. This box can complete all edits, the `jq`/`bash -n`/shellcheck gates, the `mesh.sh` unit test, the PowerShell parse + dry-run gates, and the Windows confirm-gate; the NixOS dry-build line and every real-box step defer to latitude5520 / a VPS-access run.
 
 **Which approach?**
+
+---
+
+## Execution outcome (2026-07-09, subagent-driven)
+
+**Status: session-verifiable scope COMPLETE + pushed. Real-box steps pending (see runbook, Task 7 Step 3).**
+
+- **vps repo:** Task 1 committed `46625e1` and pushed to its own origin (reviewed before push).
+- **machines repo:** Tasks 2–7 landed on `main`, merged with concurrent origin work, pushed. Final merge `a07053e` (`main == origin/main`). Per-task commits: `8132931` (fleet.json), `5ac9cac`+`35b785c` (mesh.sh + no-rotation test), `4d03177`+`feacff5` (mesh-member.sh + key-write guard), `5da6b29`+`f3eaaca`+`ed9b351` (Mesh.psm1/mesh-member.ps1 + ACL lock + lock-before-write), `b5f4f43` (mesh-hub + wiring), `88a490b` (project.md + runbook).
+
+Each task was implemented by a fresh subagent, per-task-reviewed (spec + quality), followed by a final whole-branch review (opus). **Four defects in the plan's own verbatim code were caught in review and fixed** (each an explicit user decision):
+1. `mesh.test.sh` proved show-before-add ordering but not the no-rotation *guarantee* → added a scenario asserting a successful `show` suppresses `add` (`35b785c`).
+2. `mesh-member.sh` wrote the key via unguarded `install`/`tee` (role fn runs under disabled errexit as an `if`-condition) → `install -D` + `|| return 1` guards (`feacff5`).
+3. `mesh-member.ps1` wrote the conf world-readable (`C:\ProgramData` inherits `Users:Read`) → `icacls` lock, current user + Administrators only (`f3eaaca`).
+4. That lock ran *after* the write (a brief world-readable window, unlike posix create-then-write) → reorder to create-empty → lock → write, + PrivateKey-presence guard + `throw` on ACL failure (`ed9b351`).
+
+Net: both platforms enforce secret-at-rest (posix `install -m600 -o root -g root -D` guarded; Windows created-locked-then-written).
+
+**Session gates green:** posix parse; `mesh.sh` unit test `ALL TESTS PASS` (incl. no-rotation); dispatch resolves `mesh-member`/`mesh-hub` on both platforms; Windows dry-run key-redacted + confirm-gate decline (rc 0); Windows ACL ordering proof.
+
+**Deferred (real-box only, needs VPS/NixOS/Windows access):**
+- Task 2 Step 3 `[nix box]` gate (`nix eval` hosts + dry-build) on latitude5520 after pull.
+- Runbook (Task 7 Step 3): confirm VPS `manage-peers.sh` path; land+pull vps + smoke; latitude5520 apply → key install → **reboot into kernel 6.18.38** → handshake; Windows import **replacing** the existing tunnel. `homeserver.mesh.peerName` still defaulted — confirm via `manage-peers.sh list`.
