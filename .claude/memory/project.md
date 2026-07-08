@@ -195,7 +195,15 @@ global + per-host memory). One bullet per fact under a topical heading.
   get `flake check`/standalone-home green: `codex.nix`+`claude.nix` keyed the
   host-memory link off `osConfig.networking.hostName`, which is `null` in the
   standalone `homeManagerConfiguration` context — repointed both at the `hostname`
-  specialArg (already threaded via `extraSpecialArgs` in both paths). **5b** = a
+  specialArg (already threaded via `extraSpecialArgs` in both paths). Also: the
+  generated `ssh.nix` was migrated off the DEPRECATED home-manager
+  `programs.ssh.matchBlocks`/`extraOptions` to the current `programs.ssh.settings`
+  API (upstream OpenSSH directive names: `HostName`/`User`/`StrictHostKeyChecking`),
+  with `enableDefaultConfig = false` and the old implicit `Host *` defaults
+  re-declared verbatim under `settings."*"`. On this flake's home-manager (tracks
+  master ≈ 26.11) `matchBlocks` fires deprecation warnings — future ssh.nix edits
+  (5b Windows aliases, host-key pinning) MUST use `settings`, not reintroduce
+  `matchBlocks`. **5b** = a
   `~/my/vps` `manage-peers.sh` non-interactive prereq
   (`add <name> <ip>` + `--conf-only`) + the mesh-member/mesh-hub executors
   (real-box only). Windows boxes' existing hand-made AmneziaVPN tunnel must be
