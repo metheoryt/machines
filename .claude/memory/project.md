@@ -154,6 +154,33 @@ global + per-host memory). One bullet per fact under a topical heading.
   multi-select) from a REAL terminal, not the PowerShell tool. NEXT: Phase 5 — the
   mesh-applying phase (g16/g614jv `.6` collision) or the secrets phase (agenix +
   age). Remaining stub roles: base, mesh-member/mesh-hub, ssh-server, backup-*.
+- Phase 5 = mesh role. DESIGN APPROVED + committed 2026-07-08 (spec
+  `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md`,
+  commit `c09a52a`); NOT yet implemented (next: writing-plans for 5a).
+  CORRECTION to the peer-map facts above: the ROG G16 is now **Windows-only** —
+  the NixOS `g16` install is GONE; `g614jv` (Windows) is the live ROG and owns
+  mesh `.6`. So the old "g16/g614jv `.6` collision" is moot (one machine, one
+  OS), and the `g16` machine entry (`fleet.json`), `hosts/g16/nixos/`, and the
+  `mesh-vpn-params.nix` `hosts.g16` line are STALE — Phase 5a removes them.
+  Key design decisions: (1) the **VPS is the key authority** — its
+  `manage-peers.sh` (`add`/`show`/`list`/`remove`) runs `awg genkey` VPS-side,
+  assigns the IP, stores the key in `peers/<name>.key`, and emits the full
+  client conf; server conf lives at `/etc/amnezia/amneziawg/wg0.conf`. So the
+  mesh-member executor does NOT generate keys locally — it SSHes `debian@cyphy.kz`
+  and FETCHES its conf (`show <peerName>` for existing peers = no rotation,
+  else `add <name> <ip>`), then installs it (nixos: extract PrivateKey →
+  `/etc/amnezia-wg/awg0.key`; windows: whole conf → `%ProgramData%\amnezia-wg\awg0.conf`
+  for GUI import; no Windows binary needed). (2) `fleet.json` becomes the SINGLE
+  name-keyed source of truth for mesh IPs — `mesh-vpn-params.nix` derives its
+  `hosts` map via `fromJSON`, and `modules/home/ssh.nix` GENERATES its
+  matchBlocks (hub keeps `endpoint`/cyphy.kz hostname, not `.1`). (3) VPS peer
+  names DIFFER from fleet keys (`g614jv`→`me-g614jv`, `latitude5520`→
+  `nix-lat5520`) — manifest carries `mesh.peerName`. Split: **5a** = the Nix
+  single-source refactor + g16 removal (session-verifiable via `nix eval`/
+  dry-build); **5b** = a `~/my/vps` `manage-peers.sh` non-interactive prereq
+  (`add <name> <ip>` + `--conf-only`) + the mesh-member/mesh-hub executors
+  (real-box only). Windows boxes' existing hand-made AmneziaVPN tunnel must be
+  REPLACED by the fetched conf, not run alongside it.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
