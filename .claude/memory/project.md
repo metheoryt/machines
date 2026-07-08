@@ -256,3 +256,14 @@ global + per-host memory). One bullet per fact under a topical heading.
   latitude5520 into a private repo "someday" (stated 2026-07-07) — not urgent,
   no mechanism chosen yet (chezmoi/stow/plain git all unexplored as of this
   writing).
+
+## Pending follow-ups
+
+- **Drop `pylspFixOverlay` from `flake.nix` once python-lsp/python-lsp-server
+  PR #715 merges and ships in a nixpkgs release.** The overlay builds
+  python-lsp-server from our fork commit (`metheoryt/python-lsp-server @
+  e4ee218`, version `1.14.1.dev0+pr715`) to carry the fix for the
+  `pylsp_definitions` crash on positionless definitions (`d.line is None` →
+  `TypeError`), which gortex hit constantly. Added 2026-07-09. When nixpkgs
+  ships pylsp with the fix, delete the overlay block + its entry in the
+  `overlays` list and revert to stock. Track: https://github.com/python-lsp/python-lsp-server/pull/715
