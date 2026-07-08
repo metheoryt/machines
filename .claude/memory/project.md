@@ -9,8 +9,9 @@ global + per-host memory). One bullet per fact under a topical heading.
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
 - AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`). Verified live peer map
-  (2026-07-08, `awg show` + `peers/*.key`): `.2`=homeserver, `.6`=`me-g614jv`
-  (the ROG G16's Windows/app side), `.8`=`nix-lat5520` (latitude5520's NixOS
+  (2026-07-08, `awg show` + `peers/*.key`): `.2`=homeserver, `.6`=`g614jv`
+  (peer name `me-g614jv`), the Windows-only ROG G16 — the NixOS `g16` install is
+  retired and removed from the repo. `.8`=`nix-lat5520` (latitude5520's NixOS
   side, already handshaking). `.7` is a FRIEND's device (`ilya-romanyuk`) — the
   mesh also carries friends' peers, so never disturb existing ones. The live
   `wg0` has DRIFTED from on-disk `/etc/wireguard/wg0.conf` (the file lists peers
@@ -156,12 +157,23 @@ global + per-host memory). One bullet per fact under a topical heading.
   age). Remaining stub roles: base, mesh-member/mesh-hub, ssh-server, backup-*.
 - Phase 5 = mesh role. DESIGN APPROVED + committed 2026-07-08 (spec
   `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md`,
-  commit `c09a52a`); NOT yet implemented (next: writing-plans for 5a).
-  CORRECTION to the peer-map facts above: the ROG G16 is now **Windows-only** —
-  the NixOS `g16` install is GONE; `g614jv` (Windows) is the live ROG and owns
-  mesh `.6`. So the old "g16/g614jv `.6` collision" is moot (one machine, one
-  OS), and the `g16` machine entry (`fleet.json`), `hosts/g16/nixos/`, and the
-  `mesh-vpn-params.nix` `hosts.g16` line are STALE — Phase 5a removes them.
+  commit `c09a52a`). **5a EXECUTED 2026-07-08** (commits `f9843bc`..`73d8276`):
+  the old "g16/g614jv `.6` collision" is resolved — the ROG G16 is now
+  Windows-only, `g614jv` is the live ROG and owns mesh `.6`, and the NixOS
+  `g16` install (the `fleet.json` entry, `flake.nix` wiring,
+  `hosts/g16/nixos/`, and `scripts/quick-check.sh` paths) is GONE from the
+  repo — `hosts/g16/windows/` is deliberately kept. `fleet.json` is now the
+  single mesh-IP source of truth: `mesh-vpn-params.nix` derives its `hosts`
+  map (and exposes the raw `machines` records) via `fromJSON`, and
+  `modules/home/ssh.nix` GENERATES its matchBlocks keyed on `mesh.role` (the
+  hub keeps its `cyphy.kz` public hostname, never `.1`). The new
+  `ssh.user`/`mesh.peerName` fields are in place: `g614jv`.ssh.user=`methe`
+  with peerName `me-g614jv`, `homeserver`.ssh.user=`methe`,
+  `vps`.ssh.user=`debian`, `latitude5520` peerName `nix-lat5520`. Remaining
+  follow-ups: **Phase 5b** (the `~/my/vps` `manage-peers.sh` non-interactive
+  prereq + the mesh-member/mesh-hub role executors, real-box only), and
+  `homeserver`'s `mesh.peerName` is still DEFAULTED (unset in `fleet.json`)
+  pending a `manage-peers.sh list` confirmation of its real VPS peer name.
   Key design decisions: (1) the **VPS is the key authority** — its
   `manage-peers.sh` (`add`/`show`/`list`/`remove`) runs `awg genkey` VPS-side,
   assigns the IP, stores the key in `peers/<name>.key`, and emits the full
