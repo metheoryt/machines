@@ -35,7 +35,7 @@
 # the non-Nix machines, which already does a plain one-hop `ln -s`.
 {
   config,
-  osConfig,
+  hostname,
   lib,
   ...
 }: let
@@ -51,7 +51,7 @@
     "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
     "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
     "${profileDir}/memory/personality".source = link "${agents}/memory/personality";
-    "${profileDir}/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
+    "${profileDir}/host-memory.md".source = link "${agents}/hosts/${hostname}.md";
     # cyphy plugin: one whole-directory symlink replaces the four per-entry
     # linkEntries calls that used to wire skills/agents/commands/hooks
     # individually — they all live inside agents/plugin/ now, discovered by

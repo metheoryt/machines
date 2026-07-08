@@ -8,7 +8,7 @@
 # agents/bootstrap.sh, which produces the identical links.
 {
   config,
-  osConfig,
+  hostname,
   lib,
   ...
 }: let
@@ -36,7 +36,7 @@ in {
       # Shared memory & per-host file (same sources Claude uses).
       ".codex/memory/global.md".source = link "${agents}/memory/global.md";
       ".codex/memory/personality".source = link "${agents}/memory/personality";
-      ".codex/host-memory.md".source = link "${agents}/hosts/${osConfig.networking.hostName}.md";
+      ".codex/host-memory.md".source = link "${agents}/hosts/${hostname}.md";
     }
     # Shared from agents/: skills + hook scripts. Codex-specific: subagents.
     // linkEntries "skills" agents "plugin/skills" ../../agents/plugin/skills
