@@ -45,6 +45,12 @@ Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`, `codex
 
 It's idempotent — re-run any time (e.g. after `git pull`) to pick up changes.
 
+> **Not `just provision`.** The `provision.sh` dispatcher is manifest-driven off
+> `fleet.json`, which declares no WSL machine — and it carries role executors only
+> for `agents`, `dotfiles`, `repos`, and `mesh-*`. There is no `base` executor, so
+> even with a manifest entry it would skip the apt base, `gortex`, `claude`/`codex`,
+> the SSH keys, and `git-autofetch`. `linux.sh` is what installs those. Use it.
+
 ## Multi-account SSH
 
 The script generates a per-box ed25519 key per declared GitHub account and writes

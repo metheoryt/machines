@@ -4,12 +4,15 @@
 #   • the git-synced Claude Code / Codex agent config (via agents/bootstrap.sh)
 #   • the core CLI dev tools (gortex, claude, codex, ripgrep/fd/fzf, …)
 #
-# This is the "disposable distro" counterpart to the NixOS-WSL host
-# (hosts/wsl/): imperative and apt-based, deliberately NOT a full reproduction
-# of the Nix fleet. It installs a CORE tier (must succeed — the script aborts if
-# these fail) and a BEST-EFFORT tier (nice-to-have; it warns and continues).
-# If you want full, drift-free fleet parity, use the NixOS-WSL host instead —
-# that's the whole point of the two-track design.
+# This is the imperative, apt-based counterpart to the NixOS hosts (hosts/*/nixos/):
+# deliberately NOT a full reproduction of the Nix fleet. It installs a CORE tier
+# (must succeed — the script aborts if these fail) and a BEST-EFFORT tier
+# (nice-to-have; it warns and continues). Full, drift-free fleet parity only
+# exists on a NixOS box; on WSL you trade that for zero Nix and a distro you can
+# `wsl --unregister` and re-provision in minutes.
+#
+# This is also the ONLY complete path for a WSL box: the provision.sh dispatcher
+# has no `base` role executor, so it cannot stand one up. Run this script.
 #
 # Targets glibc apt distros: Debian 11+ / Ubuntu 22.04+. NOT Alpine/musl — the
 # prebuilt gortex binary and the native claude/codex CLIs are glibc builds.
@@ -417,8 +420,8 @@ Next steps:
   • This box's clone auto-relinks agent config on git pull (core.hooksPath set
     by agents/bootstrap.sh). Commit from any fleet machine, pull here.
 
-Not installed by design (use the NixOS-WSL host for full parity): the declarative
-dev toolchain (docker, language servers, the full fish/ghostty/GNOME setup).
+Not installed by design (only a NixOS host gets these): the declarative dev
+toolchain (docker, language servers, the full fish/ghostty/GNOME setup).
 EOF
 
 exit 0
