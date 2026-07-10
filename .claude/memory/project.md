@@ -241,6 +241,20 @@ global + per-host memory). One bullet per fact under a topical heading.
   `homeserver`'s `mesh.peerName` is still DEFAULTED — confirm via
   `manage-peers.sh list` first; if it has no stored key, use the printed
   manual fallback rather than blindly `add` (risks "IP in use").
+- **Mesh activation status (per-box, live checklist — tick as you go on each
+  machine).** Steps map to the runbook above. `☐`=todo, `✅`=done, `n/a`=not
+  applicable to that box.
+
+  | Box | pull vps change | apply mesh-member | key `root:600` | reboot 6.18.38 | verified over mesh |
+  |---|---|---|---|---|---|
+  | VPS (hub) | ☐ land+smoke `add smoke … --conf-only`+`remove smoke` | n/a (hub) | n/a | n/a | n/a |
+  | latitude5520 | ☐ | ☐ (`--apply`, y) | ☐ | ☐ | ☐ `awg show awg0` handshake |
+  | g614jv (win) | ☐ | ☐ (`-Apply`, y) | n/a | n/a | ☐ import `awg0.conf`, replace tunnel |
+  | homeserver (win) | ☐ | ☐ (`-Apply`, y) | n/a | n/a | ☐ confirm `mesh.peerName` first, then import |
+
+  Prereq for the whole table: step (0) VPS `manage-peers.sh` path confirmed +
+  `fleet.json` fixed if it differs. Update this table (not a separate plan) as
+  boxes come online — it syncs to every machine via git.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
