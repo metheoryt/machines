@@ -13,6 +13,14 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Harness behavior (empirical)
 
+- **`claude --resume <id> --model X` HONORS the new model (probed 2026-07-10,
+  v2.1.206).** A session started on haiku, resumed with `--model claude-sonnet-5`,
+  ran the next turn on sonnet (verified on the `assistant` stream-json events, not
+  just the system-init echo). Resuming with **no** `--model` defaults to the
+  LAST-used model, not the session's original. So model can vary per resume/turn
+  while the session, worktree, and provider stay pinned — the basis for skep's
+  "model lives on the Invocation, not the Session" decision.
+
 - **Verify Claude Code's file-reading before designing around it.** Empirically
   confirmed for a user config dir (`CLAUDE_CONFIG_DIR`): only `settings.json` is
   read at the config-dir ROOT — a config-root `settings.local.json` **and** a
@@ -21,6 +29,30 @@ elsewhere to sync. Do NOT put secrets here.
   (b) a PROJECT-scope `<repo>/.claude/settings.local.json` `env` (this is the
   one place `settings.local.json` is honored). Test with a throwaway
   `CLAUDE_CONFIG_DIR` + `printenv` probe rather than assuming.
+
+- **Headless `claude -p` permissions (probed 2026-07-09, v2.1.205).** `Write`,
+  `Edit`, and MCP tools are ALL denied by default; each must be named in
+  `--allowedTools` (`mcp__<server>__<tool>`). `Read` is available with NO grant.
+  `--allowedTools` is **additive** to the default-allowed tools — passing only
+  an MCP tool does not strip `Read`. A PROJECT-scope `.claude/settings.json`
+  `permissions.allow` does **not** arm in headless `-p` (its grant silently has
+  no effect), so pass everything on argv and delegate nothing to settings.
+  Caveats: `Read` is free by *permission* — a `PreToolUse` hook can still deny
+  it; MCP servers may finish connecting mid-session, so a tool can be absent at
+  turn one; a tool can be missing from the session's tool list entirely
+  (registration ≠ permission). Reproducible scripts:
+  `~/my/skep/docs/superpowers/specs/probes/l1.1-permissions/`.
+
+- **When probing an agent harness, make the capability leave an out-of-band
+  marker and always run a control.** Judge by a file on disk (or an unguessable
+  token the agent could only echo after reading), never the agent's
+  self-report — but DO read the self-report, because it names the *mechanism*
+  of a denial. Two false conclusions were caught this way: a `Bash` denial that
+  was the sandbox's working-directory guard rather than the permission system
+  (an artifact of nesting `claude` inside an already-sandboxed shell), and a
+  `Grep` "success" where `Grep` was unregistered and the agent silently
+  substituted `grep` via `Bash`. A treatment whose control never armed proves
+  nothing — and reads as a clean result if you skip the control.
 
 ## Repo layout (WSL boxes)
 
