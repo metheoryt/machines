@@ -255,6 +255,15 @@ global + per-host memory). One bullet per fact under a topical heading.
   Prereq for the whole table: step (0) VPS `manage-peers.sh` path confirmed +
   `fleet.json` fixed if it differs. Update this table (not a separate plan) as
   boxes come online — it syncs to every machine via git.
+  - **2026-07-11 (from g614jv/WSL):** step (0) DONE — verified over Windows
+    `ssh.exe` that the live VPS clone is `/home/debian/vps` (NOT `~/my/vps`);
+    fixed `fleet.json` `vps.mesh.managePeers` + both mesh-lib fallbacks
+    (`/home/debian/vps/vps/manage-peers.sh`). Windows→VPS SSH key + passwordless
+    sudo both confirmed working. FOUND: the live VPS still runs the OLD
+    `manage-peers.sh` (`grep -c conf-only` = 0) — the Phase 5b change is pushed
+    to the vps repo `origin/main` (commit `46625e1`) but NOT pulled onto the VPS.
+    So VPS row step 1 (land+pull+smoke) is the true next action and gates every
+    member apply.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
