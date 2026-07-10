@@ -34,7 +34,7 @@ mesh_hub_target() {
 mesh_hub_script() {
     jq -r '
         .machines | to_entries[] | select(.value.mesh.role == "hub")
-        | .value.mesh.managePeers // "/home/debian/my/vps/vps/manage-peers.sh"
+        | .value.mesh.managePeers // "/home/debian/vps/vps/manage-peers.sh"
     ' "$MESH_MANIFEST"
 }
 

@@ -27,7 +27,7 @@ function Get-MeshHubTarget {
 }
 function Get-MeshHubScript {
     $h = Get-MeshHub
-    if ($h.mesh.managePeers) { $h.mesh.managePeers } else { '/home/debian/my/vps/vps/manage-peers.sh' }
+    if ($h.mesh.managePeers) { $h.mesh.managePeers } else { '/home/debian/vps/vps/manage-peers.sh' }
 }
 function Get-MeshPeerName {
     param([Parameter(Mandatory)][string] $Machine)

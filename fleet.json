@@ -22,7 +22,7 @@
     },
     "vps": {
       "platform": "debian",
-      "mesh": { "ip": "10.0.0.1", "role": "hub", "managePeers": "/home/debian/my/vps/vps/manage-peers.sh" },
+      "mesh": { "ip": "10.0.0.1", "role": "hub", "managePeers": "/home/debian/vps/vps/manage-peers.sh" },
       "ssh": { "user": "debian", "host": "cyphy.kz" },
       "roles": ["base", "mesh-hub", "ssh-server", "agents", "dotfiles", "backup-client"],
       "detect": { "hostname": "27608" }
