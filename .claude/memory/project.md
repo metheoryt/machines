@@ -315,6 +315,18 @@ global + per-host memory). One bullet per fact under a topical heading.
 
 ## Pending follow-ups
 
+- **VPS base-machine reproducibility (idea, NOT started — 2026-07-11).** Goal:
+  bring a fresh cloud VM back to the VPS baseline reproducibly. Blocked because
+  the provisioner's `base`, `ssh-server`, `backup-client` roles are UNIMPLEMENTED
+  — no executor files exist (only agents/dotfiles/mesh-hub/mesh-member/repos do).
+  So running `provision.sh --apply` on the VPS today does NOT provision the base:
+  base/ssh-server/backup-client print "not yet implemented (skipped)"; only
+  agents/dotfiles would actually run (mutating the live debian user's config —
+  don't). Scope when built: base machine only — services stay the `vps` repo's
+  `setup-*.sh` (awg server, caddy, rustdesk), secrets/data via restic + (unbuilt)
+  age/agenix. Open: distro (Debian vs Ubuntu 24.04 LTS — both apt-family, so the
+  `base` role can be written family-generic; low-stakes, deferrable).
+
 - **Drop `pylspFixOverlay` from `flake.nix` once python-lsp/python-lsp-server
   PR #715 merges and ships in a nixpkgs release.** The overlay builds
   python-lsp-server from our fork commit (`metheoryt/python-lsp-server @
