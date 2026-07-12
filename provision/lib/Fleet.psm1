@@ -1,4 +1,4 @@
-# provision/lib/Fleet.psm1 — shared manifest helpers for Windows.
+﻿# provision/lib/Fleet.psm1 — shared manifest helpers for Windows.
 # Uses native ConvertFrom-Json (no jq needed). Imported by provision.ps1.
 
 function Get-FleetManifestPath {

@@ -1,4 +1,4 @@
-# provision/roles/mesh-member.ps1 — the `mesh-member` role executor (Windows side).
+﻿# provision/roles/mesh-member.ps1 — the `mesh-member` role executor (Windows side).
 # Dot-sourced by provision.ps1. Defines Invoke-RoleMeshMember.
 #
 # Windows AmneziaWG runs via the AmneziaVPN GUI (no scriptable service). This

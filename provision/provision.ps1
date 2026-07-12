@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # provision/provision.ps1 — fleet front door (Windows).
 # Phase 1: detect/select the machine and PRINT the plan. Applies nothing.
 [CmdletBinding()]

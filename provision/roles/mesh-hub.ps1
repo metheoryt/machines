@@ -1,4 +1,4 @@
-# provision/roles/mesh-hub.ps1 — the `mesh-hub` role executor (Windows side).
+﻿# provision/roles/mesh-hub.ps1 — the `mesh-hub` role executor (Windows side).
 # Dot-sourced by provision.ps1. Defines Invoke-RoleMeshHub.
 #
 # The AmneziaWG hub (the VPS) is owned by the sibling ~/my/vps repo. No-op

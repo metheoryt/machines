@@ -1,4 +1,4 @@
-# provision/lib/Mesh.psm1 — VPS conf-fetch helper for Windows. Imported by
+﻿# provision/lib/Mesh.psm1 — VPS conf-fetch helper for Windows. Imported by
 # provision/roles/mesh-member.ps1. Uses native ConvertFrom-Json + ssh.exe.
 #
 # Mirrors provision/lib/mesh.sh: SSH the hub's PUBLIC endpoint (built from

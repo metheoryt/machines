@@ -1,4 +1,4 @@
-# provision/roles/dotfiles.ps1 — the `dotfiles` role executor (Windows side).
+﻿# provision/roles/dotfiles.ps1 — the `dotfiles` role executor (Windows side).
 # Dot-sourced by provision.ps1. Defines Invoke-RoleDotfiles.
 #
 # dotfiles = cross-platform home config managed by chezmoi, sourced from
