@@ -247,9 +247,9 @@ global + per-host memory). One bullet per fact under a topical heading.
 
   | Box | pull vps change | apply mesh-member | key `root:600` | reboot 6.18.38 | verified over mesh |
   |---|---|---|---|---|---|
-  | VPS (hub) | ☐ land+smoke `add smoke … --conf-only`+`remove smoke` | n/a (hub) | n/a | n/a | n/a |
+  | VPS (hub) | ✅ pulled → `46625e1` (conf-only present) | n/a (hub) | n/a | n/a | n/a |
   | latitude5520 | ☐ | ☐ (`--apply`, y) | ☐ | ☐ | ☐ `awg show awg0` handshake |
-  | g614jv (win) | ☐ | ☐ (`-Apply`, y) | n/a | n/a | ☐ import `awg0.conf`, replace tunnel |
+  | g614jv (win) | ✅ | ✅ (`-Apply`, y) | n/a | n/a | ✅ imported `awg0.conf`, tunnel replaced — hub shows `me-g614jv` handshake (2026-07-12) |
   | homeserver (win) | ☐ | ☐ (`-Apply`, y) | n/a | n/a | ☐ confirm `mesh.peerName` first, then import |
 
   Prereq for the whole table: step (0) VPS `manage-peers.sh` path confirmed +
@@ -264,6 +264,15 @@ global + per-host memory). One bullet per fact under a topical heading.
     to the vps repo `origin/main` (commit `46625e1`) but NOT pulled onto the VPS.
     So VPS row step 1 (land+pull+smoke) is the true next action and gates every
     member apply.
+  - **2026-07-12 (g614jv online):** VPS pulled `46625e1`. Hit a PS parse error
+    running `provision.ps1` under `powershell` (5.1) — the `.ps1`/`.psm1` files
+    were UTF-8 **without BOM** with em-dash comment chars; 5.1 decodes BOM-less
+    files as cp1252, turning em-dash bytes into smart quotes that PS treats as
+    string delimiters → spurious "missing terminator". Fixed by adding a UTF-8
+    BOM to all provision PS files (commit `264075a`); no PS7-only syntax, so they
+    now run under both 5.1 and 7. Then `mesh-member` `-Apply` (y) wrote
+    `awg0.conf`, imported into AmneziaVPN replacing the hand-made tunnel; VPS hub
+    (`manage-peers.sh list`, iface is `wg0` not `awg0`) shows `me-g614jv` handshake.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
