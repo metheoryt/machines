@@ -248,7 +248,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   | Box | pull vps change | apply mesh-member | key `root:600` | reboot 6.18.38 | verified over mesh |
   |---|---|---|---|---|---|
   | VPS (hub) | ✅ pulled → `46625e1` (conf-only present) | n/a (hub) | n/a | n/a | n/a |
-  | latitude5520 | ☐ | ☐ (`--apply`, y) | ☐ | ☐ | ☐ `awg show awg0` handshake |
+  | latitude5520 | ✅ | ✅ (NixOS `switch`) | ✅ | ✅ (into 6.18.38) | ✅ hub sees handshake + can ping `.8` over mesh (2026-07-13) |
   | g614jv (win) | ✅ | ✅ (`-Apply`, y) | n/a | n/a | ✅ imported `awg0.conf`, tunnel replaced — hub shows `me-g614jv` handshake (2026-07-12) |
   | homeserver (win) | ✅ | ✅ (`-Apply`, y) | n/a | n/a | ✅ rotated `wg0-homeserver` to managed key at `.2`, imported, tunnel replaced — hub shows handshake (2026-07-13) |
 
@@ -286,6 +286,13 @@ global + per-host memory). One bullet per fact under a topical heading.
     hand-made tunnel; hub shows handshake. GOTCHA for future hand-made peers: to
     make them provisioner-managed you must rotate (VPS can't hand back a key it
     never generated).
+  - **2026-07-13 (latitude5520 already online — WHOLE FLEET MESH UP):** the
+    2026-07-08 "needs reboot into 6.18.38" note was STALE — the reboot happened
+    since; `awg0` is up. Hub sees `nix-lat5520` (`.8`) handshaking AND can ping
+    `10.0.0.8` over the mesh (bidirectional). With VPS hub + g614jv + homeserver
+    + latitude5520 all handshaking, the fleet mesh activation is COMPLETE.
+    (Verify freshly with `manage-peers.sh list` before assuming a box is down —
+    the checklist can lag the live state.)
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
