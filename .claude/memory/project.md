@@ -37,8 +37,29 @@ global + per-host memory). One bullet per fact under a topical heading.
   not via DERP.
 - Per-box state: latitude5520 = AWG spoke DISABLED (`fleet.meshVpn.enable=false`
   + `services.tailscale.enable=true` in its `configuration.nix`), tailnet only.
-  homeserver = Tailscale installed BESIDE AWG (AWG not yet removed). g614jv, VPS
-  Caddy service paths, and homeserver's AWG removal = the pending rollout.
+- **Rollout DONE 2026-07-13** (plan
+  `docs/superpowers/plans/2026-07-13-headscale-fleet-rollout.md`): the VPS Caddy
+  now proxies homeserver services over the tailnet — `vps/caddy/Caddyfile`
+  upstreams repointed `10.0.0.2`→`100.64.0.3` (committed on the VPS's `origin/main`
+  directly, since the user's local vps clone was mid-feature on
+  `telegrind-poll-deploy`; that pull also reconciled the 2-commit drift + the
+  live-vs-repo Caddyfile drift). Homeserver containers already bind `0.0.0.0`, so
+  NO rebind was needed — services reachable on `100.64.0.3` as-is (git/speed/qb/tug
+  = 200; immich/navidrome were `502` only because their containers were down,
+  unrelated). **homeserver AWG REMOVED**: `AmneziaWGTunnel$awg0` stopped/disabled
+  (interface + `10.0.0.2` gone) and `wg0-homeserver` peer removed from the VPS hub
+  (`manage-peers.sh remove`). Remaining AWG peers on the hub = relatives + friends
+  + `me-g614jv` + `nix-lat5520` (untouched).
+- **Rollout PENDING:** (1) g614jv onto the tailnet — its sshd is unreachable over
+  the mesh (couldn't drive it remotely), so the user runs `winget install
+  Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz` on the
+  box directly. (2) Repoint SSH-over-mesh for the homeserver + update the vps
+  convention docs (`CLAUDE.md`/`README.md` still say "bind to 10.0.0.2 / reachable
+  only through the WireGuard tunnel"). The SSH-alias repoint is entangled with the
+  broader fleet-wide SSH-over-tailnet migration (latitude is already tailnet-only,
+  so `ssh.nix`'s AWG-mesh matchBlocks want migrating wholesale) — treat as a
+  scoped follow-up, don't hack `fleet.json` mesh IPs (that field is the AWG
+  source-of-truth for `mesh-vpn-params.nix`).
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
