@@ -75,16 +75,21 @@
   systemd.packages = [pkgs.amnezia-vpn];
   systemd.services.AmneziaVPN.wantedBy = ["multi-user.target"];
 
-  # AmneziaWG mesh spoke + SSH over mesh/LAN. address matches
-  # mesh-vpn-params.nix `hosts.latitude5520` (+ /32). The peer already exists on
-  # the VPS as `nix-lat5520` (10.0.0.8) and has handshaked. NOTE: do NOT `switch`
-  # until the private key exists at privateKeyFile (default
-  # /etc/amnezia-wg/awg0.key) — use the existing nix-lat5520 key (from the VPS
-  # peers/nix-lat5520.key), placed off-store. See the design spec's Phase 0.
+  # AmneziaWG mesh spoke — DISABLED for the Headscale fleet-mesh probe
+  # (2026-07-13). Nothing load-bearing rides latitude's awg0 (backups go over
+  # LAN), so dropping it lets Tailscale be tested on the raw ISP network with no
+  # split-tunnel interference. Re-enable by flipping to true. address is kept for
+  # a clean revert; it matches mesh-vpn-params.nix `hosts.latitude5520` (+ /32).
+  # See docs/superpowers/specs/2026-07-13-headscale-fleet-mesh-probe-design.md.
   fleet.meshVpn = {
-    enable = true;
+    enable = false;
     address = "10.0.0.8/32";
   };
+
+  # Headscale/Tailscale fleet transport (probe). tailscaled only — the tailnet
+  # is joined imperatively after switch:
+  #   sudo tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>
+  services.tailscale.enable = true;
 
   # Host-specific packages
   environment.systemPackages = with pkgs; [
