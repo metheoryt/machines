@@ -250,7 +250,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   | VPS (hub) | ✅ pulled → `46625e1` (conf-only present) | n/a (hub) | n/a | n/a | n/a |
   | latitude5520 | ☐ | ☐ (`--apply`, y) | ☐ | ☐ | ☐ `awg show awg0` handshake |
   | g614jv (win) | ✅ | ✅ (`-Apply`, y) | n/a | n/a | ✅ imported `awg0.conf`, tunnel replaced — hub shows `me-g614jv` handshake (2026-07-12) |
-  | homeserver (win) | ☐ | ☐ (`-Apply`, y) | n/a | n/a | ☐ confirm `mesh.peerName` first, then import |
+  | homeserver (win) | ✅ | ✅ (`-Apply`, y) | n/a | n/a | ✅ rotated `wg0-homeserver` to managed key at `.2`, imported, tunnel replaced — hub shows handshake (2026-07-13) |
 
   Prereq for the whole table: step (0) VPS `manage-peers.sh` path confirmed +
   `fleet.json` fixed if it differs. Update this table (not a separate plan) as
@@ -273,6 +273,19 @@ global + per-host memory). One bullet per fact under a topical heading.
     now run under both 5.1 and 7. Then `mesh-member` `-Apply` (y) wrote
     `awg0.conf`, imported into AmneziaVPN replacing the hand-made tunnel; VPS hub
     (`manage-peers.sh list`, iface is `wg0` not `awg0`) shows `me-g614jv` handshake.
+  - **2026-07-13 (homeserver online, rotated to managed key):** homeserver's
+    `.2` peer (`wg0-homeserver`) was hand-made BEFORE VPS key-storage → no stored
+    key, so the executor's `show` would miss and `add` refuse (safe no-op, but
+    couldn't be managed). Chose to ROTATE: relaxed the VPS `manage-peers.sh` IP
+    floor from 3→2 so `.2` is claimable by an explicit `add` (`.1`=VPS still
+    reserved; auto-suggest still starts at `.3` — vps `47d6729`). Then on the VPS
+    `remove wg0-homeserver` + `add wg0-homeserver 10.0.0.2` (stdout→/dev/null so
+    the key never printed) minted a managed keypair (new pubkey `oNv0/qn92…`).
+    Set `fleet.json` homeserver `mesh.peerName=wg0-homeserver` (`6cc3223`).
+    homeserver `-Apply` (y) → `show` now succeeds → imported, replaced the old
+    hand-made tunnel; hub shows handshake. GOTCHA for future hand-made peers: to
+    make them provisioner-managed you must rotate (VPS can't hand back a key it
+    never generated).
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
   passwords committed).
