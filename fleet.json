@@ -15,7 +15,7 @@
     },
     "homeserver": {
       "platform": "windows",
-      "mesh": { "ip": "10.0.0.2", "role": "member" },
+      "mesh": { "ip": "10.0.0.2", "role": "member", "peerName": "wg0-homeserver" },
       "ssh": { "user": "methe" },
       "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client"],
       "detect": { "hostname": "methe-server" }
