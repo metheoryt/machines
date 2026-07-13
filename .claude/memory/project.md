@@ -8,6 +8,42 @@ global + per-host memory). One bullet per fact under a topical heading.
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
+
+### Fleet transport is migrating AmneziaWG → Headscale (2026-07-13)
+
+- **DECISION:** the OWN fleet's mesh transport moves from AmneziaWG to
+  **Headscale** (self-hosted Tailscale control server). AmneziaWG stays ONLY as
+  the obfuscated VPN for Russia-based relatives + friends' peers on the VPS hub.
+  The extensive AWG-mesh work below (Phases 0–5b, "whole fleet mesh up") is now
+  **LEGACY for our own machines** — kept as history, still live until each box
+  is cut over to the tailnet.
+- Headscale is LIVE on the VPS: v0.29.2 + embedded DERP (region 999, STUN
+  udp/3478), served at `https://cc.cyphy.kz` behind Caddy (LE cert). `derp.urls:
+  []` → all relayed traffic rides our OWN DERP. SQLite DB, user `fleet` (id 1),
+  reusable pre-auth key. Installer `~/my/vps/vps/setup-headscale.sh` +
+  `vps/headscale/config.yaml` (sanitized, no secrets). Enroll a node:
+  `tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>`.
+- Tailnet CGNAT range `100.64.0.0/10` (disjoint from AWG `10.0.0.0/24`; they
+  coexist on the same boxes). Nodes: vps `100.64.0.1`, latitude `100.64.0.2`,
+  homeserver `100.64.0.3`. base_domain `fleet.mesh` (MagicDNS).
+- Probe PASSED 2026-07-13 (spec/plan/results under machines
+  `docs/superpowers/`): LAN-direct 3ms; SSH + RustDesk over the tailnet work;
+  DERP fallback through our own relay is reliable. **KEY FINDING:**
+  latitude(hotspot) + homeserver share this ISP's CGNAT (public `37.99.47.9`),
+  so cross-network hole-punch FAILS → traffic relays through the VPS's embedded
+  DERP (no regression vs today's all-via-VPS shape; the "P2P saves bandwidth"
+  upside won't appear on that carrier). Highest-value follow-up: enable UPnP/PCP
+  on the home router so roaming machines reach the fixed homeserver DIRECTLY,
+  not via DERP.
+- Per-box state: latitude5520 = AWG spoke DISABLED (`fleet.meshVpn.enable=false`
+  + `services.tailscale.enable=true` in its `configuration.nix`), tailnet only.
+  homeserver = Tailscale installed BESIDE AWG (AWG not yet removed). g614jv, VPS
+  Caddy service paths, and homeserver's AWG removal = the pending rollout.
+- iOS: the official **Tailscale App-Store app connects to Headscale** — set the
+  custom control server `https://cc.cyphy.kz` (tap the account/login-server
+  field; on older builds tap the version 5×). Once joined, the phone reaches
+  fleet devices by tailnet IP/MagicDNS (SSH, RustDesk, web services).
+
 - AmneziaWG VPN hub lives on the VPS (`10.0.0.1/24`). Verified live peer map
   (2026-07-08, `awg show` + `peers/*.key`): `.2`=homeserver, `.6`=`g614jv`
   (peer name `me-g614jv`), the Windows-only ROG G16 — the NixOS `g16` install is
