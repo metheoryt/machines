@@ -29,11 +29,11 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "zed-bin";
-  version = "1.10.0";
+  version = "1.10.2";
 
   src = fetchurl {
     url = "https://github.com/zed-industries/zed/releases/download/v${finalAttrs.version}/zed-linux-x86_64.tar.gz";
-    hash = "sha256-XImEPWl4JJnzXU8eJx0uIdPgqGCmnvrJcEV1HJE1PJ8=";
+    hash = "sha256-72j04wSpRP7N5ELzG88SjynTWePLCO28kcmQMqf8enU=";
   };
 
   nativeBuildInputs = [
