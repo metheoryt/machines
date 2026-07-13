@@ -55,12 +55,29 @@ global + per-host memory). One bullet per fact under a topical heading.
   37.99.47.9:51541 in 5ms`, NOT DERP) — a direct WireGuard tunnel replacing the
   old AWG one, since the VPS side is public (the easy NAT case; unlike the
   latitude↔homeserver CGNAT pair which relays).
-- **Rollout PENDING:** (1) g614jv onto the tailnet — its sshd is unreachable over
-  the mesh (couldn't drive it remotely), so the user runs `winget install
-  Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz` on the
-  box directly. (2) Repoint SSH-over-mesh for the homeserver + update the vps
-  convention docs (`CLAUDE.md`/`README.md` still say "bind to 10.0.0.2 / reachable
-  only through the WireGuard tunnel"). The SSH-alias repoint is entangled with the
+- **g614jv DONE 2026-07-13:** enrolled on the tailnet as `100.64.0.4` (headscale
+  node 4) via `winget install Tailscale.Tailscale` + `tailscale up --login-server
+  https://cc.cyphy.kz` run ON the box (its sshd was unreachable, couldn't drive it
+  remotely). Then set up Windows OpenSSH Server — now reachable at `100.64.0.4:22`
+  over the tailnet (verified from the homeserver). AWG still runs on g614jv beside
+  Tailscale (drop later once nothing needs it). The reusable pre-auth keys used
+  for enrollment were EXPIRED afterward (`headscale preauthkeys expire --id <n>
+  --force`; `list`/`expire` take `--id`, only `create` takes `--user`).
+- **Windows sshd gotchas** (for the future `ssh-server` role executor): (a)
+  `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0` throws "Class not
+  registered" under PowerShell 7 (DISM COM only registers under WinPS 5.1) — use
+  `dism.exe /Online /Add-Capability /CapabilityName:OpenSSH.Server~~~~0.0.1.0`
+  instead (version-agnostic). (b) Enable the firewall rule for ALL profiles
+  (`Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -Profile Any`) — Tailscale's
+  adapter is often a "Public" network. (c) For an ADMIN user, OpenSSH ignores
+  `~/.ssh/authorized_keys` and reads `C:\ProgramData\ssh\administrators_authorized_keys`
+  (ACL: Administrators+SYSTEM only). (d) Default shell is `cmd.exe`; set
+  `HKLM:\SOFTWARE\OpenSSH\DefaultShell` for PowerShell.
+- **Rollout PENDING (follow-up only):** repoint SSH-over-mesh for the homeserver.
+  The vps convention docs (`CLAUDE.md`/`README.md`) are DONE — updated to the
+  tailnet reality on `origin/main` (commit `a4e6faf`, via an isolated worktree so
+  the user's `telegrind-poll-deploy` WIP was untouched). The SSH-alias repoint is
+  entangled with the
   broader fleet-wide SSH-over-tailnet migration (latitude is already tailnet-only,
   so `ssh.nix`'s AWG-mesh matchBlocks want migrating wholesale) — treat as a
   scoped follow-up, don't hack `fleet.json` mesh IPs (that field is the AWG
