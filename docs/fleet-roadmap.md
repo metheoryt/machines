@@ -1,0 +1,87 @@
+# Fleet Roadmap
+
+Living backlog for the machine fleet. Curated — tick/prune as items land. A new
+session inherits the fleet state from `.claude/memory/project.md`; this file is
+the "where to head next" companion. For any item worth real work, run
+`superpowers:brainstorming` → `writing-plans` and drop the plan under
+`docs/superpowers/plans/`.
+
+_Last updated: 2026-07-13_
+
+## Where we are now
+
+Fleet transport is **Headscale** (self-hosted Tailscale) end-to-end; AmneziaWG is
+retained on the VPS **only for relatives**. Control plane at `https://cc.cyphy.kz`
++ embedded DERP.
+
+| Node | Tailnet IP | State |
+|---|---|---|
+| vps-test | `100.64.0.1` | hub + embedded DERP; also runs the AWG relatives-hub (`10.0.0.1`) |
+| latitude | `100.64.0.2` | tailnet-only (AWG spoke disabled) |
+| homeserver | `100.64.0.3` | services on tailnet; **AWG removed**; VPS↔it direct @ ~5ms |
+| g614jv | `100.64.0.4` | tailnet + Windows sshd; AWG still running beside it |
+
+Networking note: the fleet spans **two separate LANs**. Same-LAN pairs get direct
+P2P (~3ms); cross-LAN pairs relay through our own DERP (expected and accepted —
+this is why **UPnP/router port-mapping is NOT on the backlog**).
+
+## Now — finish what the migration started
+
+- [ ] **Fleet-wide SSH-over-tailnet.** `modules/home/ssh.nix` still generates host
+  aliases from AWG mesh IPs (`fleet.json` `mesh.ip`), but latitude + homeserver
+  are tailnet-only now, so those `10.0.0.x` aliases are dead. Migrate the generator
+  to tailnet MagicDNS names / `100.64.0.x`. Decide the source of truth: keep
+  `fleet.json` `mesh` for AWG (relatives/g614jv) and add a `tailnet` field, or move
+  the whole SSH story onto the tailnet. Don't hack `mesh.ip` — `mesh-vpn-params.nix`
+  reads it. _Cleanest next step; closes the half-migrated state._
+- [ ] **Restart immich + navidrome** on the homeserver — they were down during the
+  cutover; confirm they serve over the tailnet like the rest. (Operational, quick.)
+- [ ] **Drop g614jv's AWG.** It runs AWG beside Tailscale; its services already work
+  over the tailnet. Remove once nothing depends on its `10.0.0.6` (then remove the
+  `me-g614jv` peer on the VPS hub).
+
+## Next — make it repeatable (provisioner)
+
+- [ ] **Codify the `ssh-server` role executor.** Currently unimplemented. Windows:
+  `dism.exe /Online /Add-Capability /CapabilityName:OpenSSH.Server~~~~0.0.1.0`
+  (NOT `Add-WindowsCapability` — it throws "Class not registered" under PS7),
+  enable the firewall rule for all profiles, seed
+  `C:\ProgramData\ssh\administrators_authorized_keys` for admin users, set the
+  default shell. NixOS: `services.openssh`. (Gotchas captured in project memory.)
+- [ ] **Declarative Windows Tailscale provisioning.** Fold `winget install
+  Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz --authkey
+  <key>` into the `mesh-member` role so enrolling a box isn't manual. Mint a
+  short-lived key per enrollment and expire it after (`headscale preauthkeys
+  expire --id <n> --force`).
+- [ ] **Headscale ACLs.** The tailnet is default-open. Scope access (who can reach
+  which node/port) before it widens — relatives never join this tailnet, but least
+  privilege across our own boxes is cheap now.
+
+## Later — reproducibility & backups (older parked)
+
+- [ ] **VPS base-machine reproducibility.** Bring a fresh cloud VM to the VPS
+  baseline reproducibly. Blocked on the `base` / `ssh-server` / `backup-client`
+  role executors being unimplemented. Services stay the `vps` repo's `setup-*.sh`.
+  (See project memory "VPS base-machine reproducibility".)
+- [ ] **Truly-offsite backups.** Everything ultimately lands on the homeserver
+  (its own immich backups + REST target) — one location loses primary + all
+  backups. Fix is cheap: the dock drives are already removable → periodic manual
+  rotation of one drive off-site. No new infra needed.
+- [ ] **Back up latitude5520.** No dedicated backup today; only what home-manager
+  declares is "backed up" (via git). User wants it in a private repo "someday" —
+  mechanism not chosen (chezmoi/stow/plain git).
+
+## Housekeeping
+
+- [ ] **Drop `pylspFixOverlay` from `flake.nix`** once python-lsp/python-lsp-server
+  PR #715 ships in a nixpkgs release. Tracking:
+  https://github.com/python-lsp/python-lsp-server/pull/715
+
+## Done (2026-07-13, this rollout)
+
+- Headscale live on the VPS (0.29.2 + embedded DERP, `cc.cyphy.kz`).
+- Probe passed; latitude cut over; homeserver cut over (Caddy → `100.64.0.3`,
+  AWG spoke removed, no regression — direct path verified).
+- g614jv enrolled + Windows sshd set up and reachable over the tailnet.
+- vps convention docs updated to the tailnet reality; reusable pre-auth keys
+  revoked. Plans/results under `docs/superpowers/`.

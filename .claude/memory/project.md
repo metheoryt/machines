@@ -32,9 +32,10 @@ global + per-host memory). One bullet per fact under a topical heading.
   latitude(hotspot) + homeserver share this ISP's CGNAT (public `37.99.47.9`),
   so cross-network hole-punch FAILS → traffic relays through the VPS's embedded
   DERP (no regression vs today's all-via-VPS shape; the "P2P saves bandwidth"
-  upside won't appear on that carrier). Highest-value follow-up: enable UPnP/PCP
-  on the home router so roaming machines reach the fixed homeserver DIRECTLY,
-  not via DERP.
+  upside won't appear here). The fleet spans **two separate LANs**; same-LAN
+  pairs get direct P2P (~3ms), cross-LAN pairs relay via our own DERP — EXPECTED
+  and ACCEPTED by the user, so UPnP/router port-mapping is explicitly NOT a
+  follow-up. Backlog/roadmap lives at `docs/fleet-roadmap.md`.
 - Per-box state: latitude5520 = AWG spoke DISABLED (`fleet.meshVpn.enable=false`
   + `services.tailscale.enable=true` in its `configuration.nix`), tailnet only.
 - **Rollout DONE 2026-07-13** (plan
