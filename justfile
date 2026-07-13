@@ -66,10 +66,11 @@ agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."
     @env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
 
-# Bootstrap the work profile (~/.claude-work) — shared set only, settings untouched.
-agent-bootstrap-work:
-    @echo "🔗 Bootstrapping agent config (work ~/.claude-work)..."
-    @CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh
+# Bootstrap a secondary profile ~/.claude-<postfix> (e.g. `just agent-bootstrap-profile pure`).
+# Links the shared set + settings.<postfix>.json; machine-local settings.local.json untouched.
+agent-bootstrap-profile postfix:
+    @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
+    @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
 
 # Build and switch to new configuration
 switch: _check-machines-link

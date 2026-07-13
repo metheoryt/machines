@@ -185,11 +185,16 @@ SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory
 `plugin/` (skills, subagents as its `agents/`, hooks, commands — packaged as
 the `cyphy` skills-directory plugin) as one whole-directory link — so they're
 symlinked into **every** profile bootstrapped: `~/.claude`, `~/.codex`, and
-secondary profiles like `~/.claude-work`.
-`settings.json` is committed PER-PROFILE (`settings.personal.json` →
-`~/.claude`, `settings.work.json` → `~/.claude-work`); each profile's
-machine-local `settings.local.json` (personal: gortex hooks) is owned by
-neither mechanism and never committed. The work profile's Sentry secret is NOT
+secondary profiles like `~/.claude-pure`.
+`settings.json` is committed PER-PROFILE, and the committed set of
+`settings.<postfix>.json` files IS the profile registry: `settings.default.json`
+→ `~/.claude`, `settings.<postfix>.json` → `~/.claude-<postfix>` (e.g.
+`settings.pure.json` → `~/.claude-pure`). Drop a new `settings.<postfix>.json`
+into `agents/` and the next `just switch` (or `just agent-bootstrap-profile
+<postfix>`) provisions `~/.claude-<postfix>` with the full shared set — no wiring
+edit needed. Each profile's machine-local `settings.local.json` (personal:
+gortex hooks) is owned by neither mechanism and never committed. The pure/work
+profile's Sentry secret is NOT
 kept at the config-dir root (Claude does NOT read a config-dir-root
 `settings.local.json`) — it lives in each work repo's PROJECT-scope
 `.claude/settings.local.json` (gitignored per repo), which Claude reads
@@ -229,17 +234,23 @@ delete stale entries rather than letting them pile up.
 
 - **Global + per-host** load in EVERY project automatically: `just
   agent-bootstrap` (personal profile: `~/.claude` + `~/.codex`) / `just
-  agent-bootstrap-work` (secondary profile, e.g. `~/.claude-work` — SHARED set
-  + `settings.work.json`, Codex untouched) symlink `memory/global.md`,
-  the `memory/personality/` facets, and `hosts/<hostname>.md` (as
-  `host-memory.md`) into the bootstrapped profile. On NixOS,
-  `modules/home/claude.nix` symlinks these files into BOTH `~/.claude` and
-  `~/.claude-work` (and `modules/home/codex.nix`
-  into `~/.codex`) — applied by `just switch`, NOT by `agent-bootstrap`;
-  `bootstrap.sh` is the portable fallback for non-Nix machines (Windows/macOS).
+  agent-bootstrap-profile <postfix>` (a secondary profile, e.g. `pure` →
+  `~/.claude-pure` — SHARED set + `settings.<postfix>.json`, Codex untouched)
+  symlink `memory/global.md`, the `memory/personality/` facets, and
+  `hosts/<hostname>.md` (as `host-memory.md`) into the bootstrapped profile. On
+  NixOS, `modules/home/claude.nix` symlinks these files into EVERY registered
+  profile (`~/.claude` plus each `~/.claude-<postfix>`, one per committed
+  `settings.<postfix>.json`) and `modules/home/codex.nix`
+  into `~/.codex` — via an activation script (NOT `home.file`), so the memory
+  links are one-hop-direct to the repo and live OUTSIDE the nix generation,
+  exactly like `bootstrap.sh` does on non-Nix machines (Windows/macOS).
   The `global-memory-load.sh` SessionStart hook injects them each session.
-  Nothing to set up per repo — commit here, then `git pull` on the other machine
-  (NixOS: `just switch` re-links; non-Nix: the bootstrap git-hook re-links).
+  **Editing a memory takes effect immediately — it is a plain write to the
+  git-tracked repo file, so do NOT run `just switch` / `nixos-rebuild` to
+  "apply" it.** `just switch` / `bootstrap.sh` only ever CREATE links, needed
+  just for a brand-new linked file (e.g. a new personality facet) or the first
+  time a machine is set up; propagating an edit to another machine is `git pull`
+  there, nothing more.
 - **Per-project** memory lives *inside the target repo* (its `CLAUDE.md` /
   `.claude/memory/project.md` / `CLAUDE.local.md`) and Claude auto-discovers it
   from the working directory. It is NOT wired through this flake — each repo

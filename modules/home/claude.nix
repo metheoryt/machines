@@ -1,72 +1,72 @@
-# Claude Code config, version-controlled in this repo under agents/ and symlinked
-# into both ~/.claude (personal) and ~/.claude-work (work). This is the idiomatic
-# nix path for Linux/macOS; Windows uses agents/bootstrap.sh (which produces the
-# identical symlinks for both profiles).
+# Claude Code config, version-controlled in this repo under agents/ and linked
+# into every Claude profile dir (~/.claude and each ~/.claude-<postfix>). This is
+# the nix path for Linux/macOS; Windows/non-Nix machines use agents/bootstrap.sh,
+# which produces the identical one-hop symlinks.
 #
-# mkOutOfStoreSymlink points the live config straight at the repo working tree
-# (not a read-only /nix/store copy), so:
-#   - editing ~/.claude/<file> (or ~/.claude-work/<file>) from ANY repo edits the
-#     tracked file here, and
-#   - changes take effect immediately, with no `nixos-rebuild` to iterate.
-# Commit from this repo and pull on the other machines to propagate.
+# PROFILE REGISTRY (dynamic — no hardcoded profile list): the set of profiles is
+# driven by the committed settings files. Each agents/settings.<postfix>.json
+# declares one profile:
+#   settings.default.json    -> ~/.claude
+#   settings.<postfix>.json  -> ~/.claude-<postfix>   (e.g. settings.pure.json -> ~/.claude-pure)
+# Drop a new settings.<postfix>.json in the repo and the next `just switch`
+# provisions ~/.claude-<postfix> with the full shared set — no edit here needed.
+# A leftover profile dir with no matching settings file (e.g. a retired
+# ~/.claude-work on another machine) is simply ignored, never half-provisioned.
 #
-# hooks/skills/agents/commands are packaged as the "cyphy" Claude Code
-# skills-directory plugin (agents/plugin/), linked whole into
-# <profileDir>/skills/cyphy — mirroring bootstrap.sh's single `link` call for
-# the same directory. Adding a hook/skill/agent/command needs NO edit here or
-# in bootstrap.sh: both just link the directory, Claude Code discovers its
-# contents at load time.
+# EVERYTHING is linked by the activation script below — NOT home.file /
+# mkOutOfStoreSymlink — for two reasons:
+#   - one-hop-direct dest -> repo working tree, so editing ~/.claude/<file> from
+#     ANY repo edits the tracked file here and takes effect IMMEDIATELY (no
+#     nixos-rebuild to iterate); commit here + `git pull` elsewhere to propagate.
+#     In particular a memory edit is a plain git-repo write — never needs `switch`.
+#   - Claude Code's settings writer (/config, /plugin marketplace add) resolves
+#     only one symlink level before writing its settings.json.tmp beside the
+#     target; routing settings.json through home.file (i.e. the /nix/store) makes
+#     that tmp land in the read-only store and fail with EROFS. A direct one-hop
+#     link is always writable. This mirrors bootstrap.sh's plain `ln -s`.
 #
 # Secrets, transcripts, caches and plugins/ are intentionally NOT linked — they
-# stay machine-local in ~/.claude / ~/.claude-work (see agents/.gitignore for the
-# full list). settings.local.json in particular is deliberately absent from both
-# profiles below: it stays machine-local (personal: gortex hooks; work:
-# PURE_SENTRY_TOKEN secret), owned by neither this module nor bootstrap.sh.
-#
-# settings.json is NOT linked via home.file/mkOutOfStoreSymlink like the rest —
-# home.file routes every source through the Nix store, so a mkOutOfStoreSymlink
-# there ends up as dest -> store-symlink -> store-symlink -> repo file (a
-# 3-hop chain, first two hops inside the read-only store). Claude Code's
-# settings writer (`/plugin marketplace add`, `/config`, etc.) resolves only
-# one level of symlink before writing its `settings.json.tmp.*` beside that
-# target — landing inside the immutable store and failing with EROFS. Instead
-# settings.json is linked directly by an activation script below: dest -> repo
-# file in one hop, always writable. See `agents/bootstrap.sh`'s `link()` for
-# the non-Nix machines, which already does a plain one-hop `ln -s`.
+# stay machine-local per profile (see agents/.gitignore). settings.local.json in
+# particular is never linked: machine-local (personal: gortex hooks; work/pure:
+# PURE_SENTRY_TOKEN), owned by neither this module nor bootstrap.sh.
 {
   config,
   hostname,
   lib,
   ...
 }: let
-  # Repo agents/ dir on this machine (fish helpers cd to ~/machines, which is the flake).
+  # Repo agents/ dir on this machine (fish helpers cd to ~/machines, the flake).
   agents = "${config.home.homeDirectory}/machines/agents";
-  link = config.lib.file.mkOutOfStoreSymlink;
-
-  # Shared (non-settings.json) links for one profile dir (".claude" or ".claude-work").
-  profileFiles = profileDir: {
-    "${profileDir}/statusline-command.sh".source = link "${agents}/statusline-command.sh";
-    "${profileDir}/balance-refresh.py".source = link "${agents}/balance-refresh.py";
-    # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
-    "${profileDir}/CLAUDE.md".source = link "${agents}/AGENTS.md";
-    "${profileDir}/memory/global.md".source = link "${agents}/memory/global.md";
-    "${profileDir}/memory/personality".source = link "${agents}/memory/personality";
-    "${profileDir}/host-memory.md".source = link "${agents}/hosts/${hostname}.md";
-    # cyphy plugin: one whole-directory symlink replaces the four per-entry
-    # linkEntries calls that used to wire skills/agents/commands/hooks
-    # individually — they all live inside agents/plugin/ now, discovered by
-    # Claude Code as a skills-directory plugin (cyphy@skills-dir).
-    "${profileDir}/skills/cyphy".source = link "${agents}/plugin";
-  };
 in {
-  home.file = profileFiles ".claude" // profileFiles ".claude-work";
-
-  # settings.json committed per-profile: personal -> settings.personal.json,
-  # work -> settings.work.json. Direct one-hop symlink (see comment above) —
-  # runs after writeBoundary so the profile dirs already exist.
-  home.activation.linkClaudeSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
-    $DRY_RUN_CMD mkdir -p "$HOME/.claude" "$HOME/.claude-work"
-    $DRY_RUN_CMD ln -sfn "${agents}/settings.personal.json" "$HOME/.claude/settings.json"
-    $DRY_RUN_CMD ln -sfn "${agents}/settings.work.json" "$HOME/.claude-work/settings.json"
+  # Runs after writeBoundary so home-manager has already removed any prior
+  # store-routed symlinks it used to manage under the profile dirs, and $HOME
+  # exists. One profile is provisioned per committed settings.<postfix>.json.
+  home.activation.linkClaudeProfiles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    for setsrc in "${agents}"/settings.*.json; do
+      [ -e "$setsrc" ] || continue                 # tolerate an unmatched glob
+      base="$(basename "$setsrc" .json)"           # settings.<postfix>
+      postfix="''${base#settings.}"
+      if [ "$postfix" = default ]; then
+        prof="$HOME/.claude"
+      else
+        prof="$HOME/.claude-$postfix"
+      fi
+      $DRY_RUN_CMD mkdir -p "$prof/memory" "$prof/skills"
+      # Per-profile settings (one hop -> repo file; writable, so Claude's writer
+      # never hits an EROFS store path).
+      $DRY_RUN_CMD ln -sfn "$setsrc" "$prof/settings.json"
+      # Shared set — identical across profiles, all one-hop-direct to the repo.
+      $DRY_RUN_CMD ln -sfn "${agents}/statusline-command.sh" "$prof/statusline-command.sh"
+      $DRY_RUN_CMD ln -sfn "${agents}/balance-refresh.py" "$prof/balance-refresh.py"
+      # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
+      $DRY_RUN_CMD ln -sfn "${agents}/AGENTS.md" "$prof/CLAUDE.md"
+      # cyphy plugin: one whole-directory link (skills/agents/commands/hooks all
+      # live inside agents/plugin/, discovered as a skills-directory plugin).
+      $DRY_RUN_CMD ln -sfn "${agents}/plugin" "$prof/skills/cyphy"
+      # Memory stores — the frequently-edited files; live git-repo writes.
+      $DRY_RUN_CMD ln -sfn "${agents}/memory/global.md" "$prof/memory/global.md"
+      $DRY_RUN_CMD ln -sfn "${agents}/memory/personality" "$prof/memory/personality"
+      $DRY_RUN_CMD ln -sfn "${agents}/hosts/${hostname}.md" "$prof/host-memory.md"
+    done
   '';
 }

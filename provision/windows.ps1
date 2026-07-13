@@ -12,8 +12,8 @@
     4. Codex           - best-effort (npm) if npm is present; skipped otherwise.
     5. agents bootstrap- run agents/bootstrap.sh via Git Bash (NOT the WSL bash
                          stub, NOT `just` - the justfile recipe mangles the path
-                         on Windows). Personal profile always; -Work adds the
-                         work profile too.
+                         on Windows). Personal profile always; -Postfix <name>
+                         adds a secondary profile (e.g. -Postfix pure) too.
     6. machine-local   - if a backup is found (auto-discovered on ANY drive
                          letter, or via -BackupRoot), restore ONLY the
                          non-symlinked bits (.credentials.json,
@@ -25,7 +25,7 @@
   Usage (normal PowerShell - it elevates itself only for Developer Mode):
       .\provision\windows.ps1                                # auto-discovers the backup on any drive + restores creds/history
       .\provision\windows.ps1 -BackupRoot H:\backup          # or point it at a specific <L>:\backup
-      .\provision\windows.ps1 -Work                          # + work profile
+      .\provision\windows.ps1 -Postfix pure                  # + ~/.claude-pure profile
       .\provision\windows.ps1 -Force                         # overwrite existing creds/settings.local
 
   ASCII-only on purpose (runs under Windows PowerShell 5.1 on a fresh box).
@@ -34,7 +34,7 @@
 param(
     [string]$RepoDir,                    # repo clone; default: this script's repo root
     [string]$BackupRoot,                 # explicit <L>:\backup; omitted => auto-discover on any drive
-    [switch]$Work,                       # also bootstrap the ~/.claude-work profile
+    [string]$Postfix,                    # also bootstrap ~/.claude-<Postfix> (e.g. "pure")
     [switch]$Force,                      # overwrite existing .credentials.json / settings.local.json
     [switch]$SkipInstall                 # skip the Claude Code / Codex install steps
 )
@@ -158,7 +158,7 @@ function Invoke-Bootstrap($envPrefix, $label) {
     if ($LASTEXITCODE -ne 0) { throw "bootstrap.sh failed for $label profile (exit $LASTEXITCODE). See output above." }
 }
 Invoke-Bootstrap 'env -u CLAUDE_CONFIG_DIR' 'personal'
-if ($Work) { Invoke-Bootstrap 'CLAUDE_CONFIG_DIR="$HOME/.claude-work"' 'work' }
+if ($Postfix) { Invoke-Bootstrap "CLAUDE_CONFIG_DIR=`"`$HOME/.claude-$Postfix`"" $Postfix }
 
 # ---- 6. Restore machine-local bits (auto-discovers the backup; -BackupRoot overrides) ----
 Step "6. Machine-local restore"

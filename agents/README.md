@@ -1,9 +1,13 @@
 # Claude Code config (version-controlled)
 
 The Claude Code user config — skills, agents, commands, statusline and a
-committed per-profile `settings.json` — lives here and is **symlinked into both
-`~/.claude` (personal) and `~/.claude-work` (work)** so the same setup is reused
-on every machine (Windows 11 / Git Bash, macOS, Linux).
+committed per-profile `settings.json` — lives here and is **symlinked into every
+profile** so the same setup is reused on every machine (Windows 11 / Git Bash,
+macOS, Linux). The profile set is a **registry driven by the committed settings
+files**: `settings.default.json` → `~/.claude` (personal), and each
+`settings.<postfix>.json` → `~/.claude-<postfix>` (e.g. `settings.pure.json` →
+`~/.claude-pure`, the work profile). Add a `settings.<postfix>.json` and that
+profile is provisioned automatically — no wiring edit.
 
 Because `~/.claude` is the *user-level* config, these skills/plugins/agents are
 active in **every repo** you open Claude Code in — not just this one. And since
@@ -21,8 +25,8 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 
 | Path | Linked into `~/.claude` as | Notes |
 |---|---|---|
-| `settings.personal.json` | `~/.claude/settings.json` | personal profile config (committed) |
-| `settings.work.json` | `~/.claude-work/settings.json` | work profile config (committed; no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
+| `settings.default.json` | `~/.claude/settings.json` | personal profile config (committed) |
+| `settings.<postfix>.json` | `~/.claude-<postfix>/settings.json` | one secondary profile per file (registry). `settings.pure.json` → `~/.claude-pure` (work; committed, no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
 | `statusline-command.sh` | `statusline-command.sh` | compact status line |
 | `balance-refresh.py` | `balance-refresh.py` | spend calculator (statusline depends on it) |
 | `AGENTS.md` | `CLAUDE.md` | canonical global instructions; memory stores load via the `global-memory-load.sh` hook, not imports (see below); `agents/CLAUDE.md` is a symlink → it, and `~/.codex/AGENTS.md` links here too |
@@ -30,8 +34,8 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 | `hosts/<host>.md` | `host-memory.md` | per-host memory, chosen by hostname |
 | `plugin/` | `skills/cyphy` | whole-directory symlink — the "cyphy" skills-directory plugin (`skills/`, `agents/` [was `subagents/`], `hooks/hooks.json`, `commands/`), discovered by Claude Code as `cyphy@skills-dir`: live, in place, no copy-to-cache, no install/update step |
 
-`plugin/` is linked as **one whole directory** (`~/.claude/skills/cyphy`,
-`~/.claude-work/skills/cyphy`) — Claude Code discovers its
+`plugin/` is linked as **one whole directory** (`~/.claude/skills/cyphy`, and
+`~/.claude-<postfix>/skills/cyphy` in each secondary profile) — Claude Code discovers its
 `.claude-plugin/plugin.json` and loads it as `cyphy@skills-dir`. Skills and
 subagents load namespaced under the plugin (e.g. `/cyphy:update-balance`). A
 machine-local skill/agent dropped directly into `~/.claude/skills/` or
@@ -131,18 +135,22 @@ From this repo, prefer the `just` recipes over calling the script directly:
 - `just agent-bootstrap` — the **personal** profile: `~/.claude` + `~/.codex`,
   forced personal even if `$CLAUDE_CONFIG_DIR` is set elsewhere in your shell
   (`env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh`).
-- `just agent-bootstrap-work` — a **secondary** profile, e.g. `~/.claude-work`
-  (invoked as `ccw`): links the SHARED set (`AGENTS.md`→`CLAUDE.md`, `memory/`,
+- `just agent-bootstrap-profile <postfix>` — a **secondary** profile
+  `~/.claude-<postfix>`, e.g. `pure` → `~/.claude-pure` (invoked as `ccp`):
+  links the SHARED set (`AGENTS.md`→`CLAUDE.md`, `memory/`,
   `hosts/`→`host-memory.md`, `hooks/`, `skills/`, `subagents/`, `commands/`,
   `statusline-command.sh`, `balance-refresh.py`) **plus** the committed
-  `settings.work.json` → `settings.json`. It never touches the machine-local
-  `settings.local.json` (which holds the profile's Sentry secret) or its Codex
-  config (`CLAUDE_CONFIG_DIR="$HOME/.claude-work" bash agents/bootstrap.sh`).
-  On NixOS this profile is also managed by `just switch` (see the nix section).
+  `settings.<postfix>.json` → `settings.json` (falls back to
+  `settings.default.json` if that file isn't committed). It never touches the
+  machine-local `settings.local.json` (which holds the profile's Sentry secret)
+  or its Codex config
+  (`CLAUDE_CONFIG_DIR="$HOME/.claude-<postfix>" bash agents/bootstrap.sh`).
+  On NixOS every registered profile is also managed by `just switch` (see the nix section).
 
-Direct invocation, if you need something other than those two: `bash
+Direct invocation, if you need something other than those recipes: `bash
 agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
-agents/bootstrap.sh` (any other profile — SHARED set + `settings.work.json`).
+agents/bootstrap.sh` (any other profile — SHARED set + the matching
+`settings.<postfix>.json`).
 
 ### Windows note — Developer Mode
 

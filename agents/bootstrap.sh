@@ -33,16 +33,23 @@ BAK_ROOT="$CLAUDE_DIR/.bootstrap-bak"
 
 [ -n "${DRY_RUN:-}" ] || mkdir -p "$CLAUDE_DIR"
 
-# Both profiles get the SHARED set + a committed per-profile settings.json
-# (personal -> settings.personal.json, secondary -> settings.work.json). Codex
-# rides with the personal run only. The machine-local settings.local.json is
-# never touched by either profile.
+# Each profile gets the SHARED set + a committed per-profile settings.json,
+# chosen by convention from the profile dir's name:
+#   ~/.claude            -> settings.default.json
+#   ~/.claude-<postfix>  -> settings.<postfix>.json   (e.g. ~/.claude-pure -> settings.pure.json)
+# Codex rides with the personal run (~/.claude) only. The machine-local
+# settings.local.json is never touched by any profile.
 _resolve() { readlink -f "$1" 2>/dev/null || printf '%s' "$1"; }
+CLAUDE_BASE="$(basename "$CLAUDE_DIR")"
+case "$CLAUDE_BASE" in
+  .claude-*) POSTFIX="${CLAUDE_BASE#.claude-}" ;;
+  *)         POSTFIX=default ;;
+esac
 if [ "$(_resolve "$CLAUDE_DIR")" = "$(_resolve "$HOME/.claude")" ]; then
   IS_PERSONAL=1
 else
   IS_PERSONAL=0
-  printf 'Secondary profile — SHARED set + settings.work.json (Codex skipped, settings.local.json untouched)\n\n'
+  printf 'Secondary profile "%s" — SHARED set + settings.%s.json (Codex skipped, settings.local.json untouched)\n\n' "$CLAUDE_BASE" "$POSTFIX"
 fi
 
 linked=0
@@ -170,15 +177,15 @@ printf 'Bootstrapping Claude config\n  repo:  %s\n  live:  %s\n\n' "$SRC_DIR" "$
 for f in statusline-command.sh balance-refresh.py; do
   link "$SRC_DIR/$f" "$CLAUDE_DIR/$f"
 done
-# settings.json is committed per-profile: personal -> settings.personal.json,
-# any secondary profile -> settings.work.json. The machine-local
-# settings.local.json (personal: gortex hooks; work: PURE_SENTRY_TOKEN secret)
-# is never linked — it stays local and is reunited at load via env deep-merge.
-if [ "$IS_PERSONAL" -eq 1 ]; then
-  link "$SRC_DIR/settings.personal.json" "$CLAUDE_DIR/settings.json"
-else
-  link "$SRC_DIR/settings.work.json" "$CLAUDE_DIR/settings.json"
-fi
+# settings.json is committed per-profile, chosen by convention (see the POSTFIX
+# block above): ~/.claude -> settings.default.json, ~/.claude-<postfix> ->
+# settings.<postfix>.json. Falls back to settings.default.json if the profile's
+# own file isn't committed. The machine-local settings.local.json (personal:
+# gortex hooks; pure: PURE_SENTRY_TOKEN secret) is never linked — it stays local
+# and is reunited at load via env deep-merge.
+settings_src="$SRC_DIR/settings.$POSTFIX.json"
+[ -e "$settings_src" ] || settings_src="$SRC_DIR/settings.default.json"
+link "$settings_src" "$CLAUDE_DIR/settings.json"
 
 # Memory & knowledge base. Global instructions + global memory store are shared
 # across all machines; the per-host file is chosen by hostname (imported by

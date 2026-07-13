@@ -183,10 +183,10 @@ in {
       nrb = "sudo nixos-rebuild boot --flake .#${hostname}";
 
       cc = "claude";
-      # Work profile. The Sentry secret is NOT delivered here — it lives in each
-      # work repo's project-scope .claude/settings.local.json (gitignored), which
-      # Claude reads natively. (A config-dir-root settings.local.json is NOT read.)
-      ccw = "CLAUDE_CONFIG_DIR=~/.claude-work claude";
+      # Pure (work) profile. The Sentry secret is NOT delivered here — it lives in
+      # each work repo's project-scope .claude/settings.local.json (gitignored),
+      # which Claude reads natively. (A config-dir-root settings.local.json is NOT read.)
+      ccp = "CLAUDE_CONFIG_DIR=~/.claude-pure claude";
 
       df = "df -h";
       du = "du -h";

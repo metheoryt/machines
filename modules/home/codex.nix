@@ -33,13 +33,23 @@ in {
       # Codex-specific standalone hooks file.
       ".codex/hooks.json".source = link "${codex}/hooks.json";
 
-      # Shared memory & per-host file (same sources Claude uses).
-      ".codex/memory/global.md".source = link "${agents}/memory/global.md";
-      ".codex/memory/personality".source = link "${agents}/memory/personality";
-      ".codex/host-memory.md".source = link "${agents}/hosts/${hostname}.md";
+      # Memory & per-host file (same sources Claude uses) are NOT linked here —
+      # they're the frequently-edited files, linked one-hop-direct by the
+      # activation script below so they stay OUT of the home-manager generation
+      # and an edit is visibly just a git-repo write. Mirrors claude.nix.
     }
     # Shared from agents/: skills + hook scripts. Codex-specific: subagents.
     // linkEntries "skills" agents "plugin/skills" ../../agents/plugin/skills
     // linkEntries "hooks" agents "plugin/hooks" ../../agents/plugin/hooks
     // linkEntries "agents" codex "subagents" ../../agents/codex/subagents;
+
+  # Direct one-hop symlinks for the mutable memory stores (see claude.nix for
+  # the rationale). Runs after writeBoundary so home-manager has already removed
+  # any prior store-routed memory symlinks.
+  home.activation.linkCodexMemory = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    $DRY_RUN_CMD mkdir -p "$HOME/.codex/memory"
+    $DRY_RUN_CMD ln -sfn "${agents}/memory/global.md" "$HOME/.codex/memory/global.md"
+    $DRY_RUN_CMD ln -sfn "${agents}/memory/personality" "$HOME/.codex/memory/personality"
+    $DRY_RUN_CMD ln -sfn "${agents}/hosts/${hostname}.md" "$HOME/.codex/host-memory.md"
+  '';
 }
