@@ -46,10 +46,15 @@ global + per-host memory). One bullet per fact under a topical heading.
   live-vs-repo Caddyfile drift). Homeserver containers already bind `0.0.0.0`, so
   NO rebind was needed — services reachable on `100.64.0.3` as-is (git/speed/qb/tug
   = 200; immich/navidrome were `502` only because their containers were down,
-  unrelated). **homeserver AWG REMOVED**: `AmneziaWGTunnel$awg0` stopped/disabled
-  (interface + `10.0.0.2` gone) and `wg0-homeserver` peer removed from the VPS hub
+  unrelated). **homeserver AWG REMOVED**: the `AmneziaWGTunnel$awg0` tunnel was
+  DELETED in the AmneziaVPN GUI (service + adapter gone, `10.0.0.2` gone,
+  reboot-durable) and the `wg0-homeserver` peer removed from the VPS hub
   (`manage-peers.sh remove`). Remaining AWG peers on the hub = relatives + friends
-  + `me-g614jv` + `nix-lat5520` (untouched).
+  + `me-g614jv` + `nix-lat5520` (untouched). **VERIFIED no regression:** VPS→
+  homeserver over the tailnet is DIRECT (`tailscale ping homeserver` = `via
+  37.99.47.9:51541 in 5ms`, NOT DERP) — a direct WireGuard tunnel replacing the
+  old AWG one, since the VPS side is public (the easy NAT case; unlike the
+  latitude↔homeserver CGNAT pair which relays).
 - **Rollout PENDING:** (1) g614jv onto the tailnet — its sshd is unreachable over
   the mesh (couldn't drive it remotely), so the user runs `winget install
   Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz` on the
