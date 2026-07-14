@@ -90,11 +90,18 @@ global + per-host memory). One bullet per fact under a topical heading.
   override for testing; idempotent; enrolled in every machine's `roles`. Session-
   verified: jq validity, hosts.{sh,ps1} dry-run+idempotency, ps1 BOM, full
   `provision.ps1 -Apply` confirm-gate. Final review (opus) = READY TO MERGE, no
-  Critical/Important. **Real-box PENDING (runbook in the plan):** `nix flake check`
-  + `nixos-rebuild switch` on latitude5520 (then `getent hosts homeserver` +
-  `ssh homeserver`); `hosts` role apply on vps (root) and g614jv/homeserver (admin
-  pwsh). Quirk to remember: `ssh vps`→`cyphy.kz` (ssh alias) but `ping vps`→
-  `100.64.0.1` (hosts file) — each correct for its purpose.
+  Critical/Important. MERGED to `main` + pushed (merge `b319eef`).
+  **Real-box apply status (per-box):**
+  - g614jv (Windows): **hosts role DONE 2026-07-14** — applied via an elevated pwsh
+    (`Invoke-RoleHosts -Mode apply`, needs admin/UAC; writes
+    `C:\Windows\System32\drivers\etc\hosts`); verified `homeserver`→`100.64.0.3`,
+    `vps`→`100.64.0.1` resolve. (ssh.nix is home-manager/NixOS-only, N/A on g614jv.)
+  - vps (Debian, root) + homeserver (Windows, admin pwsh): `hosts` role apply PENDING.
+  - latitude5520 (NixOS): `nix flake check` + `nixos-rebuild switch` PENDING (then
+    `getent hosts homeserver` + `ssh homeserver`); this is the box where ssh.nix +
+    networking.hosts actually render.
+  Quirk to remember: `ssh vps`→`cyphy.kz` (ssh alias) but `ping vps`→`100.64.0.1`
+  (hosts file) — each correct for its purpose.
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
