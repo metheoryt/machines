@@ -104,6 +104,49 @@ global + per-host memory). One bullet per fact under a topical heading.
     networking.hosts actually render.
   Quirk to remember: `ssh vps`→`cyphy.kz` (ssh alias) but `ping vps`→`100.64.0.1`
   (hosts file) — each correct for its purpose.
+- **KEY CORRECTION 2026-07-15: MagicDNS is ALREADY LIVE tailnet-wide** (Headscale
+  `magic_dns: true` + `override_local_dns: true`; `accept-dns` ON — verified on
+  homeserver: `homeserver.fleet.mesh`→`100.64.0.3` AND bare `homeserver` resolve via
+  the search domain). So the SSH-over-tailnet spec's premise ("MagicDNS needs
+  accept-dns, which isn't set") was STALE — the whole hosts-file machinery
+  (`fleet-hosts.nix` + `hosts` role) is largely REDUNDANT (offline-fallback value is
+  illusory: no tailnet = no 100.64 route = name resolution moot anyway). MagicDNS uses
+  the Headscale GIVEN-NAMES, not fleet.json keys.
+- **NEXT SESSION — fleet rename to consistent names + MagicDNS adoption (planned,
+  NOT started 2026-07-15).** Brainstorm done: user chose SCOPE 1+2 (tailnet given-names
+  + repo names; NOT OS hostnames). Target names → machines:
+  `hub`=vps, `latitude`=latitude5520, `desktop`=g614jv, `server`=homeserver
+  (iOS phone `ipheoryt12`/.5 untouched). Coherent end-state = rename everywhere you
+  type/read AND adopt MagicDNS as the resolver. Work items:
+  - **VPS/Headscale (PENDING, needs auth — auto-mode blocks prod SSH writes; run via
+    `!` or authorize):**
+    (a) **DEPLOY gg.ez base_domain — DRIFT ALERT:** the rename `fleet.mesh`→`gg.ez` is
+    COMMITTED+PUSHED to the vps repo (`~/my/vps`, commit `c0fe069`) but NOT applied on
+    the VPS — live Headscale still serves `fleet.mesh`. Apply = pull + cp config to
+    `/etc/headscale/config.yaml` + `systemctl restart headscale` (setup-headscale.sh
+    does this; use rollback guard — `.ez` isn't a real TLD, `gg` alone rejected/`.gg`
+    is real ccTLD so gg.ez chosen). (b) **Rename given-names:** `headscale nodes rename
+    hub -i 1`; `... server -i 3`; `... desktop -i 4` (IDs verified 2026-07-15;
+    node2=latitude unchanged, node5=phone). SSH `debian@cyphy.kz` works from homeserver
+    (tailnet); read-only headscale commands are allowed, writes/restart need auth.
+  - **machines repo refactor (layers 1+2):** rename `fleet.json` keys
+    vps→hub/latitude5520→latitude/homeserver→server/g614jv→desktop (KEEP each
+    `detect.hostname` = real OS hostname: 27608/latitude5520/METHE-SERVER/g614jv; KEEP
+    `mesh.peerName` AWG legacy); rename `hosts/<name>/` dirs (`git mv`
+    hosts/latitude5520→hosts/latitude, hosts/g614jv→hosts/desktop,
+    hosts/homeserver→hosts/server; hosts/g16/windows is retired-kept, leave); update
+    `flake.nix` (`mkHost "latitude5520"`→"latitude", nixosConfigurations/homeConfigurations
+    `me@latitude5520`→`me@latitude`, checks); `networking.hostName` latitude5520→latitude.
+  - **MagicDNS adoption cleanup (fold in):** pin `--accept-dns` declaratively on latitude
+    (`services.tailscale` extraUpFlags / `tailscale set`; UNVERIFIED there); RETIRE
+    `modules/system/fleet-hosts.nix` + `provision/roles/hosts.{sh,ps1}` + the `hosts`
+    role in fleet.json + remove the managed block already written to homeserver's real
+    hosts file (`C:\Windows\System32\drivers\etc\hosts` — the `hosts` role has no
+    remove mode, delete the `# BEGIN/END fleet hosts` block by hand); SLIM `ssh.nix` to
+    just the hub public-address alias + non-default `User`s (MagicDNS gives names not
+    usernames, and hub must stay on cyphy.kz — resilience). Needs its own spec+plan
+    (cross-repo + nix host wiring); this is where we stopped (was about to map blast
+    radius). Session was g614jv-mislabeled earlier; THIS box is homeserver/METHE-SERVER.
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
