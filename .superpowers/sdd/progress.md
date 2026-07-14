@@ -25,8 +25,19 @@ ENVIRONMENT (this Windows box = homeserver / METHE-SERVER; controller box):
 ## DONE — Layer 1 code-complete. PR #1 open: https://github.com/metheoryt/machines/pull/1
 Branch feat/fleet-rename-labels (196e477..e3c12f9, 4 commits) pushed. Pre-merge
 gate = real-box nix on latitude (nix flake check + build .#nixosConfigurations.
-latitude + just quick). Layers 2-3 (VPS gg.ez deploy + headscale renames; MagicDNS
-cleanup) still pending — need their own plan + prod SSH auth.
+latitude + just quick).
+
+## DONE — Layer 2 (VPS/Headscale) live 2026-07-15
+gg.ez suffix deployed (surgical sed on /etc/headscale/config.yaml L329 + restart +
+rollback guard; NOT cp — diff proved base_domain was the only live-vs-repo diff);
+given-names renamed hub(1)/server(3)/desktop(4) (latitude(2) was already done).
+Verified hub/server/desktop/latitude resolve FQDN+bare via gg.ez. Writes ran via
+user `!` (auto-mode blocks prod SSH writes). Plan L2-3 doc:
+docs/superpowers/plans/2026-07-15-fleet-rename-layer2-3-headscale-and-magicdns-cleanup.md
+
+## PENDING — Layer 3 (MagicDNS cleanup), gated on PR #1 MERGED (L2 already live)
+pin --accept-dns on latitude; retire fleet-hosts.nix + hosts role; slim ssh.nix;
+hand-delete the # BEGIN/END fleet hosts block on this box's real hosts file.
 
 ## Minor findings (for final review triage)
 (none yet)

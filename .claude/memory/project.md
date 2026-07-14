@@ -140,12 +140,21 @@ global + per-host memory). One bullet per fact under a topical heading.
     latitude `nix flake check` + `nix build .#nixosConfigurations.latitude...toplevel`
     + `just quick`, and confirm `programs.ssh.settings` renders `hub/latitude/desktop/
     server` (hub→cyphy.kz). Only THEN merge PR #1.
-  - **Layer 2 (VPS/Headscale — PENDING, needs prod SSH auth):** (a) DEPLOY `gg.ez`:
-    on VPS pull vps repo, `cp vps/headscale/config.yaml /etc/headscale/config.yaml`,
-    `systemctl restart headscale` (keep prior config for rollback; `.ez` isn't a real
-    TLD, `.gg` is a ccTLD so gg.ez chosen). (b) `headscale nodes rename hub -i 1`;
-    `... server -i 3`; `... desktop -i 4` (node2=latitude done, node5=phone).
-    Read-only headscale cmds allowed; writes/restart need auth (`!` or authorize).
+  - **Layer 2 (VPS/Headscale) — DONE 2026-07-15.** MagicDNS suffix is now `gg.ez`
+    live; given-names renamed hub(1)/latitude(2)/server(3)/desktop(4)/ipheoryt12(5).
+    Verified from this box: `hub/server/desktop/latitude` all resolve (FQDN `.gg.ez`
+    AND bare) to their .1/.3/.4/.2; old `*.fleet.mesh` no longer resolves. HOW it was
+    applied (differs from the plan — the repo config.yaml is sanitized/near-identical
+    to live, so a `cp` was NOT used): surgical `sudo sed -i.bak-prerename` on line 329
+    of `/etc/headscale/config.yaml` (diff first proved base_domain was the ONLY line
+    differing live-vs-repo), then `systemctl restart headscale` with an auto-rollback
+    guard. AWG (relatives) is a separate service — untouched; Caddyfile upstreams are
+    raw `100.64.0.3` IPs (no suffix dependency). GOTCHA: auto-mode BLOCKS prod SSH
+    writes (`sed`/`restart`/`nodes rename`) — the user ran them via `!`; reads
+    (`headscale nodes list`, `diff`, DNS probes) run unattended. The `.bak-prerename`
+    backup of the pre-gg.ez config remains on the VPS. Clone footgun to remember: the
+    VPS vps-repo clone was behind at `a4fcf1d` (fleet.mesh) — must be `git pull`ed to
+    `c0fe069` (gg.ez) or a future `setup-headscale.sh cp` would REVERT the suffix.
   - **Layer 3 (MagicDNS cleanup — PENDING, gated on L1 merge + L2):** pin
     `--accept-dns` declaratively on latitude; RETIRE `modules/system/fleet-hosts.nix`
     + its import + `provision/roles/hosts.{sh,ps1}` + the `hosts` role in fleet.json
