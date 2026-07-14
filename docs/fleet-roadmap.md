@@ -6,7 +6,7 @@ the "where to head next" companion. For any item worth real work, run
 `superpowers:brainstorming` → `writing-plans` and drop the plan under
 `docs/superpowers/plans/`.
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-14_
 
 ## Where we are now
 
@@ -27,13 +27,20 @@ this is why **UPnP/router port-mapping is NOT on the backlog**).
 
 ## Now — finish what the migration started
 
-- [ ] **Fleet-wide SSH-over-tailnet.** `modules/home/ssh.nix` still generates host
-  aliases from AWG mesh IPs (`fleet.json` `mesh.ip`), but latitude + homeserver
-  are tailnet-only now, so those `10.0.0.x` aliases are dead. Migrate the generator
-  to tailnet MagicDNS names / `100.64.0.x`. Decide the source of truth: keep
-  `fleet.json` `mesh` for AWG (relatives/g614jv) and add a `tailnet` field, or move
-  the whole SSH story onto the tailnet. Don't hack `mesh.ip` — `mesh-vpn-params.nix`
-  reads it. _Cleanest next step; closes the half-migrated state._
+- [x] **Fleet-wide SSH-over-tailnet — CODE COMPLETE 2026-07-14** (branch
+  `feat/ssh-over-tailnet`; spec+plan `docs/superpowers/{specs,plans}/2026-07-14-fleet-ssh-over-tailnet-and-hosts*`).
+  Chose: add a parallel `fleet.json` `tailnet.ip` (kept `mesh.ip` for AWG), move the
+  whole SSH story onto raw `100.64.0.x` (not MagicDNS), hub stays on `cyphy.kz`.
+  `modules/home/ssh.nix` repointed. **Also added fleet-wide name resolution** (see
+  below). **Real-box apply PENDING** (runbook in the plan): `nix flake check` +
+  `nixos-rebuild switch` on latitude5520, then verify `ssh homeserver`.
+- [x] **Fleet-wide name resolution (hosts file) — CODE COMPLETE 2026-07-14** (same
+  branch). NixOS `modules/system/fleet-hosts.nix` generates `networking.hosts` from
+  `fleet.json`; a new cross-platform `hosts` provisioner role (`provision/roles/hosts.{sh,ps1}`)
+  writes a marker-delimited managed block into the system hosts file on Windows/Debian
+  (no-op on NixOS). So `ping homeserver`/`curl homeserver:8001` resolve fleet-wide with
+  no DNS resolver. **Real-box apply PENDING:** `hosts` role apply on vps (root) +
+  g614jv/homeserver (admin pwsh).
 - [ ] **Restart immich + navidrome** on the homeserver — they were down during the
   cutover; confirm they serve over the tailnet like the rest. (Operational, quick.)
 - [ ] **Drop g614jv's AWG.** It runs AWG beside Tailscale; its services already work

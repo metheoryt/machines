@@ -74,15 +74,27 @@ global + per-host memory). One bullet per fact under a topical heading.
   `~/.ssh/authorized_keys` and reads `C:\ProgramData\ssh\administrators_authorized_keys`
   (ACL: Administrators+SYSTEM only). (d) Default shell is `cmd.exe`; set
   `HKLM:\SOFTWARE\OpenSSH\DefaultShell` for PowerShell.
-- **Rollout PENDING (follow-up only):** repoint SSH-over-mesh for the homeserver.
-  The vps convention docs (`CLAUDE.md`/`README.md`) are DONE — updated to the
-  tailnet reality on `origin/main` (commit `a4e6faf`, via an isolated worktree so
-  the user's `telegrind-poll-deploy` WIP was untouched). The SSH-alias repoint is
-  entangled with the
-  broader fleet-wide SSH-over-tailnet migration (latitude is already tailnet-only,
-  so `ssh.nix`'s AWG-mesh matchBlocks want migrating wholesale) — treat as a
-  scoped follow-up, don't hack `fleet.json` mesh IPs (that field is the AWG
-  source-of-truth for `mesh-vpn-params.nix`).
+- **SSH-over-tailnet + fleet-wide name resolution: CODE COMPLETE 2026-07-14**
+  (branch `feat/ssh-over-tailnet`, 6 commits `8e7c748..2f9f6d7`; spec+plan under
+  `docs/superpowers/{specs,plans}/2026-07-14-fleet-ssh-over-tailnet-and-hosts*`).
+  `fleet.json` gained a parallel `tailnet.ip` per machine (vps `100.64.0.1`,
+  latitude5520 `.2`, homeserver `.3`, g614jv `.4`) — `mesh.ip`/AWG params UNTOUCHED
+  (VPS still serves relatives). `modules/home/ssh.nix` now generates each member's
+  SSH `HostName` from `m.tailnet.ip` (raw IPs, not MagicDNS); the hub (vps) still
+  points at `cyphy.kz` so managing it never depends on the transport it hosts.
+  New `modules/system/fleet-hosts.nix` generates NixOS `networking.hosts` from the
+  same manifest (name→tailnet IP), imported in latitude's config. New cross-platform
+  `hosts` provisioner role: `provision/roles/hosts.{sh,ps1}` write a marker-delimited
+  managed block (`# BEGIN/END fleet hosts`) into the system hosts file on
+  Windows/Debian (no-op on NixOS, which the Nix module owns); `FLEET_HOSTS_FILE`
+  override for testing; idempotent; enrolled in every machine's `roles`. Session-
+  verified: jq validity, hosts.{sh,ps1} dry-run+idempotency, ps1 BOM, full
+  `provision.ps1 -Apply` confirm-gate. Final review (opus) = READY TO MERGE, no
+  Critical/Important. **Real-box PENDING (runbook in the plan):** `nix flake check`
+  + `nixos-rebuild switch` on latitude5520 (then `getent hosts homeserver` +
+  `ssh homeserver`); `hosts` role apply on vps (root) and g614jv/homeserver (admin
+  pwsh). Quirk to remember: `ssh vps`→`cyphy.kz` (ssh alias) but `ping vps`→
+  `100.64.0.1` (hosts file) — each correct for its purpose.
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches

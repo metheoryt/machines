@@ -14,6 +14,7 @@
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
     ../../../modules/system/mesh-vpn.nix
+    ../../../modules/system/fleet-hosts.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
