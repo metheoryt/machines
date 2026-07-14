@@ -1,54 +1,40 @@
 {
 	"$schema" : "https://aka.ms/winget-packages.schema.2.0.json",
-	"CreationDate" : "2026-07-05T20:40:01.337-00:00",
+	"CreationDate" : "2026-07-14T00:00:00.000-00:00",
 	"Sources" :
 	[
 		{
 			"Packages" :
 			[
 				{ "PackageIdentifier" : "7zip.7zip" },
-				{ "PackageIdentifier" : "AIMP.AIMP" },
 				{ "PackageIdentifier" : "Amnezia.AmneziaWG" },
 				{ "PackageIdentifier" : "AmneziaVPN.AmneziaVPN" },
 				{ "PackageIdentifier" : "AntibodySoftware.WizTree" },
-				{ "PackageIdentifier" : "Anthropic.Claude" },
 				{ "PackageIdentifier" : "Casey.Just" },
-				{ "PackageIdentifier" : "Cloudflare.Warp" },
-				{ "PackageIdentifier" : "CrystalDewWorld.CrystalDiskInfo.AoiEdition" },
 				{ "PackageIdentifier" : "creativeprojects.resticprofile" },
+				{ "PackageIdentifier" : "CrystalDewWorld.CrystalDiskInfo.AoiEdition" },
 				{ "PackageIdentifier" : "dandavison.delta" },
-				{ "PackageIdentifier" : "Discord.Discord" },
 				{ "PackageIdentifier" : "Docker.DockerDesktop" },
-				{ "PackageIdentifier" : "Elgato.CameraHub" },
 				{ "PackageIdentifier" : "Git.Git" },
 				{ "PackageIdentifier" : "GitHub.cli" },
 				{ "PackageIdentifier" : "Google.Chrome.EXE" },
 				{ "PackageIdentifier" : "Google.GoogleDrive" },
-				{ "PackageIdentifier" : "JetBrains.Toolbox" },
-				{ "PackageIdentifier" : "Logitech.GHUB" },
-				{ "PackageIdentifier" : "ElementLabs.LMStudio" },
 				{ "PackageIdentifier" : "Microsoft.PowerShell" },
 				{ "PackageIdentifier" : "Microsoft.PowerToys" },
 				{ "PackageIdentifier" : "Microsoft.WindowsTerminal" },
 				{ "PackageIdentifier" : "Microsoft.WSL" },
 				{ "PackageIdentifier" : "MusicBrainz.Picard" },
-				{ "PackageIdentifier" : "Obsidian.Obsidian" },
 				{ "PackageIdentifier" : "OpenJS.NodeJS.LTS" },
-				{ "PackageIdentifier" : "PaulPacifico.ShutterEncoder" },
 				{ "PackageIdentifier" : "PKI.NCALayer" },
 				{ "PackageIdentifier" : "Python.Launcher" },
 				{ "PackageIdentifier" : "Python.Python.3.13" },
 				{ "PackageIdentifier" : "RadolynLabs.AyuGramDesktop" },
 				{ "PackageIdentifier" : "restic.restic" },
 				{ "PackageIdentifier" : "seerge.g-helper" },
-				{ "PackageIdentifier" : "SlackTechnologies.Slack" },
-				{ "PackageIdentifier" : "Spotify.Spotify" },
 				{ "PackageIdentifier" : "StablyAI.Orca" },
 				{ "PackageIdentifier" : "tailscale.tailscale" },
-				{ "PackageIdentifier" : "Valve.Steam" },
 				{ "PackageIdentifier" : "VideoLAN.VLC" },
-				{ "PackageIdentifier" : "ZedIndustries.Zed" },
-				{ "PackageIdentifier" : "Zoom.Zoom.EXE" }
+				{ "PackageIdentifier" : "ZedIndustries.Zed" }
 			],
 			"SourceDetails" :
 			{
@@ -61,10 +47,9 @@
 		{
 			"Packages" :
 			[
+				{ "PackageIdentifier" : "9N7R5S6B0ZZH" },
 				{ "PackageIdentifier" : "9NKSQGP7F2NH" },
-				{ "PackageIdentifier" : "9NHQ661KR4K4" },
-				{ "PackageIdentifier" : "XP8CLZL93F5Z4P" },
-				{ "PackageIdentifier" : "9N7R5S6B0ZZH" }
+				{ "PackageIdentifier" : "XP8CLZL93F5Z4P" }
 			],
 			"SourceDetails" :
 			{

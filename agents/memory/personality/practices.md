@@ -52,6 +52,12 @@ Deltas are opinions, not laws. Don't restate what global.md / CLAUDE.md cover.
   degrades to `text_matched`. (Aligns the repo to its static analyzer.)
 - **Edit safety** — check blast radius before changing a signature; prefer a
   coordinated rename over manual find-replace. See `CLAUDE.md` tool-routing.
+- **Write design/research docs for the engineer reading them** — short,
+  plain, colleague-to-colleague. Cut restated context, hedging, and
+  formal scaffolding (`Q:`/`Decision:` blocks, giant resolved-questions
+  tables). Keep what's load-bearing: the decision + why, `file:line` refs,
+  code sketches, gotchas, the estimate. Default to lean; expand only where a
+  point genuinely needs it.
 - **Trust by tier** — never act on gortex's "0 usages / dead code" for
   framework-invoked code; verify by confidence tier. Details in `global.md`.
 - **Check freshness before trusting a query** — the graph lags the working
