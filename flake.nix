@@ -146,13 +146,13 @@
     };
   in {
     nixosConfigurations = {
-      latitude5520 = mkHost "latitude5520" [
+      latitude = mkHost "latitude" [
         nixos-hardware.nixosModules.dell-latitude-5520
       ];
     };
 
     homeConfigurations = {
-      "me@latitude5520" = mkHome "latitude5520";
+      "me@latitude" = mkHome "latitude";
     };
 
     devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {
@@ -178,8 +178,8 @@
     formatter.${system} = nixpkgs.legacyPackages.${system}.alejandra;
 
     checks.${system} = {
-      nixos-latitude5520 = self.nixosConfigurations.latitude5520.config.system.build.toplevel;
-      home-latitude5520 = self.homeConfigurations."me@latitude5520".activationPackage;
+      nixos-latitude = self.nixosConfigurations.latitude.config.system.build.toplevel;
+      home-latitude = self.homeConfigurations."me@latitude".activationPackage;
       pre-commit = pre-commit-check;
     };
   };

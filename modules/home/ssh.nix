@@ -1,6 +1,6 @@
 # modules/home/ssh.nix
 #
-# Non-interactive SSH client config for the fleet, so `ssh latitude5520` (etc.)
+# Non-interactive SSH client config for the fleet, so `ssh latitude` (etc.)
 # Just Works for agents and humans: fixed HostName, User, and accept-new
 # host-key policy (TOFU-then-pin, safe on a private self-controlled mesh).
 # Imported by me.nix.
@@ -22,7 +22,7 @@
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
 _: let
   params = import ../system/mesh-vpn-params.nix;
-  mkBlock = name: m: {
+  mkBlock = _name: m: {
     HostName =
       if m.mesh.role == "hub"
       then params.endpoint # e.g. cyphy.kz — hub SSH must not depend on the transport it hosts

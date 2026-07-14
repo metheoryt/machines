@@ -18,8 +18,8 @@ echo "✅ Found flake.nix"
 
 # Check if required configuration files exist
 REQUIRED_FILES=(
-    "hosts/latitude5520/nixos/configuration.nix"
-    "hosts/latitude5520/nixos/hardware-configuration.nix"
+    "hosts/latitude/nixos/configuration.nix"
+    "hosts/latitude/nixos/hardware-configuration.nix"
     "modules/home/me.nix"
 )
 
@@ -54,7 +54,7 @@ fi
 
 # Check if we can build the configuration (dry-run)
 echo "🔨 Testing configuration build..."
-if nix build --dry-run ".#nixosConfigurations.latitude5520.config.system.build.toplevel" > /dev/null 2>&1; then
+if nix build --dry-run ".#nixosConfigurations.latitude.config.system.build.toplevel" > /dev/null 2>&1; then
     echo "✅ Configuration can be built"
 else
     echo "❌ Configuration build would fail"

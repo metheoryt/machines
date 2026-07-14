@@ -1,13 +1,13 @@
 {
   "machines": {
-    "latitude5520": {
+    "latitude": {
       "platform": "nixos",
       "mesh": { "ip": "10.0.0.8", "role": "member", "peerName": "nix-lat5520" },
       "tailnet": { "ip": "100.64.0.2" },
       "roles": ["base", "mesh-member", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client", "hosts"],
       "detect": { "hostname": "latitude5520" }
     },
-    "g614jv": {
+    "desktop": {
       "platform": "windows",
       "mesh": { "ip": "10.0.0.6", "role": "member", "peerName": "me-g614jv" },
       "tailnet": { "ip": "100.64.0.4" },
@@ -15,7 +15,7 @@
       "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "repos", "hosts"],
       "detect": { "hostname": "g614jv" }
     },
-    "homeserver": {
+    "server": {
       "platform": "windows",
       "mesh": { "ip": "10.0.0.2", "role": "member", "peerName": "wg0-homeserver" },
       "tailnet": { "ip": "100.64.0.3" },
@@ -23,7 +23,7 @@
       "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client", "hosts"],
       "detect": { "hostname": "methe-server" }
     },
-    "vps": {
+    "hub": {
       "platform": "debian",
       "mesh": { "ip": "10.0.0.1", "role": "hub", "managePeers": "/home/debian/vps/vps/manage-peers.sh" },
       "tailnet": { "ip": "100.64.0.1" },
