@@ -92,3 +92,10 @@ FINAL REVIEW (opus, a98e58f..2f9f6d7): Ready to merge = YES. No Critical, no Imp
   switch); ssh vps->cyphy.kz vs ping vps->tailnet quirk (already spec-documented).
   DEFERRED real-box (runbook): nix eval/flake check + switch on latitude5520; hosts apply on
   vps(root)/Windows(admin). NO fix wave needed. Proceeding to finishing-a-development-branch.
+FINISH: user chose "merge locally" (option 1). Reconciled first: a subagent had run `git pull`
+  on main creating merge f280060 (parent1 a98e58f spec+plan, parent2 origin/main b43f825 =
+  winget sets + practices-doc, disjoint from feature files). Merged feat/ssh-over-tailnet into
+  main --no-ff = b319eef (clean, feature files disjoint from origin's 2 commits). Post-merge
+  smoke GREEN (4 machines tailnet+hosts-role; ps1 BOM EF BB BF). Deleted branch (was dda5e30).
+  main AHEAD of origin/main by 12, NOT pushed (option 1 = local merge; push is user's call).
+  Real-box runbook still pending. DONE.
