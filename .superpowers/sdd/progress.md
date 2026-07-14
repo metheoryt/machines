@@ -7,7 +7,7 @@ Spec: docs/superpowers/specs/2026-07-14-fleet-ssh-over-tailnet-and-hosts-design.
 Branch: feat/ssh-over-tailnet
 BASE @ a98e58f (branch point from main; final-review MERGE_BASE).
 
-ENVIRONMENT (this Windows box, g614jv):
+ENVIRONMENT (this Windows box = homeserver / METHE-SERVER; earlier notes mislabeled it g614jv):
 - jq + bash live in WSL, NOT on Git Bash PATH. Run ALL posix gates via
   `wsl -e bash -lc 'cd /mnt/c/Users/methe/machines && ...'`.
 - shellcheck absent everywhere -> gates fall back to parse-only (`bash -n`).

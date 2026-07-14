@@ -92,11 +92,13 @@ global + per-host memory). One bullet per fact under a topical heading.
   `provision.ps1 -Apply` confirm-gate. Final review (opus) = READY TO MERGE, no
   Critical/Important. MERGED to `main` + pushed (merge `b319eef`).
   **Real-box apply status (per-box):**
-  - g614jv (Windows): **hosts role DONE 2026-07-14** — applied via an elevated pwsh
-    (`Invoke-RoleHosts -Mode apply`, needs admin/UAC; writes
-    `C:\Windows\System32\drivers\etc\hosts`); verified `homeserver`→`100.64.0.3`,
-    `vps`→`100.64.0.1` resolve. (ssh.nix is home-manager/NixOS-only, N/A on g614jv.)
-  - vps (Debian, root) + homeserver (Windows, admin pwsh): `hosts` role apply PENDING.
+  - homeserver (Windows, hostname `METHE-SERVER`): **hosts role DONE 2026-07-14** —
+    applied via an elevated pwsh (`Invoke-RoleHosts -Mode apply`, needs admin/UAC;
+    writes `C:\Windows\System32\drivers\etc\hosts`); verified `homeserver`→`100.64.0.3`,
+    `vps`→`100.64.0.1` resolve. The `hosts` block is fleet-wide / machine-independent
+    (same content whatever `-Machine` is passed). (ssh.nix is home-manager/NixOS-only,
+    N/A on Windows boxes.)
+  - g614jv (Windows) + vps (Debian, root): `hosts` role apply PENDING.
   - latitude5520 (NixOS): `nix flake check` + `nixos-rebuild switch` PENDING (then
     `getent hosts homeserver` + `ssh homeserver`); this is the box where ssh.nix +
     networking.hosts actually render.
