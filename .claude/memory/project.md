@@ -166,13 +166,25 @@ global + per-host memory). One bullet per fact under a topical heading.
     backup of the pre-gg.ez config remains on the VPS. Clone footgun to remember: the
     VPS vps-repo clone was behind at `a4fcf1d` (fleet.mesh) — must be `git pull`ed to
     `c0fe069` (gg.ez) or a future `setup-headscale.sh cp` would REVERT the suffix.
-  - **Layer 3 (MagicDNS cleanup — PENDING, gated on L1 merge + L2):** pin
-    `--accept-dns` declaratively on latitude; RETIRE `modules/system/fleet-hosts.nix`
-    + its import + `provision/roles/hosts.{sh,ps1}` + the `hosts` role in fleet.json
-    + hand-delete the `# BEGIN/END fleet hosts` block from homeserver's real
-    `C:\Windows\System32\drivers\etc\hosts` (role has no remove mode); SLIM `ssh.nix`
-    to just the hub `cyphy.kz` alias + non-default `User`s. Layers 2+3 still need
-    their own plan.
+  - **Layer 3 (MagicDNS cleanup) — CODE-COMPLETE, PR #2 open 2026-07-15**
+    (github.com/metheoryt/machines/pull/2, branch `feat/fleet-magicdns-cleanup`,
+    `465bf74..fc78d65`, 4 commits, built via SDD; opus final review = Ready-to-merge,
+    no Critical/Important). DONE in-repo: (1) pinned `--accept-dns` on latitude via a
+    `systemd.services.tailscale-accept-dns` oneshot (`tailscale set --accept-dns=true`
+    after tailscaled — latitude joins imperatively so `extraUpFlags` would be inert;
+    self-healing boot race is benign, Tailscale persists the pref); (2) RETIRED the
+    hosts machinery — DELETED `modules/system/fleet-hosts.nix` + its import,
+    `provision/roles/hosts.{sh,ps1}`, the `hosts` entry in `provision.ps1`, and the
+    `hosts` role from all 4 `fleet.json` machines (so **`fleet-hosts.nix` + the `hosts`
+    role NO LONGER EXIST** — supersedes the SSH-over-tailnet descriptions above);
+    (3) SLIMMED `ssh.nix` — hub→`cyphy.kz`+`debian`, server/desktop→`methe`, latitude→
+    neither (MagicDNS resolves bare names). Pre-fixed a statix `useless_parens`
+    (`fc78d65`) to de-risk the gate. **PRE-MERGE GATE (latitude, real box):** `nix
+    flake check` (incl. deadnix/statix/alejandra) + `just switch`, then verify
+    `tailscale dns status` accept-dns ON and `ping server` resolves via MagicDNS with
+    fleet-hosts gone. **STILL TODO after merge:** hand-delete the `# BEGIN/END fleet
+    hosts` block from the Windows boxes' real `C:\Windows\System32\drivers\etc\hosts`
+    (retired role has no remove mode; confirmed present on server/METHE-SERVER).
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
