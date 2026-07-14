@@ -1,6 +1,6 @@
 # modules/home/ssh.nix
 #
-# Non-interactive SSH client config for the fleet, so `ssh latitude5520` (etc.)
+# Non-interactive SSH client config for the fleet, so `ssh latitude` (etc.)
 # Just Works for agents and humans: fixed HostName, User, and accept-new
 # host-key policy (TOFU-then-pin, safe on a private self-controlled mesh).
 # Imported by me.nix.

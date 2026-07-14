@@ -278,7 +278,7 @@ vm:
 # Build ISO installer
 iso:
     @echo "💿 Building NixOS installer ISO..."
-    nix build {{flake_dir}}#nixosConfigurations.{{hostname}}.config.system.build.isoImage
+    nix build {{flake_dir}}#nixosConfigurations.{{nixos_attr}}.config.system.build.isoImage
     @echo "✅ ISO built successfully!"
 
 # Quick system health check
