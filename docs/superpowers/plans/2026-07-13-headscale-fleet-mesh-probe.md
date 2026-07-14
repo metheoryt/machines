@@ -192,7 +192,7 @@ git commit -m "feat(vps): route cc.cyphy.kz to headscale via Caddy"
 
 **Interfaces:**
 - Consumes: healthy `https://cc.cyphy.kz` (Task 2).
-- Produces: a reusable pre-auth key (used by Tasks 4–5) and the VPS as tailnet node `vps-test` — the fixed public endpoint the other nodes test against.
+- Produces: a reusable pre-auth key (used by Tasks 4–5) and the VPS as tailnet node `cyphy-hub` — the fixed public endpoint the other nodes test against.
 
 - [ ] **Step 1: Create the fleet user**
 
@@ -215,11 +215,11 @@ Expected: a long key string. Copy it — it authenticates Tasks 4 and 5. (If `--
 - [ ] **Step 3: Join the VPS to its own tailnet**
 
 ```bash
-sudo tailscale up --login-server https://cc.cyphy.kz --authkey <KEY> --hostname vps-test --accept-routes=false
+sudo tailscale up --login-server https://cc.cyphy.kz --authkey <KEY> --hostname cyphy-hub --accept-routes=false
 sudo tailscale status
 ```
 
-Expected: `tailscale status` shows `vps-test` with a `100.x.y.z` address.
+Expected: `tailscale status` shows `cyphy-hub` with a `100.x.y.z` address.
 
 - [ ] **Step 4: Confirm registration on the control side**
 
@@ -227,7 +227,7 @@ Expected: `tailscale status` shows `vps-test` with a `100.x.y.z` address.
 sudo headscale nodes list
 ```
 
-Expected: `vps-test` listed, user `fleet`, online. This proves the control plane, cert, reverse proxy, and client registration all work end to end. **Gate: do not proceed until this passes.**
+Expected: `cyphy-hub` listed, user `fleet`, online. This proves the control plane, cert, reverse proxy, and client registration all work end to end. **Gate: do not proceed until this passes.**
 
 ---
 
@@ -292,13 +292,13 @@ sudo tailscale up --login-server https://cc.cyphy.kz --authkey <KEY> --hostname 
 sudo tailscale status
 ```
 
-Expected: `latitude` gets a `100.x` address; `vps-test` visible as a peer.
+Expected: `latitude` gets a `100.x` address; `cyphy-hub` visible as a peer.
 
 - [ ] **Step 6: First reachability test (latitude ↔ VPS)**
 
 ```bash
-tailscale ping vps-test
-ssh debian@$(tailscale ip -4 vps-test)
+tailscale ping cyphy-hub
+ssh debian@$(tailscale ip -4 cyphy-hub)
 ```
 
 Expected: `tailscale ping` returns a pong (note whether `via DERP(cc)` or `direct`); SSH to the VPS over the tailnet succeeds. **This satisfies spec validation items 1 and 3.**
@@ -346,7 +346,7 @@ tailscale up --login-server https://cc.cyphy.kz --authkey <KEY> --hostname homes
 tailscale status
 ```
 
-Expected: `homeserver` gets a `100.x` address; `latitude` and `vps-test` visible.
+Expected: `homeserver` gets a `100.x` address; `latitude` and `cyphy-hub` visible.
 
 - [ ] **Step 4: Confirm the service tunnel is untouched (critical)**
 
