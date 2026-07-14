@@ -22,7 +22,7 @@
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
 _: let
   params = import ../system/mesh-vpn-params.nix;
-  mkBlock = name: m: {
+  mkBlock = _name: m: {
     HostName =
       if m.mesh.role == "hub"
       then params.endpoint # e.g. cyphy.kz — hub SSH must not depend on the transport it hosts
