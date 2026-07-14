@@ -22,10 +22,13 @@ ENVIRONMENT (this Windows box = homeserver / METHE-SERVER; controller box):
 - [x] FINAL whole-branch review (opus) + fix wave
 - [x] Task 3: push + open the Layer 1 PR
 
-## DONE — Layer 1 code-complete. PR #1 open: https://github.com/metheoryt/machines/pull/1
-Branch feat/fleet-rename-labels (196e477..e3c12f9, 4 commits) pushed. Pre-merge
-gate = real-box nix on latitude (nix flake check + build .#nixosConfigurations.
-latitude + just quick).
+## DONE — Layer 1 code-complete + nix gate GREEN on latitude. PR #1: https://github.com/metheoryt/machines/pull/1
+Branch feat/fleet-rename-labels (196e477..4859e34, 5 commits) pushed. `nix flake
+check` PASSED on latitude 2026-07-15. NEEDED an extra fix (4859e34): deadnix
+failed on modules/home/ssh.nix:25 `mkBlock = name: m:` — `name` went unused when
+the SSH-over-tailnet work moved HostName to m.tailnet.ip, but THAT branch's flake
+check was deferred to latitude and never run, so it only surfaced on this first
+real flake check -> `name`->`_name`. Ready to MERGE + `just switch` on latitude.
 
 ## DONE — Layer 2 (VPS/Headscale) live 2026-07-15
 gg.ez suffix deployed (surgical sed on /etc/headscale/config.yaml L329 + restart +

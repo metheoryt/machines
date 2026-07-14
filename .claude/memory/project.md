@@ -136,10 +136,12 @@ global + per-host memory). One bullet per fact under a topical heading.
     `$(hostname)`. OS identity untouched: `networking.hostName = "latitude5520"`,
     every `detect.hostname`, all `mesh.*`. Built via SDD (haiku/sonnet impl, sonnet
     task reviews, opus final review — which caught the quick-check.sh miss).
-    **PRE-MERGE GATE (real box, not runnable off latitude — no nix on Windows):** on
-    latitude `nix flake check` + `nix build .#nixosConfigurations.latitude...toplevel`
-    + `just quick`, and confirm `programs.ssh.settings` renders `hub/latitude/desktop/
-    server` (hub→cyphy.kz). Only THEN merge PR #1.
+    **PRE-MERGE GATE — PASSED on latitude 2026-07-15.** `nix flake check` green
+    after an extra fix (`4859e34`): deadnix failed on `ssh.nix:25` `mkBlock = name:`
+    (`name` unused since the SSH-over-tailnet HostName→tailnet.ip change, never
+    caught because that branch's flake check was deferred+never-run) → `name`→
+    `_name`. Branch is now `196e477..4859e34` (5 commits). Ready to merge PR #1 +
+    `just switch` on latitude.
   - **Layer 2 (VPS/Headscale) — DONE 2026-07-15.** MagicDNS suffix is now `gg.ez`
     live; given-names renamed hub(1)/latitude(2)/server(3)/desktop(4)/ipheoryt12(5).
     Verified from this box: `hub/server/desktop/latitude` all resolve (FQDN `.gg.ez`
