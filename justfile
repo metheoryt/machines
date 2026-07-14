@@ -42,10 +42,14 @@ default:
 # Variables
 hostname := `hostname`
 flake_dir := justfile_directory()
+# The sole NixOS box's flake attribute. Decoupled from `hostname` because the
+# OS hostname stays `latitude5520` while the flake attr is `latitude`. A second
+# NixOS box turns this into a hostname->attr map.
+nixos_attr := "latitude"
 # Build system configuration without switching
 build:
     @echo "🔨 Building NixOS configuration..."
-    sudo nixos-rebuild build --flake {{flake_dir}}#{{hostname}}
+    sudo nixos-rebuild build --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Build complete!"
 
 # Guard: home-manager (claude.nix/codex.nix) reads ~/machines/agents via
@@ -75,19 +79,19 @@ agent-bootstrap-profile postfix:
 # Build and switch to new configuration
 switch: _check-machines-link
     @echo "🔧 Switching to new NixOS configuration..."
-    sudo nixos-rebuild switch --flake {{flake_dir}}#{{hostname}}
+    sudo nixos-rebuild switch --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ System switched successfully!"
 
 # Build and test configuration temporarily
 test: _check-machines-link
     @echo "🧪 Testing NixOS configuration..."
-    sudo nixos-rebuild test --flake {{flake_dir}}#{{hostname}}
+    sudo nixos-rebuild test --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Test complete! Changes are temporary."
 
 # Build and set for next boot
 boot: _check-machines-link
     @echo "🥾 Setting configuration for next boot..."
-    sudo nixos-rebuild boot --flake {{flake_dir}}#{{hostname}}
+    sudo nixos-rebuild boot --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Configuration set for next boot!"
 
 # Update flake inputs (and out-of-tree pinned packages like rustdesk, zed, pycharm)
@@ -145,7 +149,7 @@ cleanup:
     @read
     sudo nix-collect-garbage -d
     nix-collect-garbage -d
-    sudo nixos-rebuild switch --flake {{flake_dir}}#{{hostname}}
+    sudo nixos-rebuild switch --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Deep cleanup complete!"
 
 # Optimize Nix store
@@ -268,7 +272,7 @@ monitor:
 # Test configuration in VM
 vm:
     @echo "🖥️ Building and running configuration in VM..."
-    nixos-rebuild build-vm --flake {{flake_dir}}#{{hostname}}
+    nixos-rebuild build-vm --flake {{flake_dir}}#{{nixos_attr}}
     @echo "VM built successfully! Run ./result/bin/run-nixos-vm to start."
 
 # Build ISO installer

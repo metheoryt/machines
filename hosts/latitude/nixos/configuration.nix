@@ -120,7 +120,7 @@
   home-manager = {
     extraSpecialArgs = {
       inherit inputs;
-      hostname = "latitude5520";
+      hostname = "latitude";
     };
     useGlobalPkgs = true;
     useUserPackages = true;
