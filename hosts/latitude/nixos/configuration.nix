@@ -80,7 +80,7 @@
   # (2026-07-13). Nothing load-bearing rides latitude's awg0 (backups go over
   # LAN), so dropping it lets Tailscale be tested on the raw ISP network with no
   # split-tunnel interference. Re-enable by flipping to true. address is kept for
-  # a clean revert; it matches mesh-vpn-params.nix `hosts.latitude5520` (+ /32).
+  # a clean revert; it matches mesh-vpn-params.nix `hosts.latitude` (+ /32).
   # See docs/superpowers/specs/2026-07-13-headscale-fleet-mesh-probe-design.md.
   fleet.meshVpn = {
     enable = false;
