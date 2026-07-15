@@ -4,7 +4,7 @@ The Claude Code user config — skills, agents, commands, statusline and a
 committed per-profile `settings.json` — lives here and is **symlinked into every
 profile** so the same setup is reused on every machine (Windows 11 / Git Bash,
 macOS, Linux). The profile set is a **registry driven by the committed settings
-files**: `settings.default.json` → `~/.claude` (personal), and each
+files**: `settings.json` → `~/.claude` (personal), and each
 `settings.<postfix>.json` → `~/.claude-<postfix>` (e.g. `settings.pure.json` →
 `~/.claude-pure`, the work profile). Add a `settings.<postfix>.json` and that
 profile is provisioned automatically — no wiring edit.
@@ -25,7 +25,7 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 
 | Path | Linked into `~/.claude` as | Notes |
 |---|---|---|
-| `settings.default.json` | `~/.claude/settings.json` | personal profile config (committed) |
+| `settings.json` | `~/.claude/settings.json` | personal profile config (committed) |
 | `settings.<postfix>.json` | `~/.claude-<postfix>/settings.json` | one secondary profile per file (registry). `settings.pure.json` → `~/.claude-pure` (work; committed, no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
 | `statusline-command.sh` | `statusline-command.sh` | compact status line |
 | `balance-refresh.py` | `balance-refresh.py` | spend calculator (statusline depends on it) |
@@ -140,8 +140,8 @@ From this repo, prefer the `just` recipes over calling the script directly:
   links the SHARED set (`AGENTS.md`→`CLAUDE.md`, `memory/`,
   `hosts/`→`host-memory.md`, `hooks/`, `skills/`, `subagents/`, `commands/`,
   `statusline-command.sh`, `balance-refresh.py`) **plus** the committed
-  `settings.<postfix>.json` → `settings.json` (falls back to
-  `settings.default.json` if that file isn't committed). It never touches the
+  `settings.<postfix>.json` → `settings.json` (falls back to the primary
+  `settings.json` if that file isn't committed). It never touches the
   machine-local `settings.local.json` (which holds the profile's Sentry secret)
   or its Codex config
   (`CLAUDE_CONFIG_DIR="$HOME/.claude-<postfix>" bash agents/bootstrap.sh`).

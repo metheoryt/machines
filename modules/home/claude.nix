@@ -4,9 +4,9 @@
 # which produces the identical one-hop symlinks.
 #
 # PROFILE REGISTRY (dynamic — no hardcoded profile list): the set of profiles is
-# driven by the committed settings files. Each agents/settings.<postfix>.json
-# declares one profile:
-#   settings.default.json    -> ~/.claude
+# driven by the committed settings files. The primary settings.json plus each
+# agents/settings.<postfix>.json declares one profile:
+#   settings.json            -> ~/.claude
 #   settings.<postfix>.json  -> ~/.claude-<postfix>   (e.g. settings.pure.json -> ~/.claude-pure)
 # Drop a new settings.<postfix>.json in the repo and the next `just switch`
 # provisions ~/.claude-<postfix> with the full shared set — no edit here needed.
@@ -42,14 +42,13 @@ in {
   # store-routed symlinks it used to manage under the profile dirs, and $HOME
   # exists. One profile is provisioned per committed settings.<postfix>.json.
   home.activation.linkClaudeProfiles = lib.hm.dag.entryAfter ["writeBoundary"] ''
-    for setsrc in "${agents}"/settings.*.json; do
+    for setsrc in "${agents}"/settings.json "${agents}"/settings.*.json; do
       [ -e "$setsrc" ] || continue                 # tolerate an unmatched glob
-      base="$(basename "$setsrc" .json)"           # settings.<postfix>
-      postfix="''${base#settings.}"
-      if [ "$postfix" = default ]; then
-        prof="$HOME/.claude"
+      base="$(basename "$setsrc" .json)"           # "settings" (primary) or "settings.<postfix>"
+      if [ "$base" = settings ]; then
+        prof="$HOME/.claude"                        # settings.json -> primary profile
       else
-        prof="$HOME/.claude-$postfix"
+        prof="$HOME/.claude-''${base#settings.}"    # settings.<postfix>.json -> ~/.claude-<postfix>
       fi
       $DRY_RUN_CMD mkdir -p "$prof/memory" "$prof/skills"
       # Per-profile settings (one hop -> repo file; writable, so Claude's writer

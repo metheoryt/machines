@@ -186,9 +186,9 @@ SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory
 the `cyphy` skills-directory plugin) as one whole-directory link — so they're
 symlinked into **every** profile bootstrapped: `~/.claude`, `~/.codex`, and
 secondary profiles like `~/.claude-pure`.
-`settings.json` is committed PER-PROFILE, and the committed set of
-`settings.<postfix>.json` files IS the profile registry: `settings.default.json`
-→ `~/.claude`, `settings.<postfix>.json` → `~/.claude-<postfix>` (e.g.
+`settings.json` is committed PER-PROFILE, and the committed set of settings
+files IS the profile registry: `settings.json` → `~/.claude`,
+`settings.<postfix>.json` → `~/.claude-<postfix>` (e.g.
 `settings.pure.json` → `~/.claude-pure`). Drop a new `settings.<postfix>.json`
 into `agents/` and the next `just switch` (or `just agent-bootstrap-profile
 <postfix>`) provisions `~/.claude-<postfix>` with the full shared set — no wiring

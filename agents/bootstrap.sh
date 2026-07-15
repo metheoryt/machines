@@ -35,7 +35,7 @@ BAK_ROOT="$CLAUDE_DIR/.bootstrap-bak"
 
 # Each profile gets the SHARED set + a committed per-profile settings.json,
 # chosen by convention from the profile dir's name:
-#   ~/.claude            -> settings.default.json
+#   ~/.claude            -> settings.json
 #   ~/.claude-<postfix>  -> settings.<postfix>.json   (e.g. ~/.claude-pure -> settings.pure.json)
 # Codex rides with the personal run (~/.claude) only. The machine-local
 # settings.local.json is never touched by any profile.
@@ -178,13 +178,17 @@ for f in statusline-command.sh balance-refresh.py; do
   link "$SRC_DIR/$f" "$CLAUDE_DIR/$f"
 done
 # settings.json is committed per-profile, chosen by convention (see the POSTFIX
-# block above): ~/.claude -> settings.default.json, ~/.claude-<postfix> ->
-# settings.<postfix>.json. Falls back to settings.default.json if the profile's
-# own file isn't committed. The machine-local settings.local.json (personal:
-# gortex hooks; pure: PURE_SENTRY_TOKEN secret) is never linked — it stays local
-# and is reunited at load via env deep-merge.
-settings_src="$SRC_DIR/settings.$POSTFIX.json"
-[ -e "$settings_src" ] || settings_src="$SRC_DIR/settings.default.json"
+# block above): ~/.claude -> settings.json, ~/.claude-<postfix> ->
+# settings.<postfix>.json. Falls back to the primary settings.json if the
+# profile's own file isn't committed. The machine-local settings.local.json
+# (personal: gortex hooks; pure: PURE_SENTRY_TOKEN secret) is never linked — it
+# stays local and is reunited at load via env deep-merge.
+if [ "$POSTFIX" = default ]; then
+  settings_src="$SRC_DIR/settings.json"
+else
+  settings_src="$SRC_DIR/settings.$POSTFIX.json"
+  [ -e "$settings_src" ] || settings_src="$SRC_DIR/settings.json"
+fi
 link "$settings_src" "$CLAUDE_DIR/settings.json"
 
 # Memory & knowledge base. Global instructions + global memory store are shared
