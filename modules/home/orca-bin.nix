@@ -13,6 +13,15 @@
 #   nix store prefetch-file --json \
 #     https://github.com/stablyai/orca/releases/download/v$v/orca-linux.AppImage
 # then edit `version` + `hash` below from the printed SRI hash.
+#
+# GOTCHA — do NOT use Orca's in-app "install shell command" (its CliInstaller):
+# on NixOS it writes ~/.local/bin/orca-ide → resources/bin/orca-ide (the AppImage's
+# own launcher), which execs the UNwrapped Electron binary and dies with
+# `libnspr4.so: cannot open shared object file` — it bypasses this appimageTools
+# bwrap wrapper (the only thing that supplies nss/nspr/glib/cups). ~/.local/bin
+# also precedes the Nix profile on PATH, so that stale symlink SHADOWS the working
+# `orca-ide` here. Fix: `rm ~/.local/bin/orca-ide` and rely on this Nix-wrapped
+# binary for both GUI and CLI.
 {
   lib,
   appimageTools,
