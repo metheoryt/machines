@@ -142,3 +142,38 @@ wsl --install -d Ubuntu          # or: -d Debian
 wsl --list --online              # see available distros
 wsl --unregister <name>          # nuke a disposable distro back to zero
 ```
+
+## Orca headless server (WSL)
+
+Serve one Orca runtime per WSL2 distro, each a distinct Headscale tailnet node,
+so the Orca desktop/mobile client drives repos that live natively on the distro's
+Linux filesystem (not across the slow `\\wsl.localhost` 9P boundary). Design:
+`docs/superpowers/specs/2026-07-15-orca-serve-wsl-design.md`.
+
+Run **both scripts inside each distro**, in order:
+
+    # 1. Join the fleet tailnet as this distro's own node (needs systemd + sudo)
+    export HEADSCALE_AUTHKEY='<reusable pre-auth key, headscale user fleet>'
+    bash ~/machines/provision/tailscale-wsl.sh          # → wsl-<distro> @ 100.64.x.y
+
+    # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger)
+    bash ~/machines/provision/orca-serve.sh
+
+Then read the pairing URL and add it on the client:
+
+    journalctl --user -u orca-serve -f                  # prints orca://pair?… (SECRET)
+    # on the Windows/mobile client:
+    orca environment add --name <distro> --pairing-code '<orca://pair?…>'
+
+Notes:
+
+- **Per-distro identity.** Each distro runs its own `tailscaled` and gets a
+  distinct `100.64.x.y` + MagicDNS name (`wsl-<distro>.fleet.mesh`), so every
+  Orca server uses the default port `6768`. No `.wslconfig` mirrored networking,
+  no `netsh portproxy` — inbound rides the VPS DERP relay through WSL's NAT.
+- **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with
+  `ORCA_TS_HOSTNAME`.
+- **Version** defaults to `latest`; pin with `ORCA_VERSION`.
+- **Secrets** (`HEADSCALE_AUTHKEY`, the pairing URL) are never committed.
+- Rebuilding a distro (`wsl --unregister`) leaves a stale Headscale node — prune
+  with `headscale nodes delete` on the VPS.
