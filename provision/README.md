@@ -152,9 +152,13 @@ Linux filesystem (not across the slow `\\wsl.localhost` 9P boundary). Design:
 
 Run **both scripts inside each distro**, in order:
 
-    # 1. Join the fleet tailnet as this distro's own node (needs systemd + sudo)
+    # 1. Join the fleet tailnet as this distro's own node (needs systemd + sudo).
+    #    Supply the reusable pre-auth key by ANY of (precedence high→low):
     export HEADSCALE_AUTHKEY='<reusable pre-auth key, headscale user fleet>'
     bash ~/machines/provision/tailscale-wsl.sh          # → wsl-<distro> @ 100.64.x.y
+    #    …or from a local (gitignored) file, or reuse the persisted key:
+    bash ~/machines/provision/tailscale-wsl.sh --authkey-file provision/secrets/authkey
+    bash ~/machines/provision/tailscale-wsl.sh          # reuse /etc/headscale/authkey
 
     # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger; also needs sudo)
     bash ~/machines/provision/orca-serve.sh
@@ -173,6 +177,16 @@ Notes:
   no `netsh portproxy` — inbound rides the VPS DERP relay through WSL's NAT.
 - **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with
   `ORCA_TS_HOSTNAME`.
+- **Zero-touch re-enroll.** `tailscale-wsl.sh` persists the resolved pre-auth
+  key to `/etc/headscale/authkey` (`root:root 0600`) and installs a systemd
+  *system* oneshot `tailscale-autoconnect.service`. At every boot it runs
+  `tailscale status || tailscale up`, so a normal reboot (state persists in
+  `/var/lib/tailscale`) is a no-op while a rebuilt/logged-out distro rejoins the
+  tailnet hands-free — no re-pasted key. Key precedence for the *first* run:
+  `--authkey-file <path>` → `$HEADSCALE_AUTHKEY` → the persisted key. Stash a key
+  locally under the gitignored `provision/secrets/` for `--authkey-file`.
+  Tradeoff: a reusable key sits root-readable on disk — use an *expiring* key and
+  rotate it in Headscale.
 - **Version** defaults to `latest`; pin with `ORCA_VERSION`.
 - **Secrets** (`HEADSCALE_AUTHKEY`, the pairing URL) are never committed.
 - Rebuilding a distro (`wsl --unregister`) leaves a stale Headscale node — prune

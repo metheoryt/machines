@@ -1,7 +1,7 @@
 # Orca headless server on WSL — design
 
-Date: 2026-07-15
-Status: approved-pending-review
+Date: 2026-07-15 (zero-touch re-enroll added 2026-07-16)
+Status: implemented; zero-touch re-enroll shipped 2026-07-16
 Topic: serve one Orca runtime per WSL distro, each a distinct Headscale node,
 reachable over the tailnet from the Windows Orca client / mobile.
 
@@ -61,14 +61,34 @@ Responsibilities:
    already on PATH.
 4. **Start the daemon** — `sudo systemctl enable --now tailscaled`.
 5. **Enroll** — if `tailscale status` shows this node already up on
-   `cc.cyphy.kz`, skip. Else:
-   `sudo tailscale up --login-server https://cc.cyphy.kz --authkey "$HEADSCALE_AUTHKEY" --hostname "$ORCA_TS_HOSTNAME"`.
-   - `HEADSCALE_AUTHKEY` — **required env var**, the reusable pre-auth key
-     (Headscale user `fleet`). Never stored in the repo. Script dies with a
-     clear message if unset.
+   `cc.cyphy.kz`, skip the `tailscale up` (but still persist the key + install
+   the autoconnect unit, so the flow retrofits onto an already-enrolled distro).
+   Else:
+   `sudo tailscale up --login-server https://cc.cyphy.kz --authkey "$AUTHKEY" --hostname "$ORCA_TS_HOSTNAME"`.
+   - **Pre-auth key resolution (precedence high→low):** `--authkey-file <path>`
+     → `$HEADSCALE_AUTHKEY` → an already-persisted `/etc/headscale/authkey`.
+     The reusable key (Headscale user `fleet`) is never stored in the repo; a
+     local stash lives under the gitignored `provision/secrets/`. First enroll
+     dies with a clear message if no key resolves from any source.
    - `ORCA_TS_HOSTNAME` — defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`
      (lowercased, non-`[a-z0-9-]` → `-`, e.g. `Ubuntu-26.04` → `wsl-ubuntu-26-04`).
      Overridable via env for a custom name.
+
+5b. **Zero-touch re-enroll (added 2026-07-16).** Persist the resolved key to
+   `/etc/headscale/authkey` (`root:root 0600`) and install a systemd **system**
+   oneshot `/etc/systemd/system/tailscale-autoconnect.service`:
+   `After/Wants=tailscaled.service network-online.target`,
+   `ConditionPathExists=/etc/headscale/authkey`, `Type=oneshot
+   RemainAfterExit=true`,
+   `ExecStart=/bin/sh -c 'tailscale status --peers=false >/dev/null 2>&1 ||
+   tailscale up --login-server https://cc.cyphy.kz --authkey "$(cat
+   /etc/headscale/authkey)" --hostname wsl-<distro>'`,
+   `WantedBy=multi-user.target`. Hostname is baked at install (system units
+   don't see `$WSL_DISTRO_NAME`). Runs as root → no interactive sudo at boot;
+   idempotent — a normal reboot whose state persists in `/var/lib/tailscale` is
+   a no-op (the `status` probe short-circuits), while a rebuilt/logged-out distro
+   re-enrolls hands-free. **Accepted tradeoff:** a reusable key sits root-readable
+   on disk; mitigation = use a key with an expiry and rotate it in Headscale.
 6. **Verify** — `tailscale ip -4` returns a `100.64.x.y`; print it and the
    MagicDNS FQDN `<hostname>.fleet.mesh`.
 

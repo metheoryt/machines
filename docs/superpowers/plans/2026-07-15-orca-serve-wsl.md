@@ -32,8 +32,24 @@
 
 ### Task 1: `provision/tailscale-wsl.sh` — enroll distro as a Headscale node
 
+> **Amended 2026-07-16 — zero-touch re-enroll (shipped).** The verbatim script
+> below is the original v1 (manual: `$HEADSCALE_AUTHKEY` env only, early `exit 0`
+> when already enrolled). The live script now also: (a) resolves the pre-auth key
+> by precedence `--authkey-file <path>` → `$HEADSCALE_AUTHKEY` → persisted
+> `/etc/headscale/authkey`, and persists a freshly-supplied key there
+> (`root:root 0600`); (b) drops the early `exit 0` so the key + unit retrofit onto
+> an already-enrolled distro, making `tailscale up` conditional on not-already-up;
+> (c) installs + enables a systemd **system** oneshot
+> `tailscale-autoconnect.service` (baked hostname, `ConditionPathExists`,
+> `tailscale status || tailscale up`) for hands-free re-enroll after a
+> rebuild/logout. New pure helper `ts_pick_key` (precedence) is unit-tested
+> alongside `ts_sanitize_hostname` in `provision/tailscale-wsl.test.sh`. `.gitignore`
+> gains `provision/secrets/`. See the design doc's §5/§5b for rationale. The
+> `provision/tailscale-wsl.sh` in the repo is the source of truth.
+
 **Files:**
 - Create: `provision/tailscale-wsl.sh`
+- Create: `provision/tailscale-wsl.test.sh` (unit tests: sanitizer + key precedence)
 
 **Interfaces:**
 - Consumes: env `HEADSCALE_AUTHKEY` (required unless already enrolled), optional `ORCA_TS_HOSTNAME`.

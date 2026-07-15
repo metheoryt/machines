@@ -44,3 +44,7 @@ nixos-hardware/
 
 # OpenClaude per-repo local state — machine-local, keep out of git
 .openclaude/
+
+# Local pre-auth key stash for provision/tailscale-wsl.sh (--authkey-file).
+# Reusable Headscale keys are secrets — never commit them.
+provision/secrets/
