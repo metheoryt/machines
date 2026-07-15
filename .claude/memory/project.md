@@ -180,10 +180,10 @@ global + per-host memory). One bullet per fact under a topical heading.
     (3) SLIMMED `ssh.nix` — hub→`cyphy.kz`+`debian`, server/desktop→`methe`, latitude→
     neither (MagicDNS resolves bare names). Pre-fixed a statix `useless_parens`
     (`fc78d65`) to de-risk the gate. Latitude nix gate (`nix flake check` +
-    `just switch`) PASSED → PR #2 merged. **STILL TODO:** hand-delete the
-    `# BEGIN/END fleet hosts` block from the Windows boxes' real
-    `C:\Windows\System32\drivers\etc\hosts` (retired role has no remove mode;
-    confirmed present on server/METHE-SERVER — needs elevated pwsh).
+    `just switch`) PASSED → PR #2 merged. Stale `# BEGIN/END fleet hosts` block
+    hand-deleted from server/METHE-SERVER's real hosts file 2026-07-15 (elevated
+    pwsh, `.bak-fleet-hosts` backup left); verified `server`→`100.64.0.3` still
+    resolves via MagicDNS (`server.gg.ez`). **Fleet rename + MagicDNS effort COMPLETE.**
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
