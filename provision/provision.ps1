@@ -21,7 +21,6 @@ $RoleExecutors = @{
     'repos'       = { param($Mode, $Platform, $Machine) Invoke-RoleRepos      -Mode $Mode -Platform $Platform -Machine $Machine }
     'mesh-member' = { param($Mode, $Platform, $Machine) Invoke-RoleMeshMember -Mode $Mode -Platform $Platform -Machine $Machine }
     'mesh-hub'    = { param($Mode, $Platform, $Machine) Invoke-RoleMeshHub    -Mode $Mode -Platform $Platform -Machine $Machine }
-    'hosts'       = { param($Mode, $Platform, $Machine) Invoke-RoleHosts      -Mode $Mode -Platform $Platform -Machine $Machine }
 }
 
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }

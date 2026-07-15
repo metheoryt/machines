@@ -189,6 +189,27 @@
     sudo = {
       enable = true;
       wheelNeedsPassword = true;
+
+      # Passwordless nixos-rebuild + GC for `me`, so the just switch/upgrade/
+      # test/clean recipes run unattended (e.g. driven by an agent) with no tty
+      # password prompt. NOPASSWD nixos-rebuild is effectively passwordless root
+      # for `me` — accepted on these personal boxes; the agent still gates each
+      # invocation behind its own approval prompt.
+      extraRules = [
+        {
+          users = ["me"];
+          commands = [
+            {
+              command = "/run/current-system/sw/bin/nixos-rebuild";
+              options = ["NOPASSWD"];
+            }
+            {
+              command = "/run/current-system/sw/bin/nix-collect-garbage";
+              options = ["NOPASSWD"];
+            }
+          ];
+        }
+      ];
     };
   };
 

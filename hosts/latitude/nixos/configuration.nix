@@ -14,7 +14,6 @@
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
     ../../../modules/system/mesh-vpn.nix
-    ../../../modules/system/fleet-hosts.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
@@ -91,6 +90,20 @@
   # is joined imperatively after switch:
   #   sudo tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>
   services.tailscale.enable = true;
+
+  # MagicDNS (Headscale gg.ez) is the fleet resolver; ensure accept-dns is ON
+  # declaratively so a rebuild/reboot can't silently drop name resolution.
+  # latitude joins the tailnet imperatively, so pin it via `tailscale set`
+  # rather than extraUpFlags (which only fire on a module-driven `tailscale up`).
+  systemd.services.tailscale-accept-dns = {
+    description = "Ensure Tailscale accept-dns is enabled";
+    after = ["tailscaled.service"];
+    wants = ["tailscaled.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig.Type = "oneshot";
+    serviceConfig.ExecStart = "${pkgs.tailscale}/bin/tailscale set --accept-dns=true";
+    serviceConfig.RemainAfterExit = true;
+  };
 
   # Host-specific packages
   environment.systemPackages = with pkgs; [

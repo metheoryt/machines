@@ -1,101 +1,74 @@
-# Fleet SSH-over-tailnet + name resolution — SDD Progress Ledger
+# Fleet rename Layer 1 (repo labels) — SDD Progress Ledger
 
-(Phase 5b ledger archived — 5b COMPLETE + pushed. This is a new plan.)
+(Prior SSH-over-tailnet ledger archived — that plan COMPLETE + merged. This is a new plan.)
 
-Plan: docs/superpowers/plans/2026-07-14-fleet-ssh-over-tailnet-and-hosts.md
-Spec: docs/superpowers/specs/2026-07-14-fleet-ssh-over-tailnet-and-hosts-design.md
-Branch: feat/ssh-over-tailnet
-BASE @ a98e58f (branch point from main; final-review MERGE_BASE).
+Plan: docs/superpowers/plans/2026-07-15-fleet-rename-layer1-repo-labels.md
+Spec: docs/superpowers/specs/2026-07-15-fleet-rename-and-magicdns-adoption-design.md
+Branch: feat/fleet-rename-labels
+BASE @ 196e477 (branch point from main; final-review MERGE_BASE).
 
-ENVIRONMENT (this Windows box = homeserver / METHE-SERVER; earlier notes mislabeled it g614jv):
-- jq + bash live in WSL, NOT on Git Bash PATH. Run ALL posix gates via
+ENVIRONMENT (this Windows box = homeserver / METHE-SERVER; controller box):
+- jq + bash live in WSL, NOT on Git Bash PATH. Run ALL posix/jq gates via
   `wsl -e bash -lc 'cd /mnt/c/Users/methe/machines && ...'`.
-- shellcheck absent everywhere -> gates fall back to parse-only (`bash -n`).
-- PowerShell gates: run via the PowerShell tool (native pwsh); the Read-Host
-  confirm-gate needs a non-NonInteractive pwsh -> drive with `echo n | pwsh -File`
-  from Git Bash.
-- *.sh pinned eol=lf via .gitattributes; new *.ps1 = ASCII-only content + UTF-8 BOM.
-- DEFERRED (not session-verifiable on this box):
-  - ALL `nix eval` / `nix flake check` steps (Task 2 Steps 1/5, Task 3 Steps 4/5)
-    -> latitude5520 real-box gate after pull. Implementers do the edits + record
-    the exact eval command in the report; controller marks the nix gate deferred.
-  - ALL real-box apply steps (latitude switch, vps/Windows hosts apply) -> runbook.
+- ALL `nix eval` / `nix flake check` steps DEFER to latitude (real-box gate).
+  Implementers do the edits + record the exact eval command; controller marks
+  the nix gate deferred and it becomes the PR's pre-merge gate.
+- Layer 1 touches only fleet.json, flake.nix, justfile, and two git mv renames
+  (hosts/ dir + agents/hosts/ memory file). No new *.sh/*.ps1 -> no BOM/eol work.
 
 ## Tasks
-- [x] Task 1: fleet.json — add tailnet.ip to every machine
-- [x] Task 2: modules/home/ssh.nix — HostName off AWG onto tailnet
-- [x] Task 3: modules/system/fleet-hosts.nix — generate networking.hosts + import
-- [x] Task 4: provision/roles/hosts.sh — posix hosts executor
-- [x] Task 5: provision/roles/hosts.ps1 + provision.ps1 wiring — Windows hosts executor
-- [x] Task 6: fleet.json — enroll the hosts role on every machine
+- [x] Task 1: rename fleet.json keys (hub/latitude/desktop/server)
+- [x] Task 2: latitude full-label rename (flake attr/dir/host-memory/justfile decouple)
+- [x] FINAL whole-branch review (opus) + fix wave
+- [x] Task 3: push + open the Layer 1 PR
+
+## DONE — Layer 1 code-complete + nix gate GREEN on latitude. PR #1: https://github.com/metheoryt/machines/pull/1
+Branch feat/fleet-rename-labels (196e477..4859e34, 5 commits) pushed. `nix flake
+check` PASSED on latitude 2026-07-15. NEEDED an extra fix (4859e34): deadnix
+failed on modules/home/ssh.nix:25 `mkBlock = name: m:` — `name` went unused when
+the SSH-over-tailnet work moved HostName to m.tailnet.ip, but THAT branch's flake
+check was deferred to latitude and never run, so it only surfaced on this first
+real flake check -> `name`->`_name`. Ready to MERGE + `just switch` on latitude.
+
+## DONE — Layer 2 (VPS/Headscale) live 2026-07-15
+gg.ez suffix deployed (surgical sed on /etc/headscale/config.yaml L329 + restart +
+rollback guard; NOT cp — diff proved base_domain was the only live-vs-repo diff);
+given-names renamed hub(1)/server(3)/desktop(4) (latitude(2) was already done).
+Verified hub/server/desktop/latitude resolve FQDN+bare via gg.ez. Writes ran via
+user `!` (auto-mode blocks prod SSH writes). Plan L2-3 doc:
+docs/superpowers/plans/2026-07-15-fleet-rename-layer2-3-headscale-and-magicdns-cleanup.md
+
+## PENDING — Layer 3 (MagicDNS cleanup), gated on PR #1 MERGED (L2 already live)
+pin --accept-dns on latitude; retire fleet-hosts.nix + hosts role; slim ssh.nix;
+hand-delete the # BEGIN/END fleet hosts block on this box's real hosts file.
 
 ## Minor findings (for final review triage)
-- Task 4 (hosts.sh): mktemp staging file not trap-guarded (leak under errexit caller);
-  no guard if jq/fleet.json missing (raw jq error). BOTH inherited verbatim from the
-  plan's own code, mirror existing role-executor style. Non-blocking.
-- Task 5 (hosts.ps1): (a) `Sort-Object Name` (culture-aware, case-insensitive) vs hosts.sh
-  `sort_by(.key)` (codepoint) — latent ordering-parity mismatch only for hypothetical
-  mixed-case/leading-nonalnum machine names; ordering doesn't affect resolution. (b) dry-run
-  preview body emitted via success stream (`$block | ForEach-Object`) not Write-Host — if the
-  dispatcher ever CAPTURED the scriptblock return the body could be swallowed; provision.ps1
-  invokes `& $exec` uncaptured so it displays. CONFIRM empirically at Task 6 Step 5. Both
-  inherited from the brief's code. Non-blocking.
+(none yet)
 
 ## Log
-Task 1: complete (commit 8e7c748, review clean — Spec ✅, Approved, no findings).
-  Purely additive 4-line diff (0 deletions); tailnet.ip on all 4 machines with exact
-  IPs; mesh/ssh/roles/detect untouched by construction. jq verify green (via WSL).
-  1 harmless Minor (report LF-endings overclaim, non-actionable).
-Task 2: complete (commit 1cf4eae, review clean — Spec ✅, Approved, no Critical/Important).
-  ssh.nix HostName member branch params.hosts.${name} -> m.tailnet.ip; hub unchanged
-  (params.endpoint); header comment updated; only ssh.nix touched; mesh-vpn-params.nix
-  untouched; indentation matches. Reviewer ⚠️ (raw-IP vs MagicDNS content of tailnet.ip)
-  resolved by controller from Task 1 (fields are raw 100.64.0.x). nix eval + alejandra
-  DEFERRED to latitude5520. 1 cosmetic Minor (report line-num refs off).
-Task 3: complete (commit 88ad2f2, review clean — Spec ✅, Approved). fleet-hosts.nix
-  maps tailnet.ip(key)->[name](value) over params.machines; reuses mesh-vpn-params
-  fromJSON (no new one, that file untouched); import added after mesh-vpn.nix in
-  latitude config with correct path; deadnix-clean _: ; only 2 files changed.
-  Reviewer Important/⚠️ (does machines.<name>.tailnet.ip exist? — it couldn't see
-  fleet.json) resolved by controller: Task 1 added it to all 4 (jq-verified). The
-  nix eval that would catch a missing field stays DEFERRED to latitude5520.
-Task 4: complete (commit 9a1c062, review clean — Spec ✅, Approved, no Critical/Important).
-  hosts.sh role_hosts: nixos no-op, wsl/debian write, unknown skip; ASCII markers exact;
-  FLEET_HOSTS_FILE override; dry-run side-effect-free; apply idempotent (awk strip+trailing-
-  blank-trim traced convergent by reviewer); no provision.sh edit. Smoke GREEN via WSL
-  (parse/dry-run/idempotency; shellcheck deferred-absent). 2 brief-inherited Minors logged.
-Task 5: complete (commit 2bba524, review clean — Spec ✅, Approved, no Critical/Important).
-  hosts.ps1 Invoke-RoleHosts: nixos no-op / non-windows skip / windows write; markers
-  byte-identical to hosts.sh (reviewer cross-checked); Get-FleetManifest consumed correctly;
-  FLEET_HOSTS_FILE + default path; dry-run pure; apply idempotent (hand-traced convergent);
-  $RoleExecutors gained exactly 'hosts', all 5 prior intact; only 2 files changed. BOM
-  EF BB BF verified by controller (Format-Hex) AND reviewer (diff byte-scan @2002); ASCII-only
-  body confirmed. Native pwsh smoke GREEN (dry-run/idempotency). Step 5 (full-dispatch
-  confirm-gate) DEFERRED to Task 6. 2 brief-inherited Minors logged.
-Task 6: complete (commit 2f9f6d7, review clean — Spec ✅, Approved, no findings). All 4
-  roles arrays gained "hosts" as last element (4+/4-, single full-file hunk); no role
-  removed/reordered; no other field touched; JSON valid. Controller ran the deferred
-  Task 5 Step 5 full-dispatch confirm-gate (echo n | pwsh provision.ps1 -Apply -Machine
-  g614jv): rc=0, hosts preview shows all 4 tailnet IPs between ASCII markers (success-stream
-  body SURVIVES dispatch -> Task5 Minor(b) resolved non-issue), "n" skips cleanly. Order
-  g614jv/homeserver/latitude5520/vps == sort_by parity for current names (Task5 Minor(a) moot).
-ALL 6 TASKS COMPLETE. machines range a98e58f..2f9f6d7. Proceeding to final whole-branch review.
-FINAL REVIEW (opus, a98e58f..2f9f6d7): Ready to merge = YES. No Critical, no Important.
-  All Global Constraints met; single-source-of-truth preserved; ssh.nix mapAttrs correctness
-  + hub laziness confirmed; executors mirror dotfiles pattern; markers byte-identical; BOM ok;
-  idempotency/dry-run/confirm-gate empirically verified. 3 Minors, NONE requiring a code change:
-  (1) hosts.ps1 Set-Content -Encoding ascii is the CORRECT cross-version tradeoff (BOM breaks a
-  Windows hosts file; PS5.1 has no utf8NoBOM; real hosts files are ASCII) — worth a runbook note;
-  (2) Sort-Object vs sort_by parity harmless for current names; (3) mktemp leak hypothetical
-  (apply runs under disabled set -e via `if "$fn" apply`). Recommendations = 2 runbook watch-items:
-  latitude self-hostname now resolves to tailnet .2 (blessed plan decision, verify getent after
-  switch); ssh vps->cyphy.kz vs ping vps->tailnet quirk (already spec-documented).
-  DEFERRED real-box (runbook): nix eval/flake check + switch on latitude5520; hosts apply on
-  vps(root)/Windows(admin). NO fix wave needed. Proceeding to finishing-a-development-branch.
-FINISH: user chose "merge locally" (option 1). Reconciled first: a subagent had run `git pull`
-  on main creating merge f280060 (parent1 a98e58f spec+plan, parent2 origin/main b43f825 =
-  winget sets + practices-doc, disjoint from feature files). Merged feat/ssh-over-tailnet into
-  main --no-ff = b319eef (clean, feature files disjoint from origin's 2 commits). Post-merge
-  smoke GREEN (4 machines tailnet+hosts-role; ps1 BOM EF BB BF). Deleted branch (was dda5e30).
-  main AHEAD of origin/main by 12, NOT pushed (option 1 = local merge; push is user's call).
-  Real-box runbook still pending. DONE.
+Task 1: complete (commit 0c5feb3, review clean — Spec ✅, Approved, no Critical/Important).
+  Pure 4-line key rename (4+/4-, fleet.json only); every nested field (mesh incl.
+  peerName/ip, tailnet.ip, ssh.*, roles, detect.hostname) byte-identical, reviewer
+  cross-checked via diff context. Implementer used PowerShell (not jq/WSL) for verify —
+  same check, fine. Controller closed both reviewer ⚠️: branch feat/fleet-rename-labels
+  confirmed (HEAD on it); Step 4 grep re-run by controller = clean (no literal old-key
+  lookups in modules/).
+Task 2: complete (commits 7a9c266 + fix 3064d7a, review clean — Spec ✅, Approved, no
+  findings). Full-label rename latitude5520->latitude: flake.nix 4 attr sites,
+  hosts/ dir git mv, agents/hosts memory-file git mv (100% similarity), specialArg
+  ->latitude, justfile nixos_attr var + all 7 flake-attr refs (6 nixos-rebuild + iso).
+  networking.hostName stays latitude5520 (reviewer confirmed unchanged, line 33). PLAN
+  GAP the implementer caught: `just iso` recipe (justfile:281) referenced
+  nixosConfigurations.{{hostname}} — fixed in 3064d7a to {{nixos_attr}} + ssh.nix:3
+  comment example latitude5520->latitude. grep {{hostname}} justfile now empty. nix
+  flake check DEFERRED to latitude (PR pre-merge gate). fleet-hosts.nix comment left
+  (deleted in Layer 3).
+FINAL REVIEW (opus, 196e477..3064d7a): Ready to merge = NO (1 Important) initially.
+  Rename proven consistent + AWG-safe + OS identity intact. CAUGHT a whole-branch miss
+  both the plan and per-task reviews missed: scripts/quick-check.sh (the `just quick`
+  gate) hardcoded hosts/latitude5520/nixos paths (L21,22) + .#nixosConfigurations.
+  latitude5520 dry-build attr (L57) -> `just quick` breaks. Fixed in e3c12f9 (+ 2 Minor
+  comment fixes: justfile:335 --machine vps->hub; configuration.nix:83 hosts.latitude5520
+  ->latitude). Controller re-verified repo-wide: only intended latitude5520 refs remain
+  (detect.hostname, networking.hostName, nixos_attr comment, 2 deliberate comments).
+  Predicted nix gate GREEN on latitude. Branch range 196e477..e3c12f9 (4 commits).

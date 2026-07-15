@@ -4,7 +4,7 @@
       "platform": "nixos",
       "mesh": { "ip": "10.0.0.8", "role": "member", "peerName": "nix-lat5520" },
       "tailnet": { "ip": "100.64.0.2" },
-      "roles": ["base", "mesh-member", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client", "hosts"],
+      "roles": ["base", "mesh-member", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client"],
       "detect": { "hostname": "latitude5520" }
     },
     "desktop": {
@@ -12,7 +12,7 @@
       "mesh": { "ip": "10.0.0.6", "role": "member", "peerName": "me-g614jv" },
       "tailnet": { "ip": "100.64.0.4" },
       "ssh": { "user": "methe" },
-      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "repos", "hosts"],
+      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "repos"],
       "detect": { "hostname": "g614jv" }
     },
     "server": {
@@ -20,7 +20,7 @@
       "mesh": { "ip": "10.0.0.2", "role": "member", "peerName": "wg0-homeserver" },
       "tailnet": { "ip": "100.64.0.3" },
       "ssh": { "user": "methe" },
-      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client", "hosts"],
+      "roles": ["base", "mesh-member", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client"],
       "detect": { "hostname": "methe-server" }
     },
     "hub": {
@@ -28,7 +28,7 @@
       "mesh": { "ip": "10.0.0.1", "role": "hub", "managePeers": "/home/debian/vps/vps/manage-peers.sh" },
       "tailnet": { "ip": "100.64.0.1" },
       "ssh": { "user": "debian", "host": "cyphy.kz" },
-      "roles": ["base", "mesh-hub", "ssh-server", "agents", "dotfiles", "backup-client", "hosts"],
+      "roles": ["base", "mesh-hub", "ssh-server", "agents", "dotfiles", "backup-client"],
       "detect": { "hostname": "27608" }
     }
   }

@@ -7,11 +7,13 @@
 #
 # The per-host blocks are GENERATED from fleet.json (via mesh-vpn-params.nix) —
 # one block per fleet member, so adding/removing a machine or changing its IP is
-# a one-line fleet.json edit. HostName keys on mesh.role: the hub (vps) points at
-# its public domain (cyphy.kz) so managing it never depends on the tunnel/tailnet
-# it hosts; every other member points at its TAILNET IP (fleet.json tailnet.ip).
-# The old AmneziaWG mesh IPs (mesh.ip) are no longer used for SSH — the fleet's
-# SSH transport is the Headscale tailnet.
+# a one-line fleet.json edit. HostName now comes from MagicDNS (Headscale, suffix
+# gg.ez), which resolves every fleet member's bare name fleet-wide — so no
+# per-box HostName is emitted here, EXCEPT the hub (vps), which points at its
+# public domain (cyphy.kz) so managing it never depends on the tunnel/tailnet
+# it hosts. A User override is only emitted when a machine's fleet.json ssh.user
+# differs from the default `me`. The old AmneziaWG mesh IPs (mesh.ip) and the
+# tailnet IPs formerly used here are no longer needed for SSH.
 #
 # Uses the current `programs.ssh.settings` API (upstream OpenSSH directive names
 # directly), NOT the deprecated `matchBlocks`/`extraOptions`. `enableDefaultConfig`
@@ -22,14 +24,18 @@
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
 _: let
   params = import ../system/mesh-vpn-params.nix;
-  mkBlock = _name: m: {
-    HostName =
+  mkBlock = _name: m:
+    (
       if m.mesh.role == "hub"
-      then params.endpoint # e.g. cyphy.kz — hub SSH must not depend on the transport it hosts
-      else m.tailnet.ip; # tailnet IP; was the dead AWG params.hosts.${name}
-    User = m.ssh.user or "me";
-    StrictHostKeyChecking = "accept-new";
-  };
+      then {HostName = params.endpoint;} # cyphy.kz — hub SSH must not depend on the transport it hosts
+      else {} # MagicDNS resolves the bare name fleet-wide
+    )
+    // (
+      if (m.ssh.user or "me") != "me"
+      then {User = m.ssh.user;}
+      else {}
+    )
+    // {StrictHostKeyChecking = "accept-new";};
 in {
   programs.ssh = {
     enable = true;
