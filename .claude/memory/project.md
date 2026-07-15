@@ -3,6 +3,15 @@
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host memory). One bullet per fact under a topical heading.
 
+## Workflow
+
+- **Sync through git (2026-07-15).** Work directly on `main` and
+  commit + push whenever something is ready — this repo is kept in sync across
+  the fleet through `main`, so don't leave finished work sitting uncommitted.
+  Branching is still used, but only for BIG work; small/ready changes go
+  straight to `main`. (Normal repo — plain `git`, not the bare-repo dotfiles
+  dance.)
+
 ## Fleet network
 
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
