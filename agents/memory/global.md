@@ -54,6 +54,20 @@ elsewhere to sync. Do NOT put secrets here.
   substituted `grep` via `Bash`. A treatment whose control never armed proves
   nothing — and reads as a clean result if you skip the control.
 
+- **I can run `just switch` / `nixos-rebuild` myself — passwordless sudo granted
+  (2026-07-15) — BUT only from a session NOT running inside Orca IDE.** On the
+  fleet's own machines the user enabled passwordless sudo so I can apply the
+  system-modifying nix flow directly (`just switch` / `just test` / `just build`)
+  and verify it myself instead of handing the rebuild back. **Caveat, verified
+  same day:** when the Claude session runs *inside Orca IDE*, Orca's per-terminal
+  user namespace sets `no_new_privs` on every child, which blocks `sudo`
+  outright regardless of sudoers — `sudo -n true` fails with "no new privileges
+  flag" and `just switch` cannot run. (Same Orca-namespace mechanism that makes
+  the root-owned nix store read as `nobody` and broke `~/.ssh/config` — see the
+  ssh.nix materialize note.) So: default to applying rebuilds myself, but if
+  `sudo -n true` fails with the no_new_privs error, I'm inside Orca — hand the
+  `just switch` to the user (or they relaunch Claude from a plain terminal).
+
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
