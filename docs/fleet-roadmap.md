@@ -60,6 +60,29 @@ this is why **UPnP/router port-mapping is NOT on the backlog**).
   <key>` into the `mesh-member` role so enrolling a box isn't manual. Mint a
   short-lived key per enrollment and expire it after (`headscale preauthkeys
   expire --id <n> --force`).
+- [ ] **Zero-touch WSL tailnet enrollment (design approved 2026-07-16).** Extend
+  `provision/tailscale-wsl.sh` (already shipped, currently env-key + manual) so a
+  WSL distro re-enrolls hands-free. Note: the *fleet itself* is manual today —
+  `services.tailscale.enable` on latitude, then a hand-pasted `tailscale up
+  --authkey` after switch (`hosts/latitude/nixos/configuration.nix:89`) — so
+  there's nothing more-automated to inherit; this builds the automation the fleet
+  lacks (the NixOS `authKeyFile` pattern, hand-rolled). **Approved design:**
+  (a) key source precedence `--authkey-file <path>` → `$HEADSCALE_AUTHKEY` → an
+  already-persisted `/etc/headscale/authkey`; persist the resolved key to
+  `/etc/headscale/authkey` `root:root 0600`; add `provision/secrets/` to
+  `.gitignore` for a local stash. (b) install a systemd **system** oneshot
+  `/etc/systemd/system/tailscale-autoconnect.service` — `After/Wants=tailscaled`,
+  `ConditionPathExists=/etc/headscale/authkey`, `Type=oneshot RemainAfterExit=true`,
+  `ExecStart=/bin/sh -c 'tailscale status --peers=false >/dev/null 2>&1 || tailscale
+  up --login-server https://cc.cyphy.kz --authkey "$(cat /etc/headscale/authkey)"
+  --hostname wsl-<distro>'`, `WantedBy=multi-user.target`; hostname baked at install
+  (system units don't see `$WSL_DISTRO_NAME`). Runs as root → no interactive sudo at
+  boot; idempotent (key consumed only on first enroll, state persists in
+  `/var/lib/tailscale`). One-time `sudo` to install is the only interactive step.
+  **Accepted tradeoff:** a reusable pre-auth key sits root-readable on disk;
+  mitigation = use a key with an expiry and rotate in Headscale. Update
+  spec/plan/README (`docs/superpowers/specs/2026-07-15-orca-serve-wsl-design.md`,
+  `docs/superpowers/plans/2026-07-15-orca-serve-wsl.md`) to match. Straight to `main`.
 - [ ] **Headscale ACLs.** The tailnet is default-open. Scope access (who can reach
   which node/port) before it widens — relatives never join this tailnet, but least
   privilege across our own boxes is cheap now.
