@@ -11,6 +11,8 @@
   zed-bin = pkgs.callPackage ./zed-bin.nix {};
   # nixpkgs jetbrains.pycharm bumped to latest upstream (it's the same tarball).
   pycharm = pkgs.callPackage ./pycharm-bin.nix {};
+  # Orca — worktree IDE for AI agents; upstream AppImage (not in nixpkgs).
+  orca = pkgs.callPackage ./orca-bin.nix {};
   # Same derivation as the system package (modules/programs/development.nix);
   # referenced here for the daemon service's ExecStart store path.
   gortex = pkgs.callPackage ../../pkgs/gortex.nix {};
@@ -39,6 +41,7 @@ in {
 
     # Development tools
     pycharm # upstream-latest override — see ./pycharm-bin.nix (nixpkgs lags)
+    orca # worktree IDE for AI agents — see ./orca-bin.nix (upstream AppImage)
     claude-code
     codex # OpenAI Codex CLI (config synced via codex.nix); attr unverified on Windows — confirm with `just check` on a Nix host
     sox # for claude /voice audio recording
