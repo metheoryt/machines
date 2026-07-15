@@ -1,8 +1,9 @@
 # homeserver
 
-A fleet peer of `g16`: **ASUS ROG G16 2023, RTX 3050 Ti**, running **Windows 11
-+ Docker Desktop (WSL2)** under the `methe` profile. Windows hostname:
-`methe-server`.
+**ASUS ROG G15 2023, RTX 3050 Ti**, running **Windows 11 + Docker Desktop
+(WSL2)** under the `methe` profile. Windows hostname: `methe-server`. A distinct
+physical machine from the ROG G16 (2024) laptop `g614jv` (whose retired NixOS
+identity was `g16`).
 
 - **What it runs** (Immich, Navidrome, Forgejo, the cyphy.kz service platform)
   is defined in the **`vps` repo**, not here. This repo owns the *machine*, not

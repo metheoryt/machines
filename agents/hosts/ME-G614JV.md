@@ -9,6 +9,19 @@ tooling, local paths, hardware quirks, per-host overrides. Do NOT put secrets
 here (this file is tracked in git).
 -->
 
+## Environment
+
+- **This box = `ME-G614JV`** — the **native Windows** hostname of the **ASUS ROG
+  G16 (2024)** laptop (model G614JV). Windows 11, Git Bash / PowerShell. Claude
+  Code reads `C:\Users\methe\.claude`. Distinct machine from the ROG G15 2023
+  server `methe-server`.
+- **Sibling identity: `g614jv`** — the SAME physical laptop seen from inside
+  **WSL (Ubuntu)** (mesh peer `me-g614jv`, mesh IP `.6`). See `hosts/g614jv.md`.
+  The hostname disambiguates: `ME-G614JV` = native Windows, `g614jv` = inside WSL.
+- **Retired former identity: `g16`** — this laptop once ran NixOS as `g16`
+  (retired/removed; Windows-only now). Machine-config `hosts/g16/` is kept in
+  `machines` (`windows/` only); old `hosts/g16.md` agent memory was deleted.
+
 ## Notes
 
 ## Claude config bootstrap

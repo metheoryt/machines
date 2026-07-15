@@ -68,6 +68,42 @@ elsewhere to sync. Do NOT put secrets here.
   `sudo -n true` fails with the no_new_privs error, I'm inside Orca — hand the
   `just switch` to the user (or they relaunch Claude from a plain terminal).
 
+## Orca IDE — detecting the session & what it means (empirical, probed 2026-07-15)
+
+- **Sessions may be launched from the Orca IDE instead of a bare terminal — this
+  is cross-machine and cross-project (Orca runs many projects on many hosts).**
+  Same shell/tools/`~/.claude` config/hooks/memory/capabilities as a terminal
+  session; the difference is purely an IDE control-plane wrapper. How to tell
+  you're in Orca, and what to keep in mind if you are:
+  - **Detect:** `TERM_PROGRAM=Orca` (+ `ORCA_APP_VERSION`) and a family of
+    `ORCA_*` env vars. Absent → treat as a plain terminal session.
+  - **You are a supervised child agent, not a keyboard-attached standalone:**
+    `CLAUDE_CODE_CHILD_SESSION=1` + `AI_AGENT=claude-code_<ver>_agent` are stamped
+    by the outer orchestrator (absent in top-level terminal `claude`).
+  - **A hook/control channel back to the IDE is open:** `ORCA_AGENT_HOOK_*`
+    (an `endpoint` + `PORT` + `TOKEN`). Orca can observe/intercept lifecycle and
+    tool events through it; a terminal session resolves hooks purely via
+    `~/.claude`. Assume IDE-side supervision of what the session does.
+  - **The session is bound to IDE UI objects,** not just a `$PWD`: `ORCA_TAB_ID`
+    / `ORCA_PANE_KEY` / `ORCA_TERMINAL_HANDLE` / `ORCA_WORKSPACE_ID` /
+    `ORCA_WORKTREE_ID` (workspace/worktree IDs are `<uuid>::<repo-path>` — this
+    reveals which host + repo the pane maps to).
+  - **Orca is a multi-runtime agent host** (could run the pane on a different
+    runtime): also wires Codex (`ORCA_CODEX_HOME`), opencode
+    (`ORCA_OPENCODE_CONFIG_DIR`), pi (`ORCA_PI_SOURCE_AGENT_DIR`), each with its
+    own config home under the Orca user-data dir (`ORCA_USER_DATA_PATH`, e.g.
+    `…\AppData\Roaming\orca` on Windows).
+  - **Orca presets some session params** you'd otherwise pick yourself:
+    `CLAUDE_EFFORT` (seen `high`) and `GIT_EDITOR=true` (so a bare `git commit`
+    with no `-m` won't open an editor and block the agent).
+  - **Consequence — no privilege escalation inside Orca:** its per-terminal user
+    namespace sets `no_new_privs`, so `sudo` fails regardless of sudoers
+    (`sudo -n true` → "no new privileges flag"). On NixOS this blocks
+    `just switch`/`nixos-rebuild`, and the root-owned nix store reads as
+    `nobody`. See the passwordless-sudo note above; detect with `sudo -n true`.
+  - Which host you're on is still the per-host memory's job (hostname / installed
+    tooling / paths); this note only tells you *whether the session is Orca-wrapped*.
+
 ## Repo layout (WSL boxes)
 
 - **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are

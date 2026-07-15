@@ -9,6 +9,12 @@ here: installed tooling, local paths, hardware quirks, per-host overrides. Do NO
 put secrets here (this file is tracked in git).
 -->
 
+## Environment
+
+- **This box = `latitude5520`** (fleet label `latitude`): **Dell Latitude
+  5520**, Intel Tiger Lake, **NixOS**. Standalone — no Windows sibling identity.
+  Mesh peer `nix-lat5520`, mesh IP `.8`.
+
 ## Notes
 
 ## Mesh / secrets (paths only — never the key)
