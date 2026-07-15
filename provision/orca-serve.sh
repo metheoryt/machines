@@ -85,9 +85,16 @@ else
 fi
 chmod +x "$AI"
 
-info "Extracting CLI (--appimage-extract)…"
-rm -rf "$ORCA_DIR/squashfs-root"
-( cd "$ORCA_DIR" && "$AI" --appimage-extract >/dev/null 2>&1 ) || die "--appimage-extract failed."
+# Skip re-extract if already unpacked — the live orca-serve.service execs through a
+# symlink INTO squashfs-root, so a blind rm -rf would clobber the running server on
+# a re-run. rm -rf ~/.local/opt/orca/squashfs-root to force a re-extract/upgrade.
+if [ -x "$ORCA_DIR/squashfs-root/AppRun" ]; then
+  ok "Orca already extracted (rm -rf $ORCA_DIR/squashfs-root to re-extract/upgrade)"
+else
+  info "Extracting CLI (--appimage-extract)…"
+  rm -rf "$ORCA_DIR/squashfs-root"
+  ( cd "$ORCA_DIR" && "$AI" --appimage-extract >/dev/null 2>&1 ) || die "--appimage-extract failed."
+fi
 
 # ── Expose the orca CLI on PATH ───────────────────────────────────────────────
 CLI="$(find "$ORCA_DIR/squashfs-root" -type f -name orca 2>/dev/null | head -1)"
@@ -114,7 +121,7 @@ elif have xvfb-run && xvfb-run -a orca --help >/dev/null 2>&1; then
   NEED_XVFB=1
   warn "orca needs a virtual display — serve will run under xvfb-run"
 else
-  warn "orca --help failed. Check libs:  ldd \"$CLI\" | grep 'not found'  — or run once under WSLg."
+  warn "orca --help failed. Check libs:  ldd \"\$(command -v orca)\" | grep 'not found'  — or run once under WSLg."
 fi
 
 # ── Serve wrapper (computes pairing address fresh at each start) ──────────────
@@ -140,7 +147,8 @@ if systemctl --user show-environment >/dev/null 2>&1; then
   cat > "$UD/orca-serve.service" <<'UNIT'
 [Unit]
 Description=Orca headless runtime server (tailnet, port 6768)
-After=network-online.target
+# Retry forever so a missing Electron lib self-heals once installed (no start-limit).
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -168,5 +176,5 @@ cat <<EOF
 Orca server ready on this distro.
   • Pairing URL (SECRET — do not commit):  journalctl --user -u orca-serve -f
   • Reach it at:  ${TSIP}:6768   (or <node>.fleet.mesh:6768 with MagicDNS)
-  • Pair a client:  orca environment add --name $(uname -n) --pairing-code '<orca://pair?…>'
+  • Pair a client:  orca environment add --name <distro> --pairing-code '<orca://pair?…>'
 EOF

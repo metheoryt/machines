@@ -156,7 +156,7 @@ Run **both scripts inside each distro**, in order:
     export HEADSCALE_AUTHKEY='<reusable pre-auth key, headscale user fleet>'
     bash ~/machines/provision/tailscale-wsl.sh          # → wsl-<distro> @ 100.64.x.y
 
-    # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger)
+    # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger; also needs sudo)
     bash ~/machines/provision/orca-serve.sh
 
 Then read the pairing URL and add it on the client:
