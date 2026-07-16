@@ -2,6 +2,8 @@
 
 Date: 2026-07-15 (zero-touch re-enroll added 2026-07-16)
 Status: implemented; zero-touch re-enroll shipped 2026-07-16
+Follow-up: self-service `--enroll` (SSH-mint a key) designed 2026-07-17 —
+`docs/superpowers/specs/2026-07-17-tailscale-wsl-self-enroll-design.md`
 Topic: serve one Orca runtime per WSL distro, each a distinct Headscale node,
 reachable over the tailnet from the Windows Orca client / mobile.
 
