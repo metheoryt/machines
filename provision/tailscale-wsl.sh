@@ -44,7 +44,8 @@ and a boot-time systemd oneshot (tailscale-autoconnect.service) re-enrolls
 hands-free after a rebuild/logout.
 
   --enroll                mint a fresh reusable key over SSH to the control
-                          server, then enroll (needs SSH access to the VPS)
+                          server, then enroll (needs SSH + passwordless sudo
+                          on the VPS)
   --authkey-file <path>   read the reusable pre-auth key from <path>
   --hostname <name>       node name (else $ORCA_TS_HOSTNAME, else prompt on a
                           TTY, else wsl-<distro>)
@@ -86,16 +87,17 @@ ts_extract_key_json() {
 }
 
 # Mint a fresh reusable + expiring pre-auth key from the control server over
-# SSH (headscale is native there and the ssh user runs it without sudo). Echoes
-# the key on success; returns non-zero on ssh/headscale failure. Overridable via
-# $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
+# SSH. headscale is native there but its socket is group-restricted, so the mint
+# runs via `sudo headscale` — the SSH user needs passwordless sudo on the control
+# server. Echoes the key on success; returns non-zero on ssh/headscale failure.
+# Overridable via $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
 ts_mint_key() {
   local target="${HEADSCALE_SSH:-debian@cyphy.kz}"
   local uid="${HEADSCALE_USER_ID:-1}"
   local ttl="${HEADSCALE_KEY_EXPIRY:-2160h}"
   local json
   json="$(ssh -o ConnectTimeout=15 "$target" \
-    "headscale preauthkeys create --user $uid --reusable --expiration $ttl -o json")" || return 1
+    "sudo headscale preauthkeys create --user $uid --reusable --expiration $ttl -o json")" || return 1
   ts_extract_key_json "$json"
 }
 
