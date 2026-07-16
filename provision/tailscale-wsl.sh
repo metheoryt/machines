@@ -43,12 +43,16 @@ persisted /etc/headscale/authkey. The resolved key is persisted (root:root 0600)
 and a boot-time systemd oneshot (tailscale-autoconnect.service) re-enrolls
 hands-free after a rebuild/logout.
 
+  --enroll                mint a fresh reusable key over SSH to the control
+                          server, then enroll (needs SSH access to the VPS)
   --authkey-file <path>   read the reusable pre-auth key from <path>
   --hostname <name>       node name (else $ORCA_TS_HOSTNAME, else prompt on a
                           TTY, else wsl-<distro>)
   -h, --help              show this help
 
-Env: HEADSCALE_AUTHKEY (key), ORCA_TS_HOSTNAME (node name; default wsl-<distro>).
+Env: HEADSCALE_AUTHKEY (key), ORCA_TS_HOSTNAME (node name; default wsl-<distro>),
+     HEADSCALE_SSH (default debian@cyphy.kz), HEADSCALE_USER_ID (default 1),
+     HEADSCALE_KEY_EXPIRY (default 2160h) — the last three drive --enroll.
 EOF
 }
 
@@ -81,14 +85,30 @@ ts_extract_key_json() {
     | sed -n -E 's/.*"key"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p'
 }
 
+# Mint a fresh reusable + expiring pre-auth key from the control server over
+# SSH (headscale is native there and the ssh user runs it without sudo). Echoes
+# the key on success; returns non-zero on ssh/headscale failure. Overridable via
+# $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
+ts_mint_key() {
+  local target="${HEADSCALE_SSH:-debian@cyphy.kz}"
+  local uid="${HEADSCALE_USER_ID:-1}"
+  local ttl="${HEADSCALE_KEY_EXPIRY:-2160h}"
+  local json
+  json="$(ssh -o ConnectTimeout=15 "$target" \
+    "headscale preauthkeys create --user $uid --reusable --expiration $ttl -o json")" || return 1
+  ts_extract_key_json "$json"
+}
+
 # Allow sourcing just the functions (for tests) without running main.
 [ "${TS_WSL_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 AUTHKEY_FILE=""
 HOSTNAME_ARG=""
+ENROLL=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --enroll) ENROLL=1; shift ;;
     --authkey-file) AUTHKEY_FILE="${2:-}"; [ -n "$AUTHKEY_FILE" ] || die "--authkey-file needs a path."; shift 2 ;;
     --authkey-file=*) AUTHKEY_FILE="${1#*=}"; shift ;;
     --hostname) HOSTNAME_ARG="${2:-}"; [ -n "$HOSTNAME_ARG" ] || die "--hostname needs a name."; shift 2 ;;
@@ -142,10 +162,17 @@ fi
 STORE_KEY=""
 [ -e "$AUTHKEY_STORE" ] && STORE_KEY="$($SUDO cat "$AUTHKEY_STORE" 2>/dev/null | tr -d '[:space:]')"
 
-picked="$(ts_pick_key "$FILE_KEY" "${HEADSCALE_AUTHKEY:-}" "$STORE_KEY")"
-tab=$'\t'
-KEY_SRC="${picked%%"$tab"*}"
-AUTHKEY="${picked#*"$tab"}"
+if [ "$ENROLL" = 1 ]; then
+  info "Minting a reusable key via ${HEADSCALE_SSH:-debian@cyphy.kz} (user ${HEADSCALE_USER_ID:-1}, expiry ${HEADSCALE_KEY_EXPIRY:-2160h})…"
+  AUTHKEY="$(ts_mint_key)" || die "mint failed — check \$HEADSCALE_SSH and your SSH access to the control server."
+  [ -n "$AUTHKEY" ] || die "mint returned no key — check 'headscale preauthkeys create' on the control server."
+  KEY_SRC="enroll"
+else
+  picked="$(ts_pick_key "$FILE_KEY" "${HEADSCALE_AUTHKEY:-}" "$STORE_KEY")"
+  tab=$'\t'
+  KEY_SRC="${picked%%"$tab"*}"
+  AUTHKEY="${picked#*"$tab"}"
+fi
 [ -n "$KEY_SRC" ] && info "Pre-auth key source: $KEY_SRC"
 
 # Persist a freshly-supplied key (from file/env) so the autoconnect unit and
