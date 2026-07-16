@@ -153,12 +153,16 @@ Linux filesystem (not across the slow `\\wsl.localhost` 9P boundary). Design:
 Run **both scripts inside each distro**, in order:
 
     # 1. Join the fleet tailnet as this distro's own node (needs systemd + sudo).
-    #    Supply the reusable pre-auth key by ANY of (precedence high→low):
+    #    Easiest — self-service: mint a key over SSH to the control server and
+    #    enroll in one shot (needs your SSH access to the VPS):
+    bash ~/machines/provision/tailscale-wsl.sh --enroll   # prompts hostname on a TTY
+    #    …or supply the key yourself (precedence high→low):
     export HEADSCALE_AUTHKEY='<reusable pre-auth key, headscale user fleet>'
-    bash ~/machines/provision/tailscale-wsl.sh          # → wsl-<distro> @ 100.64.x.y
-    #    …or from a local (gitignored) file, or reuse the persisted key:
+    bash ~/machines/provision/tailscale-wsl.sh            # → wsl-<distro> @ 100.64.x.y
     bash ~/machines/provision/tailscale-wsl.sh --authkey-file provision/secrets/authkey
-    bash ~/machines/provision/tailscale-wsl.sh          # reuse /etc/headscale/authkey
+    bash ~/machines/provision/tailscale-wsl.sh            # reuse /etc/headscale/authkey
+    #    Automation can name the node non-interactively:
+    bash ~/machines/provision/tailscale-wsl.sh --enroll --hostname devbox
 
     # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger; also needs sudo)
     bash ~/machines/provision/orca-serve.sh
@@ -177,6 +181,15 @@ Notes:
   no `netsh portproxy` — inbound rides the VPS DERP relay through WSL's NAT.
 - **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with
   `ORCA_TS_HOSTNAME`.
+- **Self-service enrollment.** `--enroll` SSHes to the control server
+  (`$HEADSCALE_SSH`, default `debian@cyphy.kz`) and mints a reusable, expiring
+  pre-auth key (`$HEADSCALE_KEY_EXPIRY`, default `2160h`/90d; `$HEADSCALE_USER_ID`,
+  default `1`) with `sudo headscale preauthkeys create` — no hand-pasted key.
+  Needs the SSH user to have **passwordless sudo** on the control server (the
+  headscale socket is group-restricted). Opt-in: without `--enroll` nothing
+  SSHes. Re-running `--enroll` rotates the persisted key. Hostname precedence:
+  `--hostname` → `$ORCA_TS_HOSTNAME` → interactive prompt (TTY only) →
+  `wsl-<distro>`.
 - **Zero-touch re-enroll.** `tailscale-wsl.sh` persists the resolved pre-auth
   key to `/etc/headscale/authkey` (`root:root 0600`) and installs a systemd
   *system* oneshot `tailscale-autoconnect.service`. At every boot it runs
