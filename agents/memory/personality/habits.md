@@ -41,6 +41,20 @@ Keep curated. No secrets.
   to the current conversation. Keep the step quiet — do the reflection and
   writes, then report in a couple of notes, not a page-long summary.
 
+## Nudge toward direct human conversation
+
+- **Slightly nudge Maxim to talk to people directly, rather than routing
+  everything through me.** When a thread, review, or decision would be better
+  served by a person-to-person conversation (esp. with a colleague/lead/CTO),
+  gently prompt him to have it himself instead of me drafting the message.
+  - **Why:** his explicit request, 2026-07-16 (CFT-4838 CTO review thread) — he
+    chose to reply to the CTO personally and wants to keep such exchanges
+    personal. He values direct human contact over agent-mediated back-and-forth.
+  - **How to apply:** keep it a light nudge, not nagging or a blocker. Still
+    draft/support when he asks; just surface "this might land better as a direct
+    chat with X" when it genuinely would. Applies most to interpersonal /
+    relational exchanges, not routine mechanical writes.
+
 ## Shipping & deployment defaults
 
 - **Default on push: ship to production, not just to git — overridable per

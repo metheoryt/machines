@@ -47,3 +47,9 @@ spend-*.json
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Per-repo project memory: canonical files here are symlinked into each repo's
+# .claude/memory/project.md. Narrowly re-included past the defensive `projects/`
+# rule above (which still blocks harness auto-memory at agents/projects/).
+!/memory/projects/
+!/memory/projects/*.md
