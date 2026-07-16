@@ -32,6 +32,19 @@ global + per-host memory). One bullet per fact under a topical heading.
   reusable pre-auth key. Installer `~/my/vps/vps/setup-headscale.sh` +
   `vps/headscale/config.yaml` (sanitized, no secrets). Enroll a node:
   `tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>`.
+- **Orca headless serve on WSL — hard-won facts (2026-07-17).** (a) Orca ships
+  NO `orca` binary on Linux; the only `orca`-named files in the AppImage are
+  per-OS launcher *scripts* (darwin/win32). The real CLI is `out/cli/index.js`
+  run through the bundled Electron binary in Node mode:
+  `ELECTRON_RUN_AS_NODE=1 <squashfs-root>/orca-ide <…>/out/cli/index.js "$@"`
+  (VS Code launcher model). Runs fully headless — no X/xvfb. `orca-serve.sh`
+  writes exactly this wrapper to `~/.local/bin/orca`. (b) WSL's per-user systemd
+  manager (`user@UID`) commonly fails to start ("Failed to spawn executor:
+  Device or resource busy" → result 'resources'), so user units + linger don't
+  work; `orca-serve.sh` falls back to a SYSTEM unit (`User=me`, After tailscaled)
+  — needs sudo. (c) Orca's pairing code (deviceToken + keypair) is PERSISTED in
+  `~/.config/orca` and STABLE across serve restarts, so a `Restart=`/reboot
+  service keeps the client paired. Node `desktop-wsl-ubuntu-26-04` = `100.64.0.6`.
 - **`headscale` admin commands on the VPS need `sudo` (probed 2026-07-17).**
   The control socket `/var/run/headscale/headscale.sock` is `headscale:headscale`
   mode `0770` and `debian` is NOT in the `headscale` group, so socket-touching
