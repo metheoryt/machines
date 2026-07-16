@@ -109,6 +109,7 @@ CLIJS="$(find "$APPDIR/resources" -type f -path '*/cli/index.js' 2>/dev/null | h
 ELECTRON="$APPDIR/orca-ide"
 if [ ! -x "$ELECTRON" ]; then
   # Fall back to whatever binary AppRun launches: BIN="$APPDIR/<name>".
+  # shellcheck disable=SC2016  # the literal $APPDIR is matched in AppRun, not expanded
   binname="$(sed -n 's/^BIN="\$APPDIR\/\(.*\)"$/\1/p' "$APPDIR/AppRun" 2>/dev/null | head -1)"
   [ -n "$binname" ] && ELECTRON="$APPDIR/$binname"
 fi
@@ -156,7 +157,14 @@ EOF
 chmod +x "$SERVE"
 ok "serve wrapper → ~/.local/bin/orca-serve-start"
 
-# ── Autostart via systemd user unit + linger ──────────────────────────────────
+# ── Autostart: systemd user unit (+linger), else a system unit ────────────────
+# Preferred: a user unit + linger (mirrors linux.sh's git-autofetch). But WSL's
+# per-user manager (user@UID) frequently fails to start ("Failed to spawn
+# executor: Device or resource busy" → result 'resources'), leaving no --user
+# bus. Fall back to a SYSTEM unit running serve as this user — boot-durable +
+# auto-restart, no linger needed (the system manager is healthy there, same as
+# tailscaled / tailscale-autoconnect).
+JOURNAL="journalctl -u orca-serve -f"   # overwritten to --user form on that path
 if systemctl --user show-environment >/dev/null 2>&1; then
   UD="$HOME/.config/systemd/user"; mkdir -p "$UD"
   cat > "$UD/orca-serve.service" <<'UNIT'
@@ -177,19 +185,50 @@ UNIT
   systemctl --user daemon-reload
   if systemctl --user enable --now orca-serve.service >/dev/null 2>&1; then
     $SUDO loginctl enable-linger "$(id -un)" >/dev/null 2>&1 || true
-    ok "orca-serve.service enabled (autostart + linger)"
+    JOURNAL="journalctl --user -u orca-serve -f"
+    ok "orca-serve.service enabled (user unit + linger)"
   else
-    warn "could not enable orca-serve.service — start manually: orca-serve-start"
+    warn "could not enable the user orca-serve.service — start manually: orca-serve-start"
+  fi
+elif [ "$(id -u)" = 0 ] || [ -n "$SUDO" ]; then
+  # No usable --user manager (typical in WSL). Install a SYSTEM unit instead.
+  SVC_USER="$(id -un)"
+  # A stale hand-started serve would hold :6768 and block the unit's bind.
+  pkill -f 'out/cli/index.js serve' 2>/dev/null || true
+  $SUDO tee /etc/systemd/system/orca-serve.service >/dev/null <<UNIT
+[Unit]
+Description=Orca headless runtime server (tailnet, port 6768)
+After=tailscaled.service network-online.target
+Wants=network-online.target
+# Retry forever so a missing Electron lib self-heals once installed.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=$SVC_USER
+ExecStart=$HOME/.local/bin/orca-serve-start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  $SUDO systemctl daemon-reload
+  if $SUDO systemctl enable --now orca-serve.service >/dev/null 2>&1; then
+    ok "orca-serve.service enabled (system unit, User=$SVC_USER — no user manager needed)"
+  else
+    warn "could not enable the system orca-serve.service — start manually: orca-serve-start"
   fi
 else
-  warn "no systemd user manager — start manually: orca-serve-start (or under tmux/nohup). Enable systemd in /etc/wsl.conf for autostart."
+  warn "no systemd user manager and not root — start manually: orca-serve-start (or under tmux/nohup)."
+  JOURNAL="(run orca-serve-start in the foreground to see the pairing URL)"
 fi
 
 # ── Next steps ────────────────────────────────────────────────────────────────
 cat <<EOF
 
 Orca server ready on this distro.
-  • Pairing URL (SECRET — do not commit):  journalctl --user -u orca-serve -f
+  • Pairing URL (SECRET — do not commit):  ${JOURNAL}
   • Reach it at:  ${TSIP}:6768   (or <node>.fleet.mesh:6768 with MagicDNS)
   • Pair a client:  orca environment add --name <distro> --pairing-code '<orca://pair?…>'
 EOF
