@@ -253,18 +253,25 @@ In `provision/tailscale-wsl.sh`, insert directly AFTER the `ts_extract_key_json`
 
 ```bash
 # Mint a fresh reusable + expiring pre-auth key from the control server over
-# SSH (headscale is native there and the ssh user runs it without sudo). Echoes
-# the key on success; returns non-zero on ssh/headscale failure. Overridable via
-# $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
+# SSH. headscale is native there but its socket is group-restricted, so the mint
+# runs via `sudo headscale` — the SSH user needs passwordless sudo on the control
+# server. Echoes the key on success; returns non-zero on ssh/headscale failure.
+# Overridable via $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
 ts_mint_key() {
   local target="${HEADSCALE_SSH:-debian@cyphy.kz}"
   local uid="${HEADSCALE_USER_ID:-1}"
   local ttl="${HEADSCALE_KEY_EXPIRY:-2160h}"
   local json
   json="$(ssh -o ConnectTimeout=15 "$target" \
-    "headscale preauthkeys create --user $uid --reusable --expiration $ttl -o json")" || return 1
+    "sudo headscale preauthkeys create --user $uid --reusable --expiration $ttl -o json")" || return 1
   ts_extract_key_json "$json"
 }
+
+# NOTE (corrected 2026-07-17 during execution): the mint MUST use `sudo
+# headscale`. The control socket is headscale:headscale 0770 and the SSH user
+# (debian) is not in that group, so a bare `headscale …` fails permission
+# denied. debian has passwordless sudo (verified over SSH). --enroll therefore
+# requires passwordless sudo on the control server; usage() documents it.
 ```
 
 - [ ] **Step 2: Add `--enroll` to the arg parser**
@@ -395,21 +402,22 @@ Expected: help text lists `--enroll`, `--hostname`, `--authkey-file`, and the `H
 
 - [ ] **Step 7: [VPS] mint probe (real control server)**
 
-Run:
+Run (note `sudo` — the socket is group-restricted; the SSH user needs passwordless sudo):
 ```bash
-ssh debian@cyphy.kz 'headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json'
+ssh debian@cyphy.kz 'sudo headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json'
 ```
 Expected: a JSON object containing `"key":"…"`. Sanity-check the extractor against it:
 ```bash
 cd /home/me/machines
-out="$(ssh debian@cyphy.kz 'headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json')"
+out="$(ssh debian@cyphy.kz 'sudo headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json')"
 TS_WSL_LIB_ONLY=1 bash -c 'source provision/tailscale-wsl.sh; ts_extract_key_json "$1"' _ "$out"
 ```
-Expected: prints the same key string the JSON carried. **Then expire the two probe keys** so they don't linger:
+Expected: prints the same key string the JSON carried. **Then expire the probe key** so it doesn't linger (`expire` takes `-i/--id` only — no `--user`; `list` takes neither):
 ```bash
-ssh debian@cyphy.kz 'headscale preauthkeys list --user 1'   # note the IDs just created
-ssh debian@cyphy.kz 'headscale preauthkeys expire --id <n>' # for each probe key
+ssh debian@cyphy.kz 'sudo headscale preauthkeys list'          # note the ID just created
+ssh debian@cyphy.kz 'sudo headscale preauthkeys expire --id <n> --force'
 ```
+**Ran 2026-07-17 (controller):** bare `headscale` failed `permission denied` → switched to `sudo`; minted id=4, `ts_extract_key_json` extracted the key correctly, expired id=4. Discovery drove the sudo fix commit.
 
 - [ ] **Step 8: [WSL] end-to-end on a real distro**
 
@@ -487,10 +495,12 @@ In the `Notes:` list of the same section, insert this bullet immediately BEFORE 
 - **Self-service enrollment.** `--enroll` SSHes to the control server
   (`$HEADSCALE_SSH`, default `debian@cyphy.kz`) and mints a reusable, expiring
   pre-auth key (`$HEADSCALE_KEY_EXPIRY`, default `2160h`/90d; `$HEADSCALE_USER_ID`,
-  default `1`) with `headscale preauthkeys create` — no hand-pasted key. Opt-in:
-  without `--enroll` nothing SSHes. Re-running `--enroll` rotates the persisted
-  key. Hostname precedence: `--hostname` → `$ORCA_TS_HOSTNAME` → interactive
-  prompt (TTY only) → `wsl-<distro>`.
+  default `1`) with `sudo headscale preauthkeys create` — no hand-pasted key.
+  Needs the SSH user to have **passwordless sudo** on the control server (the
+  headscale socket is group-restricted). Opt-in: without `--enroll` nothing
+  SSHes. Re-running `--enroll` rotates the persisted key. Hostname precedence:
+  `--hostname` → `$ORCA_TS_HOSTNAME` → interactive prompt (TTY only) →
+  `wsl-<distro>`.
 ```
 
 - [ ] **Step 3: Verify the section renders**

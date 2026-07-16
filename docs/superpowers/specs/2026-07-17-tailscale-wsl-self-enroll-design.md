@@ -18,8 +18,16 @@ enroll → persist → boot-autoconnect flow, fully hands-free.
 ## Control-server facts (probed 2026-07-17, read-only SSH to `debian@cyphy.kz`)
 
 - Headscale is a **native binary** at `/usr/bin/headscale`, **v0.29.2**. Not
-  Docker. The `debian` user runs `headscale` directly — **no sudo needed**.
-- User `fleet` = **ID 1** (confirmed via `headscale users list`).
+  Docker.
+- **Socket-touching `headscale` commands need `sudo`** (corrected 2026-07-17
+  after a live mint probe). The control socket
+  (`/var/run/headscale/headscale.sock`) is `headscale:headscale` mode `0770`
+  and the SSH user `debian` is **not** in the `headscale` group, so a bare
+  `headscale preauthkeys create` fails `permission denied`. `debian` has
+  **passwordless sudo**, and `sudo headscale …` runs non-interactively over
+  SSH — so `--enroll` requires the SSH user to have passwordless sudo on the
+  control server. (`--help` and other non-socket subcommands work without it.)
+- User `fleet` = **ID 1** (confirmed via `sudo headscale users list`).
 - `headscale preauthkeys create` flags (v0.29.2):
   `-u, --user uint` — **the numeric user ID, NOT the name** (so `--user 1`, not
   `--user fleet`). `--reusable`, `--ephemeral`, `-e/--expiration <human>`
@@ -34,7 +42,7 @@ box without VPS SSH access is unaffected unless it asks to mint).
 Flow when `--enroll` is set:
 
 1. **Mint** over SSH:
-   `ssh "$HEADSCALE_SSH" 'headscale preauthkeys create --user <ID> --reusable --expiration <TTL> -o json'`
+   `ssh "$HEADSCALE_SSH" 'sudo headscale preauthkeys create --user <ID> --reusable --expiration <TTL> -o json'`
    - `$HEADSCALE_SSH` — SSH target, default `debian@cyphy.kz` (the
      `manage-peers.sh` target). Normal SSH auth (operator's key/agent); a
      `ConnectTimeout` guards a dead host; **not** `BatchMode` (a key passphrase
@@ -92,7 +100,7 @@ interactive prompt (TTY only) > computed default `wsl-<sanitized $WSL_DISTRO_NAM
   JSON → the key; missing key → empty. Keep the existing sanitizer + `ts_pick_key`
   cases.
 - **shellcheck** clean; `bash -n` clean.
-- **[VPS] mint probe:** `ssh debian@cyphy.kz 'headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json'` returns parseable JSON; the key enrolls; expire it afterward with `headscale preauthkeys expire`.
+- **[VPS] mint probe:** `ssh debian@cyphy.kz 'sudo headscale preauthkeys create --user 1 --reusable --expiration 2160h -o json'` returns parseable JSON; the key enrolls; expire it afterward with `sudo headscale preauthkeys expire --id <n> --force` (`expire` takes `-i/--id` only — no `--user`). Ran 2026-07-17: minted id=4, `ts_extract_key_json` pulled the key correctly, expired it.
 - **[WSL] end-to-end:** `bash tailscale-wsl.sh --enroll` on a fresh distro →
   prompts hostname (TTY), mints, enrolls, persists, installs the unit; node
   appears in `headscale nodes list`. Re-run `--enroll` → rotates the persisted
@@ -106,6 +114,10 @@ interactive prompt (TTY only) > computed default `wsl-<sanitized $WSL_DISTRO_NAM
 - `--enroll` is **opt-in**; the default path makes no network calls beyond
   what shipped. SSH uses the operator's own credentials — no new secret is
   distributed to the WSL box.
+- `--enroll` needs the SSH user to have **passwordless sudo** on the control
+  server (the mint runs `sudo headscale`, since the headscale socket is
+  group-restricted). This is an operator/control-server prerequisite, not a
+  secret the WSL box holds.
 
 ## Out of scope
 

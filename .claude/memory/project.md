@@ -32,6 +32,14 @@ global + per-host memory). One bullet per fact under a topical heading.
   reusable pre-auth key. Installer `~/my/vps/vps/setup-headscale.sh` +
   `vps/headscale/config.yaml` (sanitized, no secrets). Enroll a node:
   `tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>`.
+- **`headscale` admin commands on the VPS need `sudo` (probed 2026-07-17).**
+  The control socket `/var/run/headscale/headscale.sock` is `headscale:headscale`
+  mode `0770` and `debian` is NOT in the `headscale` group, so socket-touching
+  subcommands (`preauthkeys create/list/expire`, `users list`, `nodes …`) fail
+  `permission denied` as a bare command. `debian` has **passwordless sudo**, so
+  run `sudo headscale …` (works non-interactively over SSH). `--help` and other
+  non-socket subcommands work without sudo. This is why `tailscale-wsl.sh
+  --enroll` mints via `sudo headscale preauthkeys create`.
 - Tailnet CGNAT range `100.64.0.0/10` (disjoint from AWG `10.0.0.0/24`; they
   coexist on the same boxes). Nodes: vps `100.64.0.1`, latitude `100.64.0.2`,
   homeserver `100.64.0.3`. base_domain `fleet.mesh` (MagicDNS).
