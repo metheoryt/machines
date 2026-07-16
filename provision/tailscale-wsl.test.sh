@@ -24,4 +24,17 @@ eq "$(ts_pick_key ''  'E' 'P')" $'env\tE'          'pick env second'
 eq "$(ts_pick_key ''  ''  'P')" $'persisted\tP'    'pick persisted last'
 eq "$(ts_pick_key ''  ''  '')"  $'\t'              'pick none → empty source+key'
 
+# ── ts_extract_key_json ───────────────────────────────────────────────────────
+json_line='{"id":"5","key":"abc123def456","user":{"id":"1","name":"fleet"},"reusable":true}'
+eq "$(ts_extract_key_json "$json_line")" 'abc123def456' 'extract key (single line, nested user obj)'
+
+json_pretty='{
+  "id": "5",
+  "key": "K9xYz-Token_007",
+  "reusable": true
+}'
+eq "$(ts_extract_key_json "$json_pretty")" 'K9xYz-Token_007' 'extract key (pretty/multiline)'
+
+eq "$(ts_extract_key_json '{"id":"5","reusable":true}')" '' 'extract key (missing → empty)'
+
 echo "PASS: tailscale-wsl.test.sh"

@@ -71,6 +71,14 @@ ts_pick_key() {
   else printf '\t'; fi
 }
 
+# Extract the single "key" field from headscale's JSON preauthkey output — no
+# jq dependency (the WSL box needs nothing extra installed). Tolerates
+# pretty-printed / multiline JSON. Echoes the key, or nothing if absent.
+ts_extract_key_json() {
+  printf '%s' "$1" | tr -d '\n' \
+    | sed -n -E 's/.*"key"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p'
+}
+
 # Allow sourcing just the functions (for tests) without running main.
 [ "${TS_WSL_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
