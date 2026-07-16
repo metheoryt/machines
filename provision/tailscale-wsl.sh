@@ -16,7 +16,8 @@
 # node isn't already connected — so a rebuilt/logged-out distro rejoins the
 # tailnet with no hand-pasted key.
 #
-# Idempotent; safe to re-run. Requires systemd in the distro (Ubuntu 24.04+/
+# Idempotent; safe to re-run (an --enroll re-run additionally mints a fresh
+# control-server key — a rotation, not a no-op). Requires systemd in the distro (Ubuntu 24.04+/
 # 26.04 default; else set [boot] systemd=true in /etc/wsl.conf and `wsl -t <d>`).
 #
 # Usage (inside the distro) — supply the reusable pre-auth key (headscale user
@@ -166,7 +167,7 @@ STORE_KEY=""
 
 if [ "$ENROLL" = 1 ]; then
   info "Minting a reusable key via ${HEADSCALE_SSH:-debian@cyphy.kz} (user ${HEADSCALE_USER_ID:-1}, expiry ${HEADSCALE_KEY_EXPIRY:-2160h})…"
-  AUTHKEY="$(ts_mint_key)" || die "mint failed — check \$HEADSCALE_SSH and your SSH access to the control server."
+  AUTHKEY="$(ts_mint_key)" || die "mint failed — check \$HEADSCALE_SSH, your SSH access, and passwordless sudo for headscale on the control server."
   [ -n "$AUTHKEY" ] || die "mint returned no key — check 'headscale preauthkeys create' on the control server."
   KEY_SRC="enroll"
 else

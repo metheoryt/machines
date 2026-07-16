@@ -13,7 +13,7 @@
 - Target: Debian/Ubuntu, x86_64 only. `set -u`. `info/ok/warn/die/have` helpers already defined — reuse verbatim.
 - **Idempotent**; safe to re-run. `--enroll` on an already-up node mints + persists a fresh key (rotation) but does NOT re-run `tailscale up`.
 - **Non-interactive safety (hard requirement):** when stdin is not a TTY (`[ -t 0 ]` false), the script MUST NOT prompt — scripted/piped provisioning must never block on stdin.
-- Control server: native `headscale` v0.29.2 at `/usr/bin/headscale` on `debian@cyphy.kz`, **no sudo needed**. User `fleet` = **ID 1**. `preauthkeys create` uses `-u/--user <uint ID>`, `--reusable`, `-e/--expiration <human>`, `-o json`.
+- Control server: native `headscale` v0.29.2 at `/usr/bin/headscale` on `debian@cyphy.kz`. **Socket-touching commands need `sudo`** (socket `headscale:headscale` mode 0770; the SSH user is not in that group but has passwordless sudo) — the mint runs `sudo headscale …`. User `fleet` = **ID 1**. `preauthkeys create` uses `-u/--user <uint ID>`, `--reusable`, `-e/--expiration <human>`, `-o json`.
 - Defaults (all overridable via env): `HEADSCALE_SSH=debian@cyphy.kz`, `HEADSCALE_USER_ID=1`, `HEADSCALE_KEY_EXPIRY=2160h` (90d).
 - Key-source precedence: **`--enroll` (mint) > `--authkey-file` > `$HEADSCALE_AUTHKEY` > persisted `/etc/headscale/authkey`.**
 - Hostname precedence: **`--hostname` > `$ORCA_TS_HOSTNAME` > interactive prompt (TTY only) > `wsl-<sanitized $WSL_DISTRO_NAME>`.** Every source is run through `ts_sanitize_hostname`.

@@ -187,9 +187,13 @@ Notes:
   default `1`) with `sudo headscale preauthkeys create` — no hand-pasted key.
   Needs the SSH user to have **passwordless sudo** on the control server (the
   headscale socket is group-restricted). Opt-in: without `--enroll` nothing
-  SSHes. Re-running `--enroll` rotates the persisted key. Hostname precedence:
-  `--hostname` → `$ORCA_TS_HOSTNAME` → interactive prompt (TTY only) →
-  `wsl-<distro>`.
+  SSHes. Re-running `--enroll` is a rotation, not a no-op: it mints a **fresh
+  remote key each run** (older reusable keys linger on the control server until
+  their expiry) and overwrites the persisted one. On an already-up node it
+  rotates the key without re-running `tailscale up`, so a changed `--hostname`
+  only takes effect on the next fresh enroll (e.g. after a rebuild), not
+  immediately. Hostname precedence: `--hostname` → `$ORCA_TS_HOSTNAME` →
+  interactive prompt (TTY only) → `wsl-<distro>`.
 - **Zero-touch re-enroll.** `tailscale-wsl.sh` persists the resolved pre-auth
   key to `/etc/headscale/authkey` (`root:root 0600`) and installs a systemd
   *system* oneshot `tailscale-autoconnect.service`. At every boot it runs
