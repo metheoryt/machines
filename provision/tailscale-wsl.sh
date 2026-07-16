@@ -44,6 +44,8 @@ and a boot-time systemd oneshot (tailscale-autoconnect.service) re-enrolls
 hands-free after a rebuild/logout.
 
   --authkey-file <path>   read the reusable pre-auth key from <path>
+  --hostname <name>       node name (else $ORCA_TS_HOSTNAME, else prompt on a
+                          TTY, else wsl-<distro>)
   -h, --help              show this help
 
 Env: HEADSCALE_AUTHKEY (key), ORCA_TS_HOSTNAME (node name; default wsl-<distro>).
@@ -84,10 +86,13 @@ ts_extract_key_json() {
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 AUTHKEY_FILE=""
+HOSTNAME_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --authkey-file) AUTHKEY_FILE="${2:-}"; [ -n "$AUTHKEY_FILE" ] || die "--authkey-file needs a path."; shift 2 ;;
     --authkey-file=*) AUTHKEY_FILE="${1#*=}"; shift ;;
+    --hostname) HOSTNAME_ARG="${2:-}"; [ -n "$HOSTNAME_ARG" ] || die "--hostname needs a name."; shift 2 ;;
+    --hostname=*) HOSTNAME_ARG="${1#*=}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (see --help)." ;;
   esac
@@ -109,8 +114,22 @@ if ! systemctl show-environment >/dev/null 2>&1; then
 fi
 
 # ── Node hostname ─────────────────────────────────────────────────────────────
+# Precedence: --hostname > $ORCA_TS_HOSTNAME > interactive prompt (TTY only) >
+# computed default. Every source is sanitized to a DNS-safe label. A prompt
+# fires ONLY on a TTY, so piped/automated runs never block on stdin.
 DEFAULT_NAME="wsl-$(ts_sanitize_hostname "${WSL_DISTRO_NAME:-$(uname -n)}")"
-HOSTNAME_TS="${ORCA_TS_HOSTNAME:-$DEFAULT_NAME}"
+if [ -n "$HOSTNAME_ARG" ]; then
+  HOSTNAME_TS="$(ts_sanitize_hostname "$HOSTNAME_ARG")"
+elif [ -n "${ORCA_TS_HOSTNAME:-}" ]; then
+  HOSTNAME_TS="$(ts_sanitize_hostname "$ORCA_TS_HOSTNAME")"
+elif [ -t 0 ]; then
+  printf '\033[0;36m▸ Node hostname [%s]: \033[0m' "$DEFAULT_NAME" >&2
+  read -r reply || reply=""
+  HOSTNAME_TS="$([ -n "$reply" ] && ts_sanitize_hostname "$reply" || printf '%s' "$DEFAULT_NAME")"
+else
+  HOSTNAME_TS="$DEFAULT_NAME"
+fi
+[ -n "$HOSTNAME_TS" ] || HOSTNAME_TS="$DEFAULT_NAME"   # sanitizing junk (e.g. "!!!") → empty
 info "Node hostname: $HOSTNAME_TS"
 
 # ── Resolve the pre-auth key (precedence: --authkey-file → env → persisted) ───
