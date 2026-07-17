@@ -66,6 +66,16 @@ only for tools the user actually uses here; add `--skills`/`--hooks` only on
 request. Hooks are frequently already machine-wide (user-scope
 `settings.local.json`), so per-repo hooks just duplicate them.
 
+**Always gitignore the generated skills dir.** Even with `--no-skills`, a future
+bare `gortex init` (or a teammate's) will re-spray `.claude/skills/generated/gortex-*`.
+Add `.claude/skills/generated/` to the repo's `.gitignore` so they can never be
+committed. If a *prior* init already committed them (they show up under
+`git ls-files .claude/skills/generated/`), remove them — `git rm -r
+.claude/skills/generated/` — **and** drop the matching gortex `## Community Skills`
+table (the block between the `<!-- gortex:communities:start/end -->` /
+`<!-- gortex:skills:start/end -->` markers) from `CLAUDE.md`/`AGENTS.md`, then add
+the gitignore line. This is a confirmed standing preference, not a per-repo ask.
+
 **Committing vs. local-only.** Only committed wiring carries to teammates/CI;
 a daemon merely *tracking* the repo is local. But **stage, don't commit unless
 asked** — and watch for two gotchas:
