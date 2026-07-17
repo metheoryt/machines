@@ -64,10 +64,19 @@ under WSL.
 
 ### 2. Fleet identity key, persisted on the Windows host
 
-- Dedicated key `~/.ssh/id_fleet` (+ `.pub`), ed25519, comment
-  `me@<sanitized $WSL_DISTRO_NAME>-wsl`. Deliberately **separate** from
-  `linux.sh`'s per-GitHub-account keys (`id_metheoryt`, `id_cyphy671`) and the
-  box's ambiguous existing `id_ed25519` — no fighting over the default identity.
+- Dedicated key `~/.ssh/id_fleet` (+ `.pub`), ed25519. Deliberately **separate**
+  from `linux.sh`'s per-GitHub-account keys (`id_metheoryt`, `id_cyphy671`) and
+  the box's ambiguous existing `id_ed25519` — no fighting over the default
+  identity.
+- **Named after the Windows HOST, not the distro.** Because the store below is
+  host-scoped (`/mnt/c/Users/<winuser>/.fleet`), every distro on one Windows host
+  **shares one key** (first distro generates it; the rest restore it). So the key
+  is a *per-host* identity and its comment must reflect that: `me@wsl-<label>`,
+  where `<label>` is the fleet member whose `fleet.json` `detect.hostname` matches
+  this box's `uname -n` (e.g. `g614jv` → `desktop` → `me@wsl-desktop`), else the
+  sanitized `uname -n`. A distro-based comment would be misleading the moment a
+  second distro restores the shared key. On restore the comment is re-stamped
+  (`ssh-keygen -y` drops it), so rebuilds/second-distro restores stay labelled.
 - **Persistence store** `FLEET_KEY_DIR`, default
   `/mnt/c/Users/<winuser>/.fleet` — `<winuser>` auto-detected as the single
   non-system directory under `/mnt/c/Users`, overridable via `FLEET_WIN_USER`;

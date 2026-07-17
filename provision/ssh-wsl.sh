@@ -103,6 +103,21 @@ ssh_wsl_merge_config() {
   fi
 }
 
+# Map this box's hostname ($2) to the fleet member whose detect.hostname matches
+# it (case-insensitive), so the per-Windows-host leaf key is named after the
+# fleet box it lives inside (e.g. g614jv → desktop → me@wsl-desktop). Falls back
+# to the sanitized hostname when no fleet member matches. Deterministic; the only
+# IO is invoking jq on the fleet.json content ($1).
+ssh_wsl_host_label() {
+  local label
+  label="$(jq -r --arg h "$2" '
+    .machines | to_entries[]
+    | select((.value.detect.hostname // "" | ascii_downcase) == ($h | ascii_downcase))
+    | .key' <<<"$1" 2>/dev/null | head -1)"
+  [ -n "$label" ] || label="$(ssh_wsl_sanitize "$2")"
+  printf '%s' "$label"
+}
+
 # Allow sourcing just the functions (for tests) without running main.
 [ "${SSH_WSL_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
@@ -154,7 +169,10 @@ $SUDO systemctl reload-or-restart ssh || warn "sshd reload-or-restart failed —
 # ── 2. Fleet identity key, persisted on the Windows host ──────────────────────
 KEY="$HOME/.ssh/$FLEET_KEY_NAME"
 mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
-KEY_COMMENT="me@$(ssh_wsl_sanitize "${WSL_DISTRO_NAME:-$(uname -n)}")-wsl"
+# One key per Windows HOST (the store below is host-scoped, so every distro on a
+# host shares it) — so name it after the host, not the distro: map uname -n to
+# the matching fleet member (g614jv → desktop), else the sanitized hostname.
+KEY_COMMENT="me@wsl-$(ssh_wsl_host_label "$(cat "$FLEET_JSON")" "$(uname -n)")"
 
 # Resolve the persistence store. Auto-detect the single non-system dir under
 # /mnt/c/Users unless FLEET_WIN_USER / FLEET_KEY_DIR pin it.
@@ -186,7 +204,10 @@ if [ -n "$STORE_KEY" ] && [ -f "$STORE_KEY" ]; then
   install -m600 "$STORE_KEY" "$KEY"
   # Derive the public key from the restored private key rather than trusting a
   # stored .pub — a priv-only store still yields a correct ~/.ssh/id_fleet.pub.
-  if ssh-keygen -y -f "$KEY" > "$KEY.pub" 2>/dev/null; then chmod 644 "$KEY.pub"
+  # Re-stamp the host-based comment: ssh-keygen -y drops it, and a second distro
+  # restoring this shared key must still label it after the host, not blank.
+  if pub="$(ssh-keygen -y -f "$KEY" 2>/dev/null)"; then
+    printf '%s %s\n' "$pub" "$KEY_COMMENT" > "$KEY.pub"; chmod 644 "$KEY.pub"
   else die "could not derive public key from restored $KEY."; fi
   ok "restored fleet key from store ($STORE_KEY)"
 elif [ -f "$KEY" ]; then

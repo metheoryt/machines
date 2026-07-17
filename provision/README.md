@@ -235,7 +235,10 @@ It:
 - creates `~/.ssh/id_fleet` (ed25519) and **persists it on the Windows host**
   (`$FLEET_KEY_DIR`, default `/mnt/c/Users/<winuser>/.fleet`), restoring it on
   the next provision — so a `wsl --unregister` rebuild reuses the same key and
-  its trust entry never goes stale;
+  its trust entry never goes stale. The store is **host-scoped**, so *every WSL
+  distro on the same Windows host shares one key* — a per-host fleet identity,
+  named after the host (`me@wsl-<host>`, mapping `uname -n` to the matching
+  `fleet.json` member, e.g. `g614jv` → `me@wsl-desktop`), not after the distro;
 - appends `id_fleet.pub` to `provision/mesh-authorized-keys` (if not already
   there). **Operator step:** commit + push, then re-provision the other boxes
   (`nixos-rebuild switch` / `windows.ps1`) so they trust the key;

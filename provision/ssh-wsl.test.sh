@@ -45,8 +45,18 @@ if command -v jq >/dev/null 2>&1; then
   # The default-me member (latitude) must NOT carry a User line. Extract its block.
   LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
   echo "$LAT_BLOCK" | grep -q '^  User ' && fail 'render: default-me member must have no User line'
+
+  # ── ssh_wsl_host_label (maps hostname → fleet name; needs jq) ────────────────
+  HL_FIXTURE='{ "machines": {
+    "desktop": { "mesh": { "role": "member" }, "detect": { "hostname": "g614jv" } },
+    "hub":     { "mesh": { "role": "hub" }, "detect": { "hostname": "27608" } }
+  } }'
+  eq "$(ssh_wsl_host_label "$HL_FIXTURE" 'g614jv')"    'desktop'   'host_label: detect.hostname match → fleet name'
+  eq "$(ssh_wsl_host_label "$HL_FIXTURE" 'G614JV')"    'desktop'   'host_label: match is case-insensitive'
+  eq "$(ssh_wsl_host_label "$HL_FIXTURE" '27608')"     'hub'       'host_label: hub matches too'
+  eq "$(ssh_wsl_host_label "$HL_FIXTURE" 'Weird.Box')" 'weird-box' 'host_label: no match → sanitized hostname'
 else
-  echo "SKIP: ssh_wsl_render_config tests (jq not installed)"
+  echo "SKIP: ssh_wsl_render_config + ssh_wsl_host_label tests (jq not installed)"
 fi
 
 # ── ssh_wsl_merge_config (idempotency + preserves foreign content) ────────────
