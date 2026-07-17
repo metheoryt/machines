@@ -21,6 +21,14 @@ ENVIRONMENT:
 - [ ] FINAL whole-branch review
 
 ## Minor findings (for final review triage)
+- #3 agents/hosts/latitude.md:22-28 documents latitude's deleted awg0 mesh key as operational — stale, misleading → fix in wave.
+- #4 docs/fleet-roadmap.md:64 backlog proposes folding tailscale enrollment into the deleted `mesh-member` role — retarget → fix in wave.
+- #5 (SKIP, YAGNI) cosmetic naming: `MESH_KEYS` var in ssh-wsl.sh + me.nix:27 "mesh matchBlocks" comment — reviewer confirmed no behavior impact; renaming a working var is risk > reward.
+
+## FINAL REVIEW (opus, b1b7d20..0d3a1aa): Ready to merge = YES WITH FIXES.
+Core re-homing sound: keys-only honored both platforms, no public SSH exposure, single trust file wired both sides, fleet.json→fleet.nix→ssh.nix chain consistent (only hub emits HostName cyphy.kz), kept items (AmneziaVPN client, winget entries, LTS kernel pin) all intact, NO security regression, no dangling refs in live NixOS/provision paths.
+  Important #1 (branch-introduced REGRESSION): provision/ssh-wsl.sh:71 — the WSL-leaf ssh-config renderer (jq twin of ssh.nix) still gates hub HostName on `.value.mesh.role == "hub"`, but Task 4 scrubbed all mesh blocks → hub block ships with NO HostName cyphy.kz → `ssh hub` from a WSL leaf resolves bare name via MagicDNS, fails. Task 3 fixed ssh.nix; this jq twin was missed (plan didn't know about it; Task 1 touched it only for the rename). Fix: gate off `(.value.ssh.host // null) != null` (value expr already uses .value.ssh.host).
+  Important #2: provision/ssh-wsl.test.sh:36-45 stale `mesh.role` FIXTURE asserts HostName cyphy.kz and PASSES with the buggy predicate → masked #1. Fix fixtures to production `ssh.host` shape (+ HL_FIXTURE 58-61 cosmetic mesh.role drop).
 
 ## Log
 
