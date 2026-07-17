@@ -62,6 +62,13 @@ in {
       # cyphy plugin: one whole-directory link (skills/agents/commands/hooks all
       # live inside agents/plugin/, discovered as a skills-directory plugin).
       $DRY_RUN_CMD ln -sfn "${agents}/plugin" "$prof/skills/cyphy"
+      # My own subagents — per-file links so the gortex-rendered agents and any
+      # machine-local ones coexist in <profile>/agents/.
+      $DRY_RUN_CMD mkdir -p "$prof/agents"
+      for asrc in "${agents}"/subagents/*.md; do
+        [ -e "$asrc" ] || continue
+        $DRY_RUN_CMD ln -sfn "$asrc" "$prof/agents/$(basename "$asrc")"
+      done
       # Memory stores — the frequently-edited files; live git-repo writes.
       $DRY_RUN_CMD ln -sfn "${agents}/memory/global.md" "$prof/memory/global.md"
       $DRY_RUN_CMD ln -sfn "${agents}/memory/personality" "$prof/memory/personality"

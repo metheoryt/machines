@@ -236,6 +236,10 @@ fi
 _mkdir "$CLAUDE_DIR/skills"
 link "$SRC_DIR/plugin" "$CLAUDE_DIR/skills/cyphy"
 
+# My own subagents: per-file links so machine-local agents AND the
+# gortex-rendered gortex-*.md all coexist in ~/.claude/agents/.
+link_entries_into "$SRC_DIR/subagents" "$CLAUDE_DIR/agents"
+
 # ── Codex config (~/.codex) — rides with the personal run only ───────────────
 if [ "$IS_PERSONAL" -eq 1 ]; then
   CODEX_SRC="$SRC_DIR/codex"
