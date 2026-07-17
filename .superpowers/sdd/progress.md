@@ -15,7 +15,7 @@ ENVIRONMENT:
 - [x] Task 2: Add fleet.sshServer module; enable on latitude
 - [x] Task 3: Delete mesh-vpn.nix; slim params -> fleet.nix; refactor ssh.nix
 - [x] Task 4: Scrub AWG mesh from fleet.json
-- [ ] Task 5: Delete provisioner AWG mesh roles/libs + dispatch
+- [x] Task 5: Delete provisioner AWG mesh roles/libs + dispatch
 - [ ] Task 6: Converge windows.ps1 SSH firewall onto the tailnet
 - [ ] Task 7: Trim base.nix kernel comment; refresh docs/memory
 - [ ] FINAL whole-branch review
@@ -28,3 +28,4 @@ Task 1: complete (commit 292628c, review clean — haiku impl+review, Spec ✅, 
 Task 2: complete (commit 3f5869f, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 findings). ssh-server.nix byte-for-byte transcription of brief; keys-only (PasswordAuth+KbdInteractive false), openFirewall=false, port 22 scoped to tailscale0 + LAN 192.168.8.0/24 (extraCommands/extraStopCommands mirror), trust = provision/fleet-authorized-keys. latitude imports module + fleet.sshServer.enable=true. `nix flake check` 41 checks passed.
 Task 3: complete (commit 99be048, review clean — sonnet impl / sonnet review, Spec ✅, Approved, 0 findings). Atomic: deleted mesh-vpn.nix, params→fleet.nix (git recorded as delete+add; slimmed to `inherit (fleet) machines;`), ssh.nix imports fleet.nix + hub HostName keyed off `(m.ssh.host or null)`. Hub-HostName equivalence VERIFIED against fleet.json (only hub.ssh.host == "cyphy.kz"; latitude/desktop/server have no ssh.host). AmneziaVPN client + ssh-server.nix import + fleet.sshServer.enable untouched. `nix flake check` passed. Controller re-verified current fleet.json keys = latitude/desktop/server/hub (matches Task 4 rewrite → no host-alias change). Concern (self-resolving): stale comment provision/roles/mesh-member.sh:4 — that file is deleted in Task 5.
 Task 4: complete (commit f6a796f, review clean — haiku impl / haiku review, Spec ✅, Approved, 0 findings). fleet.json: removed all mesh blocks + mesh-member/mesh-hub roles; jq assertion true; 4 machines intact (hub only ssh.host=cyphy.kz; latitude no ssh; desktop/server ssh.user=methe). Only fleet.json changed. `nix flake check` passed.
+Task 5: complete (commit 1ce09bf, review clean — haiku impl / haiku review, Spec ✅, Approved, 0 findings). Deleted 7 provisioner mesh files (lib/mesh.sh, lib/Mesh.psm1, lib/mesh.test.sh, roles/mesh-member.{sh,ps1}, roles/mesh-hub.{sh,ps1}); removed mesh-member/mesh-hub from provision.ps1 $RoleExecutors map (reviewer confirmed map still valid PowerShell, ends after repos entry) + comment tweak. grep for Invoke-RoleMesh/Mesh.psm1/lib/mesh.sh/roles/mesh- clean. shellcheck clean, bash -n exit 0. Also removed the stale mesh-member.sh:4 comment flagged in Task 3 (file gone). 8 files changed, 455 deletions.
