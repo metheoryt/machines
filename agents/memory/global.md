@@ -24,7 +24,10 @@ elsewhere to sync. Do NOT put secrets here.
   subagents run concurrently (no doc'd cap; batch to avoid rate limits);
   Workflows cap at ~16 concurrent / 1000 total. Three tiers: subagents (1–3) <
   agent teams (3–5, `SendMessage`) < workflows (dozens+, scripted). Our fleet:
-  shared agents go under `agents/plugin/agents/` (cyphy plugin) and sync via git.
+  shared agents go under `agents/subagents/` (per-file linked into every
+  profile's `agents/` by bootstrap.sh/claude.nix — ships `research-orchestrator`
+  + `web-research`) or `agents/plugin/agents/` (cyphy plugin); both sync via git.
+  `gortex-search`/`gortex-impact` are gortex-provisioned, not ours.
 
 - **`claude --resume <id> --model X` HONORS the new model (probed 2026-07-10,
   v2.1.206).** A session started on haiku, resumed with `--model claude-sonnet-5`,
