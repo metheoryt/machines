@@ -247,6 +247,17 @@ It:
 Env: `FLEET_KEY_DIR` (persistence store), `FLEET_WIN_USER` (Windows user for the
 default store path), `MACHINES_REPO` (repo clone; default `~/machines`).
 
+Pruning: a rebuilt distro whose Windows key store was also wiped mints a *new*
+key and appends a *new* line to `mesh-authorized-keys`. Persistence prevents
+re-appends for the same distro+store, but a genuinely fresh leaf leaves the old
+entry behind — delete the stale `me@<distro>-wsl` line from
+`provision/mesh-authorized-keys` when retiring a leaf (mirrors pruning a stale
+Headscale node on the VPS, above).
+
 Tradeoff: the persisted private key lives on `/mnt/c` (drvfs), where unix `0600`
 is not enforced — it is protected by Windows ACLs on `C:\Users\<winuser>`, not
-unix perms.
+unix perms. Weigh that against what the key unlocks: `mesh-authorized-keys` feeds
+both NixOS `authorizedKeys.keyFiles` *and* Windows
+`administrators_authorized_keys`, so `id_fleet` grants **administrator** SSH into
+the fleet boxes. The fleet trusting the leaf is the point — just know the blast
+radius if `C:\Users\<winuser>\.fleet` is ever read.

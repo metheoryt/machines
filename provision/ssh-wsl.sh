@@ -48,7 +48,6 @@ EOF
 
 CONFIG_MARKER_BEGIN="# >>> fleet-ssh (managed by ssh-wsl.sh) >>>"
 CONFIG_MARKER_END="# <<< fleet-ssh <<<"
-# shellcheck disable=SC2034  # FLEET_KEY_NAME is exported for Task 2's main
 FLEET_KEY_NAME="id_fleet"
 
 # DNS-label safe: lowercase, non [a-z0-9-] → '-', collapse repeats, trim edges.
@@ -185,7 +184,10 @@ persist_key() {  # copy the live key pair into the store (best-effort; /mnt/c = 
 
 if [ -n "$STORE_KEY" ] && [ -f "$STORE_KEY" ]; then
   install -m600 "$STORE_KEY" "$KEY"
-  install -m644 "$STORE_KEY.pub" "$KEY.pub"
+  # Derive the public key from the restored private key rather than trusting a
+  # stored .pub — a priv-only store still yields a correct ~/.ssh/id_fleet.pub.
+  if ssh-keygen -y -f "$KEY" > "$KEY.pub" 2>/dev/null; then chmod 644 "$KEY.pub"
+  else die "could not derive public key from restored $KEY."; fi
   ok "restored fleet key from store ($STORE_KEY)"
 elif [ -f "$KEY" ]; then
   ok "fleet key already present ($KEY)"
