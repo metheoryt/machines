@@ -118,6 +118,13 @@ ssh_wsl_host_label() {
   printf '%s' "$label"
 }
 
+# Normalize a public-key line ($1, e.g. `ssh-keygen -y` output) to exactly
+# "<type> <body> <comment>": keep only the first two fields (ssh-keygen -y echoes
+# any embedded comment, which would otherwise double-stamp) and apply comment $2.
+ssh_wsl_stamp_pub() {
+  printf '%s %s\n' "$(printf '%s' "$1" | awk '{print $1, $2}')" "$2"
+}
+
 # Allow sourcing just the functions (for tests) without running main.
 [ "${SSH_WSL_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
@@ -204,10 +211,11 @@ if [ -n "$STORE_KEY" ] && [ -f "$STORE_KEY" ]; then
   install -m600 "$STORE_KEY" "$KEY"
   # Derive the public key from the restored private key rather than trusting a
   # stored .pub — a priv-only store still yields a correct ~/.ssh/id_fleet.pub.
-  # Re-stamp the host-based comment: ssh-keygen -y drops it, and a second distro
-  # restoring this shared key must still label it after the host, not blank.
+  # Keep only type+body (ssh-keygen -y echoes any embedded comment, which would
+  # double-stamp), then apply the host-based comment so every restore (rebuild or
+  # second distro on this host) is labelled after the host, not blank/doubled.
   if pub="$(ssh-keygen -y -f "$KEY" 2>/dev/null)"; then
-    printf '%s %s\n' "$pub" "$KEY_COMMENT" > "$KEY.pub"; chmod 644 "$KEY.pub"
+    ssh_wsl_stamp_pub "$pub" "$KEY_COMMENT" > "$KEY.pub"; chmod 644 "$KEY.pub"
   else die "could not derive public key from restored $KEY."; fi
   ok "restored fleet key from store ($STORE_KEY)"
 elif [ -f "$KEY" ]; then

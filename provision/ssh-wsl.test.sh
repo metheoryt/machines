@@ -21,6 +21,14 @@ eq "$CONFIG_MARKER_END"   '# <<< fleet-ssh <<<'                          'marker
 eq "$(ssh_wsl_sanitize 'Ubuntu-26.04')"     'ubuntu-26-04'   'sanitize dotted'
 eq "$(ssh_wsl_sanitize 'My_Cool Distro!!')" 'my-cool-distro' 'sanitize punctuation'
 
+# ── ssh_wsl_stamp_pub (no double/blank comment regardless of input comment) ───
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY' 'me@wsl-desktop')" \
+   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: no embedded comment → stamp once'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old@comment' 'me@wsl-desktop')" \
+   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: strip embedded comment (no doubling)'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@wsl-desktop')" \
+   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: strip multi-word comment'
+
 # ── ssh_wsl_render_config (needs jq) ──────────────────────────────────────────
 if command -v jq >/dev/null 2>&1; then
   # Fixture: a hub (role hub, ssh.user debian, ssh.host cyphy.kz), a non-me
