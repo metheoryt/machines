@@ -47,6 +47,7 @@ Two tasks: **Task 1** delivers the testable core (pure helpers + passing unit te
   - `ssh_wsl_sanitize <string>` → echoes a DNS-label-safe lowercase slug (same rule as `ts_sanitize_hostname`).
   - `ssh_wsl_render_config <fleet-json-content>` → echoes the fleet block **stanzas** (no markers), one `Host` block per `fleet.json` member, blocks separated by a blank line, no trailing blank. Reads its single string argument via `jq`.
   - `ssh_wsl_key_present <pubkey-body> <authkeys-file>` → exit 0 if a line in the file has `$2` (the base64 body) equal to `<pubkey-body>`, else exit 1 (comment-insensitive; also exit 1 if the file is unreadable).
+  - `ssh_wsl_merge_config <existing-content> <block>` → echoes new config content with any prior marked span dropped and `<block>` appended exactly once (single blank-line separator). Idempotent: `merge(merge(x)) == merge(x)`.
   - Constants `CONFIG_MARKER_BEGIN`, `CONFIG_MARKER_END`, `FLEET_KEY_NAME`.
 
 - [ ] **Step 1: Write the failing test file**
@@ -73,29 +74,52 @@ eq()   { [ "$1" = "$2" ] || fail "$3: expected '$2', got '$1'"; }
 eq "$(ssh_wsl_sanitize 'Ubuntu-26.04')"     'ubuntu-26-04'   'sanitize dotted'
 eq "$(ssh_wsl_sanitize 'My_Cool Distro!!')" 'my-cool-distro' 'sanitize punctuation'
 
-# ── ssh_wsl_render_config ─────────────────────────────────────────────────────
-# Fixture: a hub (role hub, ssh.user debian, ssh.host cyphy.kz), a non-me member
-# (ssh.user methe), and a default-me member (no ssh.user).
-FIXTURE='{
-  "machines": {
-    "latitude": { "mesh": { "role": "member" } },
-    "server":   { "mesh": { "role": "member" }, "ssh": { "user": "methe" } },
-    "hub":      { "mesh": { "role": "hub" }, "ssh": { "user": "debian", "host": "cyphy.kz" } }
-  }
-}'
-RENDERED="$(ssh_wsl_render_config "$FIXTURE")"
+# ── ssh_wsl_render_config (needs jq) ──────────────────────────────────────────
+if command -v jq >/dev/null 2>&1; then
+  # Fixture: a hub (role hub, ssh.user debian, ssh.host cyphy.kz), a non-me
+  # member (ssh.user methe), and a default-me member (no ssh.user).
+  FIXTURE='{
+    "machines": {
+      "latitude": { "mesh": { "role": "member" } },
+      "server":   { "mesh": { "role": "member" }, "ssh": { "user": "methe" } },
+      "hub":      { "mesh": { "role": "hub" }, "ssh": { "user": "debian", "host": "cyphy.kz" } }
+    }
+  }'
+  RENDERED="$(ssh_wsl_render_config "$FIXTURE")"
 
-echo "$RENDERED" | grep -q '^  HostName cyphy.kz$' || fail 'render: hub HostName cyphy.kz'
-[ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 1 ] || fail 'render: only the hub gets a HostName'
-[ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 2 ] || fail 'render: exactly the two non-me members get a User line'
-echo "$RENDERED" | grep -q '^  User methe$'  || fail 'render: server → User methe'
-echo "$RENDERED" | grep -q '^  User debian$' || fail 'render: hub → User debian'
-[ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 3 ] || fail 'render: every block has IdentityFile'
-[ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 3 ] || fail 'render: every block has StrictHostKeyChecking'
-echo "$RENDERED" | grep -q '^Host latitude$' || fail 'render: latitude block present'
-# The default-me member (latitude) must NOT carry a User line. Extract its block.
-LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
-echo "$LAT_BLOCK" | grep -q '^  User ' && fail 'render: default-me member must have no User line'
+  echo "$RENDERED" | grep -q '^  HostName cyphy.kz$' || fail 'render: hub HostName cyphy.kz'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 1 ] || fail 'render: only the hub gets a HostName'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 2 ] || fail 'render: exactly the two non-me members get a User line'
+  echo "$RENDERED" | grep -q '^  User methe$'  || fail 'render: server → User methe'
+  echo "$RENDERED" | grep -q '^  User debian$' || fail 'render: hub → User debian'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 3 ] || fail 'render: every block has IdentityFile'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 3 ] || fail 'render: every block has StrictHostKeyChecking'
+  echo "$RENDERED" | grep -q '^Host latitude$' || fail 'render: latitude block present'
+  # The default-me member (latitude) must NOT carry a User line. Extract its block.
+  LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
+  echo "$LAT_BLOCK" | grep -q '^  User ' && fail 'render: default-me member must have no User line'
+else
+  echo "SKIP: ssh_wsl_render_config tests (jq not installed)"
+fi
+
+# ── ssh_wsl_merge_config (idempotency + preserves foreign content) ────────────
+GITHUB_BLOCK='Host github.com
+  HostName github.com
+  IdentityFile ~/.ssh/id_metheoryt'
+NEWBLOCK="$CONFIG_MARKER_BEGIN
+Host latitude
+  IdentityFile ~/.ssh/id_fleet
+$CONFIG_MARKER_END"
+
+M1="$(ssh_wsl_merge_config "$GITHUB_BLOCK" "$NEWBLOCK")"
+echo "$M1" | grep -q '^Host github.com$' || fail 'merge: pre-existing github block preserved'
+echo "$M1" | grep -q '^Host latitude$'   || fail 'merge: fleet block appended'
+[ "$(printf '%s\n' "$M1" | grep -cF '>>> fleet-ssh')" = 1 ] || fail 'merge: exactly one begin marker'
+# Idempotency — the property that discriminates a correct merge from the buggy one.
+M2="$(ssh_wsl_merge_config "$M1" "$NEWBLOCK")"
+eq "$M2" "$M1" 'merge: idempotent (merge∘merge == merge)'
+# Empty existing → just the block.
+eq "$(ssh_wsl_merge_config '' "$NEWBLOCK")" "$NEWBLOCK" 'merge: empty existing → just the block'
 
 # ── ssh_wsl_key_present ───────────────────────────────────────────────────────
 tmp="$(mktemp)"
@@ -209,6 +233,24 @@ ssh_wsl_key_present() {
   local body="$1" file="$2"
   [ -r "$file" ] || return 1
   awk -v b="$body" '$2 == b { found = 1 } END { exit(found ? 0 : 1) }' "$file"
+}
+
+# Merge fleet BLOCK ($2) into existing ~/.ssh/config content ($1): drop any prior
+# marked span (BEGIN..END inclusive), keep everything else, and append the block
+# exactly once, separated by a single blank line. Echoes the new content.
+# Deterministic and idempotent by construction — command substitution strips the
+# trailing newlines, so merge(merge(x)) == merge(x) with no blank-line accretion.
+ssh_wsl_merge_config() {
+  local kept
+  kept="$(printf '%s\n' "$1" | awk -v b="$CONFIG_MARKER_BEGIN" -v e="$CONFIG_MARKER_END" '
+    $0 == b { skip = 1; next }
+    $0 == e { skip = 0; next }
+    !skip')"
+  if [ -n "$kept" ]; then
+    printf '%s\n\n%s\n' "$kept" "$2"
+  else
+    printf '%s\n' "$2"
+  fi
 }
 
 # Allow sourcing just the functions (for tests) without running main.
@@ -363,19 +405,10 @@ BLOCK="$CONFIG_MARKER_BEGIN
 $STANZAS
 $CONFIG_MARKER_END"
 
+EXISTING=""
+[ -f "$CONFIG" ] && EXISTING="$(cat "$CONFIG")"
 tmp="$(mktemp)"
-if [ -f "$CONFIG" ]; then
-  # Drop any existing marked span (BEGIN..END inclusive); keep everything else.
-  awk -v b="$CONFIG_MARKER_BEGIN" -v e="$CONFIG_MARKER_END" '
-    $0 == b { skip = 1; next }
-    $0 == e { skip = 0; next }
-    !skip   { print }
-  ' "$CONFIG" > "$tmp"
-  # Collapse a trailing run of blank lines so re-runs do not accrete blanks.
-  sed -i -e :a -e '/^\n*$/{$d;N;ba}' "$tmp" 2>/dev/null || true
-  [ -s "$tmp" ] && printf '\n' >> "$tmp"   # one separator blank before our block
-fi
-printf '%s\n' "$BLOCK" >> "$tmp"
+ssh_wsl_merge_config "$EXISTING" "$BLOCK" > "$tmp"
 install -m600 "$tmp" "$CONFIG"
 rm -f "$tmp"
 ok "merged fleet block into $CONFIG (block replaced; rest untouched)"
@@ -475,7 +508,8 @@ These are not automatable from the dev box; record them for the operator to run 
 3. `test -f ~/.ssh/id_fleet && diff ~/.ssh/id_fleet "$FLEET_KEY_DIR/id_fleet"` → identical (key persisted).
 4. `grep -c 'IdentityFile ~/.ssh/id_fleet' ~/.ssh/config` ≥ 1; linux.sh's GitHub `Host` block still present.
 5. Rebuild simulation: `rm ~/.ssh/id_fleet*` then re-run → key **restored** from the store (same `ssh-keygen -lf ~/.ssh/id_fleet.pub` fingerprint), config/mesh entries unchanged (no duplicate appended).
-6. After committing `mesh-authorized-keys` and re-provisioning latitude: `ssh -o BatchMode=yes latitude true` → succeeds.
+6. Idempotency (byte-level): `cp ~/.ssh/config /tmp/c1 && bash ~/machines/provision/ssh-wsl.sh >/dev/null && diff /tmp/c1 ~/.ssh/config` → **no diff** (the marked block is replaced in place; no blank-line accretion, no `mesh-authorized-keys` duplicate).
+7. After committing `mesh-authorized-keys` and re-provisioning latitude: `ssh -o BatchMode=yes latitude true` → succeeds.
 
 ---
 
@@ -486,11 +520,11 @@ These are not automatable from the dev box; record them for the operator to run 
 - §1 sshd (install, `10-fleet.conf` key-only, enable/restart, verify `:22`) → Task 2 Step 1 blocks 1 + 5 ✓
 - §2 key persisted on Windows host (dedicated `id_fleet`, `FLEET_KEY_DIR` auto-detect + override, restore-else-generate+persist, `/mnt/c` ACL tradeoff) → Task 2 Step 1 block 2 ✓
 - §3 mesh-authorized-keys append (body-match idempotent, operator warn) → Task 2 Step 1 block 3 ✓
-- §4 merged marked block mirroring ssh.nix (HostName hub-only, User≠me-only, IdentityFile/StrictHostKeyChecking) → `ssh_wsl_render_config` (Task 1) + merge (Task 2 Step 1 block 4) ✓
-- §Components pure helpers + local sanitizer above `SSH_WSL_LIB_ONLY` guard → Task 1 ✓
-- §Testing unit (render/key_present/sanitize) + shellcheck + on-box acceptance → Task 1 tests, Task 2 Steps 2/6 ✓
+- §4 merged marked block mirroring ssh.nix (HostName hub-only, User≠me-only, IdentityFile/StrictHostKeyChecking) → `ssh_wsl_render_config` + `ssh_wsl_merge_config` (Task 1) + merge call (Task 2 Step 1 block 4) ✓
+- §Components pure helpers + local sanitizer above `SSH_WSL_LIB_ONLY` guard → Task 1 ✓. The merge is a third pure helper (`ssh_wsl_merge_config`) beyond the two the spec names — extracted so its idempotency is unit-tested rather than only shellcheck/manual, per the spec's "testable units" principle.
+- §Testing unit (sanitize/render/merge/key_present) + shellcheck + on-box acceptance → Task 1 tests, Task 2 Steps 2/6 ✓. Merge idempotency is asserted both as a unit test (`merge∘merge == merge`) and a byte-level on-box check.
 - §Env knobs `FLEET_KEY_DIR`/`FLEET_WIN_USER`/`MACHINES_REPO` → wired in Task 2 ✓
 
 **Placeholder scan:** no TBD/TODO; every step has concrete code/commands and expected output.
 
-**Type/name consistency:** `ssh_wsl_sanitize`, `ssh_wsl_render_config`, `ssh_wsl_key_present`, `CONFIG_MARKER_BEGIN/END`, `FLEET_KEY_NAME` are defined in Task 1 and used verbatim in Task 2. Markers match the spec and the config-merge `awk`. `id_fleet` used consistently across key path, render output, and README.
+**Type/name consistency:** `ssh_wsl_sanitize`, `ssh_wsl_render_config`, `ssh_wsl_key_present`, `ssh_wsl_merge_config`, `CONFIG_MARKER_BEGIN/END`, `FLEET_KEY_NAME` are defined in Task 1 and used verbatim in Task 2. Markers match the spec and the config-merge `awk`. `id_fleet` used consistently across key path, render output, and README.
