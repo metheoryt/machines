@@ -167,6 +167,9 @@ Run **both scripts inside each distro**, in order:
     # 2. Install Orca + autostart `orca serve` on :6768 (systemd-user + linger; also needs sudo)
     bash ~/machines/provision/orca-serve.sh
 
+    # 3. Fleet SSH: key-only sshd + persisted fleet key + client config (needs sudo)
+    bash ~/machines/provision/ssh-wsl.sh
+
 Then read the pairing URL and add it on the client:
 
     journalctl --user -u orca-serve -f                  # prints orca://pair?… (SECRET)
@@ -208,3 +211,42 @@ Notes:
 - **Secrets** (`HEADSCALE_AUTHKEY`, the pairing URL) are never committed.
 - Rebuilding a distro (`wsl --unregister`) leaves a stale Headscale node — prune
   with `headscale nodes delete` on the VPS.
+
+## Fleet SSH (WSL)
+
+Give a WSL2 distro a fleet SSH identity — its own key-only sshd, a persisted
+ed25519 key trusted by the other boxes, and a merged `~/.ssh/config` so
+`ssh latitude` / `ssh server` / `ssh hub` work from inside the distro. The
+distro is a **leaf**: it reaches out to the fleet and is trusted by it, but is
+**not** a `fleet.json` member (its OS hostname `g614jv` collides with the
+`desktop` host, and the box is disposable). Design:
+`docs/superpowers/specs/2026-07-17-ssh-wsl-fleet-design.md`.
+
+Run **inside the distro, after `tailscale-wsl.sh`**:
+
+    bash ~/machines/provision/ssh-wsl.sh
+
+It:
+
+- installs `openssh-server` and drops a key-only policy
+  (`/etc/ssh/sshd_config.d/10-fleet.conf`: `PasswordAuthentication no`,
+  `KbdInteractiveAuthentication no`) — no lockout risk, the `wsl -d <distro>`
+  console is always available;
+- creates `~/.ssh/id_fleet` (ed25519) and **persists it on the Windows host**
+  (`$FLEET_KEY_DIR`, default `/mnt/c/Users/<winuser>/.fleet`), restoring it on
+  the next provision — so a `wsl --unregister` rebuild reuses the same key and
+  its trust entry never goes stale;
+- appends `id_fleet.pub` to `provision/mesh-authorized-keys` (if not already
+  there). **Operator step:** commit + push, then re-provision the other boxes
+  (`nixos-rebuild switch` / `windows.ps1`) so they trust the key;
+- merges a marked fleet block into `~/.ssh/config`
+  (`# >>> fleet-ssh (managed by ssh-wsl.sh) >>>` … `# <<< fleet-ssh <<<`),
+  replacing only that block on re-run and leaving the rest (linux.sh's GitHub
+  aliases) untouched.
+
+Env: `FLEET_KEY_DIR` (persistence store), `FLEET_WIN_USER` (Windows user for the
+default store path), `MACHINES_REPO` (repo clone; default `~/machines`).
+
+Tradeoff: the persisted private key lives on `/mnt/c` (drvfs), where unix `0600`
+is not enforced — it is protected by Windows ACLs on `C:\Users\<winuser>`, not
+unix perms.

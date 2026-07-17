@@ -106,3 +106,132 @@ ssh_wsl_merge_config() {
 
 # Allow sourcing just the functions (for tests) without running main.
 [ "${SSH_WSL_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
+
+# ── Args ──────────────────────────────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1 (see --help)." ;;
+  esac
+done
+
+# ── Preconditions ─────────────────────────────────────────────────────────────
+have apt-get || die "targets Debian/Ubuntu (apt-get not found)."
+case "$(uname -m)" in x86_64|amd64) : ;; *) die "x86_64 only; this box is $(uname -m)." ;; esac
+if ! grep -qi microsoft /proc/version 2>/dev/null && [ -z "${WSL_DISTRO_NAME:-}" ]; then
+  warn "does not look like WSL — continuing anyway."
+fi
+have jq || die "jq not found — run provision/linux.sh first (its CORE apt base installs jq)."
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then have sudo || die "not root and sudo not found."; SUDO="sudo"; fi
+
+if ! systemctl show-environment >/dev/null 2>&1; then
+  die "systemd not running in this distro. Add to /etc/wsl.conf:  [boot]\\nsystemd=true  then 'wsl -t $(uname -n)' and re-open."
+fi
+
+MACHINES_REPO="${MACHINES_REPO:-$HOME/machines}"
+FLEET_JSON="$MACHINES_REPO/fleet.json"
+[ -r "$FLEET_JSON" ] || die "fleet.json not readable at $FLEET_JSON — set \$MACHINES_REPO to your clone."
+
+# ── 1. sshd (key-only) ────────────────────────────────────────────────────────
+info "Installing + configuring sshd (key-only)…"
+$SUDO apt-get install -y openssh-server >/dev/null || die "openssh-server install failed."
+$SUDO ssh-keygen -A >/dev/null 2>&1 || true   # ensure host keys (idempotent)
+
+DROPIN="/etc/ssh/sshd_config.d/10-fleet.conf"
+DROPIN_WANT="# Managed by ssh-wsl.sh — key-only auth for the fleet. Do not edit.
+PasswordAuthentication no
+KbdInteractiveAuthentication no"
+if [ "$($SUDO cat "$DROPIN" 2>/dev/null)" != "$DROPIN_WANT" ]; then
+  printf '%s\n' "$DROPIN_WANT" | $SUDO tee "$DROPIN" >/dev/null
+  ok "wrote $DROPIN"
+else
+  ok "sshd drop-in already current"
+fi
+$SUDO systemctl enable --now ssh >/dev/null 2>&1 || die "could not enable/start ssh.service."
+$SUDO systemctl reload-or-restart ssh || warn "sshd reload-or-restart failed — check 'systemctl status ssh'."
+
+# ── 2. Fleet identity key, persisted on the Windows host ──────────────────────
+KEY="$HOME/.ssh/$FLEET_KEY_NAME"
+mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+KEY_COMMENT="me@$(ssh_wsl_sanitize "${WSL_DISTRO_NAME:-$(uname -n)}")-wsl"
+
+# Resolve the persistence store. Auto-detect the single non-system dir under
+# /mnt/c/Users unless FLEET_WIN_USER / FLEET_KEY_DIR pin it.
+FLEET_KEY_DIR="${FLEET_KEY_DIR:-}"
+if [ -z "$FLEET_KEY_DIR" ]; then
+  win_user="${FLEET_WIN_USER:-}"
+  if [ -z "$win_user" ] && [ -d /mnt/c/Users ]; then
+    win_user="$(find /mnt/c/Users -mindepth 1 -maxdepth 1 -type d \
+      ! -iname 'Public' ! -iname 'Default' ! -iname 'Default User' \
+      ! -iname 'All Users' ! -iname 'DefaultAppPool' -printf '%f\n' 2>/dev/null)"
+    [ "$(printf '%s\n' "$win_user" | grep -c .)" = 1 ] || win_user=""
+  fi
+  [ -n "$win_user" ] && FLEET_KEY_DIR="/mnt/c/Users/$win_user/.fleet"
+fi
+
+STORE_KEY=""
+[ -n "$FLEET_KEY_DIR" ] && STORE_KEY="$FLEET_KEY_DIR/$FLEET_KEY_NAME"
+
+persist_key() {  # copy the live key pair into the store (best-effort; /mnt/c = Windows ACLs)
+  [ -n "$FLEET_KEY_DIR" ] || { warn "no persistence store (set \$FLEET_KEY_DIR) — key NOT persisted; a rebuild will mint a NEW key and need re-appending to mesh-authorized-keys."; return; }
+  mkdir -p "$FLEET_KEY_DIR" || { warn "could not create $FLEET_KEY_DIR — key not persisted."; return; }
+  # shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
+  cp "$KEY" "$STORE_KEY" && cp "$KEY.pub" "$STORE_KEY.pub" \
+    && ok "persisted fleet key → $STORE_KEY (Windows ACLs; unix 0600 not enforced on /mnt/c)" \
+    || warn "could not copy key into $FLEET_KEY_DIR."
+}
+
+if [ -n "$STORE_KEY" ] && [ -f "$STORE_KEY" ]; then
+  install -m600 "$STORE_KEY" "$KEY"
+  install -m644 "$STORE_KEY.pub" "$KEY.pub"
+  ok "restored fleet key from store ($STORE_KEY)"
+elif [ -f "$KEY" ]; then
+  ok "fleet key already present ($KEY)"
+  persist_key   # store was wiped but the local key survives — re-persist it
+else
+  info "Generating fleet key $KEY (ed25519)…"
+  ssh-keygen -t ed25519 -N '' -C "$KEY_COMMENT" -f "$KEY" >/dev/null || die "ssh-keygen failed."
+  persist_key
+fi
+
+# ── 3. Trust outward — append id_fleet.pub to mesh-authorized-keys ────────────
+MESH_KEYS="$MACHINES_REPO/provision/mesh-authorized-keys"
+PUB_BODY="$(awk '{print $2}' "$KEY.pub")"
+if [ ! -f "$MESH_KEYS" ]; then
+  warn "mesh-authorized-keys not found at $MESH_KEYS — skipped trust append (set \$MACHINES_REPO)."
+elif ssh_wsl_key_present "$PUB_BODY" "$MESH_KEYS"; then
+  ok "already trusted (mesh-authorized-keys)"
+else
+  printf '%s\n' "$(cat "$KEY.pub")" >> "$MESH_KEYS"
+  ok "appended id_fleet.pub → provision/mesh-authorized-keys"
+  warn "commit + push mesh-authorized-keys, then re-provision the other boxes (nixos-rebuild switch / windows.ps1) so they trust this key."
+fi
+
+# ── 4. Client config — merged fleet block in ~/.ssh/config ────────────────────
+CONFIG="$HOME/.ssh/config"
+STANZAS="$(ssh_wsl_render_config "$(cat "$FLEET_JSON")")" || die "rendering fleet config failed."
+[ -n "$STANZAS" ] || die "fleet config rendered empty — check $FLEET_JSON."
+BLOCK="$CONFIG_MARKER_BEGIN
+$STANZAS
+$CONFIG_MARKER_END"
+
+EXISTING=""
+[ -f "$CONFIG" ] && EXISTING="$(cat "$CONFIG")"
+tmp="$(mktemp)"
+ssh_wsl_merge_config "$EXISTING" "$BLOCK" > "$tmp"
+install -m600 "$tmp" "$CONFIG"
+rm -f "$tmp"
+ok "merged fleet block into $CONFIG (block replaced; rest untouched)"
+
+# ── 5. Verify ─────────────────────────────────────────────────────────────────
+# shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
+$SUDO systemctl is-active --quiet ssh && ok "sshd active" || warn "sshd not active — check 'systemctl status ssh'."
+if have ss; then
+  # shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
+  ss -ltn 2>/dev/null | grep -qE '[:.]22 ' && ok "listening on :22" || warn "no listener on :22 yet."
+fi
+[ -f "$KEY" ] && ok "fleet key: $KEY (pub: $KEY.pub)"
+info "Try:  ssh -o BatchMode=yes latitude true   (works once latitude trusts id_fleet)"
+printf '\nNext: commit+push provision/mesh-authorized-keys and re-provision the other boxes if this run appended a key.\n'
