@@ -4,4 +4,4 @@
 # Append g16's and g614jv's (this ROG Windows box) keys when reachable.
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBnlGSKtGHQwJNyODkQK0QyKX3h3hAOP2jjy5eAiEY8n me-nixos-latitude5520
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@methe-server
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@ubuntu-26-04-wsl
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@wsl-desktop
