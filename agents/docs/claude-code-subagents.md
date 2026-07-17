@@ -94,9 +94,16 @@ Skills are reusable *instructions*; subagents are reusable *contexts*.
 
 ## How our fleet setup maps to this
 
-- **User-scope custom agents:** `~/.claude/agents/gortex-search.md`,
-  `gortex-impact.md` — tool-restricted to gortex graph queries, fresh context,
-  return a summary. Textbook "keep graph-query noise out of the main window."
+- **`agents/subagents/`** is our own synced subagent home (per-file linked into
+  every profile's `agents/` by `bootstrap.sh` / `claude.nix`). Ships
+  `research-orchestrator` (Opus, `use proactively`, delegates + synthesises) and
+  `web-research` (Sonnet leaf, `disallowedTools: Agent` so it can't spawn —
+  enforces "no level 4" structurally). See the design/plan under
+  `docs/superpowers/`.
+- **gortex-provisioned agents:** `~/.claude/agents/gortex-search.md`,
+  `gortex-impact.md` — NOT ours; `gortex install` renders them machine-wide into
+  every detected assistant (drift-fenced by `gortex agents render`). The
+  orchestrator delegates its code lane to `gortex-search` by name.
 - **The `cyphy` plugin** (`agents/plugin/`) ships `quick-tasks` as its subagent
   (routine git/lint one-steppers; `Bash, Read, Glob, Grep`).
 - **`agents/` is the git-tracked SHARED tier** symlinked into every profile
