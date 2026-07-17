@@ -12,7 +12,7 @@ ENVIRONMENT:
 
 ## Tasks
 - [x] Task 1: Rename trust file mesh-authorized-keys -> fleet-authorized-keys (+ refs)
-- [ ] Task 2: Add fleet.sshServer module; enable on latitude
+- [x] Task 2: Add fleet.sshServer module; enable on latitude
 - [ ] Task 3: Delete mesh-vpn.nix; slim params -> fleet.nix; refactor ssh.nix
 - [ ] Task 4: Scrub AWG mesh from fleet.json
 - [ ] Task 5: Delete provisioner AWG mesh roles/libs + dispatch
@@ -25,3 +25,4 @@ ENVIRONMENT:
 ## Log
 
 Task 1: complete (commit 292628c, review clean — haiku impl+review, Spec ✅, Approved). Pure path/text rename; no logic. Implementer additionally updated provision/ssh-wsl.sh + provision/README.md (same trust file) to satisfy the no-lingering-ref grep — reviewer confirmed correct+complete. Note: implementer's `git add -A` (brief Step 6) swept the ledger into the feature commit; controller now commits the ledger separately each task to keep the tree clean before the next `git add -A` task.
+Task 2: complete (commit 3f5869f, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 findings). ssh-server.nix byte-for-byte transcription of brief; keys-only (PasswordAuth+KbdInteractive false), openFirewall=false, port 22 scoped to tailscale0 + LAN 192.168.8.0/24 (extraCommands/extraStopCommands mirror), trust = provision/fleet-authorized-keys. latitude imports module + fleet.sshServer.enable=true. `nix flake check` 41 checks passed.
