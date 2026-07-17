@@ -14,6 +14,7 @@
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
     ../../../modules/system/mesh-vpn.nix
+    ../../../modules/system/ssh-server.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
@@ -85,6 +86,9 @@
     enable = false;
     address = "10.0.0.8/32";
   };
+
+  # Keys-only sshd reachable over the tailnet + LAN (fleet SSH-server role).
+  fleet.sshServer.enable = true;
 
   # Headscale/Tailscale fleet transport (probe). tailscaled only — the tailnet
   # is joined imperatively after switch:
