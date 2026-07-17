@@ -31,13 +31,14 @@ eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@wsl-d
 
 # ── ssh_wsl_render_config (needs jq) ──────────────────────────────────────────
 if command -v jq >/dev/null 2>&1; then
-  # Fixture: a hub (role hub, ssh.user debian, ssh.host cyphy.kz), a non-me
-  # member (ssh.user methe), and a default-me member (no ssh.user).
+  # Fixture: a hub (ssh.user debian, ssh.host cyphy.kz), a non-me member
+  # (ssh.user methe), and a default-me member (no ssh block). Mirrors the real
+  # fleet.json shape — the hub is identified by ssh.host, not a mesh role.
   FIXTURE='{
     "machines": {
-      "latitude": { "mesh": { "role": "member" } },
-      "server":   { "mesh": { "role": "member" }, "ssh": { "user": "methe" } },
-      "hub":      { "mesh": { "role": "hub" }, "ssh": { "user": "debian", "host": "cyphy.kz" } }
+      "latitude": {},
+      "server":   { "ssh": { "user": "methe" } },
+      "hub":      { "ssh": { "user": "debian", "host": "cyphy.kz" } }
     }
   }'
   RENDERED="$(ssh_wsl_render_config "$FIXTURE")"
@@ -56,8 +57,8 @@ if command -v jq >/dev/null 2>&1; then
 
   # ── ssh_wsl_host_label (maps hostname → fleet name; needs jq) ────────────────
   HL_FIXTURE='{ "machines": {
-    "desktop": { "mesh": { "role": "member" }, "detect": { "hostname": "g614jv" } },
-    "hub":     { "mesh": { "role": "hub" }, "detect": { "hostname": "27608" } }
+    "desktop": { "detect": { "hostname": "g614jv" } },
+    "hub":     { "detect": { "hostname": "27608" } }
   } }'
   eq "$(ssh_wsl_host_label "$HL_FIXTURE" 'g614jv')"    'desktop'   'host_label: detect.hostname match → fleet name'
   eq "$(ssh_wsl_host_label "$HL_FIXTURE" 'G614JV')"    'desktop'   'host_label: match is case-insensitive'

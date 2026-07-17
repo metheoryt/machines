@@ -68,7 +68,7 @@ ssh_wsl_render_config() {
   jq -r '
     [ .machines | to_entries[] |
       ( [ "Host " + .key ]
-        + ( if .value.mesh.role == "hub" then [ "  HostName " + .value.ssh.host ] else [] end )
+        + ( if (.value.ssh.host // null) != null then [ "  HostName " + .value.ssh.host ] else [] end )
         + ( if (.value.ssh.user // "me") != "me" then [ "  User " + .value.ssh.user ] else [] end )
         + [ "  IdentityFile ~/.ssh/id_fleet", "  StrictHostKeyChecking accept-new" ]
       ) | join("\n")
