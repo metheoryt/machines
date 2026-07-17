@@ -11,7 +11,7 @@ ENVIRONMENT:
 - USER-EXECUTED (needs elevation): latitude `just switch`; desktop+server `windows.ps1` as Admin; end-to-end `ssh` reachability.
 
 ## Tasks
-- [ ] Task 1: Rename trust file mesh-authorized-keys -> fleet-authorized-keys (+ refs)
+- [x] Task 1: Rename trust file mesh-authorized-keys -> fleet-authorized-keys (+ refs)
 - [ ] Task 2: Add fleet.sshServer module; enable on latitude
 - [ ] Task 3: Delete mesh-vpn.nix; slim params -> fleet.nix; refactor ssh.nix
 - [ ] Task 4: Scrub AWG mesh from fleet.json
@@ -23,3 +23,5 @@ ENVIRONMENT:
 ## Minor findings (for final review triage)
 
 ## Log
+
+Task 1: complete (commit 292628c, review clean — haiku impl+review, Spec ✅, Approved). Pure path/text rename; no logic. Implementer additionally updated provision/ssh-wsl.sh + provision/README.md (same trust file) to satisfy the no-lingering-ref grep — reviewer confirmed correct+complete. Note: implementer's `git add -A` (brief Step 6) swept the ledger into the feature commit; controller now commits the ledger separately each task to keep the tree clean before the next `git add -A` task.
