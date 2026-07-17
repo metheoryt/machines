@@ -13,6 +13,10 @@ source "$here/ssh-wsl.sh"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 eq()   { [ "$1" = "$2" ] || fail "$3: expected '$2', got '$1'"; }
 
+# ── marker constants (must match the spec strings verbatim) ───────────────────
+eq "$CONFIG_MARKER_BEGIN" '# >>> fleet-ssh (managed by ssh-wsl.sh) >>>' 'marker begin exact'
+eq "$CONFIG_MARKER_END"   '# <<< fleet-ssh <<<'                          'marker end exact'
+
 # ── ssh_wsl_sanitize ──────────────────────────────────────────────────────────
 eq "$(ssh_wsl_sanitize 'Ubuntu-26.04')"     'ubuntu-26-04'   'sanitize dotted'
 eq "$(ssh_wsl_sanitize 'My_Cool Distro!!')" 'my-cool-distro' 'sanitize punctuation'
@@ -63,6 +67,23 @@ M2="$(ssh_wsl_merge_config "$M1" "$NEWBLOCK")"
 eq "$M2" "$M1" 'merge: idempotent (merge∘merge == merge)'
 # Empty existing → just the block.
 eq "$(ssh_wsl_merge_config '' "$NEWBLOCK")" "$NEWBLOCK" 'merge: empty existing → just the block'
+
+# Re-merging with a DIFFERENT block must REPLACE the old span, not keep both.
+OLDBLOCK="$CONFIG_MARKER_BEGIN
+Host latitude
+  IdentityFile ~/.ssh/id_fleet
+$CONFIG_MARKER_END"
+NEWER_BLOCK="$CONFIG_MARKER_BEGIN
+Host server
+  User methe
+  IdentityFile ~/.ssh/id_fleet
+$CONFIG_MARKER_END"
+SEEDED="$(ssh_wsl_merge_config "$GITHUB_BLOCK" "$OLDBLOCK")"
+REPLACED="$(ssh_wsl_merge_config "$SEEDED" "$NEWER_BLOCK")"
+echo "$REPLACED" | grep -q '^Host server$'     || fail 'merge: new block content present after re-merge'
+echo "$REPLACED" | grep -q '^Host latitude$'   && fail 'merge: old block content must be dropped on re-merge'
+echo "$REPLACED" | grep -q '^Host github.com$' || fail 'merge: foreign content preserved across re-merge'
+[ "$(printf '%s\n' "$REPLACED" | grep -cF '>>> fleet-ssh')" = 1 ] || fail 'merge: still exactly one begin marker after re-merge'
 
 # ── ssh_wsl_key_present ───────────────────────────────────────────────────────
 tmp="$(mktemp)"
