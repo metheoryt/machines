@@ -33,6 +33,13 @@ main session              (depth 0 — orchestrates the whole task)
 
 Main → orchestrator → worker is depth 2 — well inside Claude Code's 5-level cap.
 
+`gortex-search` is **not owned by this repo** — it is provisioned machine-wide by
+`gortex install` (which renders artifacts into every detected AI assistant, e.g.
+`~/.claude/agents/` and `~/.openclaude/agents/`, and drift-fences them via
+`gortex agents render`). The orchestrator delegates to it *by name* when present;
+we neither ship nor relocate it, to avoid duplicating and drifting against
+gortex-managed content.
+
 ### Invariants enforced structurally (not by prompt alone)
 
 - **No level 4.** Leaf workers omit `tools:` (so they inherit the full session
@@ -78,16 +85,17 @@ Main → orchestrator → worker is depth 2 — well inside Claude Code's 5-leve
   return a concise summary with source URLs. Generalized, capability-level
   guidance — no hardcoded tool-call sequences.
 
-### gortex-search (relocated, unchanged)
+### gortex-search (external dependency — not shipped here)
 
-Moved from local `~/.claude/agents/` into the synced `agents/subagents/` home so
-its code lane is available fleet-wide. Kept as-is: a deliberate gortex
-specialist that only runs where gortex is present. Not generalized in this
-effort (revisit later).
+The orchestrator's code lane. **Owned by gortex, not this repo:** `gortex
+install` renders it machine-wide into every detected assistant, so it is present
+on every fleet machine (where gortex is installed) without us shipping it. The
+orchestrator delegates to it by name and degrades gracefully (own grep/read)
+when it — or gortex — is absent (e.g. a directory the daemon doesn't cover).
 
-### gortex-impact (relocated, unchanged)
-
-Same relocation, for consistency and fleet sync. No behavior change.
+Consequence: we do **not** relocate `gortex-search` / `gortex-impact` into this
+repo. Copying them would duplicate gortex-generated files and fight its
+`gortex agents render` drift fence.
 
 ## Prompt philosophy — generalize, don't hardcode
 
@@ -112,15 +120,17 @@ normal repo, no allow-only ignore; nothing to "unignore").
 |---|---|
 | `agents/subagents/research-orchestrator.md` | new |
 | `agents/subagents/web-research.md` | new |
-| `agents/subagents/gortex-search.md` | relocate from `~/.claude/agents/` |
-| `agents/subagents/gortex-impact.md` | relocate from `~/.claude/agents/` |
 | `agents/bootstrap.sh` | add `link_entries_into "$SRC_DIR/subagents" "$CLAUDE_DIR/agents"` in the shared (all-profile) section |
 | `modules/home/claude.nix` | matching per-file symlink declaration for the NixOS hosts |
 
+Only two agents are shipped by this repo; `gortex-search` / `gortex-impact` are
+left to gortex (see above).
+
 `link_entries_into` (bootstrap.sh:160) already exists and is used for Codex
 agents (bootstrap.sh:257) — it symlinks each entry of a source dir into a dest
-dir individually, so machine-local agents in `~/.claude/agents/` coexist with
-the synced ones.
+dir individually. Because it links **per file**, our two synced agents coexist
+in `~/.claude/agents/` alongside the gortex-rendered `gortex-*.md` files without
+collision (distinct names) — neither clobbers the other.
 
 **Sync semantics:** editing an agent is a plain repo write — effective
 immediately, no rebuild. A *new* agent file needs one `bootstrap.sh` (or
@@ -132,8 +142,9 @@ immediately, no rebuild. A *new* agent file needs one `bootstrap.sh` (or
 - **Codex mirror.** These agents lean on the Claude Agent/Task tool +
   `WebSearch`/`WebFetch`; Codex's subagent format and tools differ. Claude-only
   first; mirror later if useful.
-- **Generalizing gortex-search / gortex-impact prompts.** They stay gortex
-  specialists on relocation.
+- **Anything about gortex-search / gortex-impact.** They are gortex-owned,
+  provisioned machine-wide by `gortex install`; this repo neither ships,
+  relocates, nor edits them.
 
 ## Load-bearing risk & verification
 
@@ -164,5 +175,6 @@ designing around it.
   exploration kept in worker contexts.
 - Agents are portable: they function on a session/directory without gortex by
   falling back to text search + file reads.
-- The set is fleet-synced via `bootstrap.sh` + `claude.nix`; `gortex-search` /
-  `gortex-impact` are no longer local-only.
+- The two new agents are fleet-synced via `bootstrap.sh` + `claude.nix`, and
+  coexist with the gortex-rendered agents in `~/.claude/agents/` without
+  collision.
