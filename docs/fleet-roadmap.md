@@ -61,9 +61,9 @@ this is why **UPnP/router port-mapping is NOT on the backlog**).
   default shell. NixOS: `services.openssh`. (Gotchas captured in project memory.)
 - [ ] **Declarative Windows Tailscale provisioning.** Fold `winget install
   Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz --authkey
-  <key>` into the `mesh-member` role so enrolling a box isn't manual. Mint a
-  short-lived key per enrollment and expire it after (`headscale preauthkeys
-  expire --id <n> --force`).
+  <key>` into the `ssh-server` role (or a dedicated tailscale role) so enrolling
+  a box isn't manual. Mint a short-lived key per enrollment and expire it after
+  (`headscale preauthkeys expire --id <n> --force`).
 - [ ] **Zero-touch WSL tailnet enrollment (design approved 2026-07-16).** Extend
   `provision/tailscale-wsl.sh` (already shipped, currently env-key + manual) so a
   WSL distro re-enrolls hands-free. Note: the *fleet itself* is manual today —
