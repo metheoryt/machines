@@ -11,7 +11,7 @@
 #
 # Durable across a `wsl --unregister` rebuild: the fleet key is persisted on the
 # Windows host ($FLEET_KEY_DIR, default /mnt/c/Users/<winuser>/.fleet) and
-# restored on the next provision, so its mesh-authorized-keys entry never goes
+# restored on the next provision, so its fleet-authorized-keys entry never goes
 # stale. sshd is key-only (PasswordAuthentication no); the WSL console is always
 # available independent of sshd, so there is no lockout risk.
 #
@@ -77,7 +77,7 @@ ssh_wsl_render_config() {
 }
 
 # True (exit 0) iff the base64 key body $1 already appears as the 2nd field of a
-# line in authorized-keys/mesh-authorized-keys file $2 (comment-insensitive).
+# line in authorized-keys/fleet-authorized-keys file $2 (comment-insensitive).
 # Unreadable/missing file → false.
 ssh_wsl_key_present() {
   local body="$1" file="$2"
@@ -199,7 +199,7 @@ STORE_KEY=""
 [ -n "$FLEET_KEY_DIR" ] && STORE_KEY="$FLEET_KEY_DIR/$FLEET_KEY_NAME"
 
 persist_key() {  # copy the live key pair into the store (best-effort; /mnt/c = Windows ACLs)
-  [ -n "$FLEET_KEY_DIR" ] || { warn "no persistence store (set \$FLEET_KEY_DIR) — key NOT persisted; a rebuild will mint a NEW key and need re-appending to mesh-authorized-keys."; return; }
+  [ -n "$FLEET_KEY_DIR" ] || { warn "no persistence store (set \$FLEET_KEY_DIR) — key NOT persisted; a rebuild will mint a NEW key and need re-appending to fleet-authorized-keys."; return; }
   mkdir -p "$FLEET_KEY_DIR" || { warn "could not create $FLEET_KEY_DIR — key not persisted."; return; }
   # shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
   cp "$KEY" "$STORE_KEY" && cp "$KEY.pub" "$STORE_KEY.pub" \
@@ -227,17 +227,17 @@ else
   persist_key
 fi
 
-# ── 3. Trust outward — append id_fleet.pub to mesh-authorized-keys ────────────
-MESH_KEYS="$MACHINES_REPO/provision/mesh-authorized-keys"
+# ── 3. Trust outward — append id_fleet.pub to fleet-authorized-keys ────────────
+MESH_KEYS="$MACHINES_REPO/provision/fleet-authorized-keys"
 PUB_BODY="$(awk '{print $2}' "$KEY.pub")"
 if [ ! -f "$MESH_KEYS" ]; then
-  warn "mesh-authorized-keys not found at $MESH_KEYS — skipped trust append (set \$MACHINES_REPO)."
+  warn "fleet-authorized-keys not found at $MESH_KEYS — skipped trust append (set \$MACHINES_REPO)."
 elif ssh_wsl_key_present "$PUB_BODY" "$MESH_KEYS"; then
-  ok "already trusted (mesh-authorized-keys)"
+  ok "already trusted (fleet-authorized-keys)"
 else
   printf '%s\n' "$(cat "$KEY.pub")" >> "$MESH_KEYS"
-  ok "appended id_fleet.pub → provision/mesh-authorized-keys"
-  warn "commit + push mesh-authorized-keys, then re-provision the other boxes (nixos-rebuild switch / windows.ps1) so they trust this key."
+  ok "appended id_fleet.pub → provision/fleet-authorized-keys"
+  warn "commit + push fleet-authorized-keys, then re-provision the other boxes (nixos-rebuild switch / windows.ps1) so they trust this key."
 fi
 
 # ── 4. Client config — merged fleet block in ~/.ssh/config ────────────────────
@@ -265,4 +265,4 @@ if have ss; then
 fi
 [ -f "$KEY" ] && ok "fleet key: $KEY (pub: $KEY.pub)"
 info "Try:  ssh -o BatchMode=yes latitude true   (works once latitude trusts id_fleet)"
-printf '\nNext: commit+push provision/mesh-authorized-keys and re-provision the other boxes if this run appended a key.\n'
+printf '\nNext: commit+push provision/fleet-authorized-keys and re-provision the other boxes if this run appended a key.\n'

@@ -231,7 +231,7 @@ Info "default shell: $pwshExe"
 #     ProgramData\ssh\administrators_authorized_keys and REFUSES it unless the
 #     ACL is locked to Administrators/SYSTEM. Rewrite + re-ACL each run.
 $adminKeys = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
-$srcKeys   = Join-Path $RepoDir 'provision\mesh-authorized-keys'
+$srcKeys   = Join-Path $RepoDir 'provision\fleet-authorized-keys'
 if (Test-Path $srcKeys) {
     # Strip comment/blank lines; write with no BOM (sshd rejects a BOM).
     $keyLines = Get-Content $srcKeys | Where-Object { $_ -and ($_ -notmatch '^\s*#') }
@@ -247,7 +247,7 @@ if (Test-Path $srcKeys) {
         Info "wrote $($keyLines.Count) key(s) to administrators_authorized_keys (ACL locked)."
     }
 } else {
-    Warn "provision\mesh-authorized-keys not found - skipped authorized_keys."
+    Warn "provision\fleet-authorized-keys not found - skipped authorized_keys."
 }
 
 # 7e. Firewall: inbound 22 from mesh + LAN only (never the open internet).

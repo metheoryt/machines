@@ -86,7 +86,7 @@ in {
     # Trust: one committed public-keys file (public keys only), shared by all
     # fleet hosts. No per-host key duplication.
     users.users.me.openssh.authorizedKeys.keyFiles = [
-      ../../provision/mesh-authorized-keys
+      ../../provision/fleet-authorized-keys
     ];
 
     # Host-key pinning (Decision 16) is a follow-up: no host has an
