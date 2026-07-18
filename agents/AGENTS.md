@@ -238,12 +238,15 @@ delete stale entries rather than letting them pile up.
   `~/.claude-pure` — SHARED set + `settings.<postfix>.json`, Codex untouched)
   symlink `memory/global.md`, the `memory/personality/` facets, and
   `hosts/<hostname>.md` (as `host-memory.md`) into the bootstrapped profile. On
-  NixOS, `modules/home/claude.nix` symlinks these files into EVERY registered
-  profile (`~/.claude` plus each `~/.claude-<postfix>`, one per committed
-  `settings.<postfix>.json`) and `modules/home/codex.nix`
-  into `~/.codex` — via an activation script (NOT `home.file`), so the memory
-  links are one-hop-direct to the repo and live OUTSIDE the nix generation,
-  exactly like `bootstrap.sh` does on non-Nix machines (Windows/macOS).
+  NixOS, `modules/home/claude.nix`'s home-manager activation script (NOT
+  `home.file`) invokes `agents/bootstrap.sh` once per registered profile
+  (`~/.claude` plus each `~/.claude-<postfix>`, one per committed
+  `settings.<postfix>.json`); the personal `~/.claude` run also provisions
+  `~/.codex` (bootstrap's `IS_PERSONAL` block), so no separate Nix module for
+  Codex is needed. `bootstrap.sh` is therefore the single deployer on
+  every platform — NixOS invokes it, Windows/macOS/non-Nix Linux run it
+  directly — so the memory links stay one-hop-direct to the repo and live
+  OUTSIDE the nix generation.
   The `global-memory-load.sh` SessionStart hook injects them each session.
   **Editing a memory takes effect immediately — it is a plain write to the
   git-tracked repo file, so do NOT run `just switch` / `nixos-rebuild` to

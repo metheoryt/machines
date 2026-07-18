@@ -2,8 +2,9 @@
 # Sourced by provision.sh (do not execute). Defines role_agents.
 #
 # agents = the synced Claude/Codex config produced by agents/bootstrap.sh.
-# On nixos it is owned by home-manager (claude.nix/codex.nix) and applied by
-# `just switch`, so the dispatcher must NOT run bootstrap.sh there.
+# On nixos it is owned by home-manager (claude.nix, which invokes
+# bootstrap.sh) and applied by `just switch`, so the dispatcher must NOT run
+# bootstrap.sh there.
 # shellcheck shell=bash
 
 # role_agents <mode> <platform> <machine>
@@ -17,7 +18,7 @@ role_agents() {
 
     case "$platform" in
         nixos)
-            echo "  agents: owned by home-manager (claude.nix/codex.nix) — applied by 'just switch'; dispatcher skips."
+            echo "  agents: owned by home-manager (claude.nix, which invokes bootstrap.sh) — applied by 'just switch'; dispatcher skips."
             return 0
             ;;
         wsl|debian)

@@ -52,14 +52,14 @@ build:
     sudo nixos-rebuild build --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Build complete!"
 
-# Guard: home-manager (claude.nix/codex.nix) reads ~/machines/agents via
+# Guard: home-manager (claude.nix, which invokes bootstrap.sh) reads ~/machines/agents via
 # mkOutOfStoreSymlink, so ~/machines must resolve to this clone. If the repo
 # isn't cloned there directly, a dangling/missing ~/machines silently breaks
 # the agent config — fail loud instead.
 _check-machines-link:
     @test -e ~/machines/agents/AGENTS.md || { echo "❌ ~/machines is missing or dangling — home-manager reads ~/machines/agents. If this clone lives elsewhere, symlink it: ln -sfn {{flake_dir}} ~/machines (see hosts/g16/windows runbook, Phase 4.0)"; exit 1; }
 
-# NOT run by switch/update on NixOS — claude.nix/codex.nix own the links there,
+# NOT run by switch/update on NixOS — claude.nix invokes bootstrap.sh to own the links there,
 # applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.
 # Relative path (not {{flake_dir}}): just runs recipes with cwd = justfile dir,
 # and on Windows {{flake_dir}} is a backslash path bash mangles (C:Users… → not

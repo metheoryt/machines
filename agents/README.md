@@ -54,9 +54,15 @@ entry-by-entry). Only the format-divergent files live under `agents/codex/`
 `.toml` subagent defs land at `~/.codex/agents/*.toml`, the same tool-dictated
 target dirname Claude uses, just read by a different tool.
 Machine-local Codex state (`config.toml`, `auth.json`, sessions, caches) is
-git-ignored (`agents/codex/.gitignore`) and never tracked. Both `bootstrap.sh`
-and `modules/home/codex.nix` produce the identical `~/.codex` tree — the same
-dual-mechanism model as the Claude side.
+git-ignored (`agents/codex/.gitignore`) and never tracked. `~/.codex` is now
+produced solely by `bootstrap.sh` — run directly off-nix (Windows/macOS/
+non-Nix Linux), or invoked on NixOS by `claude.nix`'s activation script, which
+provisions `~/.codex` as part of the personal `~/.claude` profile run
+(bootstrap's `IS_PERSONAL` block). The Claude side works the same way:
+`claude.nix` invokes `bootstrap.sh` per registered profile instead of
+reimplementing the symlink logic, so `~/.claude` and `~/.codex` both converge
+on `bootstrap.sh` as the single deployer rather than the old dual-mechanism
+model.
 
 ## What's NOT tracked (and never copy in)
 

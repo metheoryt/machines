@@ -146,8 +146,11 @@ link() {
 
 # host_id: this machine's hostname, sanitized to a filename. Prefers Windows
 # COMPUTERNAME (ME-G614JV), else `hostname` (g16 / latitude5520 on the nix
-# laptops). Must match modules/home/claude.nix (osConfig.networking.hostName)
-# and balance-refresh.py's device id.
+# laptops). This is only the off-nix fallback: on NixOS, claude.nix passes the
+# authoritative host id via the MACHINES_HOST_ID env var (the `hostname`
+# specialArg == networking.hostName), consumed below as
+# "${MACHINES_HOST_ID:-$(host_id)}" — single source of host-naming, also used
+# by balance-refresh.py's device id.
 host_id() {
   local h="${COMPUTERNAME:-$(hostname 2>/dev/null)}"
   h="${h%%.*}"                                   # strip any DNS suffix
