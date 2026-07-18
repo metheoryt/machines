@@ -17,15 +17,16 @@ put secrets here (this file is tracked in git).
 
 ## Notes
 
-## Mesh / secrets (paths only — never the key)
+## Mesh / secrets (RETIRED — paths only)
 
-- This host's AmneziaWG mesh key (`awg0`, mesh IP `10.0.0.8`, peer
-  `nix-lat5520`) lives at two paths, both git-ignored (paths recorded here, key
-  content never committed):
-  - `/etc/amnezia-wg/awg0.key` — the OPERATIONAL copy `awg0` actually reads.
-    Outside `$HOME`, so neither dotfiles nor home-manager tracks it; must be
-    placed by hand on a fresh box or `awg0` won't come up (`wireguard-awg0`
-    fails). Requires the LTS kernel (see project memory) for the module to load.
+- The AmneziaWG *mesh* has been retired from this repo, so `awg0` is no longer
+  brought up on this host. The paths below are retained only as a
+  historical/restore record of key material that may still exist on disk —
+  never the key content itself. (The AmneziaVPN *client* app on latitude is
+  KEPT and is separate from this retired mesh spoke key.)
+  - `/etc/amnezia-wg/awg0.key` — the OPERATIONAL copy `awg0` used to read.
+    Outside `$HOME`, so neither dotfiles nor home-manager tracks it.
   - `~/.ssh/vps_awg_private.key` — spare copy; recorded as a restore-checklist
     marker in the `latitude5520` dotfiles branch `.gitignore`.
-  - Regenerate/restore source of truth: VPS `vps/vps/peers/nix-lat5520.key`.
+  - Regenerate/restore source of truth (if ever needed again): VPS
+    `vps/vps/peers/nix-lat5520.key`.

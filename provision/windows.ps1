@@ -199,7 +199,7 @@ if (-not $BackupRoot) {
     }
 }
 
-# ---- 7. OpenSSH server (agent/human SSH into this box over mesh+LAN) --------
+# ---- 7. OpenSSH server (agent/human SSH into this box over tailnet+LAN) ------
 Step "7. OpenSSH server"
 $isAdmin7 = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
             ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
@@ -231,7 +231,7 @@ Info "default shell: $pwshExe"
 #     ProgramData\ssh\administrators_authorized_keys and REFUSES it unless the
 #     ACL is locked to Administrators/SYSTEM. Rewrite + re-ACL each run.
 $adminKeys = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
-$srcKeys   = Join-Path $RepoDir 'provision\mesh-authorized-keys'
+$srcKeys   = Join-Path $RepoDir 'provision\fleet-authorized-keys'
 if (Test-Path $srcKeys) {
     # Strip comment/blank lines; write with no BOM (sshd rejects a BOM).
     $keyLines = Get-Content $srcKeys | Where-Object { $_ -and ($_ -notmatch '^\s*#') }
@@ -247,26 +247,26 @@ if (Test-Path $srcKeys) {
         Info "wrote $($keyLines.Count) key(s) to administrators_authorized_keys (ACL locked)."
     }
 } else {
-    Warn "provision\mesh-authorized-keys not found - skipped authorized_keys."
+    Warn "provision\fleet-authorized-keys not found - skipped authorized_keys."
 }
 
-# 7e. Firewall: inbound 22 from mesh + LAN only (never the open internet).
-#     Create-if-absent so re-running doesn't duplicate the rule.
-$fwRule = 'OpenSSH-Server-Mesh-LAN'
-if (-not (Get-NetFirewallRule -Name $fwRule -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -Name $fwRule -DisplayName 'OpenSSH Server (mesh+LAN)' `
-        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 `
-        -RemoteAddress @('10.0.0.0/24','192.168.8.0/24') | Out-Null
-    Info "firewall rule '$fwRule' created (22 from 10.0.0.0/24, 192.168.8.0/24)."
-} else {
-    Info "firewall rule '$fwRule' already present."
+# 7e. Firewall: inbound 22 from the tailnet + LAN only (never the open internet).
+#     CONVERGE, don't create-if-absent: a box may already carry a stale rule from
+#     a prior (AWG-era) run, so remove any prior rule (the old name + this one)
+#     then recreate. Create-if-absent would silently leave the old scope in place.
+$fwRule = 'OpenSSH-Server-Tailnet-LAN'
+foreach ($old in @('OpenSSH-Server-Mesh-LAN', $fwRule)) {
+    Get-NetFirewallRule -Name $old -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 }
+New-NetFirewallRule -Name $fwRule -DisplayName 'OpenSSH Server (tailnet+LAN)' `
+    -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 `
+    -RemoteAddress @('100.64.0.0/10','192.168.8.0/24') | Out-Null
+Info "firewall rule '$fwRule' set (22 from 100.64.0.0/10, 192.168.8.0/24)."
 # Neutralize the default 'allow 22 from Any' rule the capability install adds
-# (Windows Firewall allow-rules union, so the scoped rule above restricts
-# nothing while this one is enabled). Idempotent; -ErrorAction SilentlyContinue
-# in case the rule name varies or is already gone.
+# (Windows Firewall unions allow-rules, so the scoped rule above restricts
+# nothing while this one is enabled). Idempotent.
 Disable-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
-Info "disabled default 'OpenSSH-Server-In-TCP' (Any) rule; only mesh+LAN remains."
+Info "disabled default 'OpenSSH-Server-In-TCP' (Any) rule; only tailnet+LAN remains."
 
 # 7f. Key-only auth (parity with the NixOS spokes' PasswordAuthentication=false).
 $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
@@ -287,7 +287,7 @@ if (Test-Path $sshdConfig) {
     Warn "sshd_config not found at $sshdConfig - skipped auth hardening."
 }
 
-Warn "Reachable over the mesh only while this box's AmneziaWG tunnel is up (autostart on boot) and its AllowedIPs covers 10.0.0.0/24 - verify separately."
+Warn "Reachable over the tailnet only while this box has joined the Headscale tailnet (tailscale0 up, address in 100.64.0.0/10) - verify separately."
 
 # ---- Done --------------------------------------------------------------------
 Write-Host "`n=== agent environment ready ===" -ForegroundColor Green

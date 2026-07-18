@@ -16,10 +16,9 @@
       grub.enable = false;
     };
 
-    # LTS kernel (nixpkgs default). Pinned off linuxPackages_latest because the
-    # out-of-tree AmneziaWG module (fleet mesh) fails to build against 7.x —
-    # `socket.c: 'ipv6_stub' undeclared` — while it builds clean on this LTS.
-    # LTS is also the safer track for the NVIDIA driver (see CLAUDE.md).
+    # LTS kernel (nixpkgs default). Kept off linuxPackages_latest as the safer
+    # track for the NVIDIA driver (see CLAUDE.md); the AWG mesh that formerly also
+    # required it has been retired.
     kernelPackages = pkgs.linuxPackages;
 
     # Kernel parameters for better performance and security

@@ -13,7 +13,7 @@
     ../../../modules/system/laptop.nix
     ../../../modules/system/self-update.nix
     ../../../modules/system/git-autofetch
-    ../../../modules/system/mesh-vpn.nix
+    ../../../modules/system/ssh-server.nix
 
     # Desktop environment
     ../../../modules/desktop/gnome.nix
@@ -75,16 +75,8 @@
   systemd.packages = [pkgs.amnezia-vpn];
   systemd.services.AmneziaVPN.wantedBy = ["multi-user.target"];
 
-  # AmneziaWG mesh spoke — DISABLED for the Headscale fleet-mesh probe
-  # (2026-07-13). Nothing load-bearing rides latitude's awg0 (backups go over
-  # LAN), so dropping it lets Tailscale be tested on the raw ISP network with no
-  # split-tunnel interference. Re-enable by flipping to true. address is kept for
-  # a clean revert; it matches mesh-vpn-params.nix `hosts.latitude` (+ /32).
-  # See docs/superpowers/specs/2026-07-13-headscale-fleet-mesh-probe-design.md.
-  fleet.meshVpn = {
-    enable = false;
-    address = "10.0.0.8/32";
-  };
+  # Keys-only sshd reachable over the tailnet + LAN (fleet SSH-server role).
+  fleet.sshServer.enable = true;
 
   # Headscale/Tailscale fleet transport (probe). tailscaled only — the tailnet
   # is joined imperatively after switch:

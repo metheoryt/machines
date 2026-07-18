@@ -205,6 +205,14 @@ global + per-host memory). One bullet per fact under a topical heading.
     hand-deleted from server/METHE-SERVER's real hosts file 2026-07-15 (elevated
     pwsh, `.bak-fleet-hosts` backup left); verified `server`→`100.64.0.3` still
     resolves via MagicDNS (`server.gg.ez`). **Fleet rename + MagicDNS effort COMPLETE.**
+- **AWG mesh retired from the machines repo (2026-07-17).** SSH-server role moved
+  to `modules/system/ssh-server.nix` (`fleet.sshServer`, keys-only sshd on
+  `tailscale0` + LAN). Deleted `mesh-vpn.nix`, slimmed params → `fleet.nix`
+  (machine records only), dropped `mesh` blocks + `mesh-member`/`mesh-hub` roles
+  from `fleet.json`, removed provisioner mesh roles/libs, renamed the trust file
+  → `provision/fleet-authorized-keys`, converged `windows.ps1` firewall onto
+  `100.64.0.0/10`. Kept: AmneziaVPN client (latitude + Windows winget) and the
+  VPS AWG VPN server for RU relatives.
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches

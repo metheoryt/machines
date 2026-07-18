@@ -5,15 +5,15 @@
 # host-key policy (TOFU-then-pin, safe on a private self-controlled mesh).
 # Imported by me.nix.
 #
-# The per-host blocks are GENERATED from fleet.json (via mesh-vpn-params.nix) —
+# The per-host blocks are GENERATED from fleet.json (via fleet.nix) —
 # one block per fleet member, so adding/removing a machine or changing its IP is
 # a one-line fleet.json edit. HostName now comes from MagicDNS (Headscale, suffix
 # gg.ez), which resolves every fleet member's bare name fleet-wide — so no
-# per-box HostName is emitted here, EXCEPT the hub (vps), which points at its
-# public domain (cyphy.kz) so managing it never depends on the tunnel/tailnet
-# it hosts. A User override is only emitted when a machine's fleet.json ssh.user
-# differs from the default `me`. The old AmneziaWG mesh IPs (mesh.ip) and the
-# tailnet IPs formerly used here are no longer needed for SSH.
+# per-box HostName is emitted here, EXCEPT the hub's HostName comes from its
+# `fleet.json` `ssh.host` (cyphy.kz). A User override is only emitted when a
+# machine's fleet.json ssh.user differs from the default `me`. The old
+# AmneziaWG mesh IPs (mesh.ip) and the tailnet IPs formerly used here are no
+# longer needed for SSH.
 #
 # Uses the current `programs.ssh.settings` API (upstream OpenSSH directive names
 # directly), NOT the deprecated `matchBlocks`/`extraOptions`. `enableDefaultConfig`
@@ -23,11 +23,11 @@
 #
 # Design: docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md
 {lib, ...}: let
-  params = import ../system/mesh-vpn-params.nix;
+  params = import ../system/fleet.nix;
   mkBlock = _name: m:
     (
-      if m.mesh.role == "hub"
-      then {HostName = params.endpoint;} # cyphy.kz — hub SSH must not depend on the transport it hosts
+      if (m.ssh.host or null) != null
+      then {HostName = m.ssh.host;} # hub → cyphy.kz: SSH must not depend on the transport it hosts
       else {} # MagicDNS resolves the bare name fleet-wide
     )
     // (

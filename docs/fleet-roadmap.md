@@ -17,9 +17,9 @@ retained on the VPS **only for relatives**. Control plane at `https://cc.cyphy.k
 | Node | Tailnet IP | State |
 |---|---|---|
 | vps-test | `100.64.0.1` | hub + embedded DERP; also runs the AWG relatives-hub (`10.0.0.1`) |
-| latitude | `100.64.0.2` | tailnet-only (AWG spoke disabled) |
-| homeserver | `100.64.0.3` | services on tailnet; **AWG removed**; VPS↔it direct @ ~5ms |
-| g614jv | `100.64.0.4` | tailnet + Windows sshd; AWG still running beside it |
+| latitude | `100.64.0.2` | tailnet-only (mesh removed from repo) |
+| homeserver | `100.64.0.3` | services on tailnet; mesh removed from repo; VPS↔it direct @ ~5ms |
+| g614jv | `100.64.0.4` | tailnet + Windows sshd; AWG tunnel runs locally (not repo-provisioned) |
 
 Networking note: the fleet spans **two separate LANs**. Same-LAN pairs get direct
 P2P (~3ms); cross-LAN pairs relay through our own DERP (expected and accepted —
@@ -41,6 +41,10 @@ this is why **UPnP/router port-mapping is NOT on the backlog**).
   (no-op on NixOS). So `ping homeserver`/`curl homeserver:8001` resolve fleet-wide with
   no DNS resolver. **Real-box apply PENDING:** `hosts` role apply on vps (root) +
   g614jv/homeserver (admin pwsh).
+- [x] **2026-07-17 — AWG mesh retired from the repo.** SSH re-homed onto the tailnet
+  via `fleet.sshServer` (NixOS) + converged `windows.ps1` firewall. Deleted:
+  `mesh-vpn.nix`, mesh params, `fleet.json` mesh blocks, provisioner mesh
+  roles/libs. Kept: the AmneziaVPN client + the VPS AWG VPN server.
 - [ ] **Restart immich + navidrome** on the homeserver — they were down during the
   cutover; confirm they serve over the tailnet like the rest. (Operational, quick.)
 - [ ] **Drop g614jv's AWG.** It runs AWG beside Tailscale; its services already work
@@ -57,9 +61,9 @@ this is why **UPnP/router port-mapping is NOT on the backlog**).
   default shell. NixOS: `services.openssh`. (Gotchas captured in project memory.)
 - [ ] **Declarative Windows Tailscale provisioning.** Fold `winget install
   Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz --authkey
-  <key>` into the `mesh-member` role so enrolling a box isn't manual. Mint a
-  short-lived key per enrollment and expire it after (`headscale preauthkeys
-  expire --id <n> --force`).
+  <key>` into the `ssh-server` role (or a dedicated tailscale role) so enrolling
+  a box isn't manual. Mint a short-lived key per enrollment and expire it after
+  (`headscale preauthkeys expire --id <n> --force`).
 - [ ] **Zero-touch WSL tailnet enrollment (design approved 2026-07-16).** Extend
   `provision/tailscale-wsl.sh` (already shipped, currently env-key + manual) so a
   WSL distro re-enrolls hands-free. Note: the *fleet itself* is manual today —

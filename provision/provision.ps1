@@ -14,13 +14,11 @@ Get-ChildItem -Path (Join-Path $PSScriptRoot 'roles') -Filter '*.ps1' -ErrorActi
     ForEach-Object { . $_.FullName }
 
 # role name -> executor scriptblock. A map avoids function-name mangling for
-# hyphenated roles (e.g. a future 'mesh-member').
+# hyphenated roles.
 $RoleExecutors = @{
     'agents'      = { param($Mode, $Platform, $Machine) Invoke-RoleAgents     -Mode $Mode -Platform $Platform -Machine $Machine }
     'dotfiles'    = { param($Mode, $Platform, $Machine) Invoke-RoleDotfiles   -Mode $Mode -Platform $Platform -Machine $Machine }
     'repos'       = { param($Mode, $Platform, $Machine) Invoke-RoleRepos      -Mode $Mode -Platform $Platform -Machine $Machine }
-    'mesh-member' = { param($Mode, $Platform, $Machine) Invoke-RoleMeshMember -Mode $Mode -Platform $Platform -Machine $Machine }
-    'mesh-hub'    = { param($Mode, $Platform, $Machine) Invoke-RoleMeshHub    -Mode $Mode -Platform $Platform -Machine $Machine }
 }
 
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }
