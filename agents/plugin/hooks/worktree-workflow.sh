@@ -19,7 +19,7 @@ git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 # Must be a LINKED worktree: absolute git-dir differs from the common git-dir.
 gd="$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)" || exit 0
-common="$(cd "$cwd" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd)" || exit 0
+common="$(cd "$cwd" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || exit 0
 [ -n "$common" ] || exit 0
 [ "$gd" != "$common" ] || exit 0
 

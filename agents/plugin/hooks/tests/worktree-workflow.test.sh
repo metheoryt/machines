@@ -6,7 +6,7 @@ HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$HERE/../worktree-workflow.sh"
 fail=0
 tmp="$(mktemp -d)"
-trap 'git worktree prune 2>/dev/null; rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"' EXIT
 
 run_hook() { printf '{"cwd":"%s"}' "$1" | bash "$HOOK"; }
 
@@ -50,6 +50,14 @@ mkdir "$tmp/plain"
 out="$(run_hook "$tmp/plain")"
 if [ -z "$out" ]; then echo "PASS case4 silent outside git"
 else echo "FAIL case4 (expected empty)"; printf '%s\n' "$out"; fail=1; fi
+
+# Case 5 (regression): base checkout reached via a symlinked path -> silent.
+# gd (--absolute-git-dir) is a PHYSICAL path; common must be normalized the
+# same way (pwd -P) or a symlinked cwd wrongly looks like a linked worktree.
+ln -s "$r1" "$tmp/personal-link"
+out="$(run_hook "$tmp/personal-link")"
+if [ -z "$out" ]; then echo "PASS case5 silent in base checkout via symlink"
+else echo "FAIL case5 (expected empty)"; printf '%s\n' "$out"; fail=1; fi
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit $fail
