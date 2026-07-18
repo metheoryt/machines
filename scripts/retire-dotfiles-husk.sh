@@ -6,10 +6,16 @@ set -u
 DF="$HOME/.dotfiles"
 run() { if [ -n "${DRY_RUN:-}" ]; then echo "  ~ would: $*"; else echo "  + $*"; "$@"; fi; }
 
-# 1. Guard: only retire an EMPTY husk (0 tracked files). Absent husk => already done.
+# 1. Guard: only retire a genuinely DEAD husk — a valid bare repo with 0 tracked
+#    files. FAIL SAFE: if git errors (not a repo / corrupted), REFUSE, never rm.
+#    Absent husk => already done.
 if [ -d "$DF" ]; then
-  n="$(git --git-dir="$DF" --work-tree="$HOME" ls-files 2>/dev/null | wc -l | tr -d ' ')"
-  if [ "${n:-0}" -ne 0 ]; then
+  if ! tracked="$(git --git-dir="$DF" --work-tree="$HOME" ls-files 2>/dev/null)"; then
+    echo "REFUSING: $DF exists but 'git ls-files' failed (not a healthy bare repo). Resolve manually." >&2
+    exit 1
+  fi
+  if [ -n "$tracked" ]; then
+    n="$(printf '%s\n' "$tracked" | grep -c .)"
     echo "REFUSING: $DF still tracks $n file(s). Not a dead husk — resolve manually." >&2
     exit 1
   fi
@@ -33,7 +39,11 @@ if [ -f "$fishcfg" ] && grep -q "alias dotfiles" "$fishcfg" 2>/dev/null; then
     echo "  ~ would: remove 'alias dotfiles' line from $fishcfg"
   else
     cp "$fishcfg" "$fishcfg.pre-husk-retire.bak"
-    grep -v "alias dotfiles" "$fishcfg" > "$fishcfg.tmp" && mv "$fishcfg.tmp" "$fishcfg"
+    # grep -v exits 1 when it removes EVERY line (alias-only file); the redirect has
+    # already written the filtered content, so mv unconditionally (|| true guards the
+    # exit-1 case and prevents a stray .tmp being left behind).
+    grep -v "alias dotfiles" "$fishcfg" > "$fishcfg.tmp" || true
+    mv "$fishcfg.tmp" "$fishcfg"
     echo "  + removed 'alias dotfiles' from $fishcfg (backup: $fishcfg.pre-husk-retire.bak)"
   fi
 else

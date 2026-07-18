@@ -43,4 +43,35 @@ check "non-empty husk: refuses (nonzero exit)" '[ "'$rc'" -ne 0 ]'
 check "non-empty husk: ~/.dotfiles preserved"  '[ -e "$h/.dotfiles" ]'
 rm -rf "$h" "$wt"
 
+# Case 4: NON-repo ~/.dotfiles dir with a file -> guard fails SAFE (refuses, preserves).
+# This is the regression guard for the fail-open Critical.
+h="$(mktemp -d)"
+mkdir -p "$h/.dotfiles"; printf 'precious\n' > "$h/.dotfiles/keep.txt"
+out="$(HOME="$h" bash "$script" 2>&1)"; rc=$?
+check "non-repo husk: refuses (nonzero exit)" '[ "'$rc'" -ne 0 ]'
+check "non-repo husk: ~/.dotfiles preserved"  '[ -e "$h/.dotfiles/keep.txt" ]'
+rm -rf "$h"
+
+# Case 5: fish alias among other lines -> alias removed, other lines kept, backup made, no stray .tmp.
+h="$(mktemp -d)"; git init --bare -q "$h/.dotfiles"
+mkdir -p "$h/.config/fish"
+printf 'set -x FOO bar\nalias dotfiles "git --git-dir=x"\nfunction fish_prompt\nend\n' > "$h/.config/fish/config.fish"
+HOME="$h" bash "$script" >/dev/null 2>&1
+check "fish alias line removed"     '! grep -q "alias dotfiles" "$h/.config/fish/config.fish"'
+check "fish other lines preserved"  'grep -q "set -x FOO bar" "$h/.config/fish/config.fish" && grep -q "function fish_prompt" "$h/.config/fish/config.fish"'
+check "fish config backup created"  '[ -f "$h/.config/fish/config.fish.pre-husk-retire.bak" ]'
+check "no stray .tmp (multi-line)"  '[ ! -e "$h/.config/fish/config.fish.tmp" ]'
+rm -rf "$h"
+
+# Case 6: fish alias is the ONLY line -> removed cleanly (grep -v exits 1), no stray .tmp, exit 0.
+# Regression guard for the false-success Important.
+h="$(mktemp -d)"; git init --bare -q "$h/.dotfiles"
+mkdir -p "$h/.config/fish"
+printf 'alias dotfiles "git --git-dir=x"\n' > "$h/.config/fish/config.fish"
+HOME="$h" bash "$script" >/dev/null 2>&1; rc=$?
+check "alias-only fish: exits 0"        '[ "'$rc'" -eq 0 ]'
+check "alias-only fish: alias gone"     '! grep -q "alias dotfiles" "$h/.config/fish/config.fish"'
+check "alias-only fish: no stray .tmp"  '[ ! -e "$h/.config/fish/config.fish.tmp" ]'
+rm -rf "$h"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
