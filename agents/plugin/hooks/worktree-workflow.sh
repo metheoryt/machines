@@ -8,7 +8,10 @@
 set -u
 
 # Remotes to stay silent for (work repos with their own PR flow).
-BLOCKLIST=(thepureapp)
+# Org-anchored: the trailing slash matches the github.com:thepureapp/* org
+# segment (both SSH and HTTPS forms), so a personal repo whose name merely
+# contains "thepureapp" is not wrongly silenced.
+BLOCKLIST=(thepureapp/)
 
 # Session JSON arrives on stdin; pull cwd, fall back to $PWD.
 cwd="$(jq -r '.cwd // empty' 2>/dev/null)"
