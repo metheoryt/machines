@@ -19,6 +19,19 @@ elsewhere to sync. Do NOT put secrets here.
   `main`↔branch divergence. Work repos (`github.com:thepureapp/*`) are excluded —
   they keep the pure-dev PR flow.
 
+## Fleet SSH reachability
+
+- **The fleet machines are mutually reachable over SSH via the Tailscale/Headscale
+  tailnet — assume it, don't re-probe each session.** SSH aliases live in
+  `~/.ssh/config` (generated from `provision/fleet.json` → `ssh.nix`): `latitude`
+  (latitude5520), `desktop` (g16, NixOS hostname `g614jv`), `server`
+  (methe-server — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
+  fleet workstation). Keys-only, no public exposure.
+- **The remote login shell is fish**, which chokes on `$(...)` / POSIX-test syntax
+  passed as `ssh host '<script>'` (fails silently / non-zero). To run a bash
+  snippet remotely, force bash: `ssh host bash -s < script.sh` (or
+  `ssh host bash -lc '...'`).
+
 ## Harness behavior (empirical)
 
 - **Subagents — full reference in `agents/docs/claude-code-subagents.md`
