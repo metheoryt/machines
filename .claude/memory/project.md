@@ -559,12 +559,16 @@ global + per-host memory). One bullet per fact under a topical heading.
   + the committed `.envrc` (whose sole job was the persistent nix-direnv `.direnv/`
   GC root keeping the hook's `/nix/store` closure alive against the weekly GC). The
   installed `.git/hooks/pre-commit` AND `.git/hooks/pre-push` are UNTRACKED, so
-  their removal can't ride the commit. On each box, after `git pull`, run once:
-  `rm -f .git/hooks/pre-commit .git/hooks/pre-push`. Otherwise once `.envrc` is
-  gone the `.direnv/` root drops on next `cd` → the next weekly
-  `nix-collect-garbage` reaps the pinned tooling → the stale hook fails to exec and
-  **aborts every commit/push** on that box. DONE on `~/machines` (the box this was
-  authored on). PENDING on **g16, homeserver, latitude5520**. Trade-off accepted:
+  their removal can't ride the commit. On any box that ran `nix develop`/direnv
+  against a machines clone, run once: `rm -f .git/hooks/pre-commit
+  .git/hooks/pre-push`. Otherwise once `.envrc` is gone the `.direnv/` root drops
+  on next `cd` → the next weekly `nix-collect-garbage` reaps the pinned tooling →
+  the stale hook fails to exec and **aborts every commit/push** on that box.
+  SCOPE CORRECTION: the hook only ever exists where `nix develop` ran — i.e. a
+  NixOS/nix dev box. In this fleet that is **only latitude5520** (Windows
+  desktop/server + the now-Windows-only g16 + the Debian hub + WSL leaves have no
+  nix, so never had the hook). Latitude5520 is DONE (cleaned this session); nothing
+  else is pending. Trade-off accepted:
   lint/format (alejandra/deadnix/statix/shellcheck) is now a MANUAL gate
   (`just fmt` / `just check`), no longer enforced on commit; and `cd` no longer
   auto-loads the dev shell (`.envrc` gone) — use `just shell` / `nix develop`.
