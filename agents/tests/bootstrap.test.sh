@@ -13,8 +13,12 @@ check() { if eval "$2"; then echo "ok   - $1"; else echo "FAIL - $1"; fail=1; fi
 out1="$(MACHINES_HOST_ID=testhost DRY_RUN=1 CLAUDE_CONFIG_DIR=/tmp/does-not-exist-claude bash "$boot" 2>&1)"
 check "MACHINES_HOST_ID picks hosts/testhost.md" \
   'printf "%s" "$out1" | grep -q "hosts/testhost.md"'
+# Compute the OS-hostname host id the same way bootstrap's host_id() does, so the
+# negative assertion is a real guard: pre-fix, out1 seeds this file; post-fix it must not.
+os_hid="$(hostname 2>/dev/null)"; os_hid="${os_hid%%.*}"
+os_hid="$(printf '%s' "$os_hid" | tr -c 'A-Za-z0-9_-' '_')"
 check "MACHINES_HOST_ID does not fall back to OS hostname" \
-  '! printf "%s" "$out1" | grep -qE "hosts/$(hostname | tr -c "A-Za-z0-9_-" "_")\.md"'
+  '! printf "%s" "$out1" | grep -qF "hosts/'"$os_hid"'.md"'
 
 # Case 2: the plugin hooks tests/ dir is never linked. The Codex block that links
 # plugin/hooks entry-by-entry runs ONLY on the personal profile (IS_PERSONAL=1),
