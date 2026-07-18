@@ -5,12 +5,12 @@ global + per-host memory). One bullet per fact under a topical heading.
 
 ## Workflow
 
-- **Sync through git (2026-07-15).** Work directly on `main` and
-  commit + push whenever something is ready — this repo is kept in sync across
-  the fleet through `main`, so don't leave finished work sitting uncommitted.
-  Branching is still used, but only for BIG work; small/ready changes go
-  straight to `main`. (Normal repo — plain `git`, not the bare-repo dotfiles
-  dance.)
+- **Git workflow — one framework, see `agents/docs/git-workflow.md`.** `main` is
+  the fleet-sync truth. **main-checkout mode** (on `main` in `~/machines`): commit
+  on `main`, push when ready; big/isolated work → spawn a worktree. **worktree
+  mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
+  live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
+  a fast-forward merge-back into `main` from the base checkout at checkpoints.
 
 ## Fleet network
 

@@ -11,6 +11,14 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## User
 
+## Git workflow
+
+- **Personal fleet-sync repos use one framework:** `machines/agents/docs/git-workflow.md`
+  (one model, two modes — main-checkout / worktree). In a non-blocklisted linked
+  worktree the `worktree-workflow` hook surfaces the worktree-mode rules + live
+  `main`↔branch divergence. Work repos (`github.com:thepureapp/*`) are excluded —
+  they keep the pure-dev PR flow.
+
 ## Harness behavior (empirical)
 
 - **Subagents — full reference in `agents/docs/claude-code-subagents.md`
