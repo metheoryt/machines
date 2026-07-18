@@ -20,8 +20,6 @@ in {
   imports = [
     # Claude Code config: version-controlled in claude/, symlinked into ~/.claude
     ./claude.nix
-    # Codex config: shares claude/ content, codex/-specific files, symlinked into ~/.codex
-    ./codex.nix
     # RustDesk: seed self-hosted server + known peers (seed-only, see module)
     ./rustdesk-config.nix
     # SSH client config for the fleet (per-host settings from fleet.json) — see ./ssh.nix
@@ -43,7 +41,7 @@ in {
     pycharm # upstream-latest override — see ./pycharm-bin.nix (nixpkgs lags)
     orca # worktree IDE for AI agents — see ./orca-bin.nix (upstream AppImage)
     claude-code
-    codex # OpenAI Codex CLI (config synced via codex.nix); attr unverified on Windows — confirm with `just check` on a Nix host
+    codex # OpenAI Codex CLI (config provisioned by bootstrap's personal run); attr unverified on Windows — confirm with `just check` on a Nix host
     sox # for claude /voice audio recording
     difftastic # structural diff tool — `difft`, also wired as `git dft`
 
