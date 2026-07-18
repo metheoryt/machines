@@ -28,10 +28,12 @@ a derivation of it rather than a scattered, contradictory note.
 
 ## Scope
 
-**Personal fleet-sync repos only** — `machines` now, `vps` and similar normal
-repos by opt-in. Explicitly **NOT** the Pure work repos: those keep the
-`pure-dev` PR-for-approval convention and are governed separately (the framework
-just points to them as out of scope).
+**Personal fleet-sync repos only.** The workflow applies by default in any
+linked worktree; **Pure work repos are excluded by a remote blocklist** (their
+`origin` is `github.com:thepureapp/*`), since they keep the `pure-dev`
+PR-for-approval convention and are governed separately. Personal repos
+(`github.com:metheoryt/*` — `machines`, `vps`, and any future one) are covered
+automatically with nothing to add per repo.
 
 This framework **supersedes the old `~/.dotfiles` model.** That bare-`$HOME`
 repo is already a dead husk on NixOS (0 tracked files; Home Manager owns the home
@@ -135,12 +137,12 @@ when **both** hold:
 1. **cwd is a linked worktree** — `git rev-parse --absolute-git-dir` ≠ realpath
    of `git rev-parse --git-common-dir` (equal in a base checkout, different in a
    linked worktree).
-2. **the repo opts in** — a committed marker `.claude/worktree-sync-to-main` at
-   the worktree root.
+2. **the repo's remote is not blocklisted** — `git remote get-url origin` does
+   not match any pattern in the blocklist (below).
 
-If either is false → exit 0 silently. This is what keeps it fleet-sync-only and
-silent in Pure work-repo worktrees (they never carry the marker), even though the
-hook is installed in every profile.
+If either is false → exit 0 silently. Default-on + blocklist is what keeps it
+covering personal repos automatically while staying silent in Pure work-repo
+worktrees, even though the hook is installed in every profile.
 
 When it fires it prints:
 - **Live state** — worktree name + branch; base branch (`main`); ahead/behind of
@@ -151,11 +153,17 @@ When it fires it prints:
   the rules live in ONE file and the hook only surfaces them + the live state. It
   runs no git-mutating command itself.
 
-### 3. `.claude/worktree-sync-to-main` (new — opt-in marker in `machines`)
+### 3. Remote blocklist (in the hook)
 
-An empty/short committed file at the `machines` repo root; its presence is the
-fleet-sync opt-in. Committed on `main`, so it lands in every worktree checkout.
-Adding a future fleet-sync repo = commit the same marker there.
+A short list of remote-URL patterns near the top of `worktree-workflow.sh`. If
+`origin` matches any, the hook exits silently. Initial entry:
+
+- `thepureapp` — the Pure GitHub org (`github.com:thepureapp/*`).
+
+Default-on: repos with no match (all personal repos, and local-only repos with no
+remote) get the workflow with nothing to configure. Excluding another repo later
+= add its pattern to the list. Kept as an inline array (one file, self-contained)
+rather than a separate config artifact, per the goal of not scattering config.
 
 ### 4. `hooks.json` registration
 
@@ -173,8 +181,9 @@ Add `worktree-workflow.sh` to the existing `SessionStart` array in
 
 ## Data flow
 
-- **Session in a marked worktree** → `worktree-workflow.sh` detects linked
-  worktree + marker → prints live divergence + the worktree-mode rules → Claude
+- **Session in a personal (non-blocklisted) worktree** → `worktree-workflow.sh`
+  detects a linked worktree with a non-blocklisted remote → prints live
+  divergence + the worktree-mode rules → Claude
   commits on the branch, auto-merges `main` in when clean+conflict-free, offers
   FF merge-back (run in the base checkout) at checkpoints, then offers teardown.
 - **Session in the base checkout** → hook detects NOT a linked worktree → exits
@@ -197,8 +206,8 @@ Add `worktree-workflow.sh` to the existing `SessionStart` array in
    clean state, and the worktree-mode rules from the doc.
 2. **Silent in the base checkout** — start a session in `/home/me/machines`;
    confirm the hook prints nothing (not a linked worktree).
-3. **Silent without the marker** — temporarily remove the marker; confirm the
-   hook stays silent even in a worktree.
+3. **Silent for a blocklisted remote** — in a worktree of a `thepureapp` repo (or
+   with `origin` temporarily pointed at one), confirm the hook stays silent.
 4. **Sync path** — with a clean tree and the branch behind `main`, confirm
    `git merge main` in the worktree is the correct, conflict-free (here
    fast-forward) operation.
