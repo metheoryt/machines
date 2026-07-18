@@ -167,6 +167,7 @@ link_entries_into() {
     base="$(basename "$entry")"
     [ "$base" = ".gitkeep" ] && continue   # placeholder, not real config
     [ "$base" = "hooks.json" ] && continue # cyphy plugin manifest, not a Codex hook
+    [ "$base" = "tests" ] && continue      # hook test scripts, not runtime hooks
     link "$entry" "$dest_sub/$base"
   done
 }
@@ -204,7 +205,10 @@ link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
 # Per-host memory: link agents/hosts/<host>.md -> ~/.claude/host-memory.md. Seed
 # an empty stub in the repo the first time a new host runs this, so the import
 # never dangles (commit it to start recording host-scoped memory there).
-HOST_ID="$(host_id)"
+# Host id: nix passes the authoritative hostname via MACHINES_HOST_ID (so nix and
+# bootstrap name the per-host memory file identically). Off-nix, fall back to the
+# sanitized OS hostname. Single source of host-naming — see host_id().
+HOST_ID="${MACHINES_HOST_ID:-$(host_id)}"
 host_src="$SRC_DIR/hosts/$HOST_ID.md"
 if [ ! -e "$host_src" ]; then
   if [ -n "${DRY_RUN:-}" ]; then
