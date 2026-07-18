@@ -554,6 +554,21 @@ global + per-host memory). One bullet per fact under a topical heading.
 
 ## Pending follow-ups
 
+- **Per-box stale git-hook cleanup after the pre-commit removal (2026-07-18).**
+  Commit `2af7c5b` removed the git-hooks.nix pre-commit mechanism from `flake.nix`
+  + the committed `.envrc` (whose sole job was the persistent nix-direnv `.direnv/`
+  GC root keeping the hook's `/nix/store` closure alive against the weekly GC). The
+  installed `.git/hooks/pre-commit` AND `.git/hooks/pre-push` are UNTRACKED, so
+  their removal can't ride the commit. On each box, after `git pull`, run once:
+  `rm -f .git/hooks/pre-commit .git/hooks/pre-push`. Otherwise once `.envrc` is
+  gone the `.direnv/` root drops on next `cd` → the next weekly
+  `nix-collect-garbage` reaps the pinned tooling → the stale hook fails to exec and
+  **aborts every commit/push** on that box. DONE on `~/machines` (the box this was
+  authored on). PENDING on **g16, homeserver, latitude5520**. Trade-off accepted:
+  lint/format (alejandra/deadnix/statix/shellcheck) is now a MANUAL gate
+  (`just fmt` / `just check`), no longer enforced on commit; and `cd` no longer
+  auto-loads the dev shell (`.envrc` gone) — use `just shell` / `nix develop`.
+
 - **VPS base-machine reproducibility (idea, NOT started — 2026-07-11).** Goal:
   bring a fresh cloud VM back to the VPS baseline reproducibly. Blocked because
   the provisioner's `base`, `ssh-server`, `backup-client` roles are UNIMPLEMENTED
