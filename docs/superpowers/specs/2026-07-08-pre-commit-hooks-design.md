@@ -1,7 +1,9 @@
 # Design: pre-commit hooks via git-hooks.nix
 
 Date: 2026-07-08
-Status: approved
+Status: reverted (2026-07-18) — git-hooks.nix wiring + committed `.envrc`
+(the persistent GC root this design relied on) removed. Lint/format is now a
+manual gate (`just fmt` / `just check`), not enforced on commit.
 
 ## Goal
 
