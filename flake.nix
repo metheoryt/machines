@@ -86,35 +86,35 @@
       inherit inputs system nixpkgs-stable;
     };
 
-    mkHost = hostname: extraModules:
+    mkHost = dir: hostName: extraModules:
       nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs = specialArgs // {inherit hostname;};
+        specialArgs = specialArgs // {hostname = hostName;};
         modules =
           [
-            ./hosts/${hostname}/nixos/configuration.nix
-            ./hosts/${hostname}/nixos/hardware-configuration.nix
+            ./hosts/${dir}/nixos/configuration.nix
+            ./hosts/${dir}/nixos/hardware-configuration.nix
             home-manager.nixosModules.default
             (_: {nixpkgs = nixpkgsConfig;})
           ]
           ++ extraModules;
       };
 
-    mkHome = hostname:
+    mkHome = dir: hostName:
       home-manager.lib.homeManagerConfiguration {
         pkgs = import nixpkgs nixpkgsConfig;
-        extraSpecialArgs = specialArgs // {inherit hostname;};
+        extraSpecialArgs = specialArgs // {hostname = hostName;};
         modules = [./modules/home/me.nix];
       };
   in {
     nixosConfigurations = {
-      latitude = mkHost "latitude" [
+      latitude = mkHost "latitude" "latitude5520" [
         nixos-hardware.nixosModules.dell-latitude-5520
       ];
     };
 
     homeConfigurations = {
-      "me@latitude" = mkHome "latitude";
+      "me@latitude" = mkHome "latitude" "latitude5520";
     };
 
     devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {

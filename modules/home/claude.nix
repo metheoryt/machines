@@ -33,6 +33,7 @@
   config,
   hostname,
   lib,
+  pkgs,
   ...
 }: let
   # Repo agents/ dir on this machine (fish helpers cd to ~/machines, the flake).
@@ -42,37 +43,23 @@ in {
   # store-routed symlinks it used to manage under the profile dirs, and $HOME
   # exists. One profile is provisioned per committed settings.<postfix>.json.
   home.activation.linkClaudeProfiles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    # Single deployer: bootstrap.sh is THE implementation of the profile links
+    # (shared with Windows/macOS). Call it once per committed settings*.json
+    # profile; the personal ~/.claude call also provisions ~/.codex. MACHINES_HOST_ID
+    # gives bootstrap the authoritative host id so nix and bash name the per-host
+    # memory file identically (no drift). Runs after writeBoundary so home-manager
+    # has already GC'd any prior store-routed links before bootstrap recreates them.
     for setsrc in "${agents}"/settings.json "${agents}"/settings.*.json; do
-      [ -e "$setsrc" ] || continue                 # tolerate an unmatched glob
-      base="$(basename "$setsrc" .json)"           # "settings" (primary) or "settings.<postfix>"
+      [ -e "$setsrc" ] || continue
+      base="$(basename "$setsrc" .json)"
       if [ "$base" = settings ]; then
-        prof="$HOME/.claude"                        # settings.json -> primary profile
+        prof="$HOME/.claude"
       else
-        prof="$HOME/.claude-''${base#settings.}"    # settings.<postfix>.json -> ~/.claude-<postfix>
+        prof="$HOME/.claude-''${base#settings.}"
       fi
-      $DRY_RUN_CMD mkdir -p "$prof/memory" "$prof/skills"
-      # Per-profile settings (one hop -> repo file; writable, so Claude's writer
-      # never hits an EROFS store path).
-      $DRY_RUN_CMD ln -sfn "$setsrc" "$prof/settings.json"
-      # Shared set — identical across profiles, all one-hop-direct to the repo.
-      $DRY_RUN_CMD ln -sfn "${agents}/statusline-command.sh" "$prof/statusline-command.sh"
-      $DRY_RUN_CMD ln -sfn "${agents}/balance-refresh.py" "$prof/balance-refresh.py"
-      # AGENTS.md is canonical; <profile>/CLAUDE.md links straight to the real file.
-      $DRY_RUN_CMD ln -sfn "${agents}/AGENTS.md" "$prof/CLAUDE.md"
-      # cyphy plugin: one whole-directory link (skills/agents/commands/hooks all
-      # live inside agents/plugin/, discovered as a skills-directory plugin).
-      $DRY_RUN_CMD ln -sfn "${agents}/plugin" "$prof/skills/cyphy"
-      # My own subagents — per-file links so the gortex-rendered agents and any
-      # machine-local ones coexist in <profile>/agents/.
-      $DRY_RUN_CMD mkdir -p "$prof/agents"
-      for asrc in "${agents}"/subagents/*.md; do
-        [ -e "$asrc" ] || continue
-        $DRY_RUN_CMD ln -sfn "$asrc" "$prof/agents/$(basename "$asrc")"
-      done
-      # Memory stores — the frequently-edited files; live git-repo writes.
-      $DRY_RUN_CMD ln -sfn "${agents}/memory/global.md" "$prof/memory/global.md"
-      $DRY_RUN_CMD ln -sfn "${agents}/memory/personality" "$prof/memory/personality"
-      $DRY_RUN_CMD ln -sfn "${agents}/hosts/${hostname}.md" "$prof/host-memory.md"
+      PATH="${lib.makeBinPath [pkgs.coreutils pkgs.findutils]}:$PATH" \
+      CLAUDE_CONFIG_DIR="$prof" MACHINES_HOST_ID="${hostname}" \
+        $DRY_RUN_CMD ${pkgs.bash}/bin/bash "${agents}/bootstrap.sh"
     done
   '';
 }

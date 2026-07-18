@@ -2,6 +2,7 @@
   pkgs,
   lib,
   inputs,
+  hostname,
   ...
 }: {
   imports = [
@@ -124,8 +125,7 @@
   # Home Manager configuration
   home-manager = {
     extraSpecialArgs = {
-      inherit inputs;
-      hostname = "latitude";
+      inherit inputs hostname;
     };
     useGlobalPkgs = true;
     useUserPackages = true;
