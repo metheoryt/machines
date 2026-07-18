@@ -213,6 +213,22 @@ global + per-host memory). One bullet per fact under a topical heading.
   → `provision/fleet-authorized-keys`, converged `windows.ps1` firewall onto
   `100.64.0.0/10`. Kept: AmneziaVPN client (latitude + Windows winget) and the
   VPS AWG VPN server for RU relatives.
+- **Desktop WSL leaf SSH — LIVE + VERIFIED 2026-07-18.** The `Ubuntu-26.04`
+  distro on `desktop` (tailnet node `desktop-wsl-ubuntu-26-04` = `100.64.0.6`,
+  user `me`) is fully provisioned as a fleet SSH leaf: its `id_fleet` (comment
+  `me@wsl-desktop`) is trusted on **latitude, server, AND the Debian hub**, and
+  its `~/.ssh/config` resolves `ssh latitude`/`ssh server`/`ssh hub` correctly
+  (hub → `cyphy.kz`/`debian`). Verified end-to-end from inside the distro (auth
+  OK to all three; `ssh server whoami` → `methe-server\methe`). Closes the
+  ssh-wsl "code complete, real-box apply pending" item for this host. GOTCHAs:
+  (a) the wsl `me` user has NO passwordless sudo, so `ssh-wsl.sh` can't be driven
+  non-interactively — its first `sudo apt-get install` `die`s without a TTY; if a
+  `wsl --unregister` rebuild needs it, re-run from inside the distro. (b) `ssh
+  <host> true` is a FALSE-negative reachability test against the Windows peers
+  (server/desktop): their default shell is PowerShell, where `true` is not a
+  command (exit 1) — use `whoami` / `exit 0` instead. (c) reach the distro from
+  latitude via `ssh desktop "wsl bash -lc '…'"`; base64-pipe the script to dodge
+  the local→PowerShell→bash quote nesting.
 - iOS: the official **Tailscale App-Store app connects to Headscale** — set the
   custom control server `https://cc.cyphy.kz` (tap the account/login-server
   field; on older builds tap the version 5×). Once joined, the phone reaches
