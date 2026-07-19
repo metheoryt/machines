@@ -1,6 +1,6 @@
 {
   "last_refresh": {
-    "commit": "c525f9a",
+    "commit": "b11ec0b",
     "date": "2026-07-19",
     "scope": "local-only Phase 1 (this box); fleet gather deferred to Phase 2 (post-merge)",
     "sessions_processed": 56,

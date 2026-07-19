@@ -1,6 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against c525f9a on 2026-07-19 -->
+<!-- KB refreshed against b11ec0b on 2026-07-19 -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host memory). One bullet per fact under a topical heading.
