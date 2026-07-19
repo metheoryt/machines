@@ -49,7 +49,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
   live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
   `detect.hostname` edit is inert until the box reboots), and repo-dir renames
-  `hosts/g16` → `hosts/desktop`, `hosts/server` → `hosts/server`. `hub` stays
+  `hosts/desktop` → `hosts/desktop`, `hosts/server` → `hosts/server`. `hub` stays
   `27608` (a VPS, no laptop model). Headscale already enforces node-name
   uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
   drift vs reality.
@@ -464,8 +464,8 @@ global + per-host memory). One bullet per fact under a topical heading.
   the old "g16/g614jv `.6` collision" is resolved — the ROG G16 is now
   Windows-only, `g614jv` is the live ROG and owns mesh `.6`, and the NixOS
   `g16` install (the `fleet.json` entry, `flake.nix` wiring,
-  `hosts/g16/nixos/`, and `scripts/quick-check.sh` paths) is GONE from the
-  repo — `hosts/g16/windows/` is deliberately kept. `fleet.json` is now the
+  `hosts/desktop/nixos/`, and `scripts/quick-check.sh` paths) is GONE from the
+  repo — `hosts/desktop/windows/` is deliberately kept. `fleet.json` is now the
   single mesh-IP source of truth: `mesh-vpn-params.nix` derives its `hosts`
   map (and exposes the raw `machines` records) via `fromJSON`, and
   `modules/home/ssh.nix` GENERATES its matchBlocks keyed on `mesh.role` (the
@@ -692,7 +692,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   to their own dir under `scripts/`; a new updater needs the correct extra
   `../` to reach repo root, or it breaks `just update`/`just upgrade` silently
   (`sed: no such file`).
-- `hosts/g16/windows/winget-packages.json` is a full `winget export` snapshot
+- `hosts/desktop/windows/winget-packages.json` is a full `winget export` snapshot
   of that laptop's installed state; `hosts/server/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.

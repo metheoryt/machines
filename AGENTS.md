@@ -9,7 +9,7 @@ Windows:
 
 - **g614jv / ME-G614JV** — ASUS ROG G16 2024, RTX 4060; **Windows-only** (WSL
   hostname `g614jv`, native `ME-G614JV`). Its former NixOS install `g16` was
-  retired 2026-07-08; `hosts/g16/` now holds only `windows/`.
+  retired 2026-07-08; `hosts/desktop/` now holds only `windows/`.
 - **homeserver** — ASUS ROG **G15** 2023, RTX 3050 Ti, Windows 11 + Docker Desktop, hostname `methe-server`; runs the cyphy.kz service platform
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake, NixOS hostname `latitude5520`
 - **hub** — Debian VPS at `cyphy.kz` (tailnet `100.64.0.1`), a first-class
@@ -19,7 +19,7 @@ Windows:
 
 The NixOS hosts use Home Manager (system-level integration) and share a common
 module set with host-specific overrides. The repo also carries the Windows
-install/reinstall + backup scripts (`hosts/g16/windows/`) and shared Win11
+install/reinstall + backup scripts (`hosts/desktop/windows/`) and shared Win11
 install media (`install-media/`).
 
 **`machines` / `vps` boundary:** `machines` owns the *machines* — NixOS +

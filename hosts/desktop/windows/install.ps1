@@ -4,7 +4,7 @@
   Run on a freshly reinstalled Windows (elevated PowerShell recommended, so the
   restore's icacls / WSL / robocopy steps behave). One-liner:
 
-      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows/install.ps1 | iex
+      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/desktop/windows/install.ps1 | iex
 
   It ensures git is present, clones the `machines` repo, and hands off to
   restore.ps1 (discover backup -> select -> verify -> guided restore).

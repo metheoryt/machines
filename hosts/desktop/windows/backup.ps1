@@ -8,12 +8,12 @@
   preserved), minus .venv/node_modules/caches. Nothing is pushed. WSL-side repos ride along
   inside the full WSL export.
 
-  Canonical location: machines repo, hosts/g16/windows/ (this file). It is version-
+  Canonical location: machines repo, hosts/desktop/windows/ (this file). It is version-
   controlled and pushed, so it survives the wipe — after reinstall, `git clone` machines to get
   it back. The run also drops a standalone copy on the SSD (R:\windows-reinstall\backup.ps1).
 
   Usage (from an ELEVATED PowerShell, so WSL/robocopy behave):
-      cd <your machines checkout>\hosts\g16\windows   # wherever you cloned it
+      cd <your machines checkout>\hosts\desktop\windows   # wherever you cloned it
       .\backup.ps1                 # do the backup
       .\backup.ps1 -WhatIf         # dry run: print what it would do
 
@@ -84,7 +84,7 @@ Write-Host "Logging to $log`n"
 Step 'Inventory (winget / WSL packages)' {
     # Point-in-time snapshot of what's actually installed — for DIFFING against the
     # curated keeper list, not for restore. The importable source of truth is the
-    # version-controlled hosts/g16/windows/winget-packages.json in the repo
+    # version-controlled hosts/desktop/windows/winget-packages.json in the repo
     # (curated: dropped apps removed, Store/forgotten apps added). After a backup,
     # diff this snapshot against that file and fold in anything new you want to keep.
     winget export -o "$Dst\inventory\winget-packages-snapshot.json" --disable-interactivity | Out-Null

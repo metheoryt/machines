@@ -57,7 +57,7 @@ build:
 # isn't cloned there directly, a dangling/missing ~/machines silently breaks
 # the agent config — fail loud instead.
 _check-machines-link:
-    @test -e ~/machines/agents/AGENTS.md || { echo "❌ ~/machines is missing or dangling — home-manager reads ~/machines/agents. If this clone lives elsewhere, symlink it: ln -sfn {{flake_dir}} ~/machines (see hosts/g16/windows runbook, Phase 4.0)"; exit 1; }
+    @test -e ~/machines/agents/AGENTS.md || { echo "❌ ~/machines is missing or dangling — home-manager reads ~/machines/agents. If this clone lives elsewhere, symlink it: ln -sfn {{flake_dir}} ~/machines (see hosts/desktop/windows runbook, Phase 4.0)"; exit 1; }
 
 # NOT run by switch/update on NixOS — claude.nix invokes bootstrap.sh to own the links there,
 # applied by `just switch`. Escape hatch for non-Nix machines or a forced re-link.

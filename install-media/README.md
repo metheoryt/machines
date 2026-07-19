@@ -30,5 +30,5 @@ Copy-Item install-media\autounattend.xml P:\unattend\autounattend.xml -Force
 Copy-Item install-media\ventoy.json      P:\ventoy\ventoy.json        -Force
 ```
 
-The g16 reinstall runbook (`hosts/g16/windows/windows-reinstall-runbook.md`)
+The g16 reinstall runbook (`hosts/desktop/windows/windows-reinstall-runbook.md`)
 walks the full boot → install → restore flow that uses this media.

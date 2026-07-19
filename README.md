@@ -108,7 +108,7 @@ modules/
 
 ### Host Configurations
 
-**`hosts/g16/nixos/`** — ASUS ROG G16
+**`hosts/desktop/nixos/`** — ASUS ROG G16
 - NVIDIA RTX 40-series via PRIME offload (Intel primary, NVIDIA on-demand)
 - Imports: `base`, `laptop`, `gnome`, `nvidia`, `asus-rog`, `development`, home-manager
 - ASUS services: `asusd`, `supergfxd`

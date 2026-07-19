@@ -158,9 +158,11 @@ ENVIRONMENT:
 - Nix gate: `bash scripts/quick-check.sh` (this worktree is on the NixOS box latitude5520).
 
 ## Tasks (plan #3)
-- [ ] Task 1: git mv hosts/homeserver -> hosts/server + rewrite path refs
+- [x] Task 1: git mv hosts/homeserver -> hosts/server + rewrite path refs
 - [ ] Task 2: git mv hosts/g16 -> hosts/desktop + bootstrap URL + path refs
 - [ ] Task 3: g513ie.md primary + methe-server.md symlink + dual-name prose
 - [ ] Task 4: two-layer convention + model docs (box-independent statements)
 - [ ] Phase 1 checkpoint: offer FF merge-back to main (user-gated)
 - [ ] Phase 2 (Tasks 5-7): GATED on user box rename
+
+Task 1: complete (commit 3cfd60b..fc8d836, review clean — haiku impl / haiku review, Spec ✅, Approved). git mv hosts/homeserver->hosts/server; 3 live path refs rewritten (.claude/memory/project.md x2, agents/hosts/methe-server.md x1). Minor: report's verification grep used --exclude-dir=docs (broader than :!docs/superpowers/); reviewer re-ran correct-scope grep, 0 live refs remain.
