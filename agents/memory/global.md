@@ -18,6 +18,11 @@ elsewhere to sync. Do NOT put secrets here.
   worktree the `worktree-workflow` hook surfaces the worktree-mode rules + live
   `main`↔branch divergence. Work repos (`github.com:thepureapp/*`) are excluded —
   they keep the pure-dev PR flow.
+- **Orca-managed worktree sessions — at finish, offer to delete the BRANCH only,
+  never the worktree.** In an Orca-managed session in a worktree, Orca owns the
+  worktree's lifecycle, so when work is done don't offer `git worktree remove`;
+  only offer to delete the branch. (Overrides the worktree-mode "offer to remove
+  the worktree" step of the finish rule for Orca sessions.)
 
 ## Fleet SSH reachability
 
