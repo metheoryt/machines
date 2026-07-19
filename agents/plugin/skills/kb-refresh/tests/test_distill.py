@@ -129,6 +129,21 @@ def test_run_survives_malformed_first_line_and_still_processes_other_sessions(tm
     good_digest = (out / "S2.md").read_text()
     assert "hello from good session" in good_digest
 
+def test_distill_lines_skips_valid_json_non_dict_lines():
+    lines = [
+        _ev(type="user", sessionId="S1", cwd="/home/me/machines", gitBranch="main",
+            timestamp="2026-07-17T10:00:00Z", message={"role": "user", "content": "add a swap module"}),
+        "[]",       # valid JSON, not an object -> must not raise
+        '"hi"',     # valid JSON, not an object -> must not raise
+        "42",       # valid JSON, not an object -> must not raise
+        _ev(type="assistant", sessionId="S1", timestamp="2026-07-17T10:01:30Z",
+            message={"role": "assistant", "content": [{"type": "text", "text": "I'll add ZRAM swap."}]}),
+    ]
+    digest, meta = distill.distill_lines(lines)  # must not raise AttributeError
+    assert "[USER] add a swap module" in digest
+    assert "[ASSISTANT] I'll add ZRAM swap." in digest
+    assert meta["n_lines"] == 5
+
 def test_run_preserves_cwd_on_noop_second_run(tmp_path):
     proj = tmp_path / "projects" / "-home-me-machines"
     proj.mkdir(parents=True)

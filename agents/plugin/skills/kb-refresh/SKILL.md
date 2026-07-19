@@ -60,6 +60,17 @@ which a human approves before anything is written.
   explicitly and skip straight to Track B (Step 3) — there is nothing new for
   Track A to map.
 
+### Recovery / aborted runs
+The watermark in the state file is written at gather time (Step 1), long
+before the Step 6 commit. If the run aborts after gather — a crash during
+map/reduce, or the user rejecting the proposal at the review gate (Step 5) —
+the on-disk state already has watermarks advanced, so a naive re-run reports
+"0 digests / nothing new" (a silent no-op). To retry a fresh harvest, restore
+the state file first: on the first run in a repo it's untracked, so
+`rm "$repo/.claude/kb-harvest-state.json"`; on later runs it's git-tracked, so
+`git -C "$repo" checkout -- .claude/kb-harvest-state.json` — then re-invoke
+Step 1.
+
 ## Step 2 — Track A map (subagent fan-out)
 - Batch the digests written to `<scratch>/kb-digests/*.md` into groups of
   ~15 files per batch.

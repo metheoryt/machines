@@ -27,6 +27,8 @@ def distill_lines(lines):
             ev = json.loads(raw)
         except json.JSONDecodeError:
             continue
+        if not isinstance(ev, dict):
+            continue
         ts = ev.get("timestamp")
         if ts:
             first_ts = first_ts or ts

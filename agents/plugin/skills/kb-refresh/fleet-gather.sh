@@ -54,9 +54,20 @@ main() {
     fi
     echo "[$h] distilling in-place…" >&2
     # Run the (synced) distiller on the remote box; force bash — remote shell is fish.
-    ssh "$h" bash -lc "'python3 ~/.claude/plugins/cache/*/cyphy/*/skills/kb-refresh/distill.py \
-      --out ~/.cache/kb-digests --state ~/.cache/kb-harvest-state.json --host $h ${match_args[*]}'" \
-      || { echo "[$h] skipped (unreachable)" >&2; continue; }
+    # The cyphy plugin is deployed as a skills-directory symlink
+    # ~/.claude/skills/cyphy -> …/agents/plugin, so distill.py lives under
+    # ~/.claude/skills/cyphy/skills/kb-refresh/ on every fleet box.
+    rc=0
+    ssh "$h" bash -lc "'python3 ~/.claude/skills/cyphy/skills/kb-refresh/distill.py \
+      --out ~/.cache/kb-digests --state ~/.cache/kb-harvest-state.json --host $h ${match_args[*]}'" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      if [ "$rc" -eq 255 ]; then
+        echo "[$h] skipped (unreachable)" >&2
+      else
+        echo "[$h] remote distill failed (exit $rc)" >&2
+      fi
+      continue
+    fi
     echo "[$h] pulling digests…" >&2
     rsync -az "$h:.cache/kb-digests/" "$out/" || echo "[$h] rsync failed" >&2
   done
