@@ -59,6 +59,9 @@ EOF
 }
 
 LOGIN_SERVER="https://cc.cyphy.kz"
+# Headscale base_domain — the MagicDNS suffix (`<name>.$MAGICDNS_SUFFIX`). Must
+# match /etc/headscale/config.yaml on the VPS (renamed fleet.mesh → gg.ez).
+MAGICDNS_SUFFIX="gg.ez"
 AUTHKEY_STORE="/etc/headscale/authkey"
 
 # DNS-label safe: lowercase, non [a-z0-9-] → '-', collapse repeats, trim edges.
@@ -193,7 +196,7 @@ fi
 ALREADY_UP=0
 if have tailscale && tailscale ip -4 2>/dev/null | grep -qE '^100\.'; then
   ALREADY_UP=1
-  ok "already enrolled: $(tailscale ip -4 | head -1) ($HOSTNAME_TS.fleet.mesh)"
+  ok "already enrolled: $(tailscale ip -4 | head -1) ($HOSTNAME_TS.$MAGICDNS_SUFFIX)"
 fi
 
 # ── Install tailscale ─────────────────────────────────────────────────────────
@@ -258,5 +261,5 @@ fi
 # ── Verify ────────────────────────────────────────────────────────────────────
 IP="$(tailscale ip -4 2>/dev/null | head -1)"
 [ -n "$IP" ] || die "enrolled but no tailnet IPv4 yet — check 'tailscale status'."
-ok "node '$HOSTNAME_TS' up at $IP  (MagicDNS: ${HOSTNAME_TS}.fleet.mesh)"
+ok "node '$HOSTNAME_TS' up at $IP  (MagicDNS: ${HOSTNAME_TS}.${MAGICDNS_SUFFIX})"
 printf '\nNext: bash %s\n' "$(dirname "$0")/orca-serve.sh"

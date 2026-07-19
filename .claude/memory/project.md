@@ -67,7 +67,8 @@ global + per-host memory). One bullet per fact under a topical heading.
   --enroll` mints via `sudo headscale preauthkeys create`.
 - Tailnet CGNAT range `100.64.0.0/10` (disjoint from AWG `10.0.0.0/24`; they
   coexist on the same boxes). Nodes: vps `100.64.0.1`, latitude `100.64.0.2`,
-  homeserver `100.64.0.3`. base_domain `fleet.mesh` (MagicDNS).
+  homeserver `100.64.0.3`. base_domain `gg.ez` (MagicDNS; renamed from
+  `fleet.mesh`).
 - Probe PASSED 2026-07-13 (spec/plan/results under machines
   `docs/superpowers/`): LAN-direct 3ms; SSH + RustDesk over the tailnet work;
   DERP fallback through our own relay is reliable. **KEY FINDING:**

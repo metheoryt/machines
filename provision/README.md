@@ -179,7 +179,7 @@ Then read the pairing URL and add it on the client:
 Notes:
 
 - **Per-distro identity.** Each distro runs its own `tailscaled` and gets a
-  distinct `100.64.x.y` + MagicDNS name (`wsl-<distro>.fleet.mesh`), so every
+  distinct `100.64.x.y` + MagicDNS name (`wsl-<distro>.gg.ez`), so every
   Orca server uses the default port `6768`. No `.wslconfig` mirrored networking,
   no `netsh portproxy` — inbound rides the VPS DERP relay through WSL's NAT.
 - **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with

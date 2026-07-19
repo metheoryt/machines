@@ -229,6 +229,6 @@ cat <<EOF
 
 Orca server ready on this distro.
   • Pairing URL (SECRET — do not commit):  ${JOURNAL}
-  • Reach it at:  ${TSIP}:6768   (or <node>.fleet.mesh:6768 with MagicDNS)
+  • Reach it at:  ${TSIP}:6768   (or <node>.gg.ez:6768 with MagicDNS)
   • Pair a client:  orca environment add --name <distro> --pairing-code '<orca://pair?…>'
 EOF
