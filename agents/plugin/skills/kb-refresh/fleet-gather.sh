@@ -21,6 +21,21 @@ fleet_hosts() {
   ' "$json"
 }
 
+roots_for_platform() {
+  # Projects roots to distill on the remote, in order. Windows boxes keep live
+  # transcripts in the Windows profile AND (partially) in WSL — distill both.
+  local platform="$1" user="$2"
+  case "$platform" in
+    windows)
+      printf '/mnt/c/Users/%s/.claude/projects\n' "$user"
+      printf '~/.claude/projects\n'
+      ;;
+    *)
+      printf '~/.claude/projects\n'
+      ;;
+  esac
+}
+
 detect_hosts() {
   # Echoes every fleet workstation alias present in ~/.ssh/config, one per
   # line. Does NOT exclude the current box — the OS hostname never matches

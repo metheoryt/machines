@@ -7,6 +7,11 @@ script="$here/../fleet-gather.sh"
 # fake HOME with an ssh config that lists two of three fleet aliases
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+
+# Test helpers
+fail() { echo "FAIL: $1" >&2; exit 1; }
+eq()   { [ "$1" = "$2" ] || fail "$3: expected '$2', got '$1'"; }
+
 mkdir -p "$tmp/.ssh"
 cat > "$tmp/.ssh/config" <<EOF
 Host latitude
@@ -41,6 +46,14 @@ if command -v jq >/dev/null 2>&1; then
 else
   echo "SKIP: fleet_hosts test (jq not installed)"
 fi
+
+# ── roots_for_platform ────────────────────────────────────────────────────────
+rw="$(roots_for_platform windows methe)"
+eq "$(printf '%s\n' "$rw" | sed -n 1p)" '/mnt/c/Users/methe/.claude/projects' 'roots windows: profile root first'
+eq "$(printf '%s\n' "$rw" | sed -n 2p)" '~/.claude/projects'                  'roots windows: WSL root second'
+[ "$(printf '%s\n' "$rw" | wc -l)" = 2 ] || { echo "FAIL: roots windows expected 2 roots"; exit 1; }
+ru="$(roots_for_platform nixos '')"
+eq "$ru" '~/.claude/projects' 'roots unix: single WSL/home root'
 
 got="$(detect_hosts | sort | tr '\n' ' ')"
 # 'desktop' absent from config -> excluded; 'hub' never included
