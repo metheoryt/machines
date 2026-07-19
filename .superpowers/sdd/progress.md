@@ -20,7 +20,15 @@ ENVIRONMENT:
 - [ ] Task 6: Catch-up run against machines (human-in-the-loop; main session)
 - [ ] FINAL whole-branch review
 
+## Adjudicated findings (do not re-raise)
+- T4 #2 (remote ssh command "malformed" → never runs distill.py): **FALSE POSITIVE, dismissed with evidence.** Reviewer reproduced by feeding `bash -c "'python3 …'"` locally, dropping the `bash -lc ` prefix and collapsing the two-shell ssh layers. Real flow: local `ssh` concatenates trailing argv → remote shell receives the string `bash -lc 'python3 … --host desktop --match foo --match bar'` → remote shell (fish) strips the single quotes → `bash -lc` gets a clean single-arg script → tokens split. Empirically verified: substituting `env PROBE` for python3 and running the exact sent-string through a shell executed `env` with arg `PROBE` (`env: 'PROBE': No such file`), proving correct token splitting (not "command not found: python3 …"). `~`/`*` sit inside the quoted script so remote bash expands them. No code change. (Residual, low-risk, closes at Task 6: emulated remote with bash not fish; fish strips single quotes identically.)
+
+## Open decisions (user's call — see Task 4)
+- T4 #1 (self-host exclusion never fires): REAL Important bug. `detect_hosts` compares OS `hostname` to the SSH ALIAS, but ssh.nix:59 (`mapAttrs mkBlock params.machines`) emits a Host block for every member INCLUDING self, and OS hostname ≠ alias by design (latitude5520≠latitude, g614jv≠desktop, methe-server≠server). So every fleet box would `ssh <own-alias>` and re-distill itself into a SEPARATE `~/.cache/kb-harvest-state.json`, defeating the fleet-wide git-tracked watermark + doubling that box's digests. Fix needs a self-ID mechanism the plan never specified (no in-repo alias↔OS-hostname source of truth). PENDING user decision on mechanism; must land before Task 6. Task 4 stays "Needs fixes" / NOT complete until resolved.
+
 ## Minor findings (for final review triage)
+- T4 minor: arg-parse `--out) out="$2"` crashes with `$2: unbound` under `set -u` if a flag is the last arg with no value (raw bash error instead of the usage message). Low UX robustness gap; well-formed Task 6 invocations unaffected.
+- T4 minor: `A && B || C` idiom at the required-args check (SC2015) — harmless (all three tests side-effect-free).
 - T1 #1: distill.py cwd/branch aggregation is last-wins (`if ev.get("cwd"): cwd=ev["cwd"]`), inconsistent with session_id's first-wins. Harmless for cwd; branch could flip on mid-session `git checkout`. INHERITED from plan's reference code — not implementer-introduced.
 - T1 #3: distill_lines has no guard against a valid-JSON non-dict line (bare string/number/list) → AttributeError aborts the call. Real transcript lines are always objects; robustness nice-to-have. INHERITED from plan.
 - T1 #4: test_distill.py covers only the happy path — the `except JSONDecodeError` branch and mid-session cwd/branch change are untested. Matches brief exactly.
