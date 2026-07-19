@@ -114,18 +114,22 @@ def run(projects_root, matches, out_dir, state_path, host=None):
         if not lines:
             continue
         seen += 1
-        sid_probe = json.loads(lines[0]).get("sessionId") if lines else None
+        try:
+            sid_probe = json.loads(lines[0]).get("sessionId")
+        except (json.JSONDecodeError, AttributeError):
+            sid_probe = None
         sid = sid_probe or os.path.splitext(os.path.basename(path))[0]
         start = resume_offset(sessions, sid, lines)
         new_lines = lines[start:]
         digest_body, meta = distill_lines(new_lines)
+        prev = sessions.get(sid, {})
         # always advance the watermark, even if the new slice was pure noise
         sessions[sid] = {
             "last_line": len(lines),
             "id_hash": identity_hash(lines),
             "host": host,
-            "cwd": meta.get("cwd"),
-            "last_ts": meta.get("last_ts"),
+            "cwd": meta.get("cwd") or prev.get("cwd"),
+            "last_ts": meta.get("last_ts") or prev.get("last_ts"),
         }
         if digest_body.strip():
             with_new += 1

@@ -92,3 +92,61 @@ def test_run_writes_digests_manifest_and_merges_state(tmp_path):
     # second run over the SAME unchanged file -> nothing new (read-once)
     summary2 = distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
     assert summary2["digests_written"] == 0
+
+def test_run_survives_malformed_first_line_and_still_processes_other_sessions(tmp_path):
+    proj = tmp_path / "projects" / "-home-me-machines"
+    proj.mkdir(parents=True)
+
+    # session with a malformed first line -> sid must fall back to filename stem
+    bad = proj / "BADFIRSTLINE.jsonl"
+    bad.write_text(
+        "{not json\n"
+        + json.dumps({"type": "user", "sessionId": "BADFIRSTLINE", "cwd": "/home/me/machines",
+                      "timestamp": "2026-07-17T10:00:00Z",
+                      "message": {"role": "user", "content": "hello from bad session"}}) + "\n"
+    )
+
+    # a normal, well-formed session in the same sweep
+    good = proj / "S2.jsonl"
+    good.write_text("\n".join([
+        json.dumps({"type": "user", "sessionId": "S2", "cwd": "/home/me/machines",
+                    "timestamp": "2026-07-17T11:00:00Z",
+                    "message": {"role": "user", "content": "hello from good session"}}),
+        json.dumps({"type": "assistant", "sessionId": "S2", "timestamp": "2026-07-17T11:01:00Z",
+                    "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}}),
+    ]) + "\n")
+
+    out = tmp_path / "digests"
+    state = tmp_path / "state.json"
+
+    summary = distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
+    assert summary["digests_written"] == 2
+
+    # malformed-first-line session falls back to the filename stem as sid
+    bad_digest = (out / "BADFIRSTLINE.md").read_text()
+    assert "hello from bad session" in bad_digest
+
+    good_digest = (out / "S2.md").read_text()
+    assert "hello from good session" in good_digest
+
+def test_run_preserves_cwd_on_noop_second_run(tmp_path):
+    proj = tmp_path / "projects" / "-home-me-machines"
+    proj.mkdir(parents=True)
+    sess = proj / "S1.jsonl"
+    real_cwd = "/home/me/machines"
+    sess.write_text("\n".join([
+        json.dumps({"type": "user", "sessionId": "S1", "cwd": real_cwd,
+                    "gitBranch": "main", "timestamp": "2026-07-17T10:00:00Z",
+                    "message": {"role": "user", "content": "hello"}}),
+        json.dumps({"type": "assistant", "sessionId": "S1", "timestamp": "2026-07-17T10:01:00Z",
+                    "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}}),
+    ]) + "\n")
+    out = tmp_path / "digests"
+    state = tmp_path / "state.json"
+
+    distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
+    # second run over the SAME unchanged file -> no-op; must not clobber cwd
+    distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
+
+    st = json.loads(state.read_text())
+    assert st["sessions"]["S1"]["cwd"] == real_cwd
