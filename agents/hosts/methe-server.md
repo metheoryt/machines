@@ -21,7 +21,7 @@ here (this file is tracked in git).
   it has only ever run Windows.
 - **No sibling / alternate identity — standalone box.** Do NOT confuse it with
   the ROG **G16 (2024)** laptop `g614jv`/`ME-G614JV`, which is a *different*
-  physical machine. (Some older repo docs, e.g. `hosts/homeserver/README.md` and
+  physical machine. (Some older repo docs, e.g. `hosts/server/README.md` and
   vps `CLAUDE.md`, mislabel this server as a "ROG G16 2023" — it's a G15.)
 - Runs the cyphy.kz self-hosted service platform (Immich, Navidrome, Forgejo,
   …) — service definitions live in the **`vps` repo**; this machine's

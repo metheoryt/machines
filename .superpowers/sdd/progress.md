@@ -138,3 +138,29 @@ STATUS: Job 1 COMPLETE. 10 commits 0298c6f..4bd9bf9. Offline suite green, bash -
 - PENDING USER DECISIONS: (1) FF merge-back form-B fix (4790c5f) + spec/plan notes to main; (2) KB
   refresh is near-empty → recommend SKIP full map/reduce/write, just record the ssh-quoting learning;
   (3) tool wart — record as follow-up vs fix now.
+
+---
+
+# Fleet Hostname Normalization — SDD Progress Ledger (plan #3)
+
+Plan: docs/superpowers/plans/2026-07-20-fleet-hostname-normalization.md
+Spec: docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md
+Branch: orca-setup-script-hint (worktree; base main at /home/me/machines).
+BASE @ 3cfd60b (plan commit). Branch MERGE_BASE = 7569e45.
+
+SCOPE THIS RUN: Phase 1 (Tasks 1-4) only — box-independent, mergeable now.
+Phase 2 (Tasks 6-7) gated on USER running `Rename-Computer -NewName g513ie -Restart`
+on the server box (Task 5). Do NOT execute Phase 2 until Task 5 confirmed.
+
+ENVIRONMENT:
+- gortex daemon NOT running this session → Read/Grep/Glob/Edit hooks disabled;
+  subagents use standard file tools (not gortex MCP).
+- Nix gate: `bash scripts/quick-check.sh` (this worktree is on the NixOS box latitude5520).
+
+## Tasks (plan #3)
+- [ ] Task 1: git mv hosts/homeserver -> hosts/server + rewrite path refs
+- [ ] Task 2: git mv hosts/g16 -> hosts/desktop + bootstrap URL + path refs
+- [ ] Task 3: g513ie.md primary + methe-server.md symlink + dual-name prose
+- [ ] Task 4: two-layer convention + model docs (box-independent statements)
+- [ ] Phase 1 checkpoint: offer FF merge-back to main (user-gated)
+- [ ] Phase 2 (Tasks 5-7): GATED on user box rename

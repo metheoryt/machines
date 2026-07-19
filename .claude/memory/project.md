@@ -49,7 +49,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
   live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
   `detect.hostname` edit is inert until the box reboots), and repo-dir renames
-  `hosts/g16` → `hosts/desktop`, `hosts/homeserver` → `hosts/server`. `hub` stays
+  `hosts/g16` → `hosts/desktop`, `hosts/server` → `hosts/server`. `hub` stays
   `27608` (a VPS, no laptop model). Headscale already enforces node-name
   uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
   drift vs reality.
@@ -693,7 +693,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `../` to reach repo root, or it breaks `just update`/`just upgrade` silently
   (`sed: no such file`).
 - `hosts/g16/windows/winget-packages.json` is a full `winget export` snapshot
-  of that laptop's installed state; `hosts/homeserver/windows/winget-packages.json`
+  of that laptop's installed state; `hosts/server/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.
 - **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /
