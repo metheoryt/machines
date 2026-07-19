@@ -36,6 +36,18 @@ roots_for_platform() {
   esac
 }
 
+local_host_id() {
+  # Map a live `hostname` to its fleet detect.hostname; passthrough if unknown.
+  local json="${1:-$FLEET_JSON}" live="$2" id=""
+  if [ -f "$json" ]; then
+    id="$(jq -r --arg h "$live" '
+      .machines | to_entries[]
+      | select((.value.detect.hostname // "") == $h)
+      | .value.detect.hostname' "$json" 2>/dev/null | head -1)"
+  fi
+  [ -n "$id" ] && printf '%s\n' "$id" || printf '%s\n' "$live"
+}
+
 detect_hosts() {
   # Echoes every fleet workstation alias present in ~/.ssh/config, one per
   # line. Does NOT exclude the current box — the OS hostname never matches

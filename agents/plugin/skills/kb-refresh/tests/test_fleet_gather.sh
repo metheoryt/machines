@@ -43,6 +43,11 @@ if command -v jq >/dev/null 2>&1; then
   printf '%s\n' "$fh" | grep -qP '^desktop\twindows\tg614jv\tmethe$'  || { echo "FAIL: fleet_hosts desktop tuple"; exit 1; }
   printf '%s\n' "$fh" | grep -qP '^server\twindows\tmethe-server\tmethe$' || { echo "FAIL: fleet_hosts server tuple"; exit 1; }
   printf '%s\n' "$fh" | grep -q 'hub' && { echo "FAIL: fleet_hosts must exclude hub"; exit 1; }
+
+  # ── local_host_id: known hostname → canonical id; unknown → passthrough ──────
+  eq "$(local_host_id "$fixture_json" latitude5520)" 'latitude5520' 'local_host_id: known → canonical'
+  eq "$(local_host_id "$fixture_json" g614jv)"       'g614jv'       'local_host_id: windows known → canonical'
+  eq "$(local_host_id "$fixture_json" Weird.Box)"    'Weird.Box'    'local_host_id: unknown → passthrough'
 else
   echo "SKIP: fleet_hosts test (jq not installed)"
 fi
