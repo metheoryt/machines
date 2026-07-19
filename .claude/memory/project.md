@@ -646,8 +646,8 @@ global + per-host memory). One bullet per fact under a topical heading.
   Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
   JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
-  `fleet-gather.sh` distills in-place on other fleet boxes and rsyncs back
-  only digests (never raw transcripts).
+  `fleet-gather.sh` distills in-place on other fleet boxes and copies back
+  only digests (via `cat`/`tar`, never raw transcripts).
   - `fleet-gather.sh` now harvests the **Windows** fleet members (desktop=g614jv,
     server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
     every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
