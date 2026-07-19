@@ -711,6 +711,17 @@ global + per-host memory). One bullet per fact under a topical heading.
 
 ## Pending follow-ups
 
+- **Retire the WSL distro as a separate fleet host (in-flight, stated 2026-07-19).**
+  Direction: the ROG G16 laptop's WSL distro should stop being provisioned as its own
+  tailnet node + SSH leaf (`provision/ssh-wsl.sh`, `provision/tailscale-wsl.sh`, node
+  `desktop-ubuntu26`/`100.64.0.6`); going forward WSL is used purely as a **dev
+  environment opened/run through Orca**, not a standalone fleet member. Not yet torn
+  down — the WSL-leaf facts in `agents/hosts/g614jv.md` and the mesh/SSH-over-tailnet
+  notes above stay live until the provisioning is actually removed. Consequence
+  already applied: the laptop's two host-memory files were merged into one
+  (`agents/hosts/g614jv.md`; `ME-G614JV.md` is now a symlink to it) since native
+  Windows + WSL are the same tightly-coupled box.
+
 - **Per-box stale git-hook cleanup after the pre-commit removal (2026-07-18).**
   Commit `2af7c5b` removed the git-hooks.nix pre-commit mechanism from `flake.nix`
   + the committed `.envrc` (whose sole job was the persistent nix-direnv `.direnv/`
