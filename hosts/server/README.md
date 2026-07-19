@@ -2,8 +2,8 @@
 
 **ASUS ROG G15 2023, RTX 3050 Ti** (model **G513IE**), running **Windows 11 +
 Docker Desktop (WSL2)** under the `methe` profile. Logical name `server`, OS
-hostname `methe-server` (**being renamed to `g513ie`** — the model code; see
-the hostname-normalization spec — not yet applied). A distinct physical
+hostname `g513ie` (renamed from `methe-server` 2026-07-20 — the model code;
+see the hostname-normalization spec). A distinct physical
 machine from the ROG G16 (2024) laptop `g614jv` (whose retired NixOS identity
 was `g16`).
 

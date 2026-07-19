@@ -186,3 +186,9 @@ FINAL WHOLE-BRANCH REVIEW (opus, 3cfd60b..9f046b1): **Ready to merge.** 0 Critic
 Final-review Minor fix: complete (commit e7acd9a — haiku). g513ie.md caveat now cites only sibling vps CLAUDE.md. Symlink methe-server.md verified still 120000 (not dereferenced).
 
 PHASE 1 DONE + REVIEWED. Impl range 3cfd60b..e7acd9a. Ready for FF merge-back (user-gated). Phase 2 (Tasks 5-7) remains GATED on user box rename.
+
+PHASE 1 MERGED to main (FF 7569e45..13364c8, user-approved). main==branch.
+PHASE 2 UNBLOCKED: user ran Rename-Computer + reboot. Box verified live 2026-07-20: `ssh server hostname`=g513ie, $env:COMPUTERNAME=G513IE. fleet_detect Windows uses -ieq (case-insensitive) so g513ie matches G513IE.
+  RESTIC CAVEAT: user rebooted before the Task-5-Step-1 restic --host pre-check was confirmed. Snapshot host-identity may have forked to g513ie (operational, vps-repo concern, not a machines repo change). FLAG to user post-Phase-2.
+- [ ] Task 6: flip fleet.json detect.hostname + empirical statements -> g513ie
+- [ ] Task 7: verify fleet_detect end-to-end + FF merge-back Phase 2

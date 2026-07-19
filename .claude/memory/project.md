@@ -36,23 +36,24 @@ global + per-host memory). One bullet per fact under a topical heading.
   and independently (jq) in `provision/ssh-wsl.sh` for the WSL leaf's config —
   so any hub-rule change must be applied in both places or the WSL leaf drifts.
 - Every fleet machine's OS hostname differs from its SSH alias by design
-  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `methe-server`↔`server`), so
+  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `g513ie`↔`server`), so
   "is this host me?" can't be decided by comparing `hostname` to an alias
   string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
   `kb-refresh` self-exclusion does.
-- **Hostname-normalization convention — spec approved 2026-07-19**
+- **Hostname-normalization convention — spec approved 2026-07-19, DONE
+  2026-07-20**
   (`docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md`).
   Two layers, applied fleet-wide: **logical name** (stable, role-based) = fleet
   key = SSH alias = tailnet node = repo `hosts/<dir>`; **model name** = the box's
   OS hostname = `detect.hostname` = the hardware model, lowercased
   (`latitude5520`, `g614jv`, `g513ie`, `27608`). Repo-dir renames DONE
   (Phase 1, 2026-07-20): `g16` → `hosts/desktop`, `homeserver` →
-  `hosts/server`, committed. PENDING (Phase 2, not yet applied): rename
-  `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
-  live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
-  `detect.hostname` edit is inert until the box reboots). `hub` stays
-  `27608` (a VPS, no laptop model). Headscale already enforces node-name
-  uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
+  `hosts/server`, committed. OS-hostname rename DONE (Phase 2, 2026-07-20):
+  `server`'s OS hostname `methe-server` → **`g513ie`** (its real model) via a
+  live Windows `Rename-Computer -NewName g513ie -Restart`, verified live
+  post-reboot; `fleet.json`'s `detect.hostname` now matches reality. `hub`
+  stays `27608` (a VPS, no laptop model). Headscale already enforces node-name
+  uniqueness, so no SSH/tailnet change was needed; verified no `detect.hostname`
   drift vs reality.
 - `modules/home/ssh.nix` materializes `~/.ssh/config` as a real `me`-owned
   `0600` file (not an HM store symlink) via two `home.activation` phases

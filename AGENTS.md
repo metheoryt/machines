@@ -11,8 +11,8 @@ Windows:
   hostname `g614jv`, native `ME-G614JV`). Its former NixOS install `g16` was
   retired 2026-07-08; `hosts/desktop/` now holds only `windows/`.
 - **homeserver** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
-  Windows 11 + Docker Desktop; logical name `server`, OS hostname
-  `methe-server` (**being renamed to `g513ie`** — the model code; see the
+  Windows 11 + Docker Desktop; logical name `server`, OS hostname `g513ie`
+  (renamed from `methe-server` 2026-07-20 — the model code; see the
   hostname-normalization spec). Runs the cyphy.kz service platform
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake, NixOS hostname `latitude5520`
 - **hub** — Debian VPS at `cyphy.kz` (tailnet `100.64.0.1`), a first-class
@@ -153,9 +153,9 @@ Runs at system level (`nixosModules.default`) with `useGlobalPkgs = true` and `u
   lowercased: `latitude5520`, `g614jv`, `g513ie`, `27608`.
 - `hub`/`27608` is the VPS special-case: no laptop model, so its OS hostname
   is just the VPS ID, not a model code.
-- The server's *live* OS hostname is still `methe-server` — `g513ie` above is
-  the target model name; the flip happens in Phase 2 (`Rename-Computer` +
-  reboot on the box), not yet applied.
+- The server's *live* OS hostname is now `g513ie` — renamed from
+  `methe-server` via `Rename-Computer` + reboot on the box, verified live
+  2026-07-20.
 
 ### latitude5520 (Dell Latitude 5520)
 
