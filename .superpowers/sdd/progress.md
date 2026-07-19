@@ -65,3 +65,43 @@ Task 4: complete (feat 1762233 + self-exclude fix d768141 — haiku impl / sonne
 Task 3: complete (feat 9a02407 + fix 50889e4, review + re-review clean — haiku impl / sonnet review / sonnet fix / sonnet re-review, Spec ✅, Approved after fixes). run() globs *<m>*/*.jsonl, distills from resume offset, writes headered digests + manifest.tsv (append), merge-writes `sessions` preserving `last_refresh` (verified by test seeding last_refresh). Read-once verified (2nd run over unchanged file → 0 digests; last_line/id_hash always advance). Review found 1 Important: unguarded `json.loads(lines[0])` probe could abort the whole sweep on a malformed first line → FIXED (try/except JSONDecodeError,AttributeError → filename fallback) + bundled Minor (cwd/last_ts clobbered to None on no-op run → FIXED via prev-entry fallback). 2 regression tests added (malformed-first-line survives sweep + processes 2nd session; cwd survives no-op run). 6 tests pass. Remaining Minor (final-review triage): sessions_with_new always == digests_written (redundant field); `# host: None` in header when --host omitted (SKILL always supplies --host).
 Task 2: complete (commit 493a4de, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 Critical/Important). Added identity_hash + resume_offset + import hashlib; verbatim from brief. Reviewer verified all 4 branch cases (new/truncated-strict->/identity-changed/resume) line-by-line; truncation uses strict `>` (exact-length resume not misclassified); Task 1 distill_lines + its test provably untouched. Minor: cosmetic 1-blank-line spacing between new test defs; partial-state (missing id_hash/last_line key) untested — current default safely reprocesses.
 Task 1: complete (commit fc07528, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 Critical/Important). Verbatim transcription of brief's reference code; distill_lines(lines)->(digest,meta); stdlib-only (import json); no filesystem access so read-only constraint holds by construction. Reviewer traced all 6 test events by hand, confirmed PASS. 3 Minor findings logged above (all inherited from plan code) + 1 report-accuracy slip (report said cwd/branch first-wins; code is last-wins — no code impact).
+
+---
+
+# Fleet-Gather Windows Support — SDD Progress Ledger (plan #2)
+
+Plan: docs/superpowers/plans/2026-07-19-fleet-gather-windows.md
+Spec: docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md
+Branch: refresh-kb (worktree; base main at /home/me/machines).
+BASE @ 0298c6f (plan commit; final-review MERGE_BASE = 0298c6f).
+
+ENVIRONMENT:
+- jq 1.8.2 present; grep -P works. Offline test: `bash agents/plugin/skills/kb-refresh/tests/test_fleet_gather.sh`
+- CONTROLLER RESOLUTION (all tasks): new pure-fn test blocks go BEFORE the legacy detect_hosts
+  invocation (old lines 21-24) so new assertions stay observable across Tasks 1-4; the legacy
+  call aborts under set -e once FLEET_WORKSTATIONS is removed (Task 1), and Task 5 rewrites it.
+- Job 2 (live harvest) is OUT OF SCOPE — code + offline tests only; never run main.
+
+## Tasks (plan #2)
+- [x] Task 1: fleet_hosts — fleet.json → per-host tuples
+- [x] Task 2: roots_for_platform — Windows profile + WSL roots
+- [x] Task 3: local_host_id — live hostname → fleet detect.hostname
+- [x] Task 4: remote_distill_script — static argv-driven remote distiller
+- [x] Task 5: detect_hosts drives off fleet.json + fix its test
+- [x] Task 6: main rewrite — platform-dispatch IO (cat/tar, bash-wrapped, pushed distiller)
+- [x] Task 7: docs — project.md caveat + SKILL.md remote-path description
+- [x] FINAL whole-branch review
+
+## Log (plan #2)
+Task 1: complete (commit 0298c6f..0b1a7cf, review clean — haiku impl / sonnet review, Spec ✅, Approved). fleet_hosts reads fleet.json, hub excluded via ssh.host==null, 4-field TSV. Legacy detect_hosts block left aborting (planned Task 5). New assertions placed before legacy block per controller resolution.
+Task 2: complete (commit 0b1a7cf..58200f7, review clean — haiku impl / sonnet review, Spec ✅, Approved). roots_for_platform: windows→profile+WSL (literal ~ preserved), unix→~/.claude/projects. fail/eq helpers added after trap. New block before legacy detect_hosts.
+Task 3: complete (commit 58200f7..f8f4bfe, review clean — haiku impl / sonnet review, Spec ✅, Approved). local_host_id: known→canonical detect.hostname, unknown→passthrough; null-safe jq, missing-file falls through. Assertions inside jq guard. Minors: head -1 on dup hostnames (invariant-guarded), no in-fn jq guard (matches file style).
+Task 4: complete (commit f8f4bfe..5033764, review clean — haiku impl / sonnet review, Spec ✅, Approved). remote_distill_script: single-quoted heredoc (static, no emit-time interp), argv parsing host/nroots/roots/matches, ${root/#\~/$HOME} expansion, per-root distill.py invocation, bash -n clean. Byte-exact to brief. Reviewer note: test greps+bash -n only, never executes emitted script w/ sample args (shift-count not runtime-verified; manual trace confirms correct).
+Task 5: complete (commit 5033764..6a1103d, review clean — haiku impl / sonnet review, Spec ✅, Approved). FULL SUITE GREEN (PASS, exit 0) — legacy-block breakage resolved. detect_hosts now consumes fleet_hosts, anchored Host grep preserved (no HostName/substring false-match), emits full tuple, rc0 on missing config. FLEET_WORKSTATIONS fully gone (0 repo hits). Minor: `local alias` shadows builtin (harmless, brief-dictated). CARRY TO T6 REVIEW: main() still `for h in $(detect_hosts)` — word-splits on tuple tabs; Task 6's main rewrite MUST replace it with `while IFS=$'\t' read -r alias platform hostid user; do … done < <(detect_hosts …)`.
+Task 6: complete (commit 6a1103d..8c7d4d0 impl + fix 1f50412 — haiku impl / sonnet review / sonnet fix). Spec ✅. Review found CRITICAL stdin-drain: bare ssh inside `while read … done < <(detect_hosts)` drains the loop's process-sub stream → sweep stops after 1 host. Bug was in the PLAN's code too, not implementer error. FIXED: ssh -n on the 4 unredirected loop calls (probe/mkdir/state-pull/tar); NOT on the 2 cat> pushes (< file) or the piped distill dispatch. Controller independently verified -n audit + bash -n + suite green — accepted without re-review (surgical, matches reviewer's prescribed remedy; final whole-branch review is backstop). Also fixed stale line-3 rsync comment. Plan doc code block corrected to match (commit follows).
+Task 7: complete (commit bf16683..08e5cb7 + adjacent-fix 8f-follow — haiku impl / sonnet accuracy review, Spec ✅, Accuracy Approved). SKILL.md Step 1 + project.md bullet rewritten to shipped mechanism (platform dispatch, cat/tar, pushed distiller, detect.hostname); SKILL.md rsync-free. Reviewer cross-checked every prose claim against main()/helpers/distill.py --merge-from — all TRUE. Adjacent Important: project.md:649 stale 'rsyncs back' line (contradicted the new bullet 2 lines up) — controller fixed directly (rsyncs→copies via cat/tar). project.md now rsync-clean except the '(no rsync)' assertion.
+FINAL REVIEW (opus, 0298c6f..4bd9bf9): **Ready to merge.** End-to-end trace clean: argv contract lines up for 1-root unix + 2-root Windows; Critical fix 1f50412 complete/coherent (ssh -n on 4 loop calls, absent on 3 redirected); set -e safety holds (unreachable host skips, no sweep abort); self-exclusion correct incl Windows-controller-probing-self + empty-probe guard; docs match code. All 4 logged minors DEFERRED.
+NEW MINORS (non-blocking, DEFERRED — consistent w/ approved spec which kept local NixOS controller on single stock root):
+  (a) Local distill is platform-blind: main hardcodes local --projects-root ~/.claude/projects, doesn't iterate roots_for_platform locally. If a WINDOWS box were ever controller, its own Windows-profile transcripts missed locally AND it self-excludes remotely → never harvested. Out of scope: spec fixed local=NixOS latitude=single root. KNOWN LIMITATION (one-line fix available if a Windows controller is ever needed).
+  (b) --exclude=manifest.tsv drops remote manifest rows — intentional (prevents clobber; SKILL Step 2 globs *.md, nothing consumes remote manifest). Deliberate, not a defect.
+STATUS: Job 1 COMPLETE. 10 commits 0298c6f..4bd9bf9. Offline suite green, bash -n clean. Job 2 (live harvest) downstream, runs from ~/machines after FF-merge. Merge-back = user-gated (worktree mode).
