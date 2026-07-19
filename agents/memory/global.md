@@ -33,9 +33,18 @@ elsewhere to sync. Do NOT put secrets here.
   `ssh host '<script>'` (fails silently / non-zero). The **Windows fleet members
   (`desktop`=g614jv, `server`=methe-server) SSH into PowerShell**, which chokes on
   `&&` and shell quoting. Either way, force bash: `ssh host bash -s < script.sh`
-  (piping a script file is the most robust — inline `ssh host bash -lc '...'` still
-  routes through PowerShell on the Windows boxes and mangles nested quotes). On the
-  Windows boxes `bash -s`/`bash -lc` dispatches to WSL bash.
+  (piping a script file is the most robust). On the Windows boxes `bash -s`/`bash -lc`
+  dispatches to WSL bash.
+- **Inline `ssh host bash -lc '<cmd>'` (single-quoted) FAILS on the fleet — use
+  `bash -lc "'<cmd>'"` (nested) or pipe `bash -s`.** ssh flattens its argv into ONE
+  command string, so the LOCAL single-quotes are stripped before the remote shell
+  sees them: the remote receives `bash -lc <cmd>` and `bash -c` runs only the first
+  word (`mkdir -p ~/x` → just `mkdir`, no args → "no dirs provided"). A single-word
+  command (`hostname`) survives by luck; anything with args/paths/redirects breaks.
+  The inner quotes must travel to the remote intact (`bash -lc "'…'"`), or send the
+  body on stdin (`bash -s < script`) where argv-flattening can't touch it. *(Bit the
+  fleet-gather.sh Windows harvest 2026-07-19 — the shipped single-quote form silently
+  reported the Windows boxes "unreachable.")*
 
 ## Windows OpenSSH & winget footguns
 
