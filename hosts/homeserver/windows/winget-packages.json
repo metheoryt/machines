@@ -7,8 +7,6 @@
 			"Packages" :
 			[
 				{ "PackageIdentifier" : "7zip.7zip" },
-				{ "PackageIdentifier" : "Amnezia.AmneziaWG" },
-				{ "PackageIdentifier" : "AmneziaVPN.AmneziaVPN" },
 				{ "PackageIdentifier" : "AntibodySoftware.WizTree" },
 				{ "PackageIdentifier" : "Casey.Just" },
 				{ "PackageIdentifier" : "creativeprojects.resticprofile" },

@@ -72,10 +72,6 @@
   # "behind by N" is visible without fetching first (no pull — refs only).
   services.gitAutoFetch.enable = true;
 
-  # AmneziaVPN background service (required for VPN connections)
-  systemd.packages = [pkgs.amnezia-vpn];
-  systemd.services.AmneziaVPN.wantedBy = ["multi-user.target"];
-
   # Keys-only sshd reachable over the tailnet + LAN (fleet SSH-server role).
   fleet.sshServer.enable = true;
 
