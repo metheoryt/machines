@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # provision/ssh-wsl.sh — give THIS WSL2 distro a fleet SSH identity: its own
-# key-only sshd, a persisted ed25519 fleet key trusted by the other boxes, and a
-# merged ~/.ssh/config fleet block so `ssh latitude`/`ssh server`/`ssh hub` Just
-# Work from inside the distro. Companion to tailscale-wsl.sh + orca-serve.sh.
+# key-only sshd trusting the fleet's public keys (inbound), a persisted ed25519
+# fleet key trusted by the other boxes (outbound), and a merged ~/.ssh/config
+# fleet block so `ssh latitude`/`ssh server`/`ssh hub` Just Work from inside the
+# distro. Companion to tailscale-wsl.sh + orca-serve.sh.
 #
 # Model: a LEAF node, not a fleet.json member. The distro reaches out to the
-# fleet and is trusted by it, but is not added to fleet.json (its OS hostname
-# g614jv collides with the `desktop` Windows host's detect.hostname, and the box
-# is disposable). So other boxes are not auto-configured to `ssh` back to it.
+# fleet AND accepts inbound fleet logins (it installs fleet-authorized-keys into
+# its own ~/.ssh/authorized_keys), but is not added to fleet.json (its OS
+# hostname g614jv collides with the `desktop` Windows host's detect.hostname, and
+# the box is disposable). So other boxes get no `ssh <name>` alias back to it —
+# reach it by tailnet IP / MagicDNS name. The inbound trust is a SNAPSHOT copy
+# (unlike ssh-server.nix's declarative keyFiles): re-run this script after a new
+# member joins the fleet to pick up its key.
 #
 # Durable across a `wsl --unregister` rebuild: the fleet key is persisted on the
 # Windows host ($FLEET_KEY_DIR, default /mnt/c/Users/<winuser>/.fleet) and
@@ -34,9 +39,9 @@ usage() {
   cat <<'EOF'
 ssh-wsl.sh — give THIS WSL distro a fleet SSH identity (leaf node).
 
-Establishes: a key-only sshd; a persisted ed25519 key ~/.ssh/id_fleet trusted by
-the fleet; a merged fleet block in ~/.ssh/config (ssh latitude/server/hub). Run
-AFTER tailscale-wsl.sh. Idempotent.
+Establishes: a key-only sshd trusting fleet-authorized-keys (inbound); a persisted
+ed25519 key ~/.ssh/id_fleet trusted by the fleet (outbound); a merged fleet block
+in ~/.ssh/config (ssh latitude/server/hub). Run AFTER tailscale-wsl.sh. Idempotent.
 
   -h, --help   show this help
 
@@ -83,6 +88,28 @@ ssh_wsl_key_present() {
   local body="$1" file="$2"
   [ -r "$file" ] || return 1
   awk -v b="$body" '$2 == b { found = 1 } END { exit(found ? 0 : 1) }' "$file"
+}
+
+# Merge fleet public-key lines ($2, e.g. fleet-authorized-keys content) into
+# existing authorized_keys content ($1): keep every existing non-blank line
+# verbatim, then append each fleet key whose key BODY (2nd field) is not already
+# present. Blanks + #-comments are dropped from the fleet side; existing blanks
+# are dropped, existing comments kept. Echoes the merged content. Idempotent by
+# body-key — merge(merge(x)) == merge(x). Pure: the only IO is reading its two
+# string args. The trust is a SNAPSHOT — a member added later is not picked up
+# until ssh-wsl.sh re-runs (unlike NixOS keyFiles, which re-reads each rebuild).
+ssh_wsl_merge_authorized_keys() {
+  awk '
+    function blank(s) { return s ~ /^[[:space:]]*$/ }
+    FNR == NR {                        # $1 — existing authorized_keys
+      if (blank($0)) next
+      print
+      if ($1 !~ /^#/ && $2 != "") have[$2] = 1
+      next
+    }
+    blank($0) || $1 ~ /^#/ { next }    # $2 — fleet keys: skip blanks + comments
+    $2 != "" && !($2 in have) { print; have[$2] = 1 }
+  ' <(printf '%s\n' "$1") <(printf '%s\n' "$2")
 }
 
 # Merge fleet BLOCK ($2) into existing ~/.ssh/config content ($1): drop any prior
@@ -240,7 +267,27 @@ else
   warn "commit + push fleet-authorized-keys, then re-provision the other boxes (nixos-rebuild switch / windows.ps1) so they trust this key."
 fi
 
-# ── 4. Client config — merged fleet block in ~/.ssh/config ────────────────────
+# ── 4. Trust inward — install fleet-authorized-keys into ~/.ssh/authorized_keys
+# Make THIS box accept inbound fleet logins (mirrors ssh-server.nix's keyFiles on
+# NixOS). Snapshot copy — re-run this script after a new member joins the fleet.
+AUTHK="$HOME/.ssh/authorized_keys"
+if [ ! -f "$MESH_KEYS" ]; then
+  warn "fleet-authorized-keys not found at $MESH_KEYS — skipped inbound trust (box won't accept fleet SSH)."
+else
+  EXISTING_AK=""
+  [ -f "$AUTHK" ] && EXISTING_AK="$(cat "$AUTHK")"
+  tmp_ak="$(mktemp)"
+  ssh_wsl_merge_authorized_keys "$EXISTING_AK" "$(cat "$MESH_KEYS")" > "$tmp_ak"
+  if [ -f "$AUTHK" ] && cmp -s "$tmp_ak" "$AUTHK"; then
+    ok "authorized_keys already trusts the fleet"
+  else
+    install -m600 "$tmp_ak" "$AUTHK"
+    ok "installed fleet keys → $AUTHK (inbound trust)"
+  fi
+  rm -f "$tmp_ak"
+fi
+
+# ── 5. Client config — merged fleet block in ~/.ssh/config ────────────────────
 CONFIG="$HOME/.ssh/config"
 STANZAS="$(ssh_wsl_render_config "$(cat "$FLEET_JSON")")" || die "rendering fleet config failed."
 [ -n "$STANZAS" ] || die "fleet config rendered empty — check $FLEET_JSON."
@@ -256,7 +303,7 @@ install -m600 "$tmp" "$CONFIG"
 rm -f "$tmp"
 ok "merged fleet block into $CONFIG (block replaced; rest untouched)"
 
-# ── 5. Verify ─────────────────────────────────────────────────────────────────
+# ── 6. Verify ─────────────────────────────────────────────────────────────────
 # shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
 $SUDO systemctl is-active --quiet ssh && ok "sshd active" || warn "sshd not active — check 'systemctl status ssh'."
 if have ss; then
@@ -264,5 +311,7 @@ if have ss; then
   ss -ltn 2>/dev/null | grep -qE '[:.]22 ' && ok "listening on :22" || warn "no listener on :22 yet."
 fi
 [ -f "$KEY" ] && ok "fleet key: $KEY (pub: $KEY.pub)"
+# shellcheck disable=SC2015  # ok() is a printf wrapper, never fails; || warn is the real else
+[ -f "$AUTHK" ] && ok "inbound trust: $AUTHK ($(grep -cvE '^\s*($|#)' "$AUTHK" 2>/dev/null) fleet keys)" || warn "no ~/.ssh/authorized_keys — inbound fleet SSH will be refused."
 info "Try:  ssh -o BatchMode=yes latitude true   (works once latitude trusts id_fleet)"
 printf '\nNext: commit+push provision/fleet-authorized-keys and re-provision the other boxes if this run appended a key.\n'

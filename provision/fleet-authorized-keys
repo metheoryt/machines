@@ -1,7 +1,8 @@
 # Fleet SSH trust — PUBLIC keys only, one per host. Safe to commit.
 # Consumed by NixOS (users.users.me.openssh.authorizedKeys.keyFiles) and by
 # Windows (provision/windows.ps1 -> administrators_authorized_keys).
-# Append g16's and g614jv's (this ROG Windows box) keys when reachable.
+# Append g16's key when reachable.
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBnlGSKtGHQwJNyODkQK0QyKX3h3hAOP2jjy5eAiEY8n me-nixos-latitude5520
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@methe-server
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@wsl-desktop
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH15XqDE0jcoeF5H2BJP39aBjvSPMLzB0W/n/m0SSNwD methe@me-g614jv

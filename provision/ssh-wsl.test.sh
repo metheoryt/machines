@@ -118,4 +118,27 @@ printf '%s\n' 'ssh-ed25519 AAAABODYONE a-totally-different-comment' > "$tmp"
 ssh_wsl_key_present 'AAAABODYONE' "$tmp" || fail 'key_present: comment differs, body same → 0'
 ssh_wsl_key_present 'AAAABODYONE' /nonexistent/file && fail 'key_present: unreadable file → nonzero'
 
+# ── ssh_wsl_merge_authorized_keys (union by key body; idempotent) ─────────────
+FLEET='ssh-ed25519 AAAABODYONE me-nixos-latitude
+ssh-ed25519 AAAABODYTWO methe@server
+ssh-ed25519 AAAABODYSELF me@wsl-desktop'
+# Empty existing → exactly the fleet keys, no leading blank line injected.
+eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET")" "$FLEET" 'merge_ak: empty existing → fleet keys verbatim'
+# Idempotent — merge∘merge == merge (the property that discriminates a correct union).
+M="$(ssh_wsl_merge_authorized_keys '' "$FLEET")"
+eq "$(ssh_wsl_merge_authorized_keys "$M" "$FLEET")" "$M" 'merge_ak: idempotent'
+# Foreign (non-fleet) key preserved; each fleet key appended exactly once.
+M3="$(ssh_wsl_merge_authorized_keys 'ssh-ed25519 AAAAMYOWNKEY me@laptop' "$FLEET")"
+echo "$M3" | grep -q '^ssh-ed25519 AAAAMYOWNKEY me@laptop$' || fail 'merge_ak: foreign key preserved'
+[ "$(printf '%s\n' "$M3" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: fleet key appended exactly once'
+# Same body already present under a DIFFERENT comment → not re-added (body-keyed).
+M4="$(ssh_wsl_merge_authorized_keys 'ssh-ed25519 AAAABODYONE a-different-comment' "$FLEET")"
+[ "$(printf '%s\n' "$M4" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: existing body not duplicated on differing comment'
+echo "$M4" | grep -q 'AAAABODYTWO' || fail 'merge_ak: other fleet keys still added'
+# Blank lines + #-comments in the fleet input are skipped.
+FLEET_C='# a header comment
+
+ssh-ed25519 AAAABODYONE me-nixos-latitude'
+eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET_C")" 'ssh-ed25519 AAAABODYONE me-nixos-latitude' 'merge_ak: fleet comments + blanks dropped'
+
 echo "PASS: ssh-wsl.test.sh"
