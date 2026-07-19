@@ -26,7 +26,8 @@ elsewhere to sync. Do NOT put secrets here.
   `~/.ssh/config` (generated from `fleet.json` (repo root) → `ssh.nix`): `latitude`
   (latitude5520), `desktop` (the ROG G16 2024 laptop — Windows hostname `g614jv`
   inside WSL / `ME-G614JV` native; its old NixOS identity `g16` is retired), `server`
-  (methe-server — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
+  (methe-server, the Windows homeserver — SSH lands in PowerShell, like `desktop`;
+  see the shell bullet below), `hub` (the cyphy.kz VPS, not a
   fleet workstation). Keys-only, no public exposure.
 - **The remote login shell differs by box.** NixOS/Linux members (e.g. `latitude`)
   log in to **fish**, which chokes on `$(...)` / POSIX-test syntax passed as
@@ -45,6 +46,12 @@ elsewhere to sync. Do NOT put secrets here.
   body on stdin (`bash -s < script`) where argv-flattening can't touch it. *(Bit the
   fleet-gather.sh Windows harvest 2026-07-19 — the shipped single-quote form silently
   reported the Windows boxes "unreachable.")*
+- **`tailscale status`'s node-name column ≠ the OS hostname.** It shows the
+  Headscale *node* name, which can be an overridden display name (`homeserver`,
+  `vps-test`) that is neither the logical fleet name nor the box's OS hostname.
+  The real OS hostnames — what `detect.hostname` / `fleet_detect` match — are
+  `latitude5520` / `g614jv` / `methe-server` / `27608` (verified live 2026-07-19,
+  no drift vs `fleet.json`). Don't read a box's OS hostname off `tailscale status`.
 
 ## Windows OpenSSH & winget footguns
 

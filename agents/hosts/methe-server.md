@@ -13,7 +13,9 @@ here (this file is tracked in git).
 ## Environment
 
 - **This box = `methe-server`** (Windows hostname `METHE-SERVER`): ASUS ROG **G15
-  2023**, RTX 3050 Ti. **Windows 11 + Docker Desktop (WSL2 backend)**, `methe`
+  2023**, RTX 3050 Ti. Exact model **`ROG Strix G513IE`** (`Win32_ComputerSystem.Model`
+  = `ROG Strix G513IE_G513IE`, verified live 2026-07-19) — the model code the
+  fleet hostname convention keys on. **Windows 11 + Docker Desktop (WSL2 backend)**, `methe`
   profile. Shells: Git Bash (MINGW64) + PowerShell 7. Mesh IP `.2` (the AWG hub
   is the VPS `.1`). Role: the always-on **cyphy.kz homeserver** — always was;
   it has only ever run Windows.

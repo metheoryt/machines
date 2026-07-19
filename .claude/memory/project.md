@@ -40,6 +40,19 @@ global + per-host memory). One bullet per fact under a topical heading.
   "is this host me?" can't be decided by comparing `hostname` to an alias
   string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
   `kb-refresh` self-exclusion does.
+- **Hostname-normalization convention — spec approved 2026-07-19**
+  (`docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md`).
+  Two layers, applied fleet-wide: **logical name** (stable, role-based) = fleet
+  key = SSH alias = tailnet node = repo `hosts/<dir>`; **model name** = the box's
+  OS hostname = `detect.hostname` = the hardware model, lowercased
+  (`latitude5520`, `g614jv`, `g513ie`, `27608`). PENDING (not yet applied): rename
+  `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
+  live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
+  `detect.hostname` edit is inert until the box reboots), and repo-dir renames
+  `hosts/g16` → `hosts/desktop`, `hosts/homeserver` → `hosts/server`. `hub` stays
+  `27608` (a VPS, no laptop model). Headscale already enforces node-name
+  uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
+  drift vs reality.
 - `modules/home/ssh.nix` materializes `~/.ssh/config` as a real `me`-owned
   `0600` file (not an HM store symlink) via two `home.activation` phases
   (`sshConfigUnmaterialize` before `checkLinkTargets`, `sshConfigMaterialize`
@@ -64,6 +77,13 @@ global + per-host memory). One bullet per fact under a topical heading.
   reusable pre-auth key. Installer `~/my/vps/vps/setup-headscale.sh` +
   `vps/headscale/config.yaml` (sanitized, no secrets). Enroll a node:
   `tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>`.
+- **Orca's per-project worktree setup-script is stored in plain JSON** (probed
+  2026-07-19). The field you paste `bash "$HOME/machines/scripts/orca-worktree-setup.sh"`
+  into lives in `~/.config/orca/profiles/local-default/orca-data.json` at
+  `.repos[].hookSettings.scripts.setup` (mirrored under `.projectHostSetups[]`),
+  keyed by repo path — machine-local, Orca-owned (it rewrites the file and keeps
+  `.bak.N` backups). So the string is greppable, and a repo only gets it after
+  it's been opened in Orca once.
 - **Orca headless serve on WSL — hard-won facts (2026-07-17).** (a) Orca ships
   NO `orca` binary on Linux; the only `orca`-named files in the AppImage are
   per-OS launcher *scripts* (darwin/win32). The real CLI is `out/cli/index.js`

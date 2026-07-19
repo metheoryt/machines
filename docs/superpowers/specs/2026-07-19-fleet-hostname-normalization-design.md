@@ -81,9 +81,10 @@ provider's real instance identity, and its services/backups live in the sibling
 2. **`agents/hosts/methe-server.md` → `agents/hosts/g513ie.md`** — per-host
    memory is symlinked by `bootstrap.sh` as `hosts/<hostname>.md`; the file must
    follow the new hostname. Update its self-referential prose.
-3. **Delete stale `agents/hosts/ME-G614JV.md`** — the desktop box's current
-   hostname is `g614jv` (live file `g614jv.md`); `ME-G614JV.md` is the retired
-   old Windows-install name and is dead.
+3. **`agents/hosts/ME-G614JV.md`** — already reconciled on `main`: it is now a
+   symlink to `g614jv.md` (the two host-memory files were merged), so both
+   hostnames the desktop box can report load the same memory. No action needed
+   here; do **not** re-add a "delete" step (superseded 2026-07-19 merge).
 4. **Live docs** describing hostnames/hardware — reconcile to the convention and
    the real models (`server` = ROG Strix **G513IE**, RTX 3050 Ti; `desktop`/g16
    = ROG Strix **G614JV**), and stop calling g16 a NixOS host (it is
@@ -148,7 +149,7 @@ Rename-Computer -NewName g513ie -Restart
 3. `grep -rn 'hosts/g16\|hosts/homeserver' .` (excluding `docs/superpowers/`)
    returns nothing.
 4. `agents/hosts/` contains `g513ie.md`, `g614jv.md`, `latitude5520.md` and no
-   `methe-server.md` / `ME-G614JV.md`.
+   `methe-server.md`; `ME-G614JV.md` remains a symlink to `g614jv.md`.
 5. After the box reboot: on `server`, `fleet_detect` (via the provision entry)
    resolves to `server`; `ssh server hostname` prints `g513ie`.
 
