@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fleet-gather.sh — gather + in-place distill transcripts across the fleet.
-# Raw transcripts never leave their machine; only digests are rsynced back.
+# Raw transcripts never leave their machine; only digests are copied back (via tar).
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,7 +115,7 @@ main() {
     # MUST be bash-wrapped — a bare `ssh $h hostname` runs in PowerShell and
     # returns the native Windows name.
     local remote_live
-    remote_live="$(ssh "$alias" bash -lc 'hostname' 2>/dev/null || true)"
+    remote_live="$(ssh -n "$alias" bash -lc 'hostname' 2>/dev/null || true)"
     if [ -n "$remote_live" ] && \
        [ "$(local_host_id "$FLEET_JSON" "$remote_live")" = "$self_id" ]; then
       echo "[$alias] is this box, skipping self" >&2
@@ -123,7 +123,7 @@ main() {
     fi
 
     # Reachability + cache dir (bash-wrapped; PowerShell mkdir has no -p).
-    if ! ssh "$alias" bash -lc 'mkdir -p ~/.cache/kb-digests' 2>/dev/null; then
+    if ! ssh -n "$alias" bash -lc 'mkdir -p ~/.cache/kb-digests' 2>/dev/null; then
       echo "[$alias] skipped (unreachable)" >&2
       continue
     fi
@@ -148,7 +148,7 @@ main() {
 
     # Merge the remote's advanced watermark back (only its `sessions`).
     local tmp_state; tmp_state="$(mktemp)"
-    if ssh "$alias" bash -lc 'cat ~/.cache/kb-harvest-state.json' > "$tmp_state" 2>/dev/null; then
+    if ssh -n "$alias" bash -lc 'cat ~/.cache/kb-harvest-state.json' > "$tmp_state" 2>/dev/null; then
       python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
         || echo "[$alias] state merge-back failed" >&2
     fi
@@ -157,7 +157,7 @@ main() {
     # Pull digests via tar (rsync fails on Windows). Exclude manifest.tsv — the
     # local manifest accumulates and a plain copy would clobber it.
     echo "[$alias] pulling digests…" >&2
-    ssh "$alias" bash -lc 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
+    ssh -n "$alias" bash -lc 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
       | tar xf - -C "$out" 2>/dev/null \
       || echo "[$alias] digest pull failed" >&2
   done < <(detect_hosts "$FLEET_JSON")
