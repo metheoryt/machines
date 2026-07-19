@@ -20,7 +20,11 @@ ENVIRONMENT:
 - [ ] Task 6: Catch-up run against machines (human-in-the-loop; main session)
 - [x] FINAL whole-branch review (opus, 4057905..c0eb951): Ready to merge = WITH FIXES
 - [x] Final-review fixes #1/#3/#4 landed (commit a374328, verified: 7 distill tests + fleet PASS)
-- [ ] Task 6: awaiting user decision — local-only shakeout now vs merge-first+fleet; #2 defer vs fix
+- [ ] Task F2: fleet-wide read-once fix (#2) — seed remote w/ authoritative watermark + merge back (USER: fix before any run)
+- [ ] Task 6 Phase 1: LOCAL-only catch-up harvest (this box, ~55 sessions), main session, review gate (USER: local shakeout now)
+- [ ] Phase 2 (later, separate): merge tooling→main + fleet pull + full ~200-session fleet harvest
+
+USER DECISIONS (recorded): (1) Local shakeout now, fleet later. (2) Fix #2 before any run. Both Task 6 phases write KB edits on a FRESH branch, never main.
 
 ## FINAL REVIEW findings (opus)
 - **CRITICAL #1 (CONFIRMED empirically): remote distill path wrong + undeployed.** fleet-gather.sh:57 globs `~/.claude/plugins/cache/*/cyphy/*/skills/kb-refresh/distill.py` — matches NOTHING. cyphy is deployed as a SKILLS-DIR symlink `~/.claude/skills/cyphy → /home/me/machines/agents/plugin` (bootstrap.sh:244), NOT a marketplace plugin. Correct path: `~/.claude/skills/cyphy/skills/kb-refresh/distill.py`. BUT even corrected it won't resolve until refresh-kb MERGES to main + each box pulls — the symlink points at the MAIN checkout, which lacks kb-refresh today (`find -L ~/.claude -name distill.py` = empty). Failure is misreported as "[$h] skipped (unreachable)". LOCAL distill is fine (uses $SKILL_DIR = worktree). → FIX path in script; Task 6 fleet-gather is BLOCKED until merge+fleet-pull (sequencing decision).
