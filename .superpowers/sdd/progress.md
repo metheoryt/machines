@@ -105,3 +105,36 @@ NEW MINORS (non-blocking, DEFERRED — consistent w/ approved spec which kept lo
   (a) Local distill is platform-blind: main hardcodes local --projects-root ~/.claude/projects, doesn't iterate roots_for_platform locally. If a WINDOWS box were ever controller, its own Windows-profile transcripts missed locally AND it self-excludes remotely → never harvested. Out of scope: spec fixed local=NixOS latitude=single root. KNOWN LIMITATION (one-line fix available if a Windows controller is ever needed).
   (b) --exclude=manifest.tsv drops remote manifest rows — intentional (prevents clobber; SKILL Step 2 globs *.md, nothing consumes remote manifest). Deliberate, not a defect.
 STATUS: Job 1 COMPLETE. 10 commits 0298c6f..4bd9bf9. Offline suite green, bash -n clean. Job 2 (live harvest) downstream, runs from ~/machines after FF-merge. Merge-back = user-gated (worktree mode).
+
+## LIVE HARVEST (Job 2, 2026-07-19) — bug found + fixed + verified
+- First run (shipped form-A tool): local latitude 2 digests; desktop + server both
+  "skipped (unreachable)". FALSE negative — direct ssh to both boxes WORKED (g614jv,
+  methe-server; WSL bash 5.3.9, HOME=/home/me, python 3.14, both projects roots present).
+- ROOT CAUSE (empirical A/B/C/D/E test): inline `ssh h bash -lc 'cmd'` fails. ssh FLATTENS
+  its argv into one command string, so LOCAL single-quotes are consumed before the remote
+  shell sees them → remote gets `bash -lc mkdir -p ~/x` → `bash -c` runs only word `mkdir`
+  (no args) → uutils mkdir 0.8.0 "no dirs provided" → reported "unreachable". `hostname`
+  survived only because it's one word. Form B (nested `bash -lc "'cmd'"`, the handoff's
+  validated manual form) and form D (piped `bash -s`) both work. Plan's Global Constraint
+  literally prescribed the broken form A; offline tests + static reviews could not catch it
+  (none exercised real ssh). Advisor consulted, confirmed.
+- FIX (commit 4790c5f, branch refresh-kb): 6 inline `bash -lc 'cmd'` → `bash -lc "'cmd'"`,
+  preserving -n / < file / pipe semantics per advisor matrix (probe/mkdir/state-pull/tar keep -n;
+  2 cat> pushes keep < file, no -n; distill dispatch line 150 = form D, UNCHANGED). Verified
+  argv survives dispatch: 5 args intact, `~/.claude/projects` arrives expanded to /home/me/... by
+  remote WSL bash (harmless — same as ${root/#~/$HOME} intended). Spec updated w/ nested-quote rule.
+- SECOND run (fixed tool): BOTH Windows boxes REACHED + harvested. desktop g614jv: profile root
+  22 seen/0 new, WSL root 38 seen/1 new (1 digest). server methe-server: profile 10 seen/0 new,
+  WSL 0 seen/0 new. Read-once correct (Phase-2 sessions skipped). Watermark 105→107.
+- HARVEST OUTCOME: 3 genuinely-new digests (mtime>=23:30): 8c866a7f + 9fc6b575 = THIS work session
+  on latitude (self-referential fleet-gather work, already in commits/plan/ledger); c3c430cb = g614jv
+  11-line throwaway in machines/test worktree. NEAR-EMPTY of durable new facts (as handoff predicted).
+  Scratch also holds 44 STALE carry-over digests from the 21:21 manual harvest.
+- TOOL WART (follow-up): tar pull grabs the ENTIRE remote ~/.cache/kb-digests, which still holds the
+  2026-07-19 manual-harvest leftovers → stale digests pile into scratch. Options: clean remote
+  ~/.cache/kb-digests before distilling, or pull only files newer than run-start. Not fixed this run.
+- DURABLE LEARNING to record (proposed to user): the ssh-argv-flatten quoting gotcha (refines the
+  global fleet-SSH note — inline `bash -lc 'cmd'` also fails, not only PowerShell &&/quoting).
+- PENDING USER DECISIONS: (1) FF merge-back form-B fix (4790c5f) + spec/plan notes to main; (2) KB
+  refresh is near-empty → recommend SKIP full map/reduce/write, just record the ssh-quoting learning;
+  (3) tool wart — record as follow-up vs fix now.
