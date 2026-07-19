@@ -16,10 +16,13 @@
       grub.enable = false;
     };
 
-    # LTS kernel (nixpkgs default). Kept off linuxPackages_latest as the safer
-    # track for the NVIDIA driver (see CLAUDE.md); the AWG mesh that formerly also
-    # required it has been retired.
-    kernelPackages = pkgs.linuxPackages;
+    # Latest mainline kernel. The AWG mesh that once forced this fleet onto the
+    # LTS — its out-of-tree AmneziaWG module wouldn't build on 7.x — has been
+    # retired, and the only host this flake builds (latitude5520) is Intel-only,
+    # so the NVIDIA-driver caution in CLAUDE.md doesn't apply here. If an NVIDIA
+    # host is ever re-added as a NixOS target, reconsider pinning it back to
+    # `pkgs.linuxPackages`.
+    kernelPackages = pkgs.linuxPackages_latest;
 
     # Kernel parameters for better performance and security
     kernelParams = [

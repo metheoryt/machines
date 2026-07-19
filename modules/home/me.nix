@@ -58,16 +58,6 @@ in {
     # VPN
     proton-vpn # free tier for occasional geo-unblocking
 
-    (pkgs.symlinkJoin {
-      name = "amnezia-vpn-wrapped";
-      paths = [pkgs.amnezia-vpn];
-      nativeBuildInputs = [pkgs.makeWrapper];
-      postBuild = ''
-        wrapProgram $out/bin/AmneziaVPN \
-          --prefix XDG_DATA_DIRS : "${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}"
-      '';
-    })
-
     # Additional utilities
     dconf-editor
     gnome-tweaks

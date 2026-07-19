@@ -8,8 +8,6 @@
 			[
 				{ "PackageIdentifier" : "7zip.7zip" },
 				{ "PackageIdentifier" : "AIMP.AIMP" },
-				{ "PackageIdentifier" : "Amnezia.AmneziaWG" },
-				{ "PackageIdentifier" : "AmneziaVPN.AmneziaVPN" },
 				{ "PackageIdentifier" : "AntibodySoftware.WizTree" },
 				{ "PackageIdentifier" : "Anthropic.Claude" },
 				{ "PackageIdentifier" : "Casey.Just" },

@@ -271,16 +271,28 @@ global + per-host memory). One bullet per fact under a topical heading.
   `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md` is superseded. The
   Phase 0 param edit is now DRY-BUILT GREEN on latitude5520 (full toplevel
   builds with the LTS kernel pin below).
-- Kernel is PINNED to LTS `pkgs.linuxPackages` (6.18.38) in
-  `modules/system/base.nix` (commit `e2345ba`, 2026-07-08), off
-  `linuxPackages_latest` (7.1.3): the out-of-tree AmneziaWG module does NOT
-  compile on 7.x (`socket.c: 'ipv6_stub' undeclared`) but builds clean on the
-  LTS — verified with NVIDIA 595.84 and the full latitude5520 toplevel. So the
-  mesh REQUIRES the LTS kernel fleet-wide; don't bump back to `_latest` until
-  amneziawg supports 7.x. And an out-of-tree module only loads under the kernel
-  it was built for — after a kernel-changing `switch`, `wireguard-awg0` fails
-  (`Module amneziawg not found in .../<old-kernel>`) until you REBOOT into the
-  new kernel.
+- Kernel is back on `pkgs.linuxPackages_latest` (linux-7.1.3) in
+  `modules/system/base.nix` (branch `update-nix-linux-kernel`, 2026-07-19). HISTORY:
+  it was pinned to the LTS `pkgs.linuxPackages` (6.18.38) on 2026-07-08 (commit
+  `e2345ba`) solely because the out-of-tree AmneziaWG module wouldn't compile on
+  7.x (`socket.c: 'ipv6_stub' undeclared`). That blocker is gone — the AWG mesh
+  was retired (2026-07-17, commit `8952af9`; fleet moved to Headscale/Tailscale,
+  userspace, no out-of-tree kernel module), so the bump back was safe. NVIDIA-
+  safety (CLAUDE.md's steadier-track preference) does NOT bind here: this flake
+  builds ONLY latitude5520, which is Intel-only and doesn't import `nvidia.nix`.
+  Verified: full `latitude5520` toplevel builds green on 7.1.3. If an NVIDIA host
+  (g16) is ever re-added as a NixOS target, reconsider pinning IT back to
+  `linuxPackages` — `base.nix` is shared. (Historical gotcha, still true of any
+  out-of-tree module: it only loads under the kernel it was built for — after a
+  kernel-changing `switch`, the module fails `Module <x> not found in
+  .../<old-kernel>` until you REBOOT into the new kernel.)
+- AmneziaVPN CLIENT fully retired from our own machines (2026-07-19, same branch):
+  removed the `amnezia-vpn-wrapped` package from `modules/home/me.nix`, the
+  `AmneziaVPN` systemd service from `hosts/latitude/nixos/configuration.nix`, and
+  the `Amnezia.AmneziaWG` + `AmneziaVPN.AmneziaVPN` winget entries from both
+  `hosts/{g16,homeserver}/windows/winget-packages.json`. The obfuscated AWG VPN
+  HUB (for RU relatives/friends) is untouched — it lives in the `vps` repo, not
+  here. Only historical "why the mesh was retired" comments still mention AWG.
 - Unified fleet provisioner: DESIGN APPROVED 2026-07-08, spec at
   `docs/superpowers/specs/2026-07-08-unified-fleet-provisioner-design.md`
   (commit `5cc7a94`). Convergence-first single front door over one role-based
