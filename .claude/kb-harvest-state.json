@@ -1,19 +1,31 @@
 {
   "last_refresh": {
-    "commit": "b11ec0b",
+    "commit": "2e7423f",
     "date": "2026-07-19",
-    "scope": "local-only Phase 1 (this box); fleet gather deferred to Phase 2 (post-merge)",
-    "sessions_processed": 56,
+    "scope": "Phase 2 fleet-wide harvest (latitude5520 local + methe-server + g614jv via Windows-profile transcripts); 47 digests, ~26 facts approved",
+    "sessions_processed": 105,
     "tiers_touched": [
-      "CLAUDE.md",
       "agents/memory/global.md",
       ".claude/memory/project.md",
-      "agents/hosts/latitude5520.md",
-      "agents/hosts/g614jv.md",
-      "agents/CLAUDE.md"
+      "agents/hosts/methe-server.md",
+      "agents/hosts/g614jv.md"
     ]
   },
   "sessions": {
+    "0010cc89-1a9c-4229-b37d-fbb4a859c4a9": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f04a8a356666cdff54d4f136e7da4ad325919c2f",
+      "last_line": 572,
+      "last_ts": "2026-07-07T22:27:58.090Z"
+    },
+    "019af167-2dc5-4a25-9880-279837ab89a3": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f8ebe37812c7383621dbe41cfb7e249a760a8349",
+      "last_line": 502,
+      "last_ts": "2026-07-08T00:44:46.377Z"
+    },
     "05b345b4-5ca1-40a9-a146-ba98a03cb826": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -28,12 +40,40 @@
       "last_line": 12,
       "last_ts": "2026-07-17T16:39:00.045Z"
     },
+    "0c30deed-3e70-40cf-b821-8acc30c510d4": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "bc55fad7085d226bfe65faeac830747080767f78",
+      "last_line": 12,
+      "last_ts": "2026-07-15T11:24:03.778Z"
+    },
+    "0cbc6377-f9ab-48f6-bd11-d430b9bb35ac": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "0ea227910804562076cd646f72358e84b0caa656",
+      "last_line": 27,
+      "last_ts": "2026-07-14T18:12:35.136Z"
+    },
+    "0e66b99d-07b3-4207-8a6a-a4bc4974d2ed": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "3e16d0c9563d6c6a70f125ed92dec6c2e1dfb3ea",
+      "last_line": 52,
+      "last_ts": "2026-07-18T08:26:14.065Z"
+    },
     "108e5f34-7423-4871-828e-392f4f2563db": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "86d67c5eb7455ff154517e0674be49631385226a",
       "last_line": 333,
       "last_ts": "2026-07-15T16:36:22.496Z"
+    },
+    "12792336-5e6f-45e1-a264-b9f1e8340411": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f799db836eb17b26463b999972864b4f9da32ea6",
+      "last_line": 1079,
+      "last_ts": "2026-07-08T22:36:27.813Z"
     },
     "1417daa4-de31-4d25-b43b-cbb931821382": {
       "cwd": "/home/me/orca/workspaces/machines/git-worktree-orca-setup",
@@ -42,12 +82,47 @@
       "last_line": 1051,
       "last_ts": "2026-07-18T15:07:53.623Z"
     },
+    "1c32a4fa-aa84-4681-b911-13f82e00cf95": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "33864f05519517c96fc07613f793341d19c3ee7b",
+      "last_line": 412,
+      "last_ts": "2026-07-07T23:07:42.038Z"
+    },
+    "20023ba9-de26-4f91-84b5-afad4f5582e9": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "050e8a7d7de1d37e24f0f379a150a03819b9ed2a",
+      "last_line": 86,
+      "last_ts": "2026-07-09T16:51:17.977Z"
+    },
+    "23bbd86b-54ec-4598-8111-19fe22f5df99": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "424e519e60dfeb47450df025ca1767fa267b2f89",
+      "last_line": 842,
+      "last_ts": "2026-07-06T17:15:09.945Z"
+    },
     "26c0c0e3-e9e9-48cf-bf45-3b417796e2cb": {
       "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
       "host": "latitude5520",
       "id_hash": "5ebc0d281a08795115ac931a20a3e97a6a407617",
       "last_line": 547,
       "last_ts": "2026-07-17T14:42:06.689Z"
+    },
+    "28878173-7885-4cff-a001-403996d7cefa": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "2a01944f4bc83d137fdb8b06cf9e03b007d87502",
+      "last_line": 80,
+      "last_ts": "2026-07-06T15:19:57.126Z"
+    },
+    "295b2400-b6b6-4156-9e7d-355af6d8627e": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "92ec3fcad3956914064da1fc02256bf1d03a8e01",
+      "last_line": 622,
+      "last_ts": "2026-07-13T11:51:53.754Z"
     },
     "2b024340-80a7-40cd-9c68-e803dd5b8329": {
       "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
@@ -63,12 +138,26 @@
       "last_line": 236,
       "last_ts": "2026-07-15T17:34:10.629Z"
     },
+    "32e132a7-1fc5-467c-90ef-233abb0f82ff": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "ee507e930bcedc923643415beec7bda001eb0aba",
+      "last_line": 43,
+      "last_ts": "2026-07-14T16:57:04.450Z"
+    },
     "343d9ad3-9075-42a8-a69f-2cb6883b265d": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "c85af4e768db3785009ecc49018262ae037e6f2b",
       "last_line": 1081,
       "last_ts": "2026-07-07T18:14:58.519Z"
+    },
+    "34a6324f-642f-44e0-b674-53413a0b9478": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "e8bca709157f6f0ba03b77ec00c4ec99a858489e",
+      "last_line": 49,
+      "last_ts": "2026-07-18T08:25:41.402Z"
     },
     "36b474ac-4d7a-42b8-8e07-7064c6fb3714": {
       "cwd": "/home/me/machines",
@@ -84,6 +173,27 @@
       "last_line": 497,
       "last_ts": "2026-07-17T18:40:08.730Z"
     },
+    "3f7986b8-447d-4a3d-9a0f-f630685c4756": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "369f2aa4cca098ab6bd3261216f251787ab8ca96",
+      "last_line": 311,
+      "last_ts": "2026-07-06T19:06:09.766Z"
+    },
+    "4160f434-6a56-423a-8ae2-dce35d12454d": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "b6cb144006cd40328d0be05790c9cb996e88e374",
+      "last_line": 28,
+      "last_ts": "2026-07-14T17:06:36.613Z"
+    },
+    "4968b77e-543a-4cbe-97b2-1a4affc194ad": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "9ec367d183ca2d858c7c5215a9a4d1d3dd3e9c02",
+      "last_line": 1119,
+      "last_ts": "2026-07-13T17:47:23.005Z"
+    },
     "4b330491-b4ca-4731-934c-97ef50516f79": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -95,8 +205,8 @@
       "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
       "host": "latitude5520",
       "id_hash": "16e9ec3c6ca1fd3b6a2bf4bcb1458e6ffee70e29",
-      "last_line": 796,
-      "last_ts": "2026-07-19T14:55:17.854Z"
+      "last_line": 1204,
+      "last_ts": "2026-07-19T16:07:42.465Z"
     },
     "4e37fff7-f0d2-4967-97af-ac5754566c39": {
       "cwd": "/home/me/machines",
@@ -104,6 +214,13 @@
       "id_hash": "0d65edb8d85662ff8885e2655806f4d41020a02f",
       "last_line": 214,
       "last_ts": "2026-07-14T18:12:06.416Z"
+    },
+    "4e9cdecf-eef1-405c-8630-ca49ef993fca": {
+      "cwd": null,
+      "host": "g614jv",
+      "id_hash": "bdc021efdf8eff2537ad92a3908493a6863cb92f",
+      "last_line": 2,
+      "last_ts": null
     },
     "4ec7d2f1-e438-4179-afd3-f1d712208d6e": {
       "cwd": "/home/me/machines",
@@ -119,6 +236,20 @@
       "last_line": 102,
       "last_ts": "2026-07-07T18:33:51.282Z"
     },
+    "568d85ae-86e5-4a9f-879b-5b948572685a": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "72c830e4ceffdf5605a8c211df6134f9efc73d42",
+      "last_line": 40,
+      "last_ts": "2026-07-06T17:20:50.546Z"
+    },
+    "56f10424-564d-4297-98e1-9f908ae23ba7": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-setup-script-hint",
+      "host": "latitude5520",
+      "id_hash": "d2417e5de79ba9b09157f05b9b501595f0ae2bfb",
+      "last_line": 270,
+      "last_ts": "2026-07-19T15:55:17.110Z"
+    },
     "584d9248-c110-48db-98cc-9127f44be44a": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -132,6 +263,13 @@
       "id_hash": "945becb37c4af7be96b4dc149e248ecbb20c95df",
       "last_line": 311,
       "last_ts": "2026-07-05T18:55:07.552Z"
+    },
+    "5d80aed3-cbe2-4817-958a-83a4aa4f1281": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "37747b381a68cd53a1417332294580886beb52bf",
+      "last_line": 580,
+      "last_ts": "2026-07-15T19:54:32.336Z"
     },
     "5f807bd8-1fab-46d2-84a5-63b6de6a4e1b": {
       "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
@@ -154,6 +292,13 @@
       "last_line": 509,
       "last_ts": "2026-07-07T13:49:09.927Z"
     },
+    "6693e418-db12-4d91-9787-f707e82886a8": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "0f04a1d4cad0231a1d1c00fe247ca083f66d9f3a",
+      "last_line": 1052,
+      "last_ts": "2026-07-15T11:23:09.945Z"
+    },
     "671b9676-2542-41c0-ba21-9a3149e9f322": {
       "cwd": "/home/me/gh/machines",
       "host": "latitude5520",
@@ -168,6 +313,20 @@
       "last_line": 68,
       "last_ts": "2026-07-05T18:22:33.886Z"
     },
+    "6ddfd3b8-8c8d-4fd6-abf0-82dcb764b5e6": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "abb67be405adb334a49cc80d29ea7318e791c919",
+      "last_line": 69,
+      "last_ts": "2026-07-08T21:03:18.313Z"
+    },
+    "6eaa727d-81a5-48b8-a1d0-76b3ece36f76": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "1a1f7db51293dd0e11be9dcf5b7df21d1ab70d2a",
+      "last_line": 11,
+      "last_ts": "2026-07-09T10:30:36.108Z"
+    },
     "6ef60dd7-e3de-4761-826b-d23a7f2861a9": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -175,12 +334,40 @@
       "last_line": 21,
       "last_ts": "2026-07-14T18:21:55.118Z"
     },
+    "6f633445-7ae8-40bc-a5a1-332a560a4161": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "08e6d12b07e3e4bef27ab3a592601ae41962f161",
+      "last_line": 434,
+      "last_ts": "2026-07-06T11:43:51.901Z"
+    },
+    "6feb8365-c0f7-44fd-aa57-9740cf0525d7": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "bf5cf862c138a06b1f85f57baf49e625a68594c7",
+      "last_line": 35,
+      "last_ts": "2026-07-05T21:08:39.640Z"
+    },
+    "77518c17-8e2c-4e25-8eb2-157b3d643dfa": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "f167600732403821b1c2b1e0011b499c2655d658",
+      "last_line": 58,
+      "last_ts": "2026-07-07T17:22:49.885Z"
+    },
     "814ffea6-314b-4463-91d0-6cc02172ab96": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "cc146650de9a19e06a34a4f1eb52d375d4e2d211",
       "last_line": 26,
       "last_ts": "2026-07-17T11:03:37.737Z"
+    },
+    "83095302-4347-41d7-a1d4-e0c912f5b108": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "e64ec27854676c3ae1d7090cb2b5025c0bd79266",
+      "last_line": 48,
+      "last_ts": "2026-07-07T21:21:50.743Z"
     },
     "850e7bc6-bac8-4a88-a3c2-68b494b3e1f7": {
       "cwd": "/home/me/machines",
@@ -217,6 +404,20 @@
       "last_line": 47,
       "last_ts": "2026-07-07T13:15:34.607Z"
     },
+    "925b7887-33a4-4fb0-82ee-bb4cd1c71f2c": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c17a7d6fbdf993834706c08d4d1f6855877932e9",
+      "last_line": 109,
+      "last_ts": "2026-07-15T18:47:15.422Z"
+    },
+    "9267d3f5-1158-471e-94a2-1f184c13205e": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c11746be769e00b179c11242c6c2796d9770ed5c",
+      "last_line": 12,
+      "last_ts": "2026-07-07T21:21:53.947Z"
+    },
     "96d9a682-dbcd-4649-8fc4-a113d30f3e1a": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -224,12 +425,54 @@
       "last_line": 142,
       "last_ts": "2026-07-15T21:57:04.301Z"
     },
+    "9762d15e-075f-4c45-a863-c4db842ceb34": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "9361d7bc7029e1c83acbfa7ed6db699925d57b89",
+      "last_line": 54,
+      "last_ts": "2026-07-17T14:42:29.205Z"
+    },
+    "97b1a797-8e7b-4b31-a530-40b81f5f2e19": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "7342f4ca711abf88ecfd2992f764bae0fab6f3ec",
+      "last_line": 18,
+      "last_ts": "2026-07-16T18:17:45.672Z"
+    },
+    "9806f570-daa3-4e12-af24-63e732df0dcd": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "1f85c2838e55381856795f9d015579bba12dbc6d",
+      "last_line": 5,
+      "last_ts": "2026-07-06T17:18:05.480Z"
+    },
+    "9a4a2c0e-65fb-49eb-a7f9-301984ba0e55": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "e9d5d0849decadc05848503f9d9ad575a6161118",
+      "last_line": 128,
+      "last_ts": "2026-07-06T20:44:53.665Z"
+    },
     "9be70f7a-c981-48be-97c3-eb2467c68018": {
       "cwd": "/home/me/gh/machines",
       "host": "latitude5520",
       "id_hash": "067ea811e8ad9e4894cb5dfb55368ce4b408d8e3",
       "last_line": 262,
       "last_ts": "2026-07-05T17:08:27.033Z"
+    },
+    "9ddbac91-550b-41ee-b63c-a1402574d600": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "65727050d7b414cd83f895c6d5ec26067bdc7fc1",
+      "last_line": 22,
+      "last_ts": "2026-07-10T21:11:30.330Z"
+    },
+    "9fc6b575-e141-40ef-b472-6da25ce88169": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "72cd67a975123a1b9124e2944896f0b73828d967",
+      "last_line": 164,
+      "last_ts": "2026-07-19T16:19:18.096Z"
     },
     "a2287911-468e-4783-9fcf-1900dc4b639b": {
       "cwd": "/home/me/orca/workspaces/machines/update-nix-linux-kernel",
@@ -252,6 +495,20 @@
       "last_line": 477,
       "last_ts": "2026-07-07T15:33:36.536Z"
     },
+    "ae9c9474-3cea-4ad5-acf5-503317916575": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "c55debb1897da2702604084cb3b29e617b53e8b5",
+      "last_line": 893,
+      "last_ts": "2026-07-06T15:21:51.338Z"
+    },
+    "b420690b-22a5-4fca-a0ef-cee7080f6676": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "63ff30ecea0074114d768c6c11d39603e78be21f",
+      "last_line": 321,
+      "last_ts": "2026-07-07T17:20:35.442Z"
+    },
     "b47e8f6a-568d-45d6-a48e-b028534fb308": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -273,12 +530,33 @@
       "last_line": 459,
       "last_ts": "2026-07-05T23:08:35.491Z"
     },
+    "ba3f389d-bbe0-482b-8ef7-50db15224a85": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "6eb2c0ffa94ea709c0ec0f10534934f4963107a2",
+      "last_line": 12,
+      "last_ts": "2026-07-08T17:09:43.593Z"
+    },
     "bd412c96-7936-4559-b085-dffd0c029252": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "64e1814f9a00ede0fcbbd12642535b3949087d23",
       "last_line": 110,
       "last_ts": "2026-07-15T22:03:36.776Z"
+    },
+    "bf7a3ca7-5b88-42ce-9a52-f13ecbb886d5": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c15b9486f2372a25500d455a5ca2044ccee5052a",
+      "last_line": 435,
+      "last_ts": "2026-07-19T08:43:24.739Z"
+    },
+    "bffaeb01-a2a7-4482-a930-072a350f4d5d": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "91f4b69b1fc437e22a3524de7d81843e8e10ef9b",
+      "last_line": 893,
+      "last_ts": "2026-07-07T09:10:42.435Z"
     },
     "c3b9d28f-f225-4660-a13d-b237610a7219": {
       "cwd": "/home/me/gh/machines",
@@ -301,6 +579,13 @@
       "last_line": 122,
       "last_ts": "2026-07-15T21:13:58.892Z"
     },
+    "c9782663-c19c-4331-84eb-c1ab9c3e0dd9": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "7712e60a4c5c37b898bf2782f3b1f1cb7a3f7e62",
+      "last_line": 55,
+      "last_ts": "2026-07-07T21:28:10.999Z"
+    },
     "cab62c08-fef0-42b3-adf5-e121fb5a8047": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -314,6 +599,13 @@
       "id_hash": "93d5f789dbbe00f99a598a419eb0774050be2fc1",
       "last_line": 425,
       "last_ts": "2026-07-08T18:12:19.267Z"
+    },
+    "cce75f46-d118-45ac-9280-db3bcd913e58": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "09a9e9d01599281235abb7056ce2a2fe90cb1570",
+      "last_line": 918,
+      "last_ts": "2026-07-14T19:15:14.841Z"
     },
     "cecc365e-10ff-45f4-bccc-35c8ea3dcb3e": {
       "cwd": "/home/me/orca/workspaces/machines/orca-session-management",
@@ -350,12 +642,40 @@
       "last_line": 51,
       "last_ts": "2026-07-18T08:03:05.712Z"
     },
+    "d3709f19-4986-4280-bbae-9322fd4c04fa": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "25535240120af35df872c4646f9f1415d541cba7",
+      "last_line": 245,
+      "last_ts": "2026-07-08T17:09:23.844Z"
+    },
     "d459b28b-b35d-43f7-9693-ad5abf85f049": {
       "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
       "host": "latitude5520",
       "id_hash": "2c03dfec9fc1a9f7c7ca15131b12c37d0fec8f2b",
       "last_line": 34,
       "last_ts": "2026-07-16T20:44:17.181Z"
+    },
+    "d48db917-d276-41b0-983d-792a91de8b79": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "a8b1363713e45752679822a98a157067d7755075",
+      "last_line": 32,
+      "last_ts": "2026-07-16T18:11:05.102Z"
+    },
+    "dc3e7e73-f226-4856-ac95-d6ad8f07d827": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "50313630eb41259fd4a7d71e14c9f183a1071d3b",
+      "last_line": 10,
+      "last_ts": "2026-07-06T15:29:04.463Z"
+    },
+    "de483aa9-8f6f-4bd1-b247-50e21439e658": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "c6a3cd3c30aedaf77f8f22b8b0654e6d3f683ce0",
+      "last_line": 120,
+      "last_ts": "2026-07-09T10:27:34.951Z"
     },
     "e6f78b16-e578-4b5f-b1f8-7a4425f90923": {
       "cwd": "/home/me/machines",
@@ -370,6 +690,13 @@
       "id_hash": "dc3c99f3057a5cf26fced92ce24d7e78f0973169",
       "last_line": 106,
       "last_ts": "2026-07-15T21:01:31.114Z"
+    },
+    "ee592b68-8935-495a-831b-e737431cfe5f": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "a1d9483c21f3afe2b16ade48f113b064a7509f9a",
+      "last_line": 214,
+      "last_ts": "2026-07-05T19:58:48.723Z"
     },
     "efe61ca7-8e3c-4ab4-84ca-e59010c2e760": {
       "cwd": "/home/me/machines",
@@ -398,6 +725,20 @@
       "id_hash": "099f8c162cee8255ecc0527c17df0c48b9dbaa81",
       "last_line": 30,
       "last_ts": "2026-07-15T21:15:56.555Z"
+    },
+    "f7c370bd-1c2a-4b64-921f-23866e2a8779": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "14ece2ea798e14aed1f733877303e8d55cb7f3a6",
+      "last_line": 328,
+      "last_ts": "2026-07-07T23:40:46.441Z"
+    },
+    "fda4b9b8-36bd-4d8e-8de8-6a7049e34564": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "9b3e5b62902816c86ecc2e8a50121a54244b5dc1",
+      "last_line": 918,
+      "last_ts": "2026-07-15T16:54:54.004Z"
     },
     "fe94a2d5-59e6-41dd-91f1-8170973cad18": {
       "cwd": "/home/me/machines",

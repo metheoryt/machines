@@ -28,10 +28,14 @@ elsewhere to sync. Do NOT put secrets here.
   inside WSL / `ME-G614JV` native; its old NixOS identity `g16` is retired), `server`
   (methe-server — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
   fleet workstation). Keys-only, no public exposure.
-- **The remote login shell is fish**, which chokes on `$(...)` / POSIX-test syntax
-  passed as `ssh host '<script>'` (fails silently / non-zero). To run a bash
-  snippet remotely, force bash: `ssh host bash -s < script.sh` (or
-  `ssh host bash -lc '...'`).
+- **The remote login shell differs by box.** NixOS/Linux members (e.g. `latitude`)
+  log in to **fish**, which chokes on `$(...)` / POSIX-test syntax passed as
+  `ssh host '<script>'` (fails silently / non-zero). The **Windows fleet members
+  (`desktop`=g614jv, `server`=methe-server) SSH into PowerShell**, which chokes on
+  `&&` and shell quoting. Either way, force bash: `ssh host bash -s < script.sh`
+  (piping a script file is the most robust — inline `ssh host bash -lc '...'` still
+  routes through PowerShell on the Windows boxes and mangles nested quotes). On the
+  Windows boxes `bash -s`/`bash -lc` dispatches to WSL bash.
 
 ## Windows OpenSSH & winget footguns
 
@@ -86,6 +90,11 @@ elsewhere to sync. Do NOT put secrets here.
   (vendor-neutral), NOT `~/.claude/skills/`, so Claude Code does not
   auto-discover skills installed that way — only tools that read
   `~/.agents/skills/` (e.g. Orca) see them.
+- Orca's Claude-session-**resume** command uses `&&` as a statement separator —
+  fine under `pwsh.exe` (PowerShell 7) or `cmd.exe`, but legacy Windows PowerShell
+  5.1 (`powershell.exe`) rejects it ("The token '&&' is not a valid statement
+  separator in this version"). If Orca launches a pane on a Windows box, point its
+  shell setting at `pwsh.exe`.
 
 ## Harness behavior (empirical)
 
@@ -343,3 +352,50 @@ elsewhere to sync. Do NOT put secrets here.
   surface every `text_matched`-bound spot; adopt at `standard`, ratchet to
   `strict`). Pyright won't load the django-stubs mypy plugin, so the "often
   missed" tier above still stands.
+
+## Windows & WSL scripting footguns
+
+- **Non-interactive git push over HTTPS fails on Windows.** Git Credential Manager
+  (Windows Hello / TPM-protected token) needs an interactive unlock an agent shell
+  can't trigger — symptoms like "could not read Username" or a Russian "ключ не
+  может быть использован в указанном состоянии". Push over SSH instead
+  (`git push git@github.com:owner/repo HEAD:main`); no need to change the configured
+  remote.
+- **Git on Windows doesn't preserve the executable bit** — a script bound for
+  nixos/WSL lands `100644` and won't run there. Run `git update-index --chmod=+x
+  <script>` after `git add`, or pin it via `.gitattributes`.
+- **Windows `setx` silently truncates PATH at 1024 chars** — use
+  `[Environment]::SetEnvironmentVariable(...)` for any long PATH edit.
+- **Bare `bash` on a Windows PATH often resolves to the WSL stub**
+  (`WindowsApps\bash.exe`), launching WSL instead of running the script — invoke Git
+  Bash explicitly (`C:\Program Files\Git\bin\bash.exe`) when you need it.
+- **WSL distro setup gotchas:** `wsl --import <name> <dest> <tarball>` creates only
+  the leaf dir — the parent must pre-exist or you get `ERROR_PATH_NOT_FOUND` (use a
+  user-writable path like `%USERPROFILE%\WSL` to avoid needing admin); imported
+  distros boot as **root**, so set `[user] default=<name>` in that distro's
+  `/etc/wsl.conf` and terminate to apply; converting a VHD to sparse
+  (`wsl --manage <d> --set-sparse true`) needs `wsl --shutdown` (not `--terminate` —
+  async handle release causes a sharing violation), which also stops the Docker
+  Desktop backend.
+
+## Git & bash footguns
+
+- **`git maintenance`'s prefetch task writes hidden `refs/prefetch/*`, not
+  `refs/remotes/*`** — so it deliberately does NOT update what `git status`/the
+  prompt reports as "behind by N". A background loop that wants that signal needs
+  `git fetch --all --prune` (updating real remote-tracking refs), which is why the
+  fleet's git-autofetch uses plain fetch, not `git maintenance`.
+- **bash: assigning to a variable named `GROUPS` is silently discarded** — it's a
+  reserved builtin array (the caller's GID list). Use another name (`REPO_GROUPS`).
+- **`gh auth switch` changes only the `gh` CLI's active account, NOT `git
+  push`/`pull` auth.** For git, isolate multi-account access with per-account SSH
+  host-aliases in `~/.ssh/config` (`Host github.com` vs `Host github-<alias>`, each
+  with its own `IdentityFile` + `IdentitiesOnly yes`); key commit identity off the
+  remote URL with `includeIf "hasconfig:remote.*.url:git@<alias>:*/**"` (git ≥ 2.36)
+  so identity isolation survives repos living anywhere on disk.
+
+## Subagent-driven development
+
+- **Model tiering by task type** is the working convention: haiku for pure
+  transcription/mechanical edits, sonnet for judgment edits and per-task review, opus
+  reserved for the final whole-branch cross-cutting review.

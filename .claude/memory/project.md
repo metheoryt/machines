@@ -1,6 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against b11ec0b on 2026-07-19 -->
+<!-- KB refreshed against 2e7423f on 2026-07-19 -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host memory). One bullet per fact under a topical heading.
@@ -17,6 +17,10 @@ global + per-host memory). One bullet per fact under a topical heading.
   non-fatal and only hard-gates on required-file presence + a one-host dry-build
   — it can pass green while `nix flake check` is red. For reliable per-host
   validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
+- **The Windows fleet boxes have no Nix.** Any `nix eval` / `nix build --dry-run` /
+  `nix flake check` step must be deferred to a NixOS member (currently only
+  `latitude5520`) after a `git pull` — Windows-side work can reason about Nix diffs
+  but never execute the gate.
 
 ## Fleet network
 
@@ -613,6 +617,17 @@ global + per-host memory). One bullet per fact under a topical heading.
   removable — periodic manual rotation of one dock's drive to an off-site
   location, no new infra needed. Prefer that over recommending cloud/object
   storage additions unless the user wants to skip manual rotation.
+- **RustDesk restore is not a plain file-copy.** RustDesk runs as a LocalSystem
+  Windows service that owns a master config and overwrites `%APPDATA%\RustDesk\config`
+  (`RustDesk2.toml`) seconds after service start — so `restore.ps1` can never durably
+  restore the custom ID/Relay ("retranslator") server by copying the file back. The
+  restore script instead extracts those values from the backup and prints them for
+  manual GUI entry (Settings → Network → ID/Relay Server).
+- **`restore.ps1`'s `Find-Backups` auto-discovers the backup drive** by scanning every
+  Windows volume for a `<letter>:\backup` folder, so it survives the backup SSD
+  mounting on a random drive letter; sibling scripts (`backup.ps1`,
+  `bootstrap-agents.ps1`) historically hardcoded a letter and needed the same
+  auto-discovery.
 - latitude5520 (and g16's native NixOS side) have no dedicated backup today.
   Whatever home-manager declares in this repo is already "backed up" by being
   in git; anything outside home.nix's scope (browser profiles, ad hoc
@@ -633,6 +648,20 @@ global + per-host memory). One bullet per fact under a topical heading.
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
   `fleet-gather.sh` distills in-place on other fleet boxes and rsyncs back
   only digests (never raw transcripts).
+  - **The stock `fleet-gather.sh` harvests NOTHING from the Windows fleet members
+    (`desktop`/`server`)** (verified Phase 2, 2026-07-19): (1) their live Claude
+    Code transcripts live under the **Windows** profile
+    (`/mnt/c/Users/<user>/.claude/projects`), not the WSL home's
+    `~/.claude/projects` that `distill.py`'s default `--projects-root` points at;
+    (2) SSH lands in **PowerShell**, so the script's `ssh h bash -lc` still needs
+    care and `rsync`-over-ssh fails (no `rsync` on the PowerShell PATH); (3) the
+    `~/.claude/skills/cyphy` symlink + `distill.py` aren't deployed in WSL there.
+    Until `fleet-gather.sh` is fixed, harvest the Windows boxes by hand: push
+    `distill.py` to `~/.cache/` (`ssh h bash -lc 'cat > ~/.cache/distill.py'`), run
+    it with `--projects-root /mnt/c/Users/<user>/.claude/projects` (desktop also has
+    a partial WSL `~/.claude/projects` — run both roots), `--merge-from` the
+    returned state, and `tar` digests back (not rsync). `latitude5520` (NixOS,
+    local, fish) works with the stock path.
 - `scripts/orca-worktree-setup.sh` is the generic dispatcher Orca runs on each
   new worktree: it symlinks gitignored config (`.env`,
   `.claude/settings.local.json`) from the main checkout, then delegates to
@@ -655,6 +684,30 @@ global + per-host memory). One bullet per fact under a topical heading.
   of that laptop's installed state; `hosts/homeserver/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.
+- **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /
+  `agents/AGENTS.md` (the global-memory hook works for Codex too). A tool with a
+  symlink guard (won't write through a symlink) edits nowhere useful if pointed at
+  the `CLAUDE.md` path — edit the real `AGENTS.md` target.
+- **Windows `just` needs `set windows-shell := ['C:/Program
+  Files/Git/bin/bash.exe','-cu']`** (in the justfile) — native PowerShell has no
+  POSIX `sh`, so without it `just` fails on Windows even on `just --list`. Recipes
+  must use **relative** script paths, not `{{justfile_directory()}}` — Git Bash
+  mangles the absolute backslash path (`C:\Users\methe\machines` →
+  `C:Usersmethemachines`); `just` runs recipes with cwd = justfile dir, so relative
+  works.
+- **`scripts/quick-check.sh` (the `just quick` gate) hardcodes the host label** —
+  `hosts/latitude/…` paths and `.#nixosConfigurations.latitude…` as literal strings,
+  NOT via the justfile's decoupled `nixos_attr` var. A future host-label rename
+  silently breaks `just quick` even though `nixos-rebuild`/`nix build` keep working;
+  update quick-check.sh in the same rename.
+- **`agents/statusline-command.sh` probes `python3 → python → py` in that order** —
+  on fresh Windows boxes `python3`/`python` on PATH are usually Microsoft Store stubs
+  that fail silently (blank statusline); the `py` launcher resolves real installs via
+  the registry regardless of PATH.
+- **`.gortex/` (per-repo daemon SQLite index state) is gitignored** with a trailing
+  slash so it doesn't also match the committable `.gortex.yaml` wiring; `gortex init`
+  re-sprays `.claude/skills/generated/gortex-*` even with `--no-skills`, so that path
+  stays gitignored too. Never commit either — machine-local index state.
 
 ## Pending follow-ups
 
