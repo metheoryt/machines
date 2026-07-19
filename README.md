@@ -4,8 +4,8 @@ Config, provisioning, and data-backup for a small fleet of physical machines —
 NixOS *and* Windows. The NixOS hosts are a flake (Home Manager integrated); the
 Windows hosts carry their reinstall/backup scripts and shared install media.
 
-- **g16** — ASUS ROG G16 2024, Intel + NVIDIA RTX 4060 (PRIME offload). NixOS
-  (`g16`) + a Windows install (`ME-G614JV`).
+- **desktop** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
+  **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
 - **homeserver** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti.
   Windows 11 + Docker Desktop, logical name `server`, OS hostname
   `methe-server` (**being renamed to `g513ie`** — the model code; see the
@@ -110,11 +110,7 @@ modules/
 
 ### Host Configurations
 
-**`hosts/desktop/nixos/`** — ASUS ROG G16
-- NVIDIA RTX 40-series via PRIME offload (Intel primary, NVIDIA on-demand)
-- Imports: `base`, `laptop`, `gnome`, `nvidia`, `asus-rog`, `development`, home-manager
-- ASUS services: `asusd`, `supergfxd`
-- Battery charge limit: 85% via `charge-upto <percent>`
+**`hosts/desktop/windows/`** — ROG G16 2024 (Windows-only); NixOS `g16` retired.
 
 **`hosts/latitude5520/nixos/`** — Dell Latitude 5520
 - Intel Tiger Lake with `intel-compute-runtime` (replaces `intel-ocl`)
@@ -140,19 +136,6 @@ User `me` (Maxim Romanyuk) configuration:
 - **Key packages:** google-chrome, telegram-desktop, ghostty, vlc, gimp, libreoffice, zed-editor, pycharm, claude-code, rustdesk
 
 ## Hardware Notes
-
-### g16 NVIDIA PRIME
-
-Intel (primary) + NVIDIA (on-demand via `nvidia-offload`):
-
-```bash
-# Run a program on the NVIDIA GPU
-nvidia-offload <command>
-```
-
-Bus IDs: Intel `PCI:00:02:0`, NVIDIA `PCI:01:00:0` — verify with `lspci | grep -E "VGA|3D"` if offload breaks.
-
-NVIDIA driver changes can cause `nixos-rebuild switch` to fail mid-session. Use `just upgrade` (sets next boot, then reboot) instead of `just upgrade-now`.
 
 ### Battery Charge Limiting
 

@@ -157,24 +157,12 @@ Runs at system level (`nixosModules.default`) with `useGlobalPkgs = true` and `u
   the target model name; the flip happens in Phase 2 (`Rename-Computer` +
   reboot on the box), not yet applied.
 
-### g16 (ASUS ROG G16)
-
-- CPU: Intel (kvm-intel, microcode updates enabled)
-- GPU: Intel integrated (primary, `PCI:00:02:0`) + NVIDIA discrete (PRIME offload, `PCI:01:00:0`)
-- Run on NVIDIA GPU: `nvidia-offload <command>`
-- Verify bus IDs if offload breaks: `lspci | grep -E "VGA|3D"`
-- Fine-grained power management: NVIDIA GPU powers off when idle
-- **NVIDIA upgrade safety:** Driver changes can cause `nixos-rebuild switch` to fail mid-session. Use `just upgrade` (set next boot) over `just switch` when the change includes NVIDIA.
-
 ### latitude5520 (Dell Latitude 5520)
 
 - CPU: Intel 11th Gen Tiger Lake (kvm-intel)
 - GPU: Intel integrated only (intel-compute-runtime for OpenCL)
 - Root: LUKS-encrypted ext4
 - Thunderbolt: authorized via bolt
-
-### Both hosts
-
 - Battery charge limit: 85% default, `charge-upto <percent>` to change
 - Bluetooth: off at boot — enable manually when needed
 - Swap: ZRAM (50% memory, zstd)
