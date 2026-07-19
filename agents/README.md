@@ -169,6 +169,31 @@ On Windows the script sets `MSYS=winsymlinks:nativestrict` so Git Bash creates
 Without one of those, `ln -s` falls back to copies and the "edit-anywhere"
 behavior breaks. Enable Developer Mode and re-run `bootstrap.sh`.
 
+### Gortex (code-intelligence MCP server)
+
+`bootstrap.sh` also brings up [gortex](https://github.com/zzet/gortex):
+
+- **Binary.** On Windows it installs gortex if missing (upstream PowerShell
+  installer; floats to latest — re-run it to upgrade). On NixOS the binary is
+  declarative (`pkgs/gortex.nix`, installed via `modules/programs/development.nix`)
+  and the daemon runs as a `systemd --user` service (`modules/home/me.nix`), so
+  bootstrap installs nothing there.
+- **Machine-local wiring.** It runs `gortex install --no-claude-md`, which
+  regenerates the profile's gortex skills/agents/hooks + user MCP config.
+  `--no-claude-md` is load-bearing: it keeps gortex's rule block OUT of the
+  shared, git-tracked `AGENTS.md` (reached via the `~/.claude/CLAUDE.md`
+  symlink), so bootstrap never mutates the fleet-synced instruction file. The
+  generated artefacts are machine-local and never committed — gortex owns them.
+- **Idempotent.** Re-running bootstrap skips the wiring when the profile is
+  already wired; `GORTEX_REWIRE=1` forces a refresh (e.g. after an upgrade).
+- **No daemon-start step** — `gortex mcp` (from `.mcp.json`) brings the daemon
+  up per session automatically.
+
+On **NixOS**, home-manager activation runs bootstrap too, but the wiring step is
+skipped there (kept fast/offline); run it once from a login shell with
+`just gortex-setup`. Bump the pinned version with `just update-gortex` (also run
+by `just update`), then `just switch`.
+
 ### Linux / macOS — the nix way (optional)
 
 This repo is a home-manager flake, so `modules/home/claude.nix` declares the

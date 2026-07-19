@@ -76,6 +76,14 @@ agent-bootstrap-profile postfix:
     @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
     @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
 
+# NixOS-only: run the machine-local `gortex install --no-claude-md` wiring, which
+# bootstrap.sh skips under home-manager activation (kept fast/offline there). The
+# binary + daemon come from pkgs/gortex.nix + me.nix; this fills in the per-profile
+# skills/agents/hooks + user MCP config. Run once per box (re-run after a bump).
+gortex-setup:
+    @echo "🧠 Wiring gortex (machine-local skills/agents/hooks + MCP)..."
+    @GORTEX_ALLOW_NIX_WIRE=1 GORTEX_REWIRE=1 env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
+
 # Build and switch to new configuration
 switch: _check-machines-link
     @echo "🔧 Switching to new NixOS configuration..."
@@ -101,6 +109,7 @@ update:
     @just update-rustdesk
     @just update-zed
     @just update-pycharm
+    @just update-gortex
     @echo "✅ Flake inputs updated!"
 
 # Bump rustdesk-bin.nix to the latest upstream release (also run by `update`)
@@ -117,6 +126,13 @@ update-zed:
 update-pycharm:
     @echo "📦 Checking for new PyCharm release..."
     {{flake_dir}}/scripts/update-pycharm.sh
+
+# Bump pkgs/gortex.nix to the latest upstream release (also run by `update`).
+# NixOS-only (needs `nix store prefetch-file`); the Windows boxes float via the
+# upstream installer in agents/bootstrap.sh.
+update-gortex:
+    @echo "📦 Checking for new gortex release..."
+    {{flake_dir}}/scripts/update-gortex.sh
 
 # Update and set for next boot (safe for Nvidia drivers)
 upgrade:
