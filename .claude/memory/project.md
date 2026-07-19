@@ -36,7 +36,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   and independently (jq) in `provision/ssh-wsl.sh` for the WSL leaf's config —
   so any hub-rule change must be applied in both places or the WSL leaf drifts.
 - Every fleet machine's OS hostname differs from its SSH alias by design
-  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `methe-server`↔`server`), so
+  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `g513ie`↔`server`), so
   "is this host me?" can't be decided by comparing `hostname` to an alias
   string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
   `kb-refresh` self-exclusion does.
@@ -649,7 +649,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `fleet-gather.sh` distills in-place on other fleet boxes and copies back
   only digests (via `cat`/`tar`, never raw transcripts).
   - `fleet-gather.sh` now harvests the **Windows** fleet members (desktop=g614jv,
-    server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
+    server=g513ie): it dispatches on `fleet.json` `platform`, bash-wraps
     every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
     and transports state/digests over `cat`/`tar` (no rsync), distills both the
     Windows-profile and WSL projects roots, and stamps digests with the fleet
@@ -661,7 +661,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   it is always non-fatal (exits 0) so it can't block worktree creation.
 - Per-host agent-memory filenames use the raw OS hostname
   (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
-  `methe-server.md` — not fleet aliases), threaded via a single
+  `G513IE.md` — not fleet aliases), threaded via a single
   `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
   computes it off-nix). Using a curated short name drifts from what
   nix/bootstrap resolve and misdirects the host-memory link.

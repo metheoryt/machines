@@ -18,7 +18,7 @@
       "tailnet": { "ip": "100.64.0.3" },
       "ssh": { "user": "methe" },
       "roles": ["base", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client"],
-      "detect": { "hostname": "methe-server" }
+      "detect": { "hostname": "g513ie" }
     },
     "hub": {
       "platform": "debian",

@@ -6,10 +6,10 @@ Windows hosts carry their reinstall/backup scripts and shared install media.
 
 - **g16** — ASUS ROG G16 2024, Intel + NVIDIA RTX 4060 (PRIME offload). NixOS
   (`g16`) + a Windows install (`ME-G614JV`).
-- **homeserver** — ASUS ROG G16 2023, RTX 3050 Ti. Windows 11 + Docker Desktop,
-  hostname `methe-server`. Runs the cyphy.kz service platform (defined in the
-  sibling **`vps`** repo — that repo owns the *services*; `machines` owns the
-  *machine* + its data backups).
+- **server** — ASUS ROG G15, RTX 3050 Ti. Windows 11 + Docker Desktop,
+  hostname `g513ie` (SSH alias `server`); the always-on cyphy.kz homeserver.
+  Runs the cyphy.kz service platform (defined in the sibling **`vps`** repo —
+  that repo owns the *services*; `machines` owns the *machine* + its data backups).
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only).
   NixOS.
 
@@ -23,7 +23,7 @@ tooling), `agents/` (agent config, memory, bootstrap).
 | Box kind | One command |
 |---|---|
 | **NixOS** — latitude5520 | `just switch` |
-| **Windows** — ME-G614JV, methe-server | `provision\windows.ps1` (`-Work` adds the work profile) |
+| **Windows** — ME-G614JV, g513ie | `provision\windows.ps1` (`-Work` adds the work profile) |
 | **WSL / any glibc Linux** — persisted or throwaway | `bash provision/linux.sh` |
 
 All three link your synced agent config for you (via `agents/bootstrap.sh`); to

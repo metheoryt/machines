@@ -32,7 +32,7 @@
       platform = "Windows";
     };
     "482036139" = {
-      hostname = "methe-server";
+      hostname = "g513ie";
       username = "methe";
       platform = "Windows";
     };
@@ -47,7 +47,7 @@
       platform = "Windows";
     };
     "192.168.8.170" = {
-      hostname = "methe-server";
+      hostname = "g513ie";
       username = "methe";
       platform = "Windows";
     };

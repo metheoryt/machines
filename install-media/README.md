@@ -2,7 +2,7 @@
 
 Tracked config for the **Ventoy install USB** (the Kingston XS2000, partition
 `P:`). Applies to **every** Win11 machine in the fleet — the `g16` daily driver
-and the `homeserver` (`methe-server`). The answer file is generic: it prompts
+and the homeserver (`g513ie`, SSH alias `server`). The answer file is generic: it prompts
 for the computer name at install time, so one file serves all machines.
 
 ## Files

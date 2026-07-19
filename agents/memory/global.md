@@ -26,12 +26,12 @@ elsewhere to sync. Do NOT put secrets here.
   `~/.ssh/config` (generated from `fleet.json` (repo root) → `ssh.nix`): `latitude`
   (latitude5520), `desktop` (the ROG G16 2024 laptop — Windows hostname `g614jv`
   inside WSL / `ME-G614JV` native; its old NixOS identity `g16` is retired), `server`
-  (methe-server — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
+  (g513ie — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
   fleet workstation). Keys-only, no public exposure.
 - **The remote login shell differs by box.** NixOS/Linux members (e.g. `latitude`)
   log in to **fish**, which chokes on `$(...)` / POSIX-test syntax passed as
   `ssh host '<script>'` (fails silently / non-zero). The **Windows fleet members
-  (`desktop`=g614jv, `server`=methe-server) SSH into PowerShell**, which chokes on
+  (`desktop`=g614jv, `server`=g513ie) SSH into PowerShell**, which chokes on
   `&&` and shell quoting. Either way, force bash: `ssh host bash -s < script.sh`
   (piping a script file is the most robust). On the Windows boxes `bash -s`/`bash -lc`
   dispatches to WSL bash.

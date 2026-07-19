@@ -78,19 +78,19 @@ Copied to `R:\backup`: **Downloads**; **OneDrive** — ⚠️ **sync is broken o
 - **Windows Terminal** `settings.json` (profiles, color schemes, keybinds)
 - **PowerToys** settings (FancyZones layouts, keyboard remaps, EnvironmentVariables, ColorPicker) — `Updates` payload skipped
 - **NCALayer** — the `.der` cert + settings (kept app); bundled `jre`/caches skipped
-- **AIMP** — playlists (`PLS`), library, custom genres/moods, skins, `AIMP.ini` (the music *curation*; the files themselves are on methe-server)
+- **AIMP** — playlists (`PLS`), library, custom genres/moods, skins, `AIMP.ini` (the music *curation*; the files themselves are on the homeserver)
 - **Telegram Desktop `tdata`** — so **AyuGram** can import your session/drafts on the fresh install
 
 **System settings:** **Wi-Fi profiles** with cleartext passwords → `R:\backup\secrets\wifi\*.xml` (via `netsh wlan export`, so they ride the mandatory off-SSD second copy); **user environment variables** (incl. custom `PATH`) → `R:\backup\inventory\hkcu-environment.reg`.
 
-**Dropped on purpose (no backup):** Music (already on methe-server), torrents, all Docker images + all Docker volumes (incl. qaz-law DB — re-ingest after reinstall), caches, `.venv`/`node_modules` in repos.
+**Dropped on purpose (no backup):** Music (already on the homeserver), torrents, all Docker images + all Docker volumes (incl. qaz-law DB — re-ingest after reinstall), caches, `.venv`/`node_modules` in repos.
 
 ### 1f. Second copy of the irreplaceable secrets  ⭐ (do NOT skip — the SSD is a single point of failure)
 
 Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when you plug it back in, GPG keys are **gone forever** (unlike SSH, they can't be regenerated — you'd lose the ability to decrypt anything old). So the script also extracts the tiny secret set as loose files to **`R:\backup\secrets\`** (WSL `.ssh`/`.gnupg`/`.gitconfig` via `\\wsl.localhost`, plus Windows SSH keys) — independently restorable without unpacking the big tar.
 
-**Your manual job (the script won't do this):** copy `R:\backup\secrets\` to a **second location independent of the SSD** — methe-server (`scp`/`rsync`), a password-manager attachment, or an encrypted archive emailed to yourself. Two independent copies of the few MB that can't be re-derived.
-- [ ] Second copy of `secrets/` confirmed on methe-server (or other independent location)
+**Your manual job (the script won't do this):** copy `R:\backup\secrets\` to a **second location independent of the SSD** — the homeserver (`scp`/`rsync`), a password-manager attachment, or an encrypted archive emailed to yourself. Two independent copies of the few MB that can't be re-derived.
+- [ ] Second copy of `secrets/` confirmed on the homeserver (or other independent location)
 
 ---
 
@@ -106,7 +106,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 - [ ] **OneDrive sync is broken** → confirm **no** `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` was created (its presence means some files were online-only and got missed — recover them from onedrive.live.com first). Ideally also spot-check the SSD's OneDrive file count ≈ 13,527.
 - [ ] **This runbook is readable from a device other than this PC** — confirm it's on `github.com/metheoryt/machines` (`hosts/g16/windows/`, pushed) AND at `R:\backup\windows-reinstall-runbook.md` on the SSD (don't trust OneDrive to deliver it)
 
-**Belt-and-suspenders:** optionally `rsync`/copy the whole `R:\backup` folder to methe-server too. Costs little, means the network *and* the SSD would both have to fail to lose anything.
+**Belt-and-suspenders:** optionally `rsync`/copy the whole `R:\backup` folder to the homeserver too. Costs little, means the network *and* the SSD would both have to fail to lose anything.
 
 ---
 
@@ -202,7 +202,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 | `R:\backup\windows-reinstall-runbook.md` | This runbook | Also email/phone |
 | `R:\backup\inventory\*` | winget/vscode/apt lists | Convenience |
 
-**Already safe (not on SSD):** git repos pushed to GitHub · Music on methe-server · Chrome/JetBrains via account sync.
+**Already safe (not on SSD):** git repos pushed to GitHub · Music on the homeserver · Chrome/JetBrains via account sync.
 **No longer trusted as safe:** OneDrive (Documents/Pictures) and Google Drive — sync is unreliable, so they're backed up to the SSD above.
 
 ---

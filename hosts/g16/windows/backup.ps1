@@ -275,6 +275,6 @@ Get-ChildItem $Dst -Directory | ForEach-Object {
 }
 Write-Host "`nNEXT (do BEFORE wiping):" -ForegroundColor Yellow
 Write-Host "  1. VERIFY: open files from $Dst; check tar sizes; 'git ls-remote' shows pushed commits."
-Write-Host "  2. Make a SECOND copy of $Dst\secrets off this SSD (methe-server / email) — GPG keys are unrecoverable."
+Write-Host "  2. Make a SECOND copy of $Dst\secrets off this SSD (the homeserver / email) — GPG keys are unrecoverable."
 Write-Host "  3. Only then proceed to Phase 3 (wipe)."
 if ($results.Status -contains 'FAIL') { Write-Host "`n*** Some steps FAILED — review above before trusting the backup. ***" -ForegroundColor Red }
