@@ -185,16 +185,17 @@ SHARED tier — along with `AGENTS.md`(→`CLAUDE.md`), `hosts/`(→`host-memory
 `plugin/` (skills, subagents as its `agents/`, hooks, commands — packaged as
 the `cyphy` skills-directory plugin) as one whole-directory link — so they're
 symlinked into **every** profile bootstrapped: `~/.claude`, `~/.codex`, and
-secondary profiles like `~/.claude-pure`.
+any secondary `~/.claude-<postfix>` profile registered via a `settings.<postfix>.json`.
 `settings.json` is committed PER-PROFILE, and the committed set of settings
 files IS the profile registry: `settings.json` → `~/.claude`,
-`settings.<postfix>.json` → `~/.claude-<postfix>` (e.g.
-`settings.pure.json` → `~/.claude-pure`). Drop a new `settings.<postfix>.json`
+`settings.<postfix>.json` → `~/.claude-<postfix>`. (Only `settings.json` is
+currently committed — the former `pure` / `~/.claude-pure` work profile was
+folded back into it in `d48c09a`.) Drop a new `settings.<postfix>.json`
 into `agents/` and the next `just switch` (or `just agent-bootstrap-profile
 <postfix>`) provisions `~/.claude-<postfix>` with the full shared set — no wiring
 edit needed. Each profile's machine-local `settings.local.json` (personal:
-gortex hooks) is owned by neither mechanism and never committed. The pure/work
-profile's Sentry secret is NOT
+gortex hooks) is owned by neither mechanism and never committed. A work
+repo's Sentry secret is NOT
 kept at the config-dir root (Claude does NOT read a config-dir-root
 `settings.local.json`) — it lives in each work repo's PROJECT-scope
 `.claude/settings.local.json` (gitignored per repo), which Claude reads
@@ -234,8 +235,8 @@ delete stale entries rather than letting them pile up.
 
 - **Global + per-host** load in EVERY project automatically: `just
   agent-bootstrap` (personal profile: `~/.claude` + `~/.codex`) / `just
-  agent-bootstrap-profile <postfix>` (a secondary profile, e.g. `pure` →
-  `~/.claude-pure` — SHARED set + `settings.<postfix>.json`, Codex untouched)
+  agent-bootstrap-profile <postfix>` (a secondary profile — e.g. some
+  `settings.<postfix>.json` → `~/.claude-<postfix>` — SHARED set, Codex untouched)
   symlink `memory/global.md`, the `memory/personality/` facets, and
   `hosts/<hostname>.md` (as `host-memory.md`) into the bootstrapped profile. On
   NixOS, `modules/home/claude.nix`'s home-manager activation script (NOT

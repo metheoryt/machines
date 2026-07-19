@@ -1,5 +1,7 @@
 # Project memory: machines
 
+<!-- KB refreshed against 2e7423f on 2026-07-19 -->
+
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host memory). One bullet per fact under a topical heading.
 
@@ -11,12 +13,42 @@ global + per-host memory). One bullet per fact under a topical heading.
   mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
+- `just quick` (`scripts/quick-check.sh`) treats `nix flake check` failures as
+  non-fatal and only hard-gates on required-file presence + a one-host dry-build
+  — it can pass green while `nix flake check` is red. For reliable per-host
+  validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
+- **The Windows fleet boxes have no Nix.** Any `nix eval` / `nix build --dry-run` /
+  `nix flake check` step must be deferred to a NixOS member (currently only
+  `latitude5520`) after a `git pull` — Windows-side work can reason about Nix diffs
+  but never execute the gate.
 
 ## Fleet network
 
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
+- The WSL fleet SSH key store (`ssh-wsl.sh`, `FLEET_KEY_DIR` default
+  `/mnt/c/Users/<winuser>/.fleet/id_fleet`) is keyed by Windows user with no
+  distro in the path, so every WSL distro on the same Windows box shares one
+  key identity — the key is named after the fleet member matched via
+  `fleet.json` `detect.hostname`, not the distro.
+- SSH hub/jump-host detection is implemented twice — in `modules/home/ssh.nix`
+  and independently (jq) in `provision/ssh-wsl.sh` for the WSL leaf's config —
+  so any hub-rule change must be applied in both places or the WSL leaf drifts.
+- Every fleet machine's OS hostname differs from its SSH alias by design
+  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `methe-server`↔`server`), so
+  "is this host me?" can't be decided by comparing `hostname` to an alias
+  string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
+  `kb-refresh` self-exclusion does.
+- `modules/home/ssh.nix` materializes `~/.ssh/config` as a real `me`-owned
+  `0600` file (not an HM store symlink) via two `home.activation` phases
+  (`sshConfigUnmaterialize` before `checkLinkTargets`, `sshConfigMaterialize`
+  after `linkGeneration`, `install -m600`) — OpenSSH strict-checks config
+  ownership and a root-owned store symlink reads as `nobody` inside Orca's
+  namespace, breaking all ssh. (Verified still present.)
+- Firewall rules in `provision/windows.ps1` must be written to converge
+  (remove-then-recreate), not create-if-absent — re-running against a host
+  with a stale-scoped rule would otherwise leave the old scope in place.
 
 ### Fleet transport is migrating AmneziaWG → Headscale (2026-07-13)
 
@@ -270,7 +302,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   reframed as "Phase 0" of the unified provisioner (see below); the old Runbook
   `docs/superpowers/plans/2026-07-07-fleet-mesh-vpn-ssh.md` is superseded. The
   Phase 0 param edit is now DRY-BUILT GREEN on latitude5520 (full toplevel
-  builds with the LTS kernel pin below).
+  builds with the kernel config below).
 - Kernel is back on `pkgs.linuxPackages_latest` (linux-7.1.3) in
   `modules/system/base.nix` (branch `update-nix-linux-kernel`, 2026-07-19). HISTORY:
   it was pinned to the LTS `pkgs.linuxPackages` (6.18.38) on 2026-07-08 (commit
@@ -585,6 +617,17 @@ global + per-host memory). One bullet per fact under a topical heading.
   removable — periodic manual rotation of one dock's drive to an off-site
   location, no new infra needed. Prefer that over recommending cloud/object
   storage additions unless the user wants to skip manual rotation.
+- **RustDesk restore is not a plain file-copy.** RustDesk runs as a LocalSystem
+  Windows service that owns a master config and overwrites `%APPDATA%\RustDesk\config`
+  (`RustDesk2.toml`) seconds after service start — so `restore.ps1` can never durably
+  restore the custom ID/Relay ("retranslator") server by copying the file back. The
+  restore script instead extracts those values from the backup and prints them for
+  manual GUI entry (Settings → Network → ID/Relay Server).
+- **`restore.ps1`'s `Find-Backups` auto-discovers the backup drive** by scanning every
+  Windows volume for a `<letter>:\backup` folder, so it survives the backup SSD
+  mounting on a random drive letter; sibling scripts (`backup.ps1`,
+  `bootstrap-agents.ps1`) historically hardcoded a letter and needed the same
+  auto-discovery.
 - latitude5520 (and g16's native NixOS side) have no dedicated backup today.
   Whatever home-manager declares in this repo is already "backed up" by being
   in git; anything outside home.nix's scope (browser profiles, ad hoc
@@ -593,7 +636,83 @@ global + per-host memory). One bullet per fact under a topical heading.
   no mechanism chosen yet (chezmoi/stow/plain git all unexplored as of this
   writing).
 
+## Repo tooling & scripts
+
+- Orca IDE is `modules/home/orca-bin.nix`, wrapping the upstream Linux
+  AppImage with `appimageTools.wrapType2` (same pattern as
+  `zed-bin.nix`/`pycharm-bin.nix`); there is no `just update-orca` — version
+  bumps are manual (bump `version` + rehash, per the derivation header).
+- `/cyphy:kb-refresh` (`agents/plugin/skills/kb-refresh/`) mines per-machine
+  Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
+  JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
+  (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
+  `fleet-gather.sh` distills in-place on other fleet boxes and copies back
+  only digests (via `cat`/`tar`, never raw transcripts).
+  - `fleet-gather.sh` now harvests the **Windows** fleet members (desktop=g614jv,
+    server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
+    every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
+    and transports state/digests over `cat`/`tar` (no rsync), distills both the
+    Windows-profile and WSL projects roots, and stamps digests with the fleet
+    `detect.hostname`. Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
+- `scripts/orca-worktree-setup.sh` is the generic dispatcher Orca runs on each
+  new worktree: it symlinks gitignored config (`.env`,
+  `.claude/settings.local.json`) from the main checkout, then delegates to
+  `$repo/.orca/worktree-setup.sh` or `scripts/orca-worktree.d/<main-basename>.sh`;
+  it is always non-fatal (exits 0) so it can't block worktree creation.
+- Per-host agent-memory filenames use the raw OS hostname
+  (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
+  `methe-server.md` — not fleet aliases), threaded via a single
+  `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
+  computes it off-nix). Using a curated short name drifts from what
+  nix/bootstrap resolve and misdirects the host-memory link.
+- `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
+  guard that fails loud if the repo's expected symlink location is dangling —
+  added after repo-rename events silently broke agent-config linking.
+- `update-{rustdesk,zed,pycharm}.sh` resolve their target `.nix` path relative
+  to their own dir under `scripts/`; a new updater needs the correct extra
+  `../` to reach repo root, or it breaks `just update`/`just upgrade` silently
+  (`sed: no such file`).
+- `hosts/g16/windows/winget-packages.json` is a full `winget export` snapshot
+  of that laptop's installed state; `hosts/homeserver/windows/winget-packages.json`
+  is a hand-curated minimal server set — maintained differently, don't
+  conflate them when adding packages.
+- **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /
+  `agents/AGENTS.md` (the global-memory hook works for Codex too). A tool with a
+  symlink guard (won't write through a symlink) edits nowhere useful if pointed at
+  the `CLAUDE.md` path — edit the real `AGENTS.md` target.
+- **Windows `just` needs `set windows-shell := ['C:/Program
+  Files/Git/bin/bash.exe','-cu']`** (in the justfile) — native PowerShell has no
+  POSIX `sh`, so without it `just` fails on Windows even on `just --list`. Recipes
+  must use **relative** script paths, not `{{justfile_directory()}}` — Git Bash
+  mangles the absolute backslash path (`C:\Users\methe\machines` →
+  `C:Usersmethemachines`); `just` runs recipes with cwd = justfile dir, so relative
+  works.
+- **`scripts/quick-check.sh` (the `just quick` gate) hardcodes the host label** —
+  `hosts/latitude/…` paths and `.#nixosConfigurations.latitude…` as literal strings,
+  NOT via the justfile's decoupled `nixos_attr` var. A future host-label rename
+  silently breaks `just quick` even though `nixos-rebuild`/`nix build` keep working;
+  update quick-check.sh in the same rename.
+- **`agents/statusline-command.sh` probes `python3 → python → py` in that order** —
+  on fresh Windows boxes `python3`/`python` on PATH are usually Microsoft Store stubs
+  that fail silently (blank statusline); the `py` launcher resolves real installs via
+  the registry regardless of PATH.
+- **`.gortex/` (per-repo daemon SQLite index state) is gitignored** with a trailing
+  slash so it doesn't also match the committable `.gortex.yaml` wiring; `gortex init`
+  re-sprays `.claude/skills/generated/gortex-*` even with `--no-skills`, so that path
+  stays gitignored too. Never commit either — machine-local index state.
+
 ## Pending follow-ups
+
+- **Retire the WSL distro as a separate fleet host (in-flight, stated 2026-07-19).**
+  Direction: the ROG G16 laptop's WSL distro should stop being provisioned as its own
+  tailnet node + SSH leaf (`provision/ssh-wsl.sh`, `provision/tailscale-wsl.sh`, node
+  `desktop-ubuntu26`/`100.64.0.6`); going forward WSL is used purely as a **dev
+  environment opened/run through Orca**, not a standalone fleet member. Not yet torn
+  down — the WSL-leaf facts in `agents/hosts/g614jv.md` and the mesh/SSH-over-tailnet
+  notes above stay live until the provisioning is actually removed. Consequence
+  already applied: the laptop's two host-memory files were merged into one
+  (`agents/hosts/g614jv.md`; `ME-G614JV.md` is now a symlink to it) since native
+  Windows + WSL are the same tightly-coupled box.
 
 - **Per-box stale git-hook cleanup after the pre-commit removal (2026-07-18).**
   Commit `2af7c5b` removed the git-hooks.nix pre-commit mechanism from `flake.nix`

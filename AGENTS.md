@@ -7,14 +7,20 @@ This file provides guidance to Claude Code when working with code in this reposi
 Config, provisioning, and data-backup for a small machine fleet — NixOS *and*
 Windows:
 
-- **g16** — ASUS ROG G16 2024, Intel + NVIDIA RTX 4060 (PRIME offload), NixOS hostname `g16` (Windows install: `ME-G614JV`)
-- **homeserver** — ASUS ROG G16 2023, RTX 3050 Ti, Windows 11 + Docker Desktop, hostname `methe-server`; runs the cyphy.kz service platform
+- **g614jv / ME-G614JV** — ASUS ROG G16 2024, RTX 4060; **Windows-only** (WSL
+  hostname `g614jv`, native `ME-G614JV`). Its former NixOS install `g16` was
+  retired 2026-07-08; `hosts/g16/` now holds only `windows/`.
+- **homeserver** — ASUS ROG **G15** 2023, RTX 3050 Ti, Windows 11 + Docker Desktop, hostname `methe-server`; runs the cyphy.kz service platform
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake, NixOS hostname `latitude5520`
+- **hub** — Debian VPS at `cyphy.kz` (tailnet `100.64.0.1`), a first-class
+  `fleet.json` member (roles `base, ssh-server, agents, dotfiles,
+  backup-client`); runs the Headscale control server + the AmneziaWG VPN hub.
+  Services live in the sibling `vps` repo.
 
 The NixOS hosts use Home Manager (system-level integration) and share a common
 module set with host-specific overrides. The repo also carries the Windows
-install/reinstall + backup scripts (`hosts/g16/windows/`), the fleet restic
-`backup/` clients, and shared Win11 install media (`install-media/`).
+install/reinstall + backup scripts (`hosts/g16/windows/`) and shared Win11
+install media (`install-media/`).
 
 **`machines` / `vps` boundary:** `machines` owns the *machines* — NixOS +
 Windows provisioning and data backup. The sibling **`vps`** repo owns the
@@ -77,29 +83,50 @@ Each module is self-contained (options + config + services). Modules don't impor
 |---|---|
 | `system/base.nix` | systemd-boot, Nix daemon, flakes, binary caches, networking, ZRAM swap, weekly GC, core packages, Fish shell |
 | `system/laptop.nix` | power-profiles-daemon, thermald, touchpad (libinput), backlight (acpilight/actkbd), lid/power-button behavior, S3 deep sleep, Intel microcode |
+| `system/fleet.nix` | fleet.json data / ssh.nix source of truth |
+| `system/ssh-server.nix` | keys-only sshd over the tailnet — the fleet SSH-server role |
+| `system/self-update.nix` | self-update mechanism |
+| `system/git-autofetch/` | auto-fetch timer |
 | `desktop/gnome.nix` | GDM + GNOME (Wayland), PipeWire audio, XDG portals, fonts (JetBrainsMono Nerd Font, Noto, Fira Code), excluded GNOME apps |
-| `hardware/asus-rog.nix` | `charge-upto` command + systemd service, ROG keyboard evdev fixes (mic mute, Fn+arrows), DPCD backlight kernel params |
+| `hardware/asus-rog.nix` | **orphaned** — `charge-upto` command + systemd service, ROG keyboard evdev fixes (mic mute, Fn+arrows), DPCD backlight kernel params; no host imports it since NixOS g16 was removed |
 | `hardware/dell-latitude.nix` | `charge-upto` command + systemd service, Intel compute runtime, Thunderbolt (bolt service), fstrim |
-| `nvidia.nix` | NVIDIA open kernel modules, PRIME offload mode (Intel primary, NVIDIA on-demand), fine-grained power mgmt, Wayland env vars, Vulkan/OpenCL, nvidia-container-toolkit |
+| `nvidia.nix` | **orphaned** — NVIDIA open kernel modules, PRIME offload mode (Intel primary, NVIDIA on-demand), fine-grained power mgmt, Wayland env vars, Vulkan/OpenCL, nvidia-container-toolkit; no host imports it since NixOS g16 was removed |
 | `programs/development.nix` | nix-ld, Docker (auto-start + auto-prune), Python 3.13 + uv, dev tools (git, gh, jq, ripgrep, ast-grep, fd, bat, etc.), direnv + nix-direnv, Fish + Zsh |
 | `home/me.nix` | Home Manager for user `me`: packages, git config, Fish aliases/functions, Starship prompt, Ghostty config, GNOME dconf settings, fastfetch |
+| `home/ssh.nix` | SSH client config generated from fleet.json |
+| `home/claude.nix` | Claude Code profile bootstrap wiring |
+| `home/orca-bin.nix` | Orca IDE AppImage wrapper |
+| `home/pycharm-bin.nix` | PyCharm AppImage wrapper |
+| `home/zed-bin.nix` | Zed AppImage wrapper |
+| `home/rustdesk-bin.nix` | RustDesk client wrapper |
+| `home/rustdesk-config.nix` | RustDesk server key + known-peer IDs |
+
+### Fleet networking / tailnet architecture
+
+The fleet transport is a self-hosted **Headscale tailnet** (`cc.cyphy.kz`,
+MagicDNS suffix `gg.ez`, CGNAT `100.64.0.0/10`); `fleet.json` (repo root) is
+the machine manifest, and the `ssh-server` role (`modules/system/ssh-server.nix`
++ `windows.ps1` step 7) generates every host's keys-only-sshd-over-tailnet
+story. The old AmneziaWG mesh was retired from the repo 2026-07-17 (AmneziaWG
+survives only as the VPS's obfuscated VPN for RU relatives).
 
 ### Host configurations
 
-**`hosts/g16/nixos/configuration.nix`**
-- Imports: base, laptop, gnome, nvidia, asus-rog, development, home-manager
-- Hostname: `g16`, timezone: Asia/Almaty, locale: ru_RU.UTF-8
-- User `me`: shell fish, groups: networkmanager, wheel, docker
-- ASUS services: `asusd`, `supergfxd`
-- Battery charge limit: 85% (configurable via `charge-upto <percent>`)
+Currently a single NixOS host:
 
-**`hosts/latitude5520/nixos/configuration.nix`**
-- Imports: base, laptop, gnome, dell-latitude, development, home-manager
-- Hostname: `latitude5520`, same timezone/locale
+**`hosts/latitude/nixos/configuration.nix`** (flake attr `latitude`;
+`networking.hostName` stays `latitude5520` — only the repo label/flake attr
+changed)
+- Imports: base, laptop, self-update, git-autofetch, ssh-server, gnome, dell-latitude, development, home-manager
+- Hostname: `latitude5520`, timezone Asia/Almaty, locale ru_RU.UTF-8
 - Overrides intel-ocl with intel-compute-runtime; adds intel-media-driver, intel-vaapi-driver
 - Thunderbolt: bolt service enabled
 
 **`hosts/*/nixos/hardware-configuration.nix`** — auto-generated by `nixos-generate-config`, do not edit.
+
+The Windows hosts (`g614jv`/`ME-G614JV`, `homeserver`) carry no NixOS
+configuration — they carry install/reinstall + backup scripts under
+`hosts/<name>/windows/`.
 
 ### Home Manager integration
 
