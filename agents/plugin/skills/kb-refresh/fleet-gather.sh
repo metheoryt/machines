@@ -114,27 +114,33 @@ main() {
     # Self-exclusion: compare the remote's resolved identity to ours. The probe
     # MUST be bash-wrapped — a bare `ssh $h hostname` runs in PowerShell and
     # returns the native Windows name.
+    #
+    # Remote bash commands use NESTED quoting: `bash -lc "'…'"`. ssh flattens its
+    # argv into one command string, so LOCAL single-quotes are consumed before the
+    # remote shell sees them — `bash -lc 'mkdir -p ~/x'` would arrive as
+    # `bash -lc mkdir -p ~/x`, and `bash -c` runs only the word `mkdir` (no args).
+    # The inner single-quotes must travel to the remote intact, hence "'…'".
     local remote_live
-    remote_live="$(ssh -n "$alias" bash -lc 'hostname' 2>/dev/null || true)"
+    remote_live="$(ssh -n "$alias" bash -lc "'hostname'" 2>/dev/null || true)"
     if [ -n "$remote_live" ] && \
        [ "$(local_host_id "$FLEET_JSON" "$remote_live")" = "$self_id" ]; then
       echo "[$alias] is this box, skipping self" >&2
       continue
     fi
 
-    # Reachability + cache dir (bash-wrapped; PowerShell mkdir has no -p).
-    if ! ssh -n "$alias" bash -lc 'mkdir -p ~/.cache/kb-digests' 2>/dev/null; then
+    # Reachability + cache dir (nested-quoted so the command survives the ssh flatten).
+    if ! ssh -n "$alias" bash -lc "'mkdir -p ~/.cache/kb-digests'" 2>/dev/null; then
       echo "[$alias] skipped (unreachable)" >&2
       continue
     fi
 
     # Push the distiller (drop the deployed-symlink dependency) + seed the
     # git-tracked watermark, both via cat (rsync fails on Windows).
-    if ! ssh "$alias" bash -lc 'cat > ~/.cache/distill.py' < "$SKILL_DIR/distill.py"; then
+    if ! ssh "$alias" bash -lc "'cat > ~/.cache/distill.py'" < "$SKILL_DIR/distill.py"; then
       echo "[$alias] distiller push failed" >&2
       continue
     fi
-    ssh "$alias" bash -lc 'cat > ~/.cache/kb-harvest-state.json' < "$state" \
+    ssh "$alias" bash -lc "'cat > ~/.cache/kb-harvest-state.json'" < "$state" \
       || echo "[$alias] state seed failed (remote falls back to its own cache)" >&2
 
     # Distill every root for this platform (Windows: profile + WSL; unix: home).
@@ -148,7 +154,7 @@ main() {
 
     # Merge the remote's advanced watermark back (only its `sessions`).
     local tmp_state; tmp_state="$(mktemp)"
-    if ssh -n "$alias" bash -lc 'cat ~/.cache/kb-harvest-state.json' > "$tmp_state" 2>/dev/null; then
+    if ssh -n "$alias" bash -lc "'cat ~/.cache/kb-harvest-state.json'" > "$tmp_state" 2>/dev/null; then
       python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
         || echo "[$alias] state merge-back failed" >&2
     fi
@@ -157,7 +163,7 @@ main() {
     # Pull digests via tar (rsync fails on Windows). Exclude manifest.tsv — the
     # local manifest accumulates and a plain copy would clobber it.
     echo "[$alias] pulling digests…" >&2
-    ssh -n "$alias" bash -lc 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
+    ssh -n "$alias" bash -lc "'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null'" \
       | tar xf - -C "$out" 2>/dev/null \
       || echo "[$alias] digest pull failed" >&2
   done < <(detect_hosts "$FLEET_JSON")
