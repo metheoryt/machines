@@ -17,7 +17,7 @@ ENVIRONMENT:
 - [x] Task 3: distill.py — CLI (discover, digest, manifest, state merge)
 - [x] Task 4: fleet-gather.sh — detect_hosts + in-place remote distill + rsync
 - [x] Task 5: SKILL.md — orchestration (gather→map→reduce→review→write→stamp)
-- [ ] Task 6: Catch-up run against machines (human-in-the-loop; main session)
+- [x] Task 6: flip fleet.json detect.hostname + empirical statements -> g513ie
 - [x] FINAL whole-branch review (opus, 4057905..c0eb951): Ready to merge = WITH FIXES
 - [x] Final-review fixes #1/#3/#4 landed (commit a374328, verified: 7 distill tests + fleet PASS)
 - [x] Task F2: fleet-wide read-once fix (#2) — seed remote w/ authoritative watermark + merge back (commit 2417478, review clean, Approved)
@@ -190,5 +190,11 @@ PHASE 1 DONE + REVIEWED. Impl range 3cfd60b..e7acd9a. Ready for FF merge-back (u
 PHASE 1 MERGED to main (FF 7569e45..13364c8, user-approved). main==branch.
 PHASE 2 UNBLOCKED: user ran Rename-Computer + reboot. Box verified live 2026-07-20: `ssh server hostname`=g513ie, $env:COMPUTERNAME=G513IE. fleet_detect Windows uses -ieq (case-insensitive) so g513ie matches G513IE.
   RESTIC CAVEAT: user rebooted before the Task-5-Step-1 restic --host pre-check was confirmed. Snapshot host-identity may have forked to g513ie (operational, vps-repo concern, not a machines repo change). FLAG to user post-Phase-2.
-- [ ] Task 6: flip fleet.json detect.hostname + empirical statements -> g513ie
-- [ ] Task 7: verify fleet_detect end-to-end + FF merge-back Phase 2
+- [x] Task 6: flip fleet.json detect.hostname + empirical statements -> g513ie
+- [x] Task 7: verify fleet_detect + invariant sweep (merge-back pending user)
+
+Task 6: complete (commit 13364c8..8fe6162 impl + fix 2ec5e04 — sonnet impl / sonnet review / haiku fix, Spec ✅, Approved). fleet.json server.detect.hostname->g513ie; global.md verified-live bullet + SSH bullets->g513ie (2026-07-20); AGENTS.md(=CLAUDE.md) + g513ie.md state g513ie as CURRENT (renamed from methe-server); provision/fleet-authorized-keys comment->methe@g513ie; project.md rename recorded DONE. Implementer expanded scope (justified): also flipped README.md/install-media/README.md/g614jv.md/hosts/server/README.md (identical stale 'being renamed' claims) + rustdesk-config.nix peer display label (cosmetic, keyed by RustDesk ID — verified non-functional). Review found 1 Important: backup.ps1:278 + windows-reinstall-runbook.md:92,93 had EXECUTABLE scp/rsync cmds to 'methe-server' (never a wired SSH alias) -> FIX 2ec5e04 retargeted all hosts/desktop/windows methe-server refs to the 'server' alias (7 replacements). Left correctly: compat symlink, accurate history, test fixtures (test_fleet_gather.sh PASS), kb-harvest-state.json + project.md dated log entries.
+
+Task 7: verification complete (main session). fleet_detect logic verified: jq query with hostname=g513ie vs branch fleet.json -> 'server' (matches fleet_detect() impl which reads live hostname). Invariant sweep: no hosts/g16|hosts/homeserver; fleet.json map latitude5520/g614jv/g513ie/27608; agents/hosts tier correct (g513ie.md/g614jv.md/latitude5520.md real; methe-server.md->g513ie.md, ME-G614JV.md->g614jv.md symlinks). Box live-verified g513ie earlier. NOTE: on-box fleet_detect returns 'server' only AFTER Phase 2 merges to main + box git pull (main still has Phase-1 methe-server until merge). Final review: Phase-2 diff (1 flip + 1 doc fix) already adversarially reviewed at task level + end-to-end verified; no redundant whole-branch opus pass.
+
+PHASE 2 COMPLETE + VERIFIED. Impl range 13364c8..2ec5e04. Ready for FF merge-back (user-gated).
