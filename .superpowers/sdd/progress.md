@@ -162,7 +162,7 @@ ENVIRONMENT:
 - [x] Task 2: git mv hosts/g16 -> hosts/desktop + bootstrap URL + path refs
 - [x] Task 3: g513ie.md primary + methe-server.md symlink + dual-name prose
 - [x] Task 4: two-layer convention + model docs (box-independent statements)
-- [ ] Phase 1 checkpoint: offer FF merge-back to main (user-gated)
+- [~] Phase 1 checkpoint: FF merge-back OFFERED to user (pending decision)
 - [ ] Phase 2 (Tasks 5-7): GATED on user box rename
 
 Task 1: complete (commit 3cfd60b..fc8d836, review clean — haiku impl / haiku review, Spec ✅, Approved). git mv hosts/homeserver->hosts/server; 3 live path refs rewritten (.claude/memory/project.md x2, agents/hosts/methe-server.md x1). Minor: report's verification grep used --exclude-dir=docs (broader than :!docs/superpowers/); reviewer re-ran correct-scope grep, 0 live refs remain.
@@ -181,3 +181,8 @@ PHASE 1 COMPLETE (Tasks 1-4). Impl range 3cfd60b..9f046b1.
 ## Minor follow-ups (out of Component-4 scope; for final review triage / later pass)
 - README.md:119 `hosts/latitude5520/nixos/` is a stale path — the latitude dir is `hosts/latitude` (per AGENTS.md:120). Latitude-scope, not touched (advisor: don't touch latitude sections).
 - .claude/memory/project.md ~line 346 `hosts/{g16,homeserver}/windows/winget-packages.json` — stale brace-notation path (escaped Tasks 1-2 grep because `hosts/{g16,` != `hosts/g16`). In a dated historical log entry; left as history.
+
+FINAL WHOLE-BRANCH REVIEW (opus, 3cfd60b..9f046b1): **Ready to merge.** 0 Critical/0 Important. Verified: live path sweep clean (incl brace-form check), fleet.json still methe-server (Phase-2 flip correctly withheld), bootstrap URL->hosts/desktop, symlinks mode 120000 + g513ie.md content intact, NO premature 'g513ie is live' assertion, nix gate green, models never swapped (server=G15/G513IE, desktop=G16/G614JV), docs/superpowers untouched. One Minor: g513ie.md caveat cited hosts/server/README.md as mislabeling server (branch had already fixed that file).
+Final-review Minor fix: complete (commit e7acd9a — haiku). g513ie.md caveat now cites only sibling vps CLAUDE.md. Symlink methe-server.md verified still 120000 (not dereferenced).
+
+PHASE 1 DONE + REVIEWED. Impl range 3cfd60b..e7acd9a. Ready for FF merge-back (user-gated). Phase 2 (Tasks 5-7) remains GATED on user box rename.
