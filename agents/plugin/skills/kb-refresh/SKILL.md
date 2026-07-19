@@ -42,22 +42,23 @@ which a human approves before anything is written.
     --match <slug1> [--match <slug2> ...]
   ```
 - `fleet-gather.sh` always distills this box locally first (invoking
-  `distill.py --match <m> --out <scratch> --state <state-file>
-  --host "$(hostname)"`, relying on `distill.py`'s default
-  `--projects-root ~/.claude/projects`), then calls `detect_hosts` to
-  check `~/.ssh/config` for the fleet workstation aliases (`latitude`,
-  `desktop`, `server`). For each one present and reachable (and not itself, by
-  a live hostname probe) it first `rsync`s the git-tracked state file to that
-  box's `~/.cache/kb-harvest-state.json` — seeding it with the authoritative
-  fleet-wide watermark, so it doesn't re-distill sessions already harvested
-  elsewhere — then runs `distill.py` **in place** on that box against that
-  seeded state/cache. It pulls the resulting state file back and merges only
-  its (possibly advanced) `sessions` map into the git-tracked state via
-  `distill.py --merge-from`, before `rsync`ing back the resulting `.md`
-  digests and manifest rows — raw transcripts never leave their machine. This
-  seed-then-merge round trip is what makes read-once hold fleet-wide, not just
-  on whichever box happens to run as controller that day. No fleet aliases
-  configured → silently local-only.
+  `distill.py --projects-root ~/.claude/projects --out <scratch> --state <state-file>
+  --host <this box's fleet detect.hostname>`), then reads `fleet.json` (repo
+  root) via `detect_hosts` for the workstation members (hub excluded) that also
+  have a `Host` entry in `~/.ssh/config`. For each present, reachable, non-self
+  box (self-exclusion by a bash-wrapped `hostname` probe compared to fleet
+  identity) it: seeds that box's `~/.cache/kb-harvest-state.json` with the
+  authoritative git-tracked watermark and pushes `distill.py` (both via `cat`
+  over ssh — no deployed skill needed on the remote); runs `distill.py`
+  **in place** against the seeded state, once per projects root for the box's
+  platform (Windows: the Windows profile `/mnt/c/Users/<ssh.user>/.claude/projects`
+  **and** WSL `~/.claude/projects`; unix: `~/.claude/projects`); pulls the
+  remote state back and merges only its `sessions` map via
+  `distill.py --merge-from`; then pulls the resulting digests via `tar`
+  (excluding `manifest.tsv`). Every remote command is bash-wrapped, so the
+  Windows members (whose ssh lands in PowerShell) dispatch correctly to WSL
+  bash; raw transcripts never leave their machine. No fleet aliases configured
+  → silently local-only.
 - `distill.py` reads only lines beyond each session's watermark
   (`last_line`/`id_hash` in the state file), so a session already fully
   harvested contributes nothing on a re-run; a resumed session contributes

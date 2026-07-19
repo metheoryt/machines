@@ -648,20 +648,12 @@ global + per-host memory). One bullet per fact under a topical heading.
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
   `fleet-gather.sh` distills in-place on other fleet boxes and rsyncs back
   only digests (never raw transcripts).
-  - **The stock `fleet-gather.sh` harvests NOTHING from the Windows fleet members
-    (`desktop`/`server`)** (verified Phase 2, 2026-07-19): (1) their live Claude
-    Code transcripts live under the **Windows** profile
-    (`/mnt/c/Users/<user>/.claude/projects`), not the WSL home's
-    `~/.claude/projects` that `distill.py`'s default `--projects-root` points at;
-    (2) SSH lands in **PowerShell**, so the script's `ssh h bash -lc` still needs
-    care and `rsync`-over-ssh fails (no `rsync` on the PowerShell PATH); (3) the
-    `~/.claude/skills/cyphy` symlink + `distill.py` aren't deployed in WSL there.
-    Until `fleet-gather.sh` is fixed, harvest the Windows boxes by hand: push
-    `distill.py` to `~/.cache/` (`ssh h bash -lc 'cat > ~/.cache/distill.py'`), run
-    it with `--projects-root /mnt/c/Users/<user>/.claude/projects` (desktop also has
-    a partial WSL `~/.claude/projects` — run both roots), `--merge-from` the
-    returned state, and `tar` digests back (not rsync). `latitude5520` (NixOS,
-    local, fish) works with the stock path.
+  - `fleet-gather.sh` now harvests the **Windows** fleet members (desktop=g614jv,
+    server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
+    every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
+    and transports state/digests over `cat`/`tar` (no rsync), distills both the
+    Windows-profile and WSL projects roots, and stamps digests with the fleet
+    `detect.hostname`. Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
 - `scripts/orca-worktree-setup.sh` is the generic dispatcher Orca runs on each
   new worktree: it symlinks gitignored config (`.env`,
   `.claude/settings.local.json`) from the main checkout, then delegates to
