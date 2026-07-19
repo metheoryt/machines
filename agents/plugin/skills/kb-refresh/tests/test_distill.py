@@ -34,3 +34,26 @@ def test_distill_lines_extracts_signal_and_drops_noise():
     assert meta["branch"] == "main"
     assert meta["first_ts"] == "2026-07-17T10:00:00Z"
     assert meta["n_lines"] == 6
+
+def test_identity_hash_stable_and_first_line_based():
+    a = ['{"sessionId":"S1","x":1}', '{"y":2}']
+    b = ['{"sessionId":"S1","x":1}', '{"y":9}']   # differs after line 0
+    c = ['{"sessionId":"S2","x":1}', '{"y":2}']   # differs at line 0
+    assert distill.identity_hash(a) == distill.identity_hash(b)
+    assert distill.identity_hash(a) != distill.identity_hash(c)
+    assert distill.identity_hash([]) == ""
+
+def test_resume_offset_rules():
+    lines = ['{"sessionId":"S1"}'] + ['{"n":%d}' % i for i in range(1, 10)]  # 10 lines
+    h = distill.identity_hash(lines)
+    # new session -> 0
+    assert distill.resume_offset({}, "S1", lines) == 0
+    # known session, same identity, resume from stored last_line
+    st = {"S1": {"last_line": 6, "id_hash": h}}
+    assert distill.resume_offset(st, "S1", lines) == 6
+    # identity changed (file rewritten) -> reprocess from 0
+    st_bad = {"S1": {"last_line": 6, "id_hash": "deadbeef"}}
+    assert distill.resume_offset(st_bad, "S1", lines) == 0
+    # truncated (stored beyond current length) -> 0
+    st_trunc = {"S1": {"last_line": 99, "id_hash": h}}
+    assert distill.resume_offset(st_trunc, "S1", lines) == 0

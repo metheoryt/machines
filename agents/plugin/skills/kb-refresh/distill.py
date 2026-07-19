@@ -4,6 +4,7 @@ Stdlib only. Strips Claude Code session .jsonl into a compact per-session
 digest (human turns, assistant prose, Bash commands, edited file paths).
 Transcripts are treated as read-only, append-only logs.
 """
+import hashlib
 import json
 
 _EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -62,3 +63,23 @@ def distill_lines(lines):
         "n_lines": n,
     }
     return "\n".join(out), meta
+
+
+def identity_hash(lines):
+    for raw in lines:
+        raw = raw.strip()
+        if raw:
+            return hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()
+    return ""
+
+
+def resume_offset(state_sessions, session_id, lines):
+    entry = state_sessions.get(session_id)
+    if not entry:
+        return 0
+    last_line = entry.get("last_line", 0)
+    if last_line > len(lines):            # truncated / rewritten shorter
+        return 0
+    if entry.get("id_hash") != identity_hash(lines):  # identity changed
+        return 0
+    return last_line
