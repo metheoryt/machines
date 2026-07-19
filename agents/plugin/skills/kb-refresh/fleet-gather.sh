@@ -3,8 +3,23 @@
 # Raw transcripts never leave their machine; only digests are rsynced back.
 set -euo pipefail
 
-FLEET_WORKSTATIONS=(latitude desktop server)   # 'hub' is the VPS, excluded
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# fleet.json (repo root) is the machine manifest; four levels up from the skill dir.
+FLEET_JSON="${FLEET_JSON:-$SKILL_DIR/../../../../fleet.json}"
+
+fleet_hosts() {
+  # Emit one TSV row per non-hub workstation: alias<TAB>platform<TAB>hostname<TAB>user.
+  # The hub is the only member with ssh.host set (it's the VPS) — exclude it.
+  local json="${1:-$FLEET_JSON}"
+  [ -f "$json" ] || return 0
+  jq -r '
+    .machines | to_entries[]
+    | select(.value.ssh.host == null)
+    | [ .key, (.value.platform // "unknown"),
+        (.value.detect.hostname // ""), (.value.ssh.user // "") ]
+    | @tsv
+  ' "$json"
+}
 
 detect_hosts() {
   # Echoes every fleet workstation alias present in ~/.ssh/config, one per
