@@ -7,12 +7,15 @@ FLEET_WORKSTATIONS=(latitude desktop server)   # 'hub' is the VPS, excluded
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 detect_hosts() {
+  # Echoes every fleet workstation alias present in ~/.ssh/config, one per
+  # line. Does NOT exclude the current box — the OS hostname never matches
+  # the SSH alias on this fleet (latitude5520≠latitude, g614jv≠desktop,
+  # methe-server≠server), so that comparison never fired. Self-exclusion is
+  # done at connect time in main() instead, via a live `ssh` hostname probe.
   local cfg="${HOME}/.ssh/config"
   [ -f "$cfg" ] || return 0
-  local self; self="$(hostname 2>/dev/null || echo)"
   local h
   for h in "${FLEET_WORKSTATIONS[@]}"; do
-    [ "$h" = "$self" ] && continue
     if grep -qiE "^[[:space:]]*Host[[:space:]]+.*\b${h}\b" "$cfg"; then
       echo "$h"
     fi
@@ -42,6 +45,13 @@ main() {
 
   local h
   for h in $(detect_hosts); do
+    # Self-exclusion moved here from detect_hosts: the OS hostname never
+    # matches the SSH alias on this fleet, so we can only tell "this is me"
+    # by actually connecting and comparing the remote hostname to our own.
+    if [ "$(ssh "$h" hostname 2>/dev/null)" = "$(hostname)" ]; then
+      echo "[$h] is this box, skipping self" >&2
+      continue
+    fi
     echo "[$h] distilling in-place…" >&2
     # Run the (synced) distiller on the remote box; force bash — remote shell is fish.
     ssh "$h" bash -lc "'python3 ~/.claude/plugins/cache/*/cyphy/*/skills/kb-refresh/distill.py \
