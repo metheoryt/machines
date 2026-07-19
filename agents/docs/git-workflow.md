@@ -37,8 +37,11 @@ checkout, not here.
   Because you kept syncing `main` in, this is a fast-forward. If `--ff-only` is
   refused (main diverged independently), stop and ask — do a real merge only with
   explicit OK.
-- **Finish.** After a clean merge-back, offer to push `main` and to remove the
-  worktree (`git worktree remove` + delete the branch). Both user-gated.
+- **Finish.** After a clean merge-back, offer to push `main` and to delete the
+  branch. Also offer to remove the worktree (`git worktree remove`) — **unless the
+  session is Orca-managed** (`TERM_PROGRAM=Orca`), in which case Orca owns the
+  worktree lifecycle: offer branch deletion only, never worktree removal. All
+  user-gated.
 <!-- WORKTREE-MODE:END -->
 
 ---
