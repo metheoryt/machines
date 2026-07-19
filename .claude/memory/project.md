@@ -673,7 +673,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `../` to reach repo root, or it breaks `just update`/`just upgrade` silently
   (`sed: no such file`).
 - `hosts/g16/windows/winget-packages.json` is a full `winget export` snapshot
-  of that laptop's installed state; `hosts/homeserver/windows/winget-packages.json`
+  of that laptop's installed state; `hosts/g513ie/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.
 - **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /

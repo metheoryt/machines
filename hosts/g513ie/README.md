@@ -1,4 +1,4 @@
-# homeserver
+# g513ie (the cyphy.kz homeserver)
 
 **ASUS ROG G15, RTX 3050 Ti**, running **Windows 11 + Docker Desktop
 (WSL2)** under the `methe` profile. Windows hostname: `g513ie` (SSH alias
