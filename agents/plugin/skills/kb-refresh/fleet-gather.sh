@@ -52,6 +52,12 @@ main() {
       echo "[$h] is this box, skipping self" >&2
       continue
     fi
+    # Seed the remote with the authoritative git-tracked watermark so it does not
+    # re-distill sessions already harvested fleet-wide (read-once holds fleet-wide).
+    ssh "$h" mkdir -p .cache 2>/dev/null || true
+    rsync -az "$state" "$h:.cache/kb-harvest-state.json" 2>/dev/null \
+      || echo "[$h] state push failed (remote falls back to its own cache)" >&2
+
     echo "[$h] distilling in-place…" >&2
     # Run the (synced) distiller on the remote box; force bash — remote shell is fish.
     # The cyphy plugin is deployed as a skills-directory symlink
@@ -68,6 +74,15 @@ main() {
       fi
       continue
     fi
+
+    # Merge the remote's advanced watermark back into the git-tracked state.
+    tmp_state="$(mktemp)"
+    if rsync -az "$h:.cache/kb-harvest-state.json" "$tmp_state" 2>/dev/null; then
+      python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
+        || echo "[$h] state merge-back failed" >&2
+    fi
+    rm -f "$tmp_state"
+
     echo "[$h] pulling digests…" >&2
     rsync -az "$h:.cache/kb-digests/" "$out/" || echo "[$h] rsync failed" >&2
   done

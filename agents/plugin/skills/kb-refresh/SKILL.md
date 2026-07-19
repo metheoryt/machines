@@ -47,10 +47,17 @@ which a human approves before anything is written.
   `--projects-root ~/.claude/projects`), then calls `detect_hosts` to
   check `~/.ssh/config` for the fleet workstation aliases (`latitude`,
   `desktop`, `server`). For each one present and reachable (and not itself, by
-  a live hostname probe) it runs `distill.py` **in place** on that box against
-  its own local state/cache, then `rsync`s back only the resulting `.md`
-  digests and manifest rows — raw transcripts never leave their machine. No
-  fleet aliases configured → silently local-only.
+  a live hostname probe) it first `rsync`s the git-tracked state file to that
+  box's `~/.cache/kb-harvest-state.json` — seeding it with the authoritative
+  fleet-wide watermark, so it doesn't re-distill sessions already harvested
+  elsewhere — then runs `distill.py` **in place** on that box against that
+  seeded state/cache. It pulls the resulting state file back and merges only
+  its (possibly advanced) `sessions` map into the git-tracked state via
+  `distill.py --merge-from`, before `rsync`ing back the resulting `.md`
+  digests and manifest rows — raw transcripts never leave their machine. This
+  seed-then-merge round trip is what makes read-once hold fleet-wide, not just
+  on whichever box happens to run as controller that day. No fleet aliases
+  configured → silently local-only.
 - `distill.py` reads only lines beyond each session's watermark
   (`last_line`/`id_hash` in the state file), so a session already fully
   harvested contributes nothing on a re-run; a resumed session contributes

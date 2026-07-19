@@ -144,6 +144,82 @@ def test_distill_lines_skips_valid_json_non_dict_lines():
     assert "[ASSISTANT] I'll add ZRAM swap." in digest
     assert meta["n_lines"] == 5
 
+def test_merge_sessions_into_adds_new_remote_session(tmp_path):
+    local_state = tmp_path / "local.json"
+    remote_state = tmp_path / "remote.json"
+    local_state.write_text(json.dumps({"sessions": {}}))
+    remote_state.write_text(json.dumps({"sessions": {
+        "R1": {"last_line": 4, "id_hash": "h1", "host": "remote1",
+               "cwd": "/home/me/machines", "last_ts": "2026-07-17T10:00:00Z"},
+    }}))
+
+    n = distill.merge_sessions_into(str(local_state), str(remote_state))
+    assert n == 1
+
+    st = json.loads(local_state.read_text())
+    assert st["sessions"]["R1"] == {
+        "last_line": 4, "id_hash": "h1", "host": "remote1",
+        "cwd": "/home/me/machines", "last_ts": "2026-07-17T10:00:00Z",
+    }
+
+def test_merge_sessions_into_higher_last_line_wins_no_rewind(tmp_path):
+    local_state = tmp_path / "local.json"
+    remote_state = tmp_path / "remote.json"
+    local_state.write_text(json.dumps({"sessions": {
+        "A": {"last_line": 5, "id_hash": "local-a", "host": "local", "cwd": "/x", "last_ts": "t1"},
+        "B": {"last_line": 9, "id_hash": "local-b", "host": "local", "cwd": "/x", "last_ts": "t2"},
+    }}))
+    remote_state.write_text(json.dumps({"sessions": {
+        "A": {"last_line": 8, "id_hash": "remote-a", "host": "remote1", "cwd": "/y", "last_ts": "t3"},
+        "B": {"last_line": 3, "id_hash": "remote-b", "host": "remote1", "cwd": "/y", "last_ts": "t4"},
+    }}))
+
+    n = distill.merge_sessions_into(str(local_state), str(remote_state))
+    assert n == 1  # only A advances; B stays (no rewind)
+
+    st = json.loads(local_state.read_text())
+    assert st["sessions"]["A"] == {
+        "last_line": 8, "id_hash": "remote-a", "host": "remote1", "cwd": "/y", "last_ts": "t3",
+    }
+    assert st["sessions"]["B"] == {
+        "last_line": 9, "id_hash": "local-b", "host": "local", "cwd": "/x", "last_ts": "t2",
+    }
+
+def test_merge_sessions_into_preserves_last_refresh_and_local_only_sessions(tmp_path):
+    local_state = tmp_path / "local.json"
+    remote_state = tmp_path / "remote.json"
+    local_state.write_text(json.dumps({
+        "last_refresh": {"commit": "abc123"},
+        "sessions": {
+            "LOCALONLY": {"last_line": 7, "id_hash": "lh", "host": "local", "cwd": "/x", "last_ts": "t1"},
+        },
+    }))
+    remote_state.write_text(json.dumps({"sessions": {
+        "R1": {"last_line": 2, "id_hash": "rh", "host": "remote1", "cwd": "/y", "last_ts": "t2"},
+    }}))
+
+    n = distill.merge_sessions_into(str(local_state), str(remote_state))
+    assert n == 1
+
+    st = json.loads(local_state.read_text())
+    assert st["last_refresh"] == {"commit": "abc123"}
+    assert st["sessions"]["LOCALONLY"]["last_line"] == 7
+    assert st["sessions"]["R1"]["last_line"] == 2
+
+def test_merge_sessions_into_missing_remote_file_is_noop(tmp_path):
+    local_state = tmp_path / "local.json"
+    remote_state = tmp_path / "does-not-exist.json"
+    original = {"last_refresh": {"commit": "abc123"}, "sessions": {
+        "A": {"last_line": 5, "id_hash": "h", "host": "local", "cwd": "/x", "last_ts": "t1"},
+    }}
+    local_state.write_text(json.dumps(original))
+
+    n = distill.merge_sessions_into(str(local_state), str(remote_state))
+    assert n == 0
+
+    st = json.loads(local_state.read_text())
+    assert st == original
+
 def test_run_preserves_cwd_on_noop_second_run(tmp_path):
     proj = tmp_path / "projects" / "-home-me-machines"
     proj.mkdir(parents=True)

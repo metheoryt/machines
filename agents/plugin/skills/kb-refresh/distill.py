@@ -156,15 +156,58 @@ def run(projects_root, matches, out_dir, state_path, host=None):
     return {"sessions_seen": seen, "sessions_with_new": with_new, "digests_written": written}
 
 
+def merge_sessions_into(local_state_path, remote_state_path):
+    """Merge remote's `sessions` map into the local git-tracked state.
+
+    Only the `sessions` key is touched — every other top-level key in the
+    local state (e.g. `last_refresh`) is preserved untouched. A remote
+    session is taken WHOLE when it's new to local or its `last_line` is
+    strictly greater than local's (never rewind an already-advanced
+    watermark). Returns the count of sessions added-or-updated.
+    """
+    if not os.path.exists(remote_state_path):
+        return 0
+    try:
+        with open(remote_state_path) as f:
+            remote_state = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return 0
+    remote_sessions = remote_state.get("sessions") or {}
+
+    local_state = _load_state(local_state_path)
+    local_sessions = local_state.setdefault("sessions", {})
+
+    merged = 0
+    for sid, remote_entry in remote_sessions.items():
+        local_entry = local_sessions.get(sid)
+        if local_entry is None or remote_entry.get("last_line", 0) > local_entry.get("last_line", 0):
+            local_sessions[sid] = remote_entry
+            merged += 1
+
+    with open(local_state_path, "w") as f:
+        json.dump(local_state, f, indent=2, sort_keys=True)
+    return merged
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Distill Claude transcripts into KB digests.")
     ap.add_argument("--projects-root", default=os.path.expanduser("~/.claude/projects"))
-    ap.add_argument("--match", action="append", required=True,
+    ap.add_argument("--match", action="append", required=False,
                     help="substring of the project slug to include (repeatable)")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", required=False)
     ap.add_argument("--state", required=True)
     ap.add_argument("--host", default=None)
+    ap.add_argument("--merge-from", dest="merge_from", default=None,
+                    help="merge a remote state file's sessions into --state and exit")
     args = ap.parse_args(argv)
+    if args.merge_from:
+        if not args.state:
+            ap.error("--state is required with --merge-from")
+        n = merge_sessions_into(args.state, args.merge_from)
+        print(json.dumps({"sessions_merged": n}))
+        return
+    if not args.match or not args.out:
+        ap.error("--match and --out are required")
     summary = run(args.projects_root, args.match, args.out, args.state, args.host)
     print(json.dumps(summary))
 
