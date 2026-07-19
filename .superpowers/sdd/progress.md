@@ -159,10 +159,17 @@ ENVIRONMENT:
 
 ## Tasks (plan #3)
 - [x] Task 1: git mv hosts/homeserver -> hosts/server + rewrite path refs
-- [ ] Task 2: git mv hosts/g16 -> hosts/desktop + bootstrap URL + path refs
-- [ ] Task 3: g513ie.md primary + methe-server.md symlink + dual-name prose
-- [ ] Task 4: two-layer convention + model docs (box-independent statements)
+- [x] Task 2: git mv hosts/g16 -> hosts/desktop + bootstrap URL + path refs
+- [x] Task 3: g513ie.md primary + methe-server.md symlink + dual-name prose
+- [x] Task 4: two-layer convention + model docs (box-independent statements)
 - [ ] Phase 1 checkpoint: offer FF merge-back to main (user-gated)
 - [ ] Phase 2 (Tasks 5-7): GATED on user box rename
 
 Task 1: complete (commit 3cfd60b..fc8d836, review clean — haiku impl / haiku review, Spec ✅, Approved). git mv hosts/homeserver->hosts/server; 3 live path refs rewritten (.claude/memory/project.md x2, agents/hosts/methe-server.md x1). Minor: report's verification grep used --exclude-dir=docs (broader than :!docs/superpowers/); reviewer re-ran correct-scope grep, 0 live refs remain.
+
+Task 2: complete (commit fc8d836..ea0409c impl + fix ff5f48b — haiku impl / haiku review / haiku fix / haiku re-review, Spec ✅, Approved after fix). git mv hosts/g16->hosts/desktop; bootstrap URL in install.ps1 updated; 22 path rewrites across 12 files (README/AGENTS/justfile/install-media/backup.ps1/runbook/project.md/g614jv.md/CLAUDE.md). Review found 2 real defects from the blind sweep: (Critical) g614jv.md `hosts/g16.md` (deleted-file ref) tripped grep -> fixed to bare `g16.md`; (Important) project.md rename-desc tautology hosts/desktop->hosts/desktop -> restored FROM->TO as `g16`->hosts/desktop, `homeserver`->hosts/server. grep clean.
+  NOTE for Task 4: project.md hostname-normalization bullet still lumps the (now-DONE) dir renames under 'PENDING'. Task 4 Step 4 should reconcile: dir renames are done; only the methe-server->g513ie OS-hostname flip remains pending (Phase 2).
+
+Task 3: complete (commit ff5f48b..1d5a117, review clean — sonnet impl / sonnet review, Spec ✅, Approved, 0 issues). git mv methe-server.md->g513ie.md; relative compat symlink methe-server.md->g513ie.md (mode 120000, matches ME-G614JV.md precedent); H1 dual-name + 'This box' prose (methe-server today, being renamed to g513ie — does NOT assert g513ie is live yet); model line + Notes preserved byte-for-byte (verified via git show). add+typechange (not R100) confirmed cosmetic, no content loss. Commit scoped (left unrelated progress.md unstaged) = fine.
+
+Task 4: complete. CLAUDE.md is a symlink to AGENTS.md (same inode) — one edit covered both: repo-overview `homeserver` bullet now states model **G513IE**, logical name `server`, OS hostname `methe-server` (**being renamed to `g513ie`**); added a "Two-layer hostname convention" subsection under Hardware Context (logical name vs OS-hostname=model, `hub`/`27608` VPS special-case, explicit note that the server's *live* hostname is still `methe-server`). README.md: fixed the stale "ROG G16 2023" server-model claim -> "ROG G15 2023 (model G513IE)" + convention/target phrasing; left the onboarding table's `methe-server` (line 26) untouched — that's current/operational addressing, not a convention statement. hosts/server/README.md: added model code + convention/target note; also fixed a real broken relative path found while editing (`../g16/windows/...` -> `../desktop/windows/...`, a casualty of Task 2's dir rename that the `hosts/g16` literal-string sweep can't catch since it's a relative ref). .claude/memory/project.md: reconciled the in-flight bullet per Task 2's note — dir renames now recorded DONE, only the `methe-server`->`g513ie` OS-hostname flip stays PENDING (Phase 2); kept the FROM->TO phrasing bare (`g16`->`hosts/desktop`, not `hosts/g16`->`hosts/desktop`) to avoid tripping the literal-string sweep — caught and fixed this exact mistake in a self-review pass before committing. Gate: quick-check.sh green (required files + flake eval + dry-build all pass); full-repo sweep for `hosts/g16`/`hosts/homeserver` outside docs/superpowers + .superpowers is empty.

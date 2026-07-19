@@ -45,11 +45,12 @@ global + per-host memory). One bullet per fact under a topical heading.
   Two layers, applied fleet-wide: **logical name** (stable, role-based) = fleet
   key = SSH alias = tailnet node = repo `hosts/<dir>`; **model name** = the box's
   OS hostname = `detect.hostname` = the hardware model, lowercased
-  (`latitude5520`, `g614jv`, `g513ie`, `27608`). PENDING (not yet applied): rename
+  (`latitude5520`, `g614jv`, `g513ie`, `27608`). Repo-dir renames DONE
+  (Phase 1, 2026-07-20): `g16` → `hosts/desktop`, `homeserver` →
+  `hosts/server`, committed. PENDING (Phase 2, not yet applied): rename
   `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
   live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
-  `detect.hostname` edit is inert until the box reboots), and repo-dir renames
-  `g16` → `hosts/desktop`, `homeserver` → `hosts/server`. `hub` stays
+  `detect.hostname` edit is inert until the box reboots). `hub` stays
   `27608` (a VPS, no laptop model). Headscale already enforces node-name
   uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
   drift vs reality.

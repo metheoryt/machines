@@ -6,8 +6,10 @@ Windows hosts carry their reinstall/backup scripts and shared install media.
 
 - **g16** — ASUS ROG G16 2024, Intel + NVIDIA RTX 4060 (PRIME offload). NixOS
   (`g16`) + a Windows install (`ME-G614JV`).
-- **homeserver** — ASUS ROG G16 2023, RTX 3050 Ti. Windows 11 + Docker Desktop,
-  hostname `methe-server`. Runs the cyphy.kz service platform (defined in the
+- **homeserver** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti.
+  Windows 11 + Docker Desktop, logical name `server`, OS hostname
+  `methe-server` (**being renamed to `g513ie`** — the model code; see the
+  hostname-normalization spec). Runs the cyphy.kz service platform (defined in the
   sibling **`vps`** repo — that repo owns the *services*; `machines` owns the
   *machine* + its data backups).
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only).
