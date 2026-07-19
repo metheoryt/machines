@@ -38,10 +38,20 @@ this spec turns that verified manual work into the tool.
 
 The risk is the **shell boundary**, not the distill logic.
 
-1. **Every remote command is bash-wrapped.** Not only the distill call — all of
-   `mkdir`, the transport calls, the self-exclusion probe, and the distill
-   invocation go through `ssh $h bash …`. A bare `ssh $h <cmd>` lands in
-   PowerShell; that is the entire bug class.
+1. **Every remote command is bash-wrapped — AND nested-quoted.** Not only the
+   distill call — all of `mkdir`, the transport calls, the self-exclusion probe,
+   and the distill invocation go through `ssh $h bash …`. A bare `ssh $h <cmd>`
+   lands in PowerShell; that is the entire bug class.
+   **Nested quoting is mandatory** for the inline `bash -lc` calls: write
+   `ssh $h bash -lc "'<cmd>'"`, NOT `ssh $h bash -lc '<cmd>'`. ssh flattens its
+   argv into a single command string, so the LOCAL single-quotes are consumed
+   before the remote shell ever sees them — `bash -lc '<cmd>'` arrives as
+   `bash -lc <cmd>` and `bash -c` then runs only the first word (`mkdir` with no
+   args → "no dirs provided", misreported as "unreachable"). The inner quotes
+   must travel to the remote intact. *(The live harvest 2026-07-19 caught the
+   shipped single-quote form failing on both Windows boxes; the piped `bash -s`
+   distill dispatch — rule 2 — was unaffected because its body arrives on stdin,
+   not in argv.)*
 2. **Dynamic values cross as arguments, never string-interpolated.** Pipe a
    static script and pass roots/host/matches as positional args
    (`ssh $h bash -s -- "$host" "$@" < run.sh`, read `$1/$2/…` inside). This
