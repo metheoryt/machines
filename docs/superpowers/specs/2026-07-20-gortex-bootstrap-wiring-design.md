@@ -1,20 +1,31 @@
 # Design: wire gortex into machine bootstrap
 
-<!-- Status: approved (brainstorm) — 2026-07-20 -->
+<!-- Status: revised 2026-07-20 after discovering the NixOS half already exists -->
 
 ## Problem
 
 `gortex` (code-intelligence engine + MCP server) was installed **by hand** on
-`g513ie`. Bringing it up on a machine currently takes three manual steps —
-install the binary, run `gortex install` (machine-local MCP/skills/agents/hooks
-wiring), and have a daemon available. Nothing in this repo's bootstrap
-provisions gortex, so every fleet member is a manual setup and drifts.
+`g513ie`. Bringing it up on a machine takes three concerns — the binary, the
+machine-local `gortex install` wiring (MCP/skills/agents/hooks), and a daemon.
 
-Goal: on the three `agents`-role workstations — `latitude` (NixOS),
-`desktop` + `server` (Windows) — gortex's **binary** comes up automatically
-through the existing bootstrap mechanisms, and its **machine-local wiring** is
-(re)generated idempotently, **without** mutating the shared fleet-synced
-`agents/AGENTS.md` and **without** committing any generated artifact.
+**What already exists (NixOS / `latitude`) — do NOT rebuild:**
+
+- `pkgs/gortex.nix` — pinned derivation (fetch release tarball + `autoPatchelfHook`),
+  currently **v0.56.0**; the bump recipe is documented in its header comment.
+- `modules/programs/development.nix:60` — installs it as a system package.
+- `modules/home/me.nix` (`systemd.user.services.gortex-daemon`) — runs the daemon
+  (`gortex daemon start --no-progress`, `Type=simple`).
+
+So on NixOS the **binary and daemon are already declarative**. The only thing
+`gortex install` is **not** invoked anywhere in the repo (verified) — the
+machine-local wiring is manual on every box, including `latitude`.
+
+Goal (narrowed to the real gaps): on the three `agents`-role workstations —
+`latitude` (NixOS), `desktop` + `server` (Windows) — bring up gortex's
+**binary** (Windows only; NixOS already has it) and its **machine-local wiring**
+automatically/idempotently through the existing bootstrap, **without** mutating
+the shared fleet-synced `agents/AGENTS.md` and **without** committing any
+generated artifact.
 
 `hub` (Debian VPS) is **out of scope** by decision — a 288 MB binary + graph
 indexing is not worth it on a small always-on VPS.
@@ -66,7 +77,7 @@ indexing is not worth it on a small always-on VPS.
 
 ## Design
 
-### 1. Binary install — per platform
+### 1. Binary install
 
 **Windows (`desktop`, `server`)** — a new install-if-missing step in
 `bootstrap.sh`, gated to Windows (`IS_WINDOWS=1`, already computed at the top):
@@ -80,20 +91,15 @@ indexing is not worth it on a small always-on VPS.
   is not visible to the current process.
 - Floats naturally: re-running the installer upgrades in place.
 
-**NixOS (`latitude`)** — a new `modules/home/gortex.nix`:
-
-- A derivation fetching `gortex_linux_<arch>.tar.gz` (exact asset name confirmed
-  from the releases page at implementation; docs show `gortex_${OS}_${ARCH}.tar.gz`)
-  from GitHub releases at a **pinned version + sha256**, unpacked, with
-  `autoPatchelfHook` (+ `stdenv.cc.cc.lib`/`glibc` as needed for the CGO binary),
-  exposing `bin/gortex`. Added to the home profile's `home.packages`.
-- Imported into the home configuration alongside the other `modules/home/*`.
-- **`bootstrap.sh` does NOT install the binary on NixOS** — nix owns it there.
-- **Float = bump**: upgrading is editing the version + sha256 in `gortex.nix`.
-  A `just gortex-bump [version]` helper automates the hash refresh
-  (`nix-prefetch-url` / a failing-build hash capture), so a bump is one command
-  + a `switch`. Pin the current baseline at the version live on the fleet
-  (`v0.60.0` as of writing).
+**NixOS (`latitude`) — already done, no new work.** `pkgs/gortex.nix` +
+`development.nix` provide the binary; the `gortex-daemon` systemd service in
+`me.nix` runs the daemon. `bootstrap.sh` must **not** try to install the binary
+on NixOS (`[ -e /etc/NIXOS ]` gate). The one optional touch here is a
+**version bump** of `pkgs/gortex.nix` `0.56.0 → 0.60.0` to match the floating
+Windows fleet (edit `version` + `hash` per the recipe already in the file's
+header; the tarball hash comes from upstream `checksums.txt`). This is a
+one-line-derivation change, validated on `latitude`, and is optional — kept as
+its own task so it can be dropped.
 
 ### 2. Machine-local wiring — all three boxes, in `bootstrap.sh`
 
@@ -146,10 +152,11 @@ history.
 
 | Unit | Responsibility | Platform | Depends on |
 |------|----------------|----------|------------|
-| `modules/home/gortex.nix` | Declarative gortex **binary** (pinned tarball derivation) | NixOS only | GitHub release asset + sha256 |
+| `pkgs/gortex.nix` (**exists**) | Declarative gortex **binary** (pinned tarball derivation) | NixOS only | GitHub release asset + sha256 |
+| `me.nix` `gortex-daemon` (**exists**) | Daemon systemd user service | NixOS only | `pkgs/gortex.nix` |
+| `pkgs/gortex.nix` version bump (optional) | Match Windows float (0.56.0 → 0.60.0) | NixOS only | upstream `checksums.txt` |
 | `bootstrap.sh` › `ensure_gortex_binary` | Install binary if missing | Windows only | PowerShell installer |
 | `bootstrap.sh` › `ensure_gortex_wired` | `gortex install --no-claude-md` idempotently | all (skipped in nix activation) | binary present |
-| `just gortex-bump` | Refresh pinned version+hash in `gortex.nix` | dev convenience | nix |
 | `just gortex-setup` | Run the wiring step on NixOS from a login shell | NixOS convenience | binary present |
 | `agents/AGENTS.md` restore | Undo the manual-install rewrite | shared | git history |
 
@@ -166,11 +173,16 @@ history.
 
 ## Risks / open implementation details
 
-- **CGO binary under `autoPatchelfHook`** — may need extra runtime libs; resolved
-  empirically on `latitude` at build time.
-- **Exact release asset name + arch string** — confirm from the releases page
-  when writing `gortex.nix`.
 - **Wiring idempotency predicate** — the precise "already wired" check is chosen
   at implementation; must be cheap and robust across gortex versions.
 - **`gortex install` network use** — it may fetch skill content; the NixOS-
   activation skip avoids doing that during `switch`.
+- **Version-bump hash** (only if the optional bump is taken) — fetch the tarball
+  sha256 from upstream `checksums.txt` for v0.60.0 and convert to SRI, per the
+  recipe already in `pkgs/gortex.nix`. Build-validated on `latitude`.
+
+## What this design deliberately does NOT touch
+
+- `pkgs/gortex.nix` structure, `development.nix` inclusion, or the `gortex-daemon`
+  systemd service — the NixOS binary+daemon already work; only an optional
+  version bump is in scope.
