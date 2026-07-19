@@ -44,7 +44,19 @@ global + per-host memory). One bullet per fact under a topical heading.
   work; `orca-serve.sh` falls back to a SYSTEM unit (`User=me`, After tailscaled)
   — needs sudo. (c) Orca's pairing code (deviceToken + keypair) is PERSISTED in
   `~/.config/orca` and STABLE across serve restarts, so a `Restart=`/reboot
-  service keeps the client paired. Node `desktop-wsl-ubuntu-26-04` = `100.64.0.6`.
+  service keeps the client paired. Node = `100.64.0.6`; Headscale given-name
+  (MagicDNS) renamed `desktop-wsl-ubuntu-26-04` → **`desktop-ubuntu26`**
+  (`desktop-ubuntu26.gg.ez`) on 2026-07-19 via `sudo headscale nodes rename
+  desktop-ubuntu26 -i 6`. Reported hostname on the box is still the long form
+  (needs interactive sudo to change) — cosmetic; given-name is durable unless the
+  node fully re-registers (new machine key on a `wsl --unregister` rebuild).
+- **SSH into the WSL box (2026-07-19).** `ssh-wsl.sh` now installs
+  `fleet-authorized-keys` into the box's own `~/.ssh/authorized_keys` (inbound
+  trust; was a leaf that only trusted OUTward before). This ROG box's key
+  (`methe@me-g614jv`) is now in `fleet-authorized-keys` too. `me` on the WSL box
+  needs a sudo PASSWORD, but the box's `id_fleet` IS trusted on the VPS — so
+  Headscale admin is reachable by hopping `ssh me@100.64.0.6 → ssh hub → sudo
+  headscale …` (VPS `debian` = passwordless sudo).
 - **`headscale` admin commands on the VPS need `sudo` (probed 2026-07-17).**
   The control socket `/var/run/headscale/headscale.sock` is `headscale:headscale`
   mode `0770` and `debian` is NOT in the `headscale` group, so socket-touching
