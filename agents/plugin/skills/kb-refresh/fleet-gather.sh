@@ -70,19 +70,18 @@ EOS
 }
 
 detect_hosts() {
-  # Echoes every fleet workstation alias present in ~/.ssh/config, one per
-  # line. Does NOT exclude the current box — the OS hostname never matches
-  # the SSH alias on this fleet (latitude5520≠latitude, g614jv≠desktop,
-  # methe-server≠server), so that comparison never fired. Self-exclusion is
-  # done at connect time in main() instead, via a live `ssh` hostname probe.
-  local cfg="${HOME}/.ssh/config"
+  # fleet.json workstations that also have a Host entry in the ssh config.
+  # Emits the full fleet_hosts tuple (alias<TAB>platform<TAB>hostname<TAB>user)
+  # so main has platform/identity/user without a second jq pass.
+  local json="${1:-$FLEET_JSON}" cfg="${2:-$HOME/.ssh/config}"
   [ -f "$cfg" ] || return 0
-  local h
-  for h in "${FLEET_WORKSTATIONS[@]}"; do
-    if grep -qiE "^[[:space:]]*Host[[:space:]]+.*\b${h}\b" "$cfg"; then
-      echo "$h"
+  local alias rest
+  while IFS=$'\t' read -r alias rest; do
+    [ -n "$alias" ] || continue
+    if grep -qiE "^[[:space:]]*Host[[:space:]]+.*\b${alias}\b" "$cfg"; then
+      printf '%s\t%s\n' "$alias" "$rest"
     fi
-  done
+  done < <(fleet_hosts "$json")
 }
 
 # Usage: fleet-gather.sh --out DIR --state FILE --match SUBSTR [--match SUBSTR ...]

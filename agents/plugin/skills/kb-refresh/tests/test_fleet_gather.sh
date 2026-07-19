@@ -73,7 +73,16 @@ printf '%s\n' "$rds" | grep -qF '${root/#\~/$HOME}' || fail 'rds: expands leadin
 # It is valid bash:
 printf '%s\n' "$rds" | bash -n || fail 'rds: emitted script is not valid bash'
 
-got="$(detect_hosts | sort | tr '\n' ' ')"
-# 'desktop' absent from config -> excluded; 'hub' never included
-[ "$got" = "latitude server " ] || { echo "FAIL: got '$got'"; exit 1; }
-echo "PASS"
+# ── detect_hosts: fleet.json workstations ∩ ssh config Host entries ───────────
+if command -v jq >/dev/null 2>&1; then
+  aliases="$(detect_hosts "$fixture_json" "$tmp/.ssh/config" | cut -f1 | sort | tr '\n' ' ')"
+  # desktop absent from config → excluded; hub never a workstation
+  eq "$aliases" 'latitude server ' 'detect_hosts: config-present workstations only'
+  # the emitted row is the full tuple, not just the alias
+  detect_hosts "$fixture_json" "$tmp/.ssh/config" | grep -qP '^server\twindows\tmethe-server\tmethe$' \
+    || fail 'detect_hosts: emits full tuple per host'
+else
+  echo "SKIP: detect_hosts test (jq not installed)"
+fi
+
+echo "PASS: test_fleet_gather.sh"
