@@ -1,5 +1,7 @@
 # Project memory: machines
 
+<!-- KB refreshed against c525f9a on 2026-07-19 -->
+
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host memory). One bullet per fact under a topical heading.
 
@@ -11,12 +13,38 @@ global + per-host memory). One bullet per fact under a topical heading.
   mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
+- `just quick` (`scripts/quick-check.sh`) treats `nix flake check` failures as
+  non-fatal and only hard-gates on required-file presence + a one-host dry-build
+  — it can pass green while `nix flake check` is red. For reliable per-host
+  validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
 
 ## Fleet network
 
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
+- The WSL fleet SSH key store (`ssh-wsl.sh`, `FLEET_KEY_DIR` default
+  `/mnt/c/Users/<winuser>/.fleet/id_fleet`) is keyed by Windows user with no
+  distro in the path, so every WSL distro on the same Windows box shares one
+  key identity — the key is named after the fleet member matched via
+  `fleet.json` `detect.hostname`, not the distro.
+- SSH hub/jump-host detection is implemented twice — in `modules/home/ssh.nix`
+  and independently (jq) in `provision/ssh-wsl.sh` for the WSL leaf's config —
+  so any hub-rule change must be applied in both places or the WSL leaf drifts.
+- Every fleet machine's OS hostname differs from its SSH alias by design
+  (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `methe-server`↔`server`), so
+  "is this host me?" can't be decided by comparing `hostname` to an alias
+  string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
+  `kb-refresh` self-exclusion does.
+- `modules/home/ssh.nix` materializes `~/.ssh/config` as a real `me`-owned
+  `0600` file (not an HM store symlink) via two `home.activation` phases
+  (`sshConfigUnmaterialize` before `checkLinkTargets`, `sshConfigMaterialize`
+  after `linkGeneration`, `install -m600`) — OpenSSH strict-checks config
+  ownership and a root-owned store symlink reads as `nobody` inside Orca's
+  namespace, breaking all ssh. (Verified still present.)
+- Firewall rules in `provision/windows.ps1` must be written to converge
+  (remove-then-recreate), not create-if-absent — re-running against a host
+  with a stale-scoped rule would otherwise leave the old scope in place.
 
 ### Fleet transport is migrating AmneziaWG → Headscale (2026-07-13)
 
@@ -275,9 +303,11 @@ global + per-host memory). One bullet per fact under a topical heading.
   `modules/system/base.nix` (commit `e2345ba`, 2026-07-08), off
   `linuxPackages_latest` (7.1.3): the out-of-tree AmneziaWG module does NOT
   compile on 7.x (`socket.c: 'ipv6_stub' undeclared`) but builds clean on the
-  LTS — verified with NVIDIA 595.84 and the full latitude5520 toplevel. So the
-  mesh REQUIRES the LTS kernel fleet-wide; don't bump back to `_latest` until
-  amneziawg supports 7.x. And an out-of-tree module only loads under the kernel
+  LTS — verified with NVIDIA 595.84 and the full latitude5520 toplevel. The AWG
+  mesh was retired 2026-07-17, so the amneziawg build reason no longer binds;
+  the LTS pin is KEPT anyway as the safer default (base.nix comment), verified:
+  base.nix is still `pkgs.linuxPackages`. (Do not bump to `_latest` on the basis
+  of the old amneziawg rationale.) And an out-of-tree module only loads under the kernel
   it was built for — after a kernel-changing `switch`, `wireguard-awg0` fails
   (`Module amneziawg not found in .../<old-kernel>`) until you REBOOT into the
   new kernel.
@@ -580,6 +610,41 @@ global + per-host memory). One bullet per fact under a topical heading.
   latitude5520 into a private repo "someday" (stated 2026-07-07) — not urgent,
   no mechanism chosen yet (chezmoi/stow/plain git all unexplored as of this
   writing).
+
+## Repo tooling & scripts
+
+- Orca IDE is `modules/home/orca-bin.nix`, wrapping the upstream Linux
+  AppImage with `appimageTools.wrapType2` (same pattern as
+  `zed-bin.nix`/`pycharm-bin.nix`); there is no `just update-orca` — version
+  bumps are manual (bump `version` + rehash, per the derivation header).
+- `/cyphy:kb-refresh` (`agents/plugin/skills/kb-refresh/`) mines per-machine
+  Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
+  JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
+  (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
+  `fleet-gather.sh` distills in-place on other fleet boxes and rsyncs back
+  only digests (never raw transcripts).
+- `scripts/orca-worktree-setup.sh` is the generic dispatcher Orca runs on each
+  new worktree: it symlinks gitignored config (`.env`,
+  `.claude/settings.local.json`) from the main checkout, then delegates to
+  `$repo/.orca/worktree-setup.sh` or `scripts/orca-worktree.d/<main-basename>.sh`;
+  it is always non-fatal (exits 0) so it can't block worktree creation.
+- Per-host agent-memory filenames use the raw OS hostname
+  (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
+  `methe-server.md` — not fleet aliases), threaded via a single
+  `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
+  computes it off-nix). Using a curated short name drifts from what
+  nix/bootstrap resolve and misdirects the host-memory link.
+- `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
+  guard that fails loud if the repo's expected symlink location is dangling —
+  added after repo-rename events silently broke agent-config linking.
+- `update-{rustdesk,zed,pycharm}.sh` resolve their target `.nix` path relative
+  to their own dir under `scripts/`; a new updater needs the correct extra
+  `../` to reach repo root, or it breaks `just update`/`just upgrade` silently
+  (`sed: no such file`).
+- `hosts/g16/windows/winget-packages.json` is a full `winget export` snapshot
+  of that laptop's installed state; `hosts/homeserver/windows/winget-packages.json`
+  is a hand-curated minimal server set — maintained differently, don't
+  conflate them when adding packages.
 
 ## Pending follow-ups
 

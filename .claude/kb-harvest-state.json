@@ -1,0 +1,410 @@
+{
+  "last_refresh": {
+    "commit": "c525f9a",
+    "date": "2026-07-19",
+    "scope": "local-only Phase 1 (this box); fleet gather deferred to Phase 2 (post-merge)",
+    "sessions_processed": 56,
+    "tiers_touched": [
+      "CLAUDE.md",
+      "agents/memory/global.md",
+      ".claude/memory/project.md",
+      "agents/hosts/latitude5520.md",
+      "agents/hosts/g614jv.md",
+      "agents/CLAUDE.md"
+    ]
+  },
+  "sessions": {
+    "05b345b4-5ca1-40a9-a146-ba98a03cb826": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0f603b410347f286ee0f6c9c528dc8590511c8f3",
+      "last_line": 323,
+      "last_ts": "2026-07-15T11:20:43.352Z"
+    },
+    "06b9c866-7900-429c-893f-1dc3b25d5070": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "7b12ccd040a854f339afd52fddc8af0d39a893e8",
+      "last_line": 12,
+      "last_ts": "2026-07-17T16:39:00.045Z"
+    },
+    "108e5f34-7423-4871-828e-392f4f2563db": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "86d67c5eb7455ff154517e0674be49631385226a",
+      "last_line": 333,
+      "last_ts": "2026-07-15T16:36:22.496Z"
+    },
+    "1417daa4-de31-4d25-b43b-cbb931821382": {
+      "cwd": "/home/me/orca/workspaces/machines/git-worktree-orca-setup",
+      "host": "latitude5520",
+      "id_hash": "66b6d170170a9ea1090ef95ab7759e680fd57039",
+      "last_line": 1051,
+      "last_ts": "2026-07-18T15:07:53.623Z"
+    },
+    "26c0c0e3-e9e9-48cf-bf45-3b417796e2cb": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "5ebc0d281a08795115ac931a20a3e97a6a407617",
+      "last_line": 547,
+      "last_ts": "2026-07-17T14:42:06.689Z"
+    },
+    "2b024340-80a7-40cd-9c68-e803dd5b8329": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "d3a8b4a8377c5653f5223ca750f66a50e45b89ed",
+      "last_line": 19,
+      "last_ts": "2026-07-16T20:43:06.067Z"
+    },
+    "2caeba31-b0ed-4746-a12c-7683ccf9cfb1": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "7d46dcbc0576051935d2e81bad7e69c8202af2ef",
+      "last_line": 236,
+      "last_ts": "2026-07-15T17:34:10.629Z"
+    },
+    "343d9ad3-9075-42a8-a69f-2cb6883b265d": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "c85af4e768db3785009ecc49018262ae037e6f2b",
+      "last_line": 1081,
+      "last_ts": "2026-07-07T18:14:58.519Z"
+    },
+    "36b474ac-4d7a-42b8-8e07-7064c6fb3714": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b63a94cf03c62b25c6f2cb8dc7b3b90400f2c3f2",
+      "last_line": 78,
+      "last_ts": "2026-07-08T19:26:15.757Z"
+    },
+    "3963c8ea-ef5b-4d6c-9140-0a0b0140b8b0": {
+      "cwd": "/home/me/orca/workspaces/machines/ssh-over-fleet",
+      "host": "latitude5520",
+      "id_hash": "175251c79597990f213c7c44468c9ca98d822e01",
+      "last_line": 497,
+      "last_ts": "2026-07-17T18:40:08.730Z"
+    },
+    "4b330491-b4ca-4731-934c-97ef50516f79": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d6bfa2e7e7ed3c85d139bdaf409300349119d233",
+      "last_line": 776,
+      "last_ts": "2026-07-07T21:54:25.324Z"
+    },
+    "4d393ddf-3a6e-49a3-8864-9a5dca2233cf": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "16e9ec3c6ca1fd3b6a2bf4bcb1458e6ffee70e29",
+      "last_line": 796,
+      "last_ts": "2026-07-19T14:55:17.854Z"
+    },
+    "4e37fff7-f0d2-4967-97af-ac5754566c39": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0d65edb8d85662ff8885e2655806f4d41020a02f",
+      "last_line": 214,
+      "last_ts": "2026-07-14T18:12:06.416Z"
+    },
+    "4ec7d2f1-e438-4179-afd3-f1d712208d6e": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "2474b7b6c35d1eb90e0e18ae3f4cebdae24286df",
+      "last_line": 49,
+      "last_ts": "2026-07-13T15:19:29.909Z"
+    },
+    "544aa6bb-64a7-4514-8bc0-b7718d897c39": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "71068a4e346c217f640b1b26ea8f92f9236230ca",
+      "last_line": 102,
+      "last_ts": "2026-07-07T18:33:51.282Z"
+    },
+    "584d9248-c110-48db-98cc-9127f44be44a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d01b53699044c1429d942628b5ea25b431e2fb76",
+      "last_line": 26,
+      "last_ts": "2026-07-15T17:31:57.978Z"
+    },
+    "5a8a0d3a-71cf-4064-b80f-ce8490c35845": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "945becb37c4af7be96b4dc149e248ecbb20c95df",
+      "last_line": 311,
+      "last_ts": "2026-07-05T18:55:07.552Z"
+    },
+    "5f807bd8-1fab-46d2-84a5-63b6de6a4e1b": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "b54235ba872a75db520c41754070a9605add9bfc",
+      "last_line": 60,
+      "last_ts": "2026-07-17T16:44:52.881Z"
+    },
+    "621ca828-0889-406c-9632-1047ba55bdab": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "dadc731a8df99a6066b593f5f80912681c675f01",
+      "last_line": 1893,
+      "last_ts": "2026-07-17T16:37:39.461Z"
+    },
+    "64735ef3-fabb-411f-91a3-720b25a6dfcf": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "757dd986aadb68e98b351f257fe39a878edfbaaf",
+      "last_line": 509,
+      "last_ts": "2026-07-07T13:49:09.927Z"
+    },
+    "671b9676-2542-41c0-ba21-9a3149e9f322": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "18b57f30606316bcf7010545486c49bcf8065e0c",
+      "last_line": 54,
+      "last_ts": "2026-07-05T17:33:50.170Z"
+    },
+    "691b6ce3-c50a-4508-bdc7-c2587aca5d7e": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "fdc0c608e638d0ce6c1105720f5386f011e97e75",
+      "last_line": 68,
+      "last_ts": "2026-07-05T18:22:33.886Z"
+    },
+    "6ef60dd7-e3de-4761-826b-d23a7f2861a9": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d4380b71031117481f70200cecc7c55038511825",
+      "last_line": 21,
+      "last_ts": "2026-07-14T18:21:55.118Z"
+    },
+    "814ffea6-314b-4463-91d0-6cc02172ab96": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "cc146650de9a19e06a34a4f1eb52d375d4e2d211",
+      "last_line": 26,
+      "last_ts": "2026-07-17T11:03:37.737Z"
+    },
+    "850e7bc6-bac8-4a88-a3c2-68b494b3e1f7": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "02c3f16d02cf0be88bdbe27dc81effb65f32b42a",
+      "last_line": 180,
+      "last_ts": "2026-07-15T10:19:42.654Z"
+    },
+    "892ce1c5-fcd6-4705-bbf6-032333852763": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f4bf7a1f0d511306534f813a1454c2ec4656e97b",
+      "last_line": 26,
+      "last_ts": "2026-07-15T10:19:49.995Z"
+    },
+    "8c3a3abe-3576-41c0-8554-a0b435f5137e": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "9b3edd5d04cb2876aedaf3992b71ec57a2922905",
+      "last_line": 141,
+      "last_ts": "2026-07-14T09:15:26.287Z"
+    },
+    "8c4a3511-0d5f-4e4d-9084-69f3d263dce4": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d686925146f6de763847622960cfdfd7aad0a343",
+      "last_line": 239,
+      "last_ts": "2026-07-14T09:22:28.379Z"
+    },
+    "8f0e270d-a046-47c8-9b51-62a180922a53": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b0812c3db1f605f2292c0b11e65d88d360e49cae",
+      "last_line": 47,
+      "last_ts": "2026-07-07T13:15:34.607Z"
+    },
+    "96d9a682-dbcd-4649-8fc4-a113d30f3e1a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d91e44016dc6473fbcf2c57ab62f1aeeb73a9c5f",
+      "last_line": 142,
+      "last_ts": "2026-07-15T21:57:04.301Z"
+    },
+    "9be70f7a-c981-48be-97c3-eb2467c68018": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "067ea811e8ad9e4894cb5dfb55368ce4b408d8e3",
+      "last_line": 262,
+      "last_ts": "2026-07-05T17:08:27.033Z"
+    },
+    "a2287911-468e-4783-9fcf-1900dc4b639b": {
+      "cwd": "/home/me/orca/workspaces/machines/update-nix-linux-kernel",
+      "host": "latitude5520",
+      "id_hash": "4b9a5c1a406c6b032fb72f4214da864bea649c13",
+      "last_line": 293,
+      "last_ts": "2026-07-19T12:36:28.415Z"
+    },
+    "a6d0caf7-8165-481a-a54d-b1f5e6184478": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "2009a65a960656850e701904150d5cd5de0bb435",
+      "last_line": 181,
+      "last_ts": "2026-07-07T13:29:12.661Z"
+    },
+    "ab11ea7f-4619-454e-abce-25133a99d3ac": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f177857fb01958db57104658262cc80f85e56352",
+      "last_line": 477,
+      "last_ts": "2026-07-07T15:33:36.536Z"
+    },
+    "b47e8f6a-568d-45d6-a48e-b028534fb308": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "e3dd70c46ca55846eb25a34cc22fa0b4361e62b4",
+      "last_line": 299,
+      "last_ts": "2026-07-08T19:17:53.686Z"
+    },
+    "b84f243e-06e2-45ee-a07c-06ee631d0909": {
+      "cwd": "/home/me/orca/workspaces/machines/git-worktree-orca-setup",
+      "host": "latitude5520",
+      "id_hash": "46145db9ed90f28cac1106015c1625ece79d1e30",
+      "last_line": 447,
+      "last_ts": "2026-07-18T09:03:23.497Z"
+    },
+    "b984b7ee-4815-4431-b9d5-62c3267af56e": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "98a1c13b2b44fa7a8d5f172702f1def55c50bb11",
+      "last_line": 459,
+      "last_ts": "2026-07-05T23:08:35.491Z"
+    },
+    "bd412c96-7936-4559-b085-dffd0c029252": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "64e1814f9a00ede0fcbbd12642535b3949087d23",
+      "last_line": 110,
+      "last_ts": "2026-07-15T22:03:36.776Z"
+    },
+    "c3b9d28f-f225-4660-a13d-b237610a7219": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "01b58ddc56a2876126ed1610376bfab2bcb74b93",
+      "last_line": 25,
+      "last_ts": "2026-07-05T18:56:41.421Z"
+    },
+    "c58a025a-b506-4770-8842-186f692e8327": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-hosts-ui-research",
+      "host": "latitude5520",
+      "id_hash": "28f9c2f9c5e4e97a86bcc5c8315ac7c3e68746c1",
+      "last_line": 85,
+      "last_ts": "2026-07-18T09:50:35.331Z"
+    },
+    "c78e09c5-5117-46b4-bd95-ab1df8eb9299": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "15ddb666b71fbd7c8e8a9ebbf10780ee6d77a2c4",
+      "last_line": 122,
+      "last_ts": "2026-07-15T21:13:58.892Z"
+    },
+    "cab62c08-fef0-42b3-adf5-e121fb5a8047": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "8bfbd70f5316d8a8d1b01211c59f0e43f31916b2",
+      "last_line": 14,
+      "last_ts": "2026-07-15T22:04:14.052Z"
+    },
+    "cccbd71f-7112-49d1-b00b-4775f333a348": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "93d5f789dbbe00f99a598a419eb0774050be2fc1",
+      "last_line": 425,
+      "last_ts": "2026-07-08T18:12:19.267Z"
+    },
+    "cecc365e-10ff-45f4-bccc-35c8ea3dcb3e": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-session-management",
+      "host": "latitude5520",
+      "id_hash": "b4353eb824814a2d61ff0500ddca9d946ba07fa1",
+      "last_line": 79,
+      "last_ts": "2026-07-19T13:23:41.775Z"
+    },
+    "cfd6e12c-98d2-4ffa-9213-258e7e9b5f4d": {
+      "cwd": "/home/me/orca/workspaces/machines/ssh-over-fleet",
+      "host": "latitude5520",
+      "id_hash": "09af587291ea963d51b92c0e09b2e3e7fddb401e",
+      "last_line": 152,
+      "last_ts": "2026-07-18T08:12:51.939Z"
+    },
+    "d07916ff-c1da-45d9-a6e5-5db2ff022289": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "a9c1b43e8d8ebe01e2c2ca763e2910a3f6c717bb",
+      "last_line": 246,
+      "last_ts": "2026-07-14T18:17:44.693Z"
+    },
+    "d2606824-0501-43f6-a110-c8e5be624f0a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "69565865419a891fc4c71541a73b41bf56c1647b",
+      "last_line": 167,
+      "last_ts": "2026-07-13T13:01:36.916Z"
+    },
+    "d2c354f5-dccb-496e-ae10-9df775aaec07": {
+      "cwd": "/home/me/orca/workspaces/machines/test-worktree-setup-script",
+      "host": "latitude5520",
+      "id_hash": "8db38161d44863b8a6116efea9620c8226b0095b",
+      "last_line": 51,
+      "last_ts": "2026-07-18T08:03:05.712Z"
+    },
+    "d459b28b-b35d-43f7-9693-ad5abf85f049": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "2c03dfec9fc1a9f7c7ca15131b12c37d0fec8f2b",
+      "last_line": 34,
+      "last_ts": "2026-07-16T20:44:17.181Z"
+    },
+    "e6f78b16-e578-4b5f-b1f8-7a4425f90923": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "319f1f36feae5638ab548bf20c93b2eefc919a5a",
+      "last_line": 64,
+      "last_ts": "2026-07-14T18:16:43.089Z"
+    },
+    "eddb2751-71aa-44ae-aaad-c7ddf4b33382": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "dc3c99f3057a5cf26fced92ce24d7e78f0973169",
+      "last_line": 106,
+      "last_ts": "2026-07-15T21:01:31.114Z"
+    },
+    "efe61ca7-8e3c-4ab4-84ca-e59010c2e760": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0d8e82b6eafea08da08cc48a6abacd71766e9d13",
+      "last_line": 418,
+      "last_ts": "2026-07-10T23:46:01.795Z"
+    },
+    "f0f32919-7e4e-4b81-8b7d-ed871aeacc7b": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "56dcbde9fa026bf9ab1f8409254067c98ac8a4d6",
+      "last_line": 50,
+      "last_ts": "2026-07-07T16:13:32.928Z"
+    },
+    "f18ebe4d-71de-4bc6-9e93-de8560c14d1d": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "35a9ae08894fbe61f57158d4f3c006180eb57b4e",
+      "last_line": 141,
+      "last_ts": "2026-07-07T18:18:39.503Z"
+    },
+    "f4d2b041-c8f3-4a4c-b5c7-a84912203992": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "099f8c162cee8255ecc0527c17df0c48b9dbaa81",
+      "last_line": 30,
+      "last_ts": "2026-07-15T21:15:56.555Z"
+    },
+    "fe94a2d5-59e6-41dd-91f1-8170973cad18": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "bf27b397046437903f4bdc3142390adab23575c2",
+      "last_line": 159,
+      "last_ts": "2026-07-07T17:22:16.514Z"
+    }
+  }
+}

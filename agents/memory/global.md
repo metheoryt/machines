@@ -23,8 +23,9 @@ elsewhere to sync. Do NOT put secrets here.
 
 - **The fleet machines are mutually reachable over SSH via the Tailscale/Headscale
   tailnet — assume it, don't re-probe each session.** SSH aliases live in
-  `~/.ssh/config` (generated from `provision/fleet.json` → `ssh.nix`): `latitude`
-  (latitude5520), `desktop` (g16, NixOS hostname `g614jv`), `server`
+  `~/.ssh/config` (generated from `fleet.json` (repo root) → `ssh.nix`): `latitude`
+  (latitude5520), `desktop` (the ROG G16 2024 laptop — Windows hostname `g614jv`
+  inside WSL / `ME-G614JV` native; its old NixOS identity `g16` is retired), `server`
   (methe-server — SSH lands in its Linux/WSL env), `hub` (the cyphy.kz VPS, not a
   fleet workstation). Keys-only, no public exposure.
 - **The remote login shell is fish**, which chokes on `$(...)` / POSIX-test syntax
@@ -32,7 +33,87 @@ elsewhere to sync. Do NOT put secrets here.
   snippet remotely, force bash: `ssh host bash -s < script.sh` (or
   `ssh host bash -lc '...'`).
 
+## Windows OpenSSH & winget footguns
+
+- Windows Firewall allow-rules **union**, and installing `OpenSSH.Server` auto-creates
+  `OpenSSH-Server-In-TCP` allowing TCP 22 from Any on all profiles — so adding a
+  narrower scoped rule restricts nothing until the default is
+  `Disable-NetFirewallRule`'d (which is exactly what `windows.ps1` does).
+- Windows OpenSSH Server ships with `PasswordAuthentication` enabled — key-only
+  parity needs `PasswordAuthentication no` / `KbdInteractiveAuthentication no`
+  written into `%ProgramData%\ssh\sshd_config` + an sshd restart; capability +
+  authorized_keys alone is not enough.
+- `OpenSSH.Server~~~~0.0.1.0` is a fixed optional-feature capability identifier
+  (unchanged since Win10 1809), NOT a version string — the real binary version
+  updates via Windows Update; check it with `Get-WindowsCapability -Online -Name
+  OpenSSH*`.
+- The winget package `Anthropic.Claude` installs the Claude **Desktop** app, not
+  the Claude Code CLI (install that separately via native installer / npm); a
+  Node.js winget entry is what enables Claude Code's `npx`-dependent features.
+
+## Fish shell gotchas
+
+- Fish errors "no matches found" on unquoted glob args like `grep
+  --include=*.nix` — quote the pattern (`--include="*.nix"`) or use `find`.
+
+## Fleet scripting conventions
+
+- A script feature that SSHes into infrastructure to mint a credential must be
+  strictly opt-in behind an explicit flag (e.g. `tailscale-wsl.sh --enroll`),
+  never firing as a side effect of a normal run.
+- `ssh-keygen -y` echoes the `-C` comment embedded in a key, so re-stamping by
+  appending the comment again produces a doubled comment ("me@wsl-desktop
+  me@wsl-desktop") — strip to type+body before re-stamping.
+
+## Home-Manager & bootstrap gotchas
+
+- Home-Manager's `checkLinkTargets` aborts activation ("Existing file would be
+  clobbered") when a path it wants to own already holds untracked files/symlinks
+  from another mechanism (e.g. `bootstrap.sh`) — remove those stray links once,
+  don't retry the switch. Corollary: running a profile bootstrap from inside a
+  git worktree can repoint the profile symlinks (`~/.claude`, `~/.codex`) into
+  that worktree and break them if it's later removed — remove symlinks whose
+  target contains the worktree path, then re-switch.
+
+## Orca IDE — tooling footguns
+
+- Never use Orca's in-app "install shell command" on NixOS: it symlinks
+  `~/.local/bin/orca-ide` straight at the AppImage's unwrapped Electron binary,
+  which fails `libnspr4.so: cannot open shared object file` and — if
+  `~/.local/bin` precedes it on PATH — silently shadows the working
+  Nix-wrapped `orca-ide`. Delete `~/.local/bin/orca-ide` if present.
+- `npx skills add … --global` (Vercel Labs) installs to `~/.agents/skills/`
+  (vendor-neutral), NOT `~/.claude/skills/`, so Claude Code does not
+  auto-discover skills installed that way — only tools that read
+  `~/.agents/skills/` (e.g. Orca) see them.
+
 ## Harness behavior (empirical)
+
+- Claude Code's settings writer (`/config`, `/plugin marketplace add`, …)
+  resolves only **one** symlink hop before writing its `<file>.tmp.*` beside
+  the target; a second hop into a read-only store (Nix) fails EROFS — this is
+  why the tracked config files must be **one-hop-direct** out-of-store
+  symlinks.
+- The Claude Code statusline's 5h/7d usage segments render only when the
+  harness feeds `rate_limits.five_hour`/`seven_day` (subscription-billed
+  sessions); API-key sessions get a cost/balance segment instead. Switching
+  profiles swaps the OAuth credential in `~/.claude/.credentials.json` +
+  `~/.claude.json`'s `oauthAccount`, not the config dir.
+- Claude Code's "auto mode" is a permission mode, not a model choice — set via
+  `permissions.defaultMode: "auto"` in settings.json (enum:
+  default/acceptEdits/bypassPermissions/plan/auto).
+- Claude Code's safety classifier auto-denies actions that route around a
+  guardrail — a direct `git push origin main`, a commit/PR that weakens a
+  security control (e.g. adding NOPASSWD sudo), a state-changing multi-target
+  op on a terse/ambiguous approval, or a write of external content into a
+  directory later read as agent instructions (`npx skills add … --global`); it
+  wants the user to run the command directly.
+- DSPy was evaluated and rejected for evolving the Claude Code / cyphy agent
+  config: it needs a typed signature + scalar metric + labeled dataset that
+  open-ended interactive sessions lack, and its few-shot-demo lever doesn't
+  apply to zero-shot instruction prose (CLAUDE.md/skills/facets). The scoped
+  alternative (transcript-mining behavioral eval → human-gated config diffs)
+  was deprioritized, not built.
 
 - **Subagents — full reference in `agents/docs/claude-code-subagents.md`
   (verified 2026-07).** Key facts: subagent = separate Claude instance, fresh
@@ -138,6 +219,10 @@ elsewhere to sync. Do NOT put secrets here.
     (`sudo -n true` → "no new privileges flag"). On NixOS this blocks
     `just switch`/`nixos-rebuild`, and the root-owned nix store reads as
     `nobody`. See the passwordless-sudo note above; detect with `sudo -n true`.
+  - **To tell "inside Orca's user namespace" from genuinely-corrupted on-disk
+    ownership**, check `id; cat /proc/self/uid_map`: a `1000 1000 1` remap
+    means namespaced (nothing broken on disk); `0 0 4294967295` means the real
+    host and a real problem.
   - Which host you're on is still the per-host memory's job (hostname / installed
     tooling / paths); this note only tells you *whether the session is Orca-wrapped*.
 
@@ -189,6 +274,12 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Gortex
 
+- Defining the `gortex` MCP server in BOTH user scope (`~/.claude.json`, often a
+  hardcoded `/nix/store/…-gortex-<ver>/bin/gortex` path) and project scope
+  (`.mcp.json`, bare `gortex mcp`) makes Claude treat them as two servers with
+  separate OAuth storage and trips `claude doctor`'s conflict warning — keep
+  only the project-scope bare-command definition (portable, git-tracked; the
+  store-pinned path also goes stale on upgrade).
 - Gortex's Python resolution is near-compiler-grade for the STATIC OO layer
   (classes, methods, inheritance/MRO, imports, explicit calls, direct ORM calls
   like `Model.objects.filter`). It degrades on framework "magic" — true for
