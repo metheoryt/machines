@@ -49,7 +49,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `server`'s OS hostname `methe-server` → **`g513ie`** (its real model; needs a
   live Windows `Rename-Computer -NewName g513ie -Restart` — the repo
   `detect.hostname` edit is inert until the box reboots), and repo-dir renames
-  `hosts/desktop` → `hosts/desktop`, `hosts/server` → `hosts/server`. `hub` stays
+  `g16` → `hosts/desktop`, `homeserver` → `hosts/server`. `hub` stays
   `27608` (a VPS, no laptop model). Headscale already enforces node-name
   uniqueness, so no SSH/tailnet change is needed; verified no `detect.hostname`
   drift vs reality.
