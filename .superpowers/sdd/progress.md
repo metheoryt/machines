@@ -14,7 +14,7 @@ ENVIRONMENT:
 ## Tasks
 - [x] Task 1: distill.py — single-session jsonl → digest (full read)
 - [x] Task 2: distill.py — read-once watermark (resume offset + identity hash)
-- [ ] Task 3: distill.py — CLI (discover, digest, manifest, state merge)
+- [x] Task 3: distill.py — CLI (discover, digest, manifest, state merge)
 - [ ] Task 4: fleet-gather.sh — detect_hosts + in-place remote distill + rsync
 - [ ] Task 5: SKILL.md — orchestration (gather→map→reduce→review→write→stamp)
 - [ ] Task 6: Catch-up run against machines (human-in-the-loop; main session)
@@ -26,5 +26,6 @@ ENVIRONMENT:
 - T1 #4: test_distill.py covers only the happy path — the `except JSONDecodeError` branch and mid-session cwd/branch change are untested. Matches brief exactly.
 
 ## Log
+Task 3: complete (feat 9a02407 + fix 50889e4, review + re-review clean — haiku impl / sonnet review / sonnet fix / sonnet re-review, Spec ✅, Approved after fixes). run() globs *<m>*/*.jsonl, distills from resume offset, writes headered digests + manifest.tsv (append), merge-writes `sessions` preserving `last_refresh` (verified by test seeding last_refresh). Read-once verified (2nd run over unchanged file → 0 digests; last_line/id_hash always advance). Review found 1 Important: unguarded `json.loads(lines[0])` probe could abort the whole sweep on a malformed first line → FIXED (try/except JSONDecodeError,AttributeError → filename fallback) + bundled Minor (cwd/last_ts clobbered to None on no-op run → FIXED via prev-entry fallback). 2 regression tests added (malformed-first-line survives sweep + processes 2nd session; cwd survives no-op run). 6 tests pass. Remaining Minor (final-review triage): sessions_with_new always == digests_written (redundant field); `# host: None` in header when --host omitted (SKILL always supplies --host).
 Task 2: complete (commit 493a4de, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 Critical/Important). Added identity_hash + resume_offset + import hashlib; verbatim from brief. Reviewer verified all 4 branch cases (new/truncated-strict->/identity-changed/resume) line-by-line; truncation uses strict `>` (exact-length resume not misclassified); Task 1 distill_lines + its test provably untouched. Minor: cosmetic 1-blank-line spacing between new test defs; partial-state (missing id_hash/last_line key) untested — current default safely reprocesses.
 Task 1: complete (commit fc07528, review clean — haiku impl / sonnet review, Spec ✅, Approved, 0 Critical/Important). Verbatim transcription of brief's reference code; distill_lines(lines)->(digest,meta); stdlib-only (import json); no filesystem access so read-only constraint holds by construction. Reviewer traced all 6 test events by hand, confirmed PASS. 3 Minor findings logged above (all inherited from plan code) + 1 report-accuracy slip (report said cwd/branch first-wins; code is last-wins — no code impact).
