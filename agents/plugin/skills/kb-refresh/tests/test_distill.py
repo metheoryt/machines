@@ -57,3 +57,38 @@ def test_resume_offset_rules():
     # truncated (stored beyond current length) -> 0
     st_trunc = {"S1": {"last_line": 99, "id_hash": h}}
     assert distill.resume_offset(st_trunc, "S1", lines) == 0
+
+def test_run_writes_digests_manifest_and_merges_state(tmp_path):
+    # fake ~/.claude/projects layout
+    proj = tmp_path / "projects" / "-home-me-machines"
+    proj.mkdir(parents=True)
+    sess = proj / "S1.jsonl"
+    sess.write_text("\n".join([
+        json.dumps({"type": "user", "sessionId": "S1", "cwd": "/home/me/machines",
+                    "gitBranch": "main", "timestamp": "2026-07-17T10:00:00Z",
+                    "message": {"role": "user", "content": "hello"}}),
+        json.dumps({"type": "assistant", "sessionId": "S1", "timestamp": "2026-07-17T10:01:00Z",
+                    "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}}),
+    ]) + "\n")
+    out = tmp_path / "digests"
+    state = tmp_path / "state.json"
+    # pre-seed an unrelated last_refresh to prove merge-preservation
+    state.write_text(json.dumps({"last_refresh": {"commit": "abc123"}}))
+
+    summary = distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
+    assert summary["digests_written"] == 1
+    digest = (out / "S1.md").read_text()
+    assert "# session: S1" in digest
+    assert "# host: testbox" in digest
+    assert "[USER] hello" in digest and "[ASSISTANT] hi" in digest
+
+    st = json.loads(state.read_text())
+    assert st["last_refresh"] == {"commit": "abc123"}          # preserved
+    assert st["sessions"]["S1"]["last_line"] == 2
+    assert st["sessions"]["S1"]["host"] == "testbox"
+    assert "id_hash" in st["sessions"]["S1"]
+    assert (out / "manifest.tsv").exists()
+
+    # second run over the SAME unchanged file -> nothing new (read-once)
+    summary2 = distill.run(str(tmp_path / "projects"), ["machines"], str(out), str(state), host="testbox")
+    assert summary2["digests_written"] == 0
