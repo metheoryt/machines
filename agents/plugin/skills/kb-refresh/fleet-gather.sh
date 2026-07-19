@@ -48,6 +48,27 @@ local_host_id() {
   [ -n "$id" ] && printf '%s\n' "$id" || printf '%s\n' "$live"
 }
 
+remote_distill_script() {
+  # Static run-script executed on a remote via `bash -s -- <hostid> <nroots>
+  # <root>... <match>...`. All dynamic values arrive as positional args; the
+  # only expansion is a leading ~ → remote $HOME (distill.py does NOT expanduser
+  # an explicit --projects-root).
+  cat <<'EOS'
+set -euo pipefail
+host="$1"; shift
+nroots="$1"; shift
+roots=(); for _ in $(seq 1 "$nroots"); do roots+=("$1"); shift; done
+margs=(); for m in "$@"; do margs+=(--match "$m"); done
+mkdir -p ~/.cache/kb-digests
+for root in "${roots[@]}"; do
+  root="${root/#\~/$HOME}"
+  python3 ~/.cache/distill.py --projects-root "$root" \
+    --out ~/.cache/kb-digests --state ~/.cache/kb-harvest-state.json \
+    --host "$host" "${margs[@]}"
+done
+EOS
+}
+
 detect_hosts() {
   # Echoes every fleet workstation alias present in ~/.ssh/config, one per
   # line. Does NOT exclude the current box — the OS hostname never matches

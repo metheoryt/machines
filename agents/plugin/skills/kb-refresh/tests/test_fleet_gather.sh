@@ -60,6 +60,19 @@ eq "$(printf '%s\n' "$rw" | sed -n 2p)" '~/.claude/projects'                  'r
 ru="$(roots_for_platform nixos '')"
 eq "$ru" '~/.claude/projects' 'roots unix: single WSL/home root'
 
+# ── remote_distill_script: static, argv-driven, per-root loop ─────────────────
+rds="$(remote_distill_script)"
+printf '%s\n' "$rds" | grep -q -- '--projects-root' || fail 'rds: has --projects-root'
+printf '%s\n' "$rds" | grep -q -- '--host'          || fail 'rds: passes --host'
+printf '%s\n' "$rds" | grep -q '~/.cache/distill.py' || fail 'rds: invokes pushed distiller'
+# argv-driven (values arrive as positional args, not interpolated):
+printf '%s\n' "$rds" | grep -q 'shift'              || fail 'rds: consumes positional args'
+printf '%s\n' "$rds" | grep -qF '"$@"'              || fail 'rds: reads remaining args'
+# leading-~ expansion against remote $HOME:
+printf '%s\n' "$rds" | grep -qF '${root/#\~/$HOME}' || fail 'rds: expands leading ~ against HOME'
+# It is valid bash:
+printf '%s\n' "$rds" | bash -n || fail 'rds: emitted script is not valid bash'
+
 got="$(detect_hosts | sort | tr '\n' ' ')"
 # 'desktop' absent from config -> excluded; 'hub' never included
 [ "$got" = "latitude server " ] || { echo "FAIL: got '$got'"; exit 1; }
