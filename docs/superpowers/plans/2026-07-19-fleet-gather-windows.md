@@ -418,7 +418,7 @@ main() {
     # MUST be bash-wrapped — a bare `ssh $h hostname` runs in PowerShell and
     # returns the native Windows name.
     local remote_live
-    remote_live="$(ssh "$alias" bash -lc 'hostname' 2>/dev/null || true)"
+    remote_live="$(ssh -n "$alias" bash -lc 'hostname' 2>/dev/null || true)"
     if [ -n "$remote_live" ] && \
        [ "$(local_host_id "$FLEET_JSON" "$remote_live")" = "$self_id" ]; then
       echo "[$alias] is this box, skipping self" >&2
@@ -426,7 +426,7 @@ main() {
     fi
 
     # Reachability + cache dir (bash-wrapped; PowerShell mkdir has no -p).
-    if ! ssh "$alias" bash -lc 'mkdir -p ~/.cache/kb-digests' 2>/dev/null; then
+    if ! ssh -n "$alias" bash -lc 'mkdir -p ~/.cache/kb-digests' 2>/dev/null; then
       echo "[$alias] skipped (unreachable)" >&2
       continue
     fi
@@ -451,7 +451,7 @@ main() {
 
     # Merge the remote's advanced watermark back (only its `sessions`).
     local tmp_state; tmp_state="$(mktemp)"
-    if ssh "$alias" bash -lc 'cat ~/.cache/kb-harvest-state.json' > "$tmp_state" 2>/dev/null; then
+    if ssh -n "$alias" bash -lc 'cat ~/.cache/kb-harvest-state.json' > "$tmp_state" 2>/dev/null; then
       python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
         || echo "[$alias] state merge-back failed" >&2
     fi
@@ -460,7 +460,7 @@ main() {
     # Pull digests via tar (rsync fails on Windows). Exclude manifest.tsv — the
     # local manifest accumulates and a plain copy would clobber it.
     echo "[$alias] pulling digests…" >&2
-    ssh "$alias" bash -lc 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
+    ssh -n "$alias" bash -lc 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
       | tar xf - -C "$out" 2>/dev/null \
       || echo "[$alias] digest pull failed" >&2
   done < <(detect_hosts "$FLEET_JSON")
@@ -560,5 +560,6 @@ git commit -m "docs(kb): fleet-gather now handles the Windows fleet"
 
 - **Test file source order:** the fixture `fleet.json` heredoc (`fixture_json=`) must be created before ANY test block that passes it (Tasks 1, 3, 5). If you place the fixture inside the Task 1 jq-guard but Task 5's `detect_hosts` block ends up earlier in the file, hoist the `fixture_json=` heredoc to just after the `trap …` line so it is unconditional and first. Keep the top-of-file scaffolding (`tmp="$(mktemp -d)"`, `trap`, `export HOME="$tmp"`, `KB_GATHER_NO_MAIN=1 source "$script"`) intact.
 - **`grep -P`** (PCRE) is used in tests for `\t`; it is available in the GNU grep the fleet uses. If a box lacks `-P`, swap to `grep -qE $'…\t…'` with a literal tab.
+- **`ssh -n` inside the `while read … done < <(detect_hosts)` loop is mandatory** on every remote call that does NOT already redirect its own stdin (the `hostname` probe, the `mkdir` reachability check, the merge-back state `cat` pull, the digest `tar` pull). A bare `ssh` reads stdin by default and would drain the loop's process-substitution stream, so the sweep would silently process only the FIRST host. Do NOT add `-n` to the `cat > …` pushes (stdin = the file via `< file`) or the piped distill dispatch (stdin = the `remote_distill_script` pipe). *(Corrected here after a Task-6 review caught the drain bug.)*
 - **Do NOT run `main` / the live harvest** as part of this plan — that is Job 2, downstream, run from the `~/machines` main checkout after this branch FF-merges. Implementation here is code + offline tests only.
 ```
