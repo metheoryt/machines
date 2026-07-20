@@ -10,65 +10,67 @@ runs a per-repo **setup script** on every fresh worktree. That script is the
 gitignored local config from the base checkout and delegates to a repo-specific
 hook. Two gaps make adopting it per repo a manual, error-prone chore:
 
-1. **Wiring the setup field is hand-work.** The setup command lives in the
-   machine-local, Orca-owned `orca-data.json`, mirrored in two places
-   (`.repos[]` and `.projectHostSetups[]`), keyed per repo. Pointing a repo at
-   the dispatcher means pasting the one-liner into the Orca UI once per repo per
-   machine, and it only sticks after the repo has been opened in Orca once.
+1. **Knowing what to wire.** The setup command lives in Orca's per-repo settings
+   (stored machine-locally in the Orca-owned `orca-data.json`). Pointing a repo
+   at the dispatcher means knowing the exact one-liner and that it only sticks
+   after the repo has been opened in Orca once — easy to get wrong or forget.
 2. **Per-repo custom rules have no on-ramp.** The dispatcher already delegates to
    a committed `$repo/.orca/worktree-setup.sh`, but nothing scaffolds that file
    or its optional gortex wiring — you write it from scratch each time.
 
 ## Solution
 
-One **skill** in the cyphy plugin, invocable as `/orca-setup`. Run once per repo
-per machine, it (a) scaffolds the repo's committed `.orca/worktree-setup.sh`
-custom-rules delegate and (b) wires that repo's Orca setup field to the shared
-dispatcher. Same **hybrid architecture as `/ship`**: `SKILL.md` orchestrates the
-gated, user-in-the-loop steps; a committed, unit-tested `wire-orca.sh` does the
-deterministic `orca-data.json` mutation.
+One **skill** in the cyphy plugin, invocable as `/orca-setup`. Run once per repo,
+it (a) scaffolds the repo's committed `.orca/worktree-setup.sh` custom-rules
+delegate and (b) **prints** the exact setup-script command for the user to paste
+into Orca's per-repo settings themselves.
 
-Explicitly **not** a subagent: it mutates machine-local config and commits a
-file — it wants the user in the loop and the harness safety classifier on the
-writes. A detached context buys nothing.
+The skill **never writes `orca-data.json` and never asks the user to close
+Orca.** The user does the field-wiring through the Orca UI — a two-second paste —
+while the skill does the parts worth automating: the guard, the scaffold, and a
+**read-only** check of the current wiring so the printed guidance is accurate
+("already wired, nothing to do" vs "paste this"). This trades a fragile,
+machine-local, IDE-racing write for a copy-paste the user controls.
+
+Explicitly **not** a subagent: it commits a file and reasons about the repo — it
+wants the user in the loop. A detached context buys nothing.
 
 ## Locked decisions
 
 | # | Decision |
 |---|----------|
-| 1 | **Form:** one cyphy-plugin skill, `/orca-setup`. Not a subagent. One-time per-repo, per-machine. |
-| 2 | **Architecture:** hybrid — `SKILL.md` runs the gated steps; a committed, unit-tested `wire-orca.sh` does the deterministic JSON write; `worktree-setup.template.sh` is the scaffold. |
-| 3 | **Propagate scope:** wire-on-scaffold only — one repo per run. "All repos" = run it once in each fleet-sync repo. No bulk loop over Orca's DB. |
+| 1 | **Form:** one cyphy-plugin skill, `/orca-setup`. Not a subagent. One-time per-repo. |
+| 2 | **Architecture:** `SKILL.md` orchestrates; a committed `worktree-setup.template.sh` is the scaffold; an optional **read-only** `orca-status.sh` reports current wiring. The skill **prints** the setup one-liner for the user to paste; it never writes `orca-data.json`, never closes Orca. |
+| 3 | **Field wiring is manual (by the user, in the Orca UI).** The skill prints the exact command + where to paste it, and read-only-reports current state. No config mutation, no bulk propagation. "All repos" = run it once per repo. |
 | 4 | **Rules location:** committed `$base/.orca/worktree-setup.sh` (synced across the fleet, travels with the repo — the dispatcher checks it first). |
 | 5 | **Gortex block:** readiness prep only (daemon up + base repo tracked + base-slug marker), opt-in. NOT creation-time overlay registration — a fresh worktree has zero uncommitted edits, so an overlay would be empty; the working agent registers its own overlay later per `cyphy:worktree-agent`. |
 | 6 | **Identity:** match Orca entries on **normalized origin URL → `projectId`**, never path (path is per-machine/per-worktree). Resolve the base checkout via `git rev-parse --git-common-dir`. Refuse work/Pure repos (origin `thepureapp/*`) — pure-dev flow. |
-| 7 | **JSON write:** backup-first, Orca-closed, both mirrors, idempotent no-op, never clobber a foreign setup, graceful stop when the repo is unknown to Orca. |
 
 ## Components & file layout
 
 ```
 agents/plugin/skills/orca-setup/
-  SKILL.md                     # orchestration procedure (gated steps)
-  wire-orca.sh                 # deterministic orca-data.json writer (jq), unit-tested
+  SKILL.md                     # orchestration procedure (guard, scaffold, print)
   worktree-setup.template.sh   # the committed .orca/ scaffold
-  tests/wire-orca.test.sh      # mocks orca-data.json + a temp repo, covers the matrix
+  orca-status.sh               # read-only current-wiring check (never writes)
+  tests/orca-setup.test.sh     # mocks orca-data.json + a temp repo
 ```
 
-- **`SKILL.md`** — the ordered procedure the agent follows for an `/orca-setup`
-  run. Links to the dispatcher and `cyphy:worktree-agent` rather than
-  duplicating them.
-- **`wire-orca.sh`** — deterministic, non-interactive. Input: the target
-  `orca-data.json` path, the normalized `projectId`, and the setup one-liner.
-  Emits a single status token per the matrix below. Reusable by hand.
+- **`SKILL.md`** — the ordered procedure the agent follows. Links to the
+  dispatcher and `cyphy:worktree-agent` rather than duplicating them.
 - **`worktree-setup.template.sh`** — the scaffold written to
   `$base/.orca/worktree-setup.sh`. Marker-delimited managed blocks so re-runs
   update only what the skill owns.
-- **`tests/wire-orca.test.sh`** — same mock-the-tools style as
+- **`orca-status.sh`** — deterministic, **read-only**. Input: the
+  `orca-data.json` path, the normalized `projectId`, and the dispatcher
+  one-liner. Emits one status token (matrix below). Never opens the file for
+  writing; safe to run while Orca is open. Reusable by hand.
+- **`tests/orca-setup.test.sh`** — same mock-the-tools style as
   `fleet-pull.test.sh` / `worktree-workflow.test.sh`.
 
 ## Control flow of an `/orca-setup` run
 
-`SKILL.md` drives; `wire-orca.sh` does the JSON half.
+`SKILL.md` drives; `orca-status.sh` does the read-only inspection.
 
 1. **Resolve identity & guard.**
    - Base checkout = parent of `git rev-parse --git-common-dir` (works from a
@@ -91,39 +93,38 @@ agents/plugin/skills/orca-setup/
    - If the file already exists → don't clobber; update only the managed
      (marker-delimited) blocks and show a diff. Offer to `git add` it.
 
-3. **Wire the Orca setup field** (machine-local; `wire-orca.sh`).
-   - **Precondition — repo known to Orca:** if no entry matches the `projectId`,
-     the repo hasn't been opened in Orca yet → tell the user to open it once,
-     stop gracefully (Orca can't be pre-seeded).
-   - **Precondition — Orca closed:** the write lands on Orca's *next launch*;
-     writing while Orca runs races its own rewrite. If an Orca process is
-     running, ask the user to quit it first.
-   - Back up `orca-data.json` (timestamped) before writing.
-   - Set `scripts.setup` = `bash "$HOME/machines/scripts/orca-worktree-setup.sh"`
-     in **both mirrors**: `.repos[]` and `.projectHostSetups[]` for the matched
-     entry.
-   - **Idempotent:** already the dispatcher → no-op. A *different* non-empty
-     setup (e.g. pure-dev) → do **not** clobber; report and ask.
-   - Report what changed; note it takes effect on next Orca launch.
+3. **Print the setup command + report current state** (no writes).
+   - Run `orca-status.sh` (read-only) against the local `orca-data.json` for the
+     matched `projectId`, then print guidance tailored to the result:
+     - **WIRED** → "Already pointed at the dispatcher — nothing to do."
+     - **UNWIRED** / **ABSENT** → print the exact one-liner and where to paste it
+       in Orca:
 
-## Per-write decision matrix (`wire-orca.sh`)
+       ```
+       bash "$HOME/machines/scripts/orca-worktree-setup.sh"
+       ```
 
-For the matched `projectId` entry (both mirrors):
+       Paste into Orca → the repo's settings → **Setup script** field. (If the
+       repo isn't listed in Orca yet, open it once so it appears, then paste.)
+     - **CONFLICT** → "A different setup script is configured (`<value>`).
+       Replace it with the dispatcher one-liner only if you mean to; otherwise
+       leave it." — never presumes.
+   - No backup, no Orca-closed requirement, no field mutation. The user applies
+     it in the UI; it takes effect on the next worktree Orca creates.
+
+## Current-wiring status matrix (`orca-status.sh`, read-only)
+
+For the matched `projectId` entry:
 
 ```
 entry present?
-  no        -> ABSENT (repo not opened in Orca; can't pre-seed)
-current setup == dispatcher one-liner?
-  yes       -> UNCHANGED (idempotent no-op)
-current setup empty?
-  yes       -> WROTE (both mirrors set)
-current setup is some OTHER command?
-  yes       -> CONFLICT (foreign setup, e.g. pure-dev; not clobbered — caller asks)
+  no                                   -> ABSENT   (repo not opened in Orca yet)
+current setup == dispatcher one-liner? -> WIRED    (nothing to do)
+current setup empty?                   -> UNWIRED  (print the one-liner to paste)
+current setup is some OTHER command?   -> CONFLICT (report the value; user decides)
 ```
 
-`wire-orca.sh` always backs up before any write and never touches an entry other
-than the matched `projectId`. The Orca-running check and the user prompts live in
-`SKILL.md` (the gated half), not in the deterministic writer.
+The tool only reads. `SKILL.md` turns the token into the guidance above.
 
 ## Discovery & identity
 
@@ -137,49 +138,51 @@ than the matched `projectId`. The Orca-running check and the user prompts live i
   path, which differs per machine and per worktree.
 - **`orca` CLI:** `~/.local/bin/orca` (regenerated per Orca upgrade by
   `provision/orca-serve.sh`) is **not depended upon** — it isn't present on
-  every box and exposes no persistent setup-field setter. The skill reads/edits
-  `orca-data.json` directly (the store the CLI itself uses). If the CLI is
-  present it may be used to *read* the registry (`orca repo list --json`), but
-  the JSON is the source of truth.
+  every box. The read-only status check parses `orca-data.json` directly (the
+  store the CLI itself uses). If the CLI is present it may be used to *read* the
+  registry (`orca repo list --json`), but the JSON is the source of truth.
 
 ## Machine scope
 
 Orca's repo/worktree registry is **per-runtime, i.e. per host** (the WSL runtime
 and a Windows runtime keep separate registries). `orca-data.json` is not synced.
-So `/orca-setup` is a per-machine action — run it on each box where you want the
-repo wired. The committed `.orca/worktree-setup.sh` (step 2) *does* sync, so the
-custom rules travel; only the machine-local field-wiring (step 3) repeats.
+The committed `.orca/worktree-setup.sh` (step 2) *does* sync, so the custom rules
+travel; the field-wiring (step 3) is per-machine — but since the user applies it
+in the UI, "run per box" is just "paste per box." The skill's printed guidance is
+identical on every machine.
 
 ## Error handling
 
-- Every gate that can't proceed (foreign setup, repo unknown to Orca, Orca
-  running) **stops and asks** — it never guesses or clobbers.
+- The skill **never mutates Orca config** — the worst case is a printed command
+  the user doesn't paste. No backup/rollback surface.
+- Every ambiguous state (foreign setup, repo not opened) is *reported*, not
+  acted on — the user decides.
 - The scaffold is non-fatal by construction; a bad delegate can't block Orca.
-- `wire-orca.sh` backs up before writing and mutates only the matched entry.
+- `orca-status.sh` opens `orca-data.json` read-only; safe with Orca running.
 
 ## Testing
 
-`tests/wire-orca.test.sh`, mocking a fixture `orca-data.json` + a temp git repo
+`tests/orca-setup.test.sh`, mocking a fixture `orca-data.json` + a temp git repo
 (as `fleet-pull.test.sh` mocks ssh/git):
 
 - **projectId match** — origin variants canonicalize to the same `projectId`.
-- **Work-repo refusal** — `thepureapp/*` origin is refused before any write.
-- **No-entry graceful stop** — unknown `projectId` → `ABSENT`, no write.
-- **Backup created** — a timestamped backup exists before the file is modified.
-- **Both mirrors written** — `.repos[]` and `.projectHostSetups[]` both updated.
-- **Idempotent no-op** — a second run on an already-wired entry → `UNCHANGED`.
-- **Foreign setup not clobbered** — a pure-dev-style setup → `CONFLICT`, value
-  untouched.
+- **Work-repo refusal** — `thepureapp/*` origin is refused before anything else.
+- **Status: ABSENT** — unknown `projectId` → `ABSENT`.
+- **Status: WIRED** — entry already at the dispatcher one-liner → `WIRED`.
+- **Status: UNWIRED** — empty setup → `UNWIRED`.
+- **Status: CONFLICT** — a pure-dev-style setup → `CONFLICT`, value reported.
+- **Read-only** — `orca-data.json` is byte-identical after `orca-status.sh` runs.
 - **Scaffold non-fatal** — the generated `.orca/worktree-setup.sh` exits 0 even
   when its steps fail.
 
 ## Non-goals
 
-- No bulk propagation across Orca's whole repo DB (decision #3).
+- No writing to `orca-data.json` — the skill prints; the user pastes (decision #3).
+- No bulk propagation across Orca's repo DB.
 - No creation-time gortex overlay (decision #5) — readiness prep only.
 - No work/Pure-repo support — pure-dev PR flow.
 - No dependency on the `orca` CLI being installed.
-- Not a general Orca-config editor — scoped to the worktree-setup field.
+- Not a general Orca-config editor.
 
 ## Where this work lands
 
