@@ -42,6 +42,45 @@ self_alias() {
     "$FLEET_JSON" 2>/dev/null | head -1
 }
 
+# Script piped to each member. $1 = normalized target url. Prints ONE token.
+REMOTE_SCRIPT='set -u
+target="$1"
+roots="$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly"
+norm() {
+  local u="$1"
+  u="${u%.git}"; u="${u#ssh://}"; u="${u#git+ssh://}"; u="${u#https://}"; u="${u#http://}"
+  u="${u#git@}"; u="${u#*@}"; u="${u/://}"
+  printf "%s" "$u" | awk -F/ "{ \$1=tolower(\$1) }1" OFS=/
+}
+found=""
+for root in $roots; do
+  for d in "$root" "$root"/*; do
+    { [ -d "$d/.git" ] || [ -f "$d/.git" ]; } || continue
+    o="$(git -C "$d" remote get-url origin 2>/dev/null)" || continue
+    if [ "$(norm "$o")" = "$target" ]; then found="$d"; break 2; fi
+  done
+done
+[ -n "$found" ] || { echo "SKIP absent"; exit 0; }
+[ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] || { echo "SKIP dirty"; exit 0; }
+before="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
+if git -C "$found" pull --ff-only origin main >/dev/null 2>&1; then
+  after="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
+  if [ "$before" = "$after" ]; then echo "OK up-to-date"; else echo "OK $before..$after"; fi
+else
+  echo "SKIP diverged"
+fi'
+
+# Reachability probe + remote run for one member. Prints one status token.
+run_member() {
+  local alias="$1" target="$2"
+  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" true 2>/dev/null; then
+    printf 'SKIP unreachable\n'; return 0
+  fi
+  local res
+  res="$(printf '%s' "$REMOTE_SCRIPT" | $SSH "$alias" bash -s "$target" 2>/dev/null)"
+  printf '%s\n' "${res:-SKIP no-output}"
+}
+
 # main() is added in Task 3. Only run it when executed, not when sourced.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   :  # main "$@"  (wired in Task 3)
