@@ -7,7 +7,7 @@
 # ahead/behind counts shown by git are accurate within one interval. The actual
 # pull is left to you / the agent, done deliberately when the tree is safe.
 # (For the flake repo itself, services.nixRepoAutoPull additionally fast-forwards
-# it via rebase — see modules/system/self-update.nix. The two are complementary.)
+# it via merge --ff-only — see modules/system/self-update.nix. The two are complementary.)
 #
 # Safety: runs as the repo owner (not root), never blocks on a credential or host
 # prompt (BatchMode + GIT_TERMINAL_PROMPT=0), and times out per-repo so one
