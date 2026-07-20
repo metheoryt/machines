@@ -211,6 +211,15 @@ elsewhere to sync. Do NOT put secrets here.
   `sudo -n true` fails with the no_new_privs error, I'm inside Orca — hand the
   `just switch` to the user (or they relaunch Claude from a plain terminal).
 
+- **The `Bash` tool is Git Bash / POSIX sh — NOT PowerShell — even on Windows.**
+  PowerShell here-string syntax `@'...'@` is not parsed there: the literal `@'`
+  and `'@` delimiter lines leak straight into the command. (Hit 2026-07-19: a
+  `git commit -m @'...'@` produced a commit whose subject was a bare `@` with the
+  real message below and a trailing `@` — had to `--amend`.) For multi-line
+  strings in the `Bash` tool use a POSIX heredoc (`command <<'EOF' … EOF`, or
+  `git commit -F - <<'EOF'`); reserve `@'…'@` for the separate **PowerShell**
+  tool. Rule of thumb: pick the quoting for the tool you're calling, not the OS.
+
 ## Orca IDE — detecting the session & what it means (empirical, probed 2026-07-15)
 
 - **Sessions may be launched from the Orca IDE instead of a bare terminal — this
