@@ -90,26 +90,46 @@ in place on the server, so it is its own source of truth and rarely pulls; an
 auto-converge-on-pull trigger has no value there (YAGNI). Sibling repos are
 therefore pull-only (below).
 
-### 2. Convergence job (detached, root)
+### 2. Convergence: OS-agnostic plumbing + a per-OS delegate
 
-Why detached + root:
-- **Detached:** an inline hook would make every `/ship` block minutes-per-box,
-  serially, with output swallowed by `fleet-pull.sh`'s `>/dev/null`. Fire-and-forget
-  removes that regression.
-- **Root oneshot:** the converge unit runs as root; the pull stays a user action.
-  This is how `nixos-rebuild switch` gets its privilege **without** wiring
-  passwordless sudo for the pulling user.
+Split responsibilities so no OS knowledge leaks into the plumbing:
 
-What it runs (per OS, idempotent, "sync software but skip already-applied one-time
-settings"):
-- **Linux / WSL / non-nix:** the existing per-os provisioner (`provision/linux.sh`
-  or the manifest-driven `provision.sh` role executors). Each step is
-  check-then-act; software install no-ops cheaply when present.
-- **NixOS:** `nixos-rebuild switch` **against the committed `flake.lock`** — applies
-  exactly the software/config the shipper committed and tested. Gate the heavy
-  rebuild on the merge actually touching `*.nix` / `flake.*`
-  (`git diff --name-only ORIG_HEAD HEAD`); otherwise skip it (config that is
-  symlinked — Claude config, memory — is already live from the pull).
+- **Plumbing** = the systemd unit (`machines-converge.service`) / Windows Scheduled
+  Task. It only: grants privilege, detaches, and runs `.fleet/on-update.sh`. It
+  knows nothing about *what* converges.
+  - **Detached:** an inline hook would make every `/ship` block minutes-per-box,
+    serially, with output swallowed by `fleet-pull.sh`'s `>/dev/null`.
+    Fire-and-forget removes that regression.
+  - **Privileged:** the Linux unit runs as **root**; the Windows task runs as
+    **SYSTEM/admin**. The pull stays an unprivileged user action. This is how
+    `nixos-rebuild switch` / `provision/windows.ps1` get privilege **without**
+    wiring passwordless sudo for the pulling user. The delegate assumes it is
+    privileged.
+
+- **Delegate** = `machines/.fleet/on-update.sh` (POSIX sh, repo-owned) owns **all**
+  policy: detect the box class and route (idempotent, "sync software but skip
+  already-applied one-time settings"):
+  - **NixOS** (`[ -e /etc/NIXOS ]`): `nixos-rebuild switch --flake .#$(hostname)`
+    **against the committed `flake.lock`** — applies exactly the software/config the
+    shipper committed and tested. Gate the heavy rebuild on the merge actually
+    touching `*.nix` / `flake.*` (`git diff --name-only ORIG_HEAD HEAD`); otherwise
+    skip (symlinked config — Claude config, memory — is already live from the pull).
+  - **Linux / WSL / non-nix:** `bash provision/linux.sh` (or the manifest-driven
+    `provision.sh` role executors). Each step is check-then-act; software install
+    no-ops cheaply when present.
+  - **Windows** (Git-for-Windows `uname` = `MINGW*`/`MSYS*`): `powershell -File
+    provision/windows.ps1`.
+
+  Consolidating the `linux.sh`-vs-`provision.sh`-vs-`nixos-rebuild` routing in the
+  delegate keeps the hook and the unit/task fully generic — a second repo's delegate
+  can route however it likes.
+
+**Changed-range is captured at hook time, not delegate time.** The delegate runs
+detached, seconds-to-minutes later, and `ORIG_HEAD` can move if another pull fires
+in that window (timer ~10 min; a rebuild can outlast it). So the hook records the
+`ORIG_HEAD` and `HEAD` SHAs at fire time and hands them to the delegate (env vars or
+a state file the unit/task reads); the delegate's `*.nix`/`flake.*` gate diffs that
+captured range, never a live `ORIG_HEAD`.
 
 Constraint — **convergence must never dirty the tracked tree.** `bootstrap.sh`
 symlinks and provision writes config; every write must target a gitignored or
