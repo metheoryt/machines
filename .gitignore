@@ -47,3 +47,9 @@ provision/secrets/
 
 # Gortex daemon per-repo sidecar DB — machine-local index state, never commit.
 .gortex/
+
+# Per-host convergence state + runtime root (à la ~/.config). Gitignored so
+# converge.sh / provision writes never trip the clean-tree gate. Per-host by
+# construction — never synced. See docs/superpowers/specs/2026-07-21-fleet-
+# converge-self-healing-sync-design.md §5.
+/.machines/
