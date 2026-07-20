@@ -128,5 +128,15 @@ tgt_uptodate="$(normalize_url "$up_uptodate")"
 got="$(run_member extra "$tgt_uptodate")"
 [ "$got" = "OK up-to-date" ] && pass "extra up-to-date" || die "extra -> '$got' (want OK up-to-date)"
 
+# --- full run via main(): self (latitude, LOCAL_TAILNET_IP=100.64.0.2) excluded ---
+# Reset boxes: server behind (OK ff), desktop absent, hub unreachable (already),
+# latitude is SELF so must NOT appear.
+out="$(FLEET_JSON="$FLEET" LOCAL_TAILNET_IP="100.64.0.2" SSH="mock_ssh" \
+       main "$up" 2>/dev/null)"
+printf '%s' "$out" | grep -qE '^latitude' && die "self latitude should be excluded" || pass "self excluded"
+printf '%s' "$out" | grep -qE '^server .*OK'      && pass "table server OK"      || die "table missing server OK: $out"
+printf '%s' "$out" | grep -qE '^desktop .*SKIP'   && pass "table desktop SKIP"   || die "table missing desktop SKIP: $out"
+printf '%s' "$out" | grep -qE '^hub .*unreachable'&& pass "table hub unreachable"|| die "table missing hub: $out"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

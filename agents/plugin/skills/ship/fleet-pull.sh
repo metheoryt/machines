@@ -81,7 +81,24 @@ run_member() {
   printf '%s\n' "${res:-SKIP no-output}"
 }
 
-# main() is added in Task 3. Only run it when executed, not when sourced.
+main() {
+  local raw="${1:-}"
+  [ -n "$raw" ] || { echo "usage: fleet-pull.sh <origin-url>" >&2; return 0; }
+  local target self
+  target="$(normalize_url "$raw")"
+  self="$(self_alias)"
+  printf 'Fleet pull of %s  (self: %s)\n' "$target" "${self:-unknown}"
+  printf '%-10s %s\n' 'MEMBER' 'RESULT'
+  local m
+  while read -r m; do
+    [ -n "$m" ] || continue
+    [ "$m" = "$self" ] && continue
+    printf '%-10s %s\n' "$m" "$(run_member "$m" "$target")"
+  done < <(jq -r '.machines | keys[]' "$FLEET_JSON" 2>/dev/null)
+  return 0
+}
+
+# Only run main when executed, not when sourced (tests source this file).
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  :  # main "$@"  (wired in Task 3)
+  main "$@"
 fi
