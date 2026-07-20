@@ -50,7 +50,12 @@ mkdir -p "$tmp/home"
 mock_ssh() {
   while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
   local alias="$1"; shift
-  if [ "${1:-}" = "true" ]; then
+  # Reachability probe (bash -c true, or legacy bare true) always ends in
+  # "true"; the work call (bash -s <target>) always ends in the target.
+  if [ "${@: -1}" = "true" ]; then
+    # Model a PowerShell/Windows box: no bare `true`, only bash works.
+    # A bare-`true` probe ($1 != "bash") fails; a bash-wrapped probe succeeds.
+    if [ "$alias" = "winbox" ] && [ "${1:-}" != "bash" ]; then return 1; fi
     grep -qx "$alias" "$UNREACHABLE" && return 1 || return 0
   fi
   # $@ is now: bash -s <target> ; run it locally with this box's HOME on stdin.
@@ -137,6 +142,15 @@ printf '%s' "$out" | grep -qE '^latitude' && die "self latitude should be exclud
 printf '%s' "$out" | grep -qE '^server .*OK'      && pass "table server OK"      || die "table missing server OK: $out"
 printf '%s' "$out" | grep -qE '^desktop .*SKIP'   && pass "table desktop SKIP"   || die "table missing desktop SKIP: $out"
 printf '%s' "$out" | grep -qE '^hub .*unreachable'&& pass "table hub unreachable"|| die "table missing hub: $out"
+
+# winbox: models a PowerShell/Windows box where a bare `true` probe fails but
+# a bash-wrapped probe (`bash -c true`) succeeds. Empty $HOME (no checkout),
+# so once the probe passes the box is reachable but the repo is absent ->
+# SKIP absent, NOT SKIP unreachable. This is the regression guard for Fix 1:
+# it is RED if run_member's probe reverts to bare `true`, GREEN with `bash -c true`.
+mkdir -p "$tmp/home/winbox"
+got="$(run_member winbox "$target")"
+[ "$got" = "SKIP absent" ] && pass "winbox reachable via bash probe" || die "winbox -> '$got' (want SKIP absent)"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

@@ -73,11 +73,11 @@ fi'
 # Reachability probe + remote run for one member. Prints one status token.
 run_member() {
   local alias="$1" target="$2"
-  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" true 2>/dev/null; then
+  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -c true 2>/dev/null; then
     printf 'SKIP unreachable\n'; return 0
   fi
   local res
-  res="$(printf '%s' "$REMOTE_SCRIPT" | $SSH "$alias" bash -s "$target" 2>/dev/null)"
+  res="$(printf '%s' "$REMOTE_SCRIPT" | $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s "$target" 2>/dev/null)"
   printf '%s\n' "${res:-SKIP no-output}"
 }
 
