@@ -100,5 +100,33 @@ echo hub >> "$UNREACHABLE"
 got="$(run_member hub "$target")"
 [ "$got" = "SKIP unreachable" ] && pass "hub unreachable" || die "hub -> '$got' (want SKIP unreachable)"
 
+# desktop (reused, now that "desktop absent" already ran): diverged checkout
+# -> SKIP diverged. Local checkout carries a commit not on the bare upstream,
+# and the bare upstream independently advanced via a second clone -> real
+# divergent histories, `pull --ff-only` must refuse.
+up_div="$tmp/upstream-diverged.git"; git init -q --bare "$up_div"
+mkrepo "$tmp/home/desktop/machines"
+git -C "$tmp/home/desktop/machines" remote set-url origin "$up_div"
+git -C "$tmp/home/desktop/machines" push -q origin main
+git clone -q "$up_div" "$tmp/clone-diverged"
+git -C "$tmp/clone-diverged" config user.email t@t; git -C "$tmp/clone-diverged" config user.name t
+git -C "$tmp/clone-diverged" commit -q --allow-empty -m upstream-ahead
+git -C "$tmp/clone-diverged" push -q origin main
+git -C "$tmp/home/desktop/machines" commit -q --allow-empty -m local-ahead
+tgt_div="$(normalize_url "$up_div")"
+got="$(run_member desktop "$tgt_div")"
+[ "$got" = "SKIP diverged" ] && pass "desktop diverged" || die "desktop -> '$got' (want SKIP diverged)"
+
+# extra: clean checkout already at the bare upstream's HEAD, no new commits
+# either side -> OK up-to-date.
+mkdir -p "$tmp/home/extra"
+up_uptodate="$tmp/upstream-uptodate.git"; git init -q --bare "$up_uptodate"
+mkrepo "$tmp/home/extra/machines"
+git -C "$tmp/home/extra/machines" remote set-url origin "$up_uptodate"
+git -C "$tmp/home/extra/machines" push -q origin main
+tgt_uptodate="$(normalize_url "$up_uptodate")"
+got="$(run_member extra "$tgt_uptodate")"
+[ "$got" = "OK up-to-date" ] && pass "extra up-to-date" || die "extra -> '$got' (want OK up-to-date)"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"
