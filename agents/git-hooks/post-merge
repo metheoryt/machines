@@ -1,3 +1,32 @@
 #!/usr/bin/env bash
-# Fires after `git pull` (merge). Re-link Claude config — see _refresh-claude-config.
-exec "$(dirname "$0")/_refresh-claude-config"
+# Fires after `git pull` (merge). TWO jobs, so this does NOT `exec`:
+#   1. re-link Claude config (see _refresh-claude-config)
+#   2. fire convergence — the NON-NIX trigger (spec §1a). NixOS never runs this
+#      hook (bootstrap skips core.hooksPath there); it uses machines-converge.path.
+# Convergence is fired DETACHED and we return immediately so `/ship`'s pull never
+# blocks on a rebuild/provision. converge.sh self-gates (primary worktree, main).
+set -u
+HERE="$(cd -P "$(dirname "$0")" && pwd)"
+
+# Job 1 — config refresh (never fail the git op).
+"$HERE/_refresh-claude-config" || true
+
+# Job 2 — only the machines repo ships scripts/converge.sh.
+repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+converge="$repo/scripts/converge.sh"
+[ -f "$converge" ] || exit 0
+
+case "$(uname -s 2>/dev/null)" in
+  MINGW* | MSYS* | CYGWIN*)
+    # SYSTEM/admin task — NOT a hook-spawned Start-Process (which would inherit
+    # the pulling user's unprivileged token). MSYS_NO_PATHCONV stops Git Bash
+    # from mangling the /run and /tn switches into paths.
+    MSYS_NO_PATHCONV=1 schtasks /run /tn machines-converge >/dev/null 2>&1 || true
+    ;;
+  *)
+    # WSL / non-systemd Linux: no root unit — background converge.sh directly.
+    # (Its privilege is passwordless-sudo-or-user scope; it skips what it can't do.)
+    setsid sh "$converge" >/dev/null 2>&1 </dev/null &
+    ;;
+esac
+exit 0
