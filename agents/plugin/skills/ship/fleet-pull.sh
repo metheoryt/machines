@@ -73,7 +73,11 @@ fi'
 # Reachability probe + remote run for one member. Prints one status token.
 run_member() {
   local alias="$1" target="$2"
-  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -c true 2>/dev/null; then
+  # `</dev/null` is load-bearing: without it, ssh drains the caller's stdin,
+  # which in main()'s `while read … done < <(jq …)` loop is the member list —
+  # so the probe would swallow the remaining members and the loop would stop
+  # after the first one. (A shell-function mock does not reproduce this.)
+  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -c true </dev/null 2>/dev/null; then
     printf 'SKIP unreachable\n'; return 0
   fi
   local res

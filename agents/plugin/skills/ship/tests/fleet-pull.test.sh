@@ -2,6 +2,11 @@
 # Behavior tests for fleet-pull.sh — builds throwaway repos + a fake fleet.json,
 # mocks ssh/tailscale on PATH, asserts on the summary output.
 set -u
+# Give the script itself a /dev/null stdin so the stdin-drain regression guard
+# fails CLEANLY rather than hanging: main()'s loop keeps its own `< <(jq …)`
+# input, but direct run_member probes (whose stdin would otherwise be the
+# terminal) never block on the draining mock.
+exec </dev/null
 HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$HERE/../fleet-pull.sh"
 fail=0
@@ -53,6 +58,12 @@ mock_ssh() {
   # Reachability probe (bash -c true, or legacy bare true) always ends in
   # "true"; the work call (bash -s <target>) always ends in the target.
   if [ "${@: -1}" = "true" ]; then
+    # Real ssh drains its stdin; model that so the "ssh in a loop eats the
+    # member list" bug is reproducible. Harmless because run_member's probe
+    # redirects stdin from /dev/null — if that `</dev/null` is ever removed,
+    # this drain consumes main()'s `while read … done < <(jq …)` input and the
+    # "all non-self members processed" assertion below goes RED.
+    cat >/dev/null 2>&1 || true
     # Model a PowerShell/Windows box: no bare `true`, only bash works.
     # A bare-`true` probe ($1 != "bash") fails; a bash-wrapped probe succeeds.
     if [ "$alias" = "winbox" ] && [ "${1:-}" != "bash" ]; then return 1; fi
@@ -142,6 +153,14 @@ printf '%s' "$out" | grep -qE '^latitude' && die "self latitude should be exclud
 printf '%s' "$out" | grep -qE '^server .*OK'      && pass "table server OK"      || die "table missing server OK: $out"
 printf '%s' "$out" | grep -qE '^desktop .*SKIP'   && pass "table desktop SKIP"   || die "table missing desktop SKIP: $out"
 printf '%s' "$out" | grep -qE '^hub .*unreachable'&& pass "table hub unreachable"|| die "table missing hub: $out"
+
+# Regression guard for the "ssh in a loop drains stdin" bug: the mock's probe
+# branch drains stdin like real ssh. All three non-self members (desktop, hub,
+# server) must appear — if run_member's probe loses its `</dev/null`, the probe
+# swallows the member list and the loop stops after the first row.
+rows="$(printf '%s\n' "$out" | grep -cE '^(desktop|hub|server) ')"
+[ "$rows" -eq 3 ] && pass "loop processed all 3 non-self members (stdin intact)" \
+  || die "loop stopped early: only $rows/3 member rows in: $out"
 
 # winbox: models a PowerShell/Windows box where a bare `true` probe fails but
 # a bash-wrapped probe (`bash -c true`) succeeds. Empty $HOME (no checkout),
