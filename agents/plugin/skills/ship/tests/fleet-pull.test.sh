@@ -83,6 +83,12 @@ mkrepo() { # $1 = dir ; makes a repo with origin = machines, one commit
 }
 
 target="$(normalize_url git@github.com:metheoryt/machines.git)"
+# A target guaranteed not to collide with any real checkout the unscoped
+# `/mnt/c/Users/*/` root in REMOTE_SCRIPT might stumble onto on the host
+# running this test (e.g. this very repo's own working copy, whose origin
+# happens to equal $target) — used for the "absent" cases below so they stay
+# hermetic regardless of what's checked out on the box running the suite.
+absent_target="$(normalize_url git@github.com:metheoryt/nonesuch.git)"
 
 # server: clean checkout, behind origin -> OK (a real FF). Build an "origin" the
 # checkout can pull from, one commit ahead.
@@ -101,7 +107,7 @@ case "$got" in OK\ *..*) pass "server OK (ff)";; *) die "server -> '$got' (want 
 
 # desktop: no matching checkout -> SKIP absent
 mkdir -p "$tmp/home/desktop"
-got="$(run_member desktop "$target")"
+got="$(run_member desktop "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "desktop absent" || die "desktop -> '$got' (want SKIP absent)"
 
 # latitude: dirty checkout -> SKIP dirty
@@ -131,7 +137,7 @@ git -C "$tmp/clone-diverged" push -q origin main
 git -C "$tmp/home/desktop/machines" commit -q --allow-empty -m local-ahead
 tgt_div="$(normalize_url "$up_div")"
 got="$(run_member desktop "$tgt_div")"
-[ "$got" = "SKIP diverged" ] && pass "desktop diverged" || die "desktop -> '$got' (want SKIP diverged)"
+[ "$got" = "SKIP diverged | conv:none" ] && pass "desktop diverged" || die "desktop -> '$got' (want SKIP diverged | conv:none)"
 
 # extra: clean checkout already at the bare upstream's HEAD, no new commits
 # either side -> OK up-to-date.
@@ -142,7 +148,7 @@ git -C "$tmp/home/extra/machines" remote set-url origin "$up_uptodate"
 git -C "$tmp/home/extra/machines" push -q origin main
 tgt_uptodate="$(normalize_url "$up_uptodate")"
 got="$(run_member extra "$tgt_uptodate")"
-[ "$got" = "OK up-to-date" ] && pass "extra up-to-date" || die "extra -> '$got' (want OK up-to-date)"
+[ "$got" = "OK up-to-date | conv:none" ] && pass "extra up-to-date" || die "extra -> '$got' (want OK up-to-date | conv:none)"
 
 # --- full run via main(): self (latitude, LOCAL_TAILNET_IP=100.64.0.2) excluded ---
 # Reset boxes: server behind (OK ff), desktop absent, hub unreachable (already),
@@ -168,8 +174,23 @@ rows="$(printf '%s\n' "$out" | grep -cE '^(desktop|hub|server) ')"
 # SKIP absent, NOT SKIP unreachable. This is the regression guard for Fix 1:
 # it is RED if run_member's probe reverts to bare `true`, GREEN with `bash -c true`.
 mkdir -p "$tmp/home/winbox"
-got="$(run_member winbox "$target")"
+got="$(run_member winbox "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "winbox reachable via bash probe" || die "winbox -> '$got' (want SKIP absent)"
+
+# --- convergence column: REMOTE_SCRIPT reports .machines/last-converge ---
+# Build a found-repo with a last-converge record; run the token-builder snippet
+# the remote script uses and assert the converge token is derived from it.
+convrepo="$tmp/convrepo"; mkdir -p "$convrepo/.machines"
+printf 'rev=%s\nstatus=ok\ntimestamp=t\nreason=r\n' 1234567890abcdef > "$convrepo/.machines/last-converge"
+conv_token="$(
+  found="$convrepo"
+  cf="$found/.machines/last-converge"
+  if [ -f "$cf" ]; then
+    cs="$(sed -n 's/^status=//p' "$cf")"; cr="$(sed -n 's/^rev=//p' "$cf")"
+    echo "conv:${cs:-?}@$(printf '%s' "$cr" | cut -c1-7)"
+  else echo "conv:none"; fi
+)"
+[ "$conv_token" = "conv:ok@1234567" ] && pass "converge token from last-converge" || die "converge token: got '$conv_token'"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

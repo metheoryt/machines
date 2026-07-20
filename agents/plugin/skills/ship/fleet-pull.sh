@@ -65,10 +65,18 @@ done
 before="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
 if git -C "$found" pull --ff-only origin main >/dev/null 2>&1; then
   after="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
-  if [ "$before" = "$after" ]; then echo "OK up-to-date"; else echo "OK $before..$after"; fi
+  if [ "$before" = "$after" ]; then pull="OK up-to-date"; else pull="OK $before..$after"; fi
 else
-  echo "SKIP diverged"
-fi'
+  pull="SKIP diverged"
+fi
+conv="none"
+cf="$found/.machines/last-converge"
+if [ -f "$cf" ]; then
+  cs="$(sed -n "s/^status=//p" "$cf")"
+  cr="$(sed -n "s/^rev=//p" "$cf")"
+  conv="${cs:-?}@$(printf "%s" "$cr" | cut -c1-7)"
+fi
+echo "$pull | conv:$conv"'
 
 # Reachability probe + remote run for one member. Prints one status token.
 run_member() {
