@@ -43,7 +43,7 @@ wants the user in the loop. A detached context buys nothing.
 | 2 | **Architecture:** `SKILL.md` orchestrates; a committed `worktree-setup.template.sh` is the scaffold; an optional **read-only** `orca-status.sh` reports current wiring. The skill **prints** the setup one-liner for the user to paste; it never writes `orca-data.json`, never closes Orca. |
 | 3 | **Field wiring is manual (by the user, in the Orca UI).** The skill prints the exact command + where to paste it, and read-only-reports current state. No config mutation, no bulk propagation. "All repos" = run it once per repo. |
 | 4 | **Rules location:** committed `$base/.orca/worktree-setup.sh` (synced across the fleet, travels with the repo — the dispatcher checks it first). |
-| 5 | **Gortex block:** readiness prep only (daemon up + base repo tracked + base-slug marker), opt-in. NOT creation-time overlay registration — a fresh worktree has zero uncommitted edits, so an overlay would be empty; the working agent registers its own overlay later per `cyphy:worktree-agent`. |
+| 5 | **Gortex block:** readiness prep only — **ensure the daemon is running** (opt-in via `ORCA_GORTEX=1`). NOT creation-time overlay registration — a fresh worktree has zero uncommitted edits, so an overlay would be empty; the working agent registers its own overlay later per `cyphy:worktree-agent`, and reads its workspace slug from its own session orientation. (No `track`/slug-marker step — those CLIs can't be verified without a running daemon, and the daemon-up ensure is the load-bearing part.) |
 | 6 | **Identity:** match Orca entries on **normalized origin URL → `projectId`**, never path (path is per-machine/per-worktree). Resolve the base checkout via `git rev-parse --git-common-dir`. Refuse work/Pure repos (origin `thepureapp/*`) — pure-dev flow. |
 
 ## Components & file layout
@@ -62,9 +62,10 @@ agents/plugin/skills/orca-setup/
   `$base/.orca/worktree-setup.sh`. Marker-delimited managed blocks so re-runs
   update only what the skill owns.
 - **`orca-status.sh`** — deterministic, **read-only**. Input: the
-  `orca-data.json` path, the normalized `projectId`, and the dispatcher
-  one-liner. Emits one status token (matrix below). Never opens the file for
-  writing; safe to run while Orca is open. Reusable by hand.
+  `orca-data.json` path, the raw `origin` URL (it derives the `projectId`
+  itself), the dispatcher one-liner, and the base checkout path (fallback match
+  key). Emits one status token (matrix below). Never opens the file for writing;
+  safe to run while Orca is open. Reusable by hand.
 - **`tests/orca-setup.test.sh`** — same mock-the-tools style as
   `fleet-pull.test.sh` / `worktree-workflow.test.sh`.
 
@@ -84,12 +85,12 @@ agents/plugin/skills/orca-setup/
    - Non-fatal template (never `set -e`, always `exit 0`), matching the
      dispatcher's conventions.
    - Sections: a `log()` stderr helper; a clearly-marked **repo-specific steps**
-     stub; and an opt-in **gortex readiness** block (decision #5): ensure the
-     daemon is up (`gortex daemon start --detach` if `gortex daemon status`
-     fails), confirm the base repo is tracked, and drop a marker recording the
-     base workspace slug so the working agent's own
-     `overlay_register {workspace_id: <slug>}` is a one-liner and never hits
-     "cwd not covered".
+     stub; and an opt-in **gortex readiness** block (decision #5): when
+     `ORCA_GORTEX=1` and `gortex` is on `PATH`, ensure the daemon is up
+     (`gortex daemon start --detach` if `gortex daemon status` fails) so graph
+     tools work from the worktree and the working agent's own
+     `overlay_register` (per `cyphy:worktree-agent`) doesn't hit "cwd not
+     covered". No overlay is registered here.
    - If the file already exists → don't clobber; update only the managed
      (marker-delimited) blocks and show a diff. Offer to `git add` it.
 
@@ -166,7 +167,6 @@ identical on every machine.
 (as `fleet-pull.test.sh` mocks ssh/git):
 
 - **projectId match** — origin variants canonicalize to the same `projectId`.
-- **Work-repo refusal** — `thepureapp/*` origin is refused before anything else.
 - **Status: ABSENT** — unknown `projectId` → `ABSENT`.
 - **Status: WIRED** — entry already at the dispatcher one-liner → `WIRED`.
 - **Status: UNWIRED** — empty setup → `UNWIRED`.
