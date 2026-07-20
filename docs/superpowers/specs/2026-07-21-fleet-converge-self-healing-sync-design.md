@@ -57,10 +57,12 @@ hook.
 
 ## Components
 
-### 1. Committed `post-merge` hook
+### 1. Committed `post-merge` hook + `.fleet/on-update.sh` delegate
 
-- Lives in a committed dir, e.g. `agents/githooks/post-merge` (POSIX sh).
-- Wired via `git config core.hooksPath agents/githooks`, set once by
+- The generic hook lives in a committed dir, e.g. `agents/githooks/post-merge`
+  (POSIX sh). It is a thin dispatcher: self-gate, then run the repo's committed
+  `.fleet/on-update.sh` delegate if present, detached.
+- Wired via `git config core.hooksPath <abs>/agents/githooks`, set once by
   `agents/bootstrap.sh` (runs per profile on every OS already). Git-for-Windows
   runs `.sh` hooks under its bundled `sh`, so one hook covers all boxes.
 - **Self-gates** (all must pass, else `exit 0`):
@@ -69,13 +71,24 @@ hook.
   [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] || exit 0
   # only the deploy branch
   [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || exit 0
+  # only if this repo declares post-update steps
+  [ -f .fleet/on-update.sh ] || exit 0
   ```
-  `core.hooksPath` is per-repo (shared across worktrees), so the guard is what
-  enforces "worktrees push/ship freely, but never converge."
-- **Fires convergence detached** and returns immediately:
+- **Fires the delegate detached** and returns immediately:
   - Linux/NixOS: `systemctl start --no-block machines-converge.service`
   - Windows: `schtasks /run /tn machines-converge` (or detached `Start-Process`)
-- Only `machines` carries the hook. Sibling repos are pull-only (below).
+- `machines/.fleet/on-update.sh` is the convergence delegate (provision +
+  `nixos-rebuild`, per OS). It is the only delegate that exists now.
+
+**Scope decision (machines-only, generalizable):** the hook is wired **only into
+`machines`** for now — it is the only repo needing post-update action. The
+`.fleet/on-update.sh` convention (mirroring the existing `.orca/worktree-setup.sh`
+delegate) means any other repo can opt in later by committing its own
+`.fleet/on-update.sh` and having `bootstrap.sh` wire the hook there too — a config
+flip, not a redesign. Considered and deferred: `~/my/vps` — single-node, developed
+in place on the server, so it is its own source of truth and rarely pulls; an
+auto-converge-on-pull trigger has no value there (YAGNI). Sibling repos are
+therefore pull-only (below).
 
 ### 2. Convergence job (detached, root)
 
@@ -197,3 +210,5 @@ stance — warranted now that `.nix` config lives in this repo. Safety:
   (systemd / `.ps1` Scheduled Task / provision-inlined user timer).
 - `agents/bootstrap.sh` — per-profile installer; wires `core.hooksPath`.
 - `provision/` — the idempotent per-os/per-role convergence substrate.
+- `.orca/worktree-setup.sh` — precedent for a committed per-repo delegate script
+  the convention (`.fleet/on-update.sh`) mirrors.
