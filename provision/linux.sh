@@ -409,6 +409,57 @@ EOF
   fi
 fi
 
+# ── BEST-EFFORT: fleet self-pull timer (Trigger B) — spec 2026-07-21 ──────────
+# ~10-min ff-pull of every fleet-sync repo (provision/fleet-selfpull.sh). The
+# pull fires the repo's post-merge hook, which fires convergence — this timer
+# NEVER converges itself. systemd-user timer where available (mirrors the
+# git-autofetch install above), else a cron fallback. Idempotent.
+info "Installing fleet self-pull timer…"
+FSP="$REPO/provision/fleet-selfpull.sh"
+if [ ! -f "$FSP" ]; then
+  warn "provision/fleet-selfpull.sh not found — skipping fleet self-pull timer"
+elif systemctl --user show-environment >/dev/null 2>&1; then
+  _ud2="$HOME/.config/systemd/user"; mkdir -p "$_ud2"
+  cat > "$_ud2/fleet-selfpull.service" <<EOF
+[Unit]
+Description=Fleet self-pull (ff-only) of all fleet-sync repos
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash $FSP
+EOF
+  cat > "$_ud2/fleet-selfpull.timer" <<'UNIT'
+[Unit]
+Description=Periodic fleet self-pull
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+  if systemctl --user daemon-reload >/dev/null 2>&1 \
+     && systemctl --user enable --now fleet-selfpull.timer >/dev/null 2>&1; then
+    ok "fleet-selfpull.timer (systemd-user) installed"
+  else
+    warn "could not enable fleet-selfpull.timer"
+  fi
+elif have crontab; then
+  if crontab -l 2>/dev/null | grep -qF "$FSP"; then
+    ok "fleet-selfpull cron already present"
+  elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); /usr/bin/env bash %s >/dev/null 2>&1\n' "$FSP"; } \
+         | crontab - >/dev/null 2>&1; then
+    ok "fleet-selfpull cron installed"
+  else
+    warn "could not install fleet-selfpull cron"
+  fi
+else
+  warn "fleet-selfpull installed but not scheduled (no systemd user manager or cron)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf '\n\033[1mDone.\033[0m %s warning(s).\n\n' "$WARNINGS"
 cat <<EOF

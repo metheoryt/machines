@@ -289,6 +289,47 @@ if (Test-Path $sshdConfig) {
 
 Warn "Reachable over the tailnet only while this box has joined the Headscale tailnet (tailscale0 up, address in 100.64.0.0/10) - verify separately."
 
+# ---- 8. Fleet convergence tasks (spec 2026-07-21) ----------------------------
+# Two idempotent (-Force) Scheduled Tasks:
+#   1. machines-converge - SYSTEM task, on-demand only (fired by the post-merge
+#      hook via `schtasks /run /tn machines-converge`). Runs scripts/converge.sh
+#      under Git Bash with SYSTEM privilege so it gets admin rights WITHOUT
+#      granting the pulling user elevation.
+#   2. fleet-selfpull - repeating ~10-min task (Trigger B). Its pull fires the
+#      post-merge hook, which in turn fires machines-converge. Runs as the user.
+Step "8. Fleet convergence tasks"
+$convergeScript = Join-Path $RepoDir 'scripts\converge.sh'
+if (-not (Test-Path $convergeScript)) {
+    Warn "scripts\converge.sh not found under $RepoDir - skipping convergence task registration."
+} else {
+    # (1) machines-converge - SYSTEM, no trigger (on-demand).
+    $convAction = New-ScheduledTaskAction -Execute $GitBash `
+        -Argument "-lc `"'$repoUnix/scripts/converge.sh'`""
+    $convPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $convSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    Register-ScheduledTask -TaskName 'machines-converge' -Action $convAction `
+        -Principal $convPrincipal -Settings $convSettings -Force | Out-Null
+    Info "registered 'machines-converge' (SYSTEM, on-demand)."
+
+    # (2) fleet-selfpull - every 10 min, as the user, with jitter.
+    $selfpullPs1 = Join-Path $RepoDir 'provision\fleet-selfpull.ps1'
+    $pullAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+        -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$selfpullPs1`""
+    $pullTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+        -RepetitionInterval (New-TimeSpan -Minutes 10) `
+        -RepetitionDuration ([TimeSpan]::MaxValue)
+    $pullTrigger.RandomDelay = 'PT2M'   # jitter so boxes don't hit GitHub together
+    $pullSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 9)
+    $pullPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+    Register-ScheduledTask -TaskName 'fleet-selfpull' -Action $pullAction -Trigger $pullTrigger `
+        -Settings $pullSettings -Principal $pullPrincipal -Force | Out-Null
+    Info "registered 'fleet-selfpull' (every 10 min, jittered)."
+}
+
 # ---- Done --------------------------------------------------------------------
 Write-Host "`n=== agent environment ready ===" -ForegroundColor Green
 Info "Verify: claude --version ; ls ~\.claude (CLAUDE.md, settings.json, skills\cyphy should be symlinks into $RepoDir\agents)."
