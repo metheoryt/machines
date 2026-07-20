@@ -45,7 +45,7 @@ self_alias() {
 # Script piped to each member. $1 = normalized target url. Prints ONE token.
 REMOTE_SCRIPT='set -u
 target="$1"
-roots="$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly"
+roots="$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly /mnt/c/Users/*/"
 norm() {
   local u="$1"
   u="${u%.git}"; u="${u#ssh://}"; u="${u#git+ssh://}"; u="${u#https://}"; u="${u#http://}"
