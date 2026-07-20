@@ -21,12 +21,16 @@ it updates.
 
 ## Non-goals
 
-- **No setup skill.** The one-time wiring (hook `core.hooksPath`, timer, converge
-  unit/task, delegate) is single-repo and belongs in the existing installers
-  (`bootstrap.sh`, `provision.{sh,ps1}`, the nix module) which already run on every
-  box — not in an interactive skill. A `/fleet-onupdate-setup` skill (mirror of
-  `/orca-setup`: scaffold `.fleet/on-update.sh`, wire hooksPath, verify the task)
-  becomes worthwhile only when a **second** repo opts in. Deferred until then.
+- **No setup skill, no delegate convention, no separate repo.** All three are reuse
+  machinery with zero current reuse (convergence has exactly one consumer —
+  `machines`; `vps` is ruled out as single-node/dev-in-place). So convergence lives
+  **inline in `machines`** as `scripts/converge.sh`, wired only into `machines`.
+  Deferred until a *second* repo genuinely needs post-update action, at which point
+  the cheap generalizations become worthwhile — a `.fleet/on-update.sh` delegate
+  convention, a `/fleet-onupdate-setup` skill (mirror of `/orca-setup`), and/or
+  extracting the hook+timer mechanics into a shared repo. Each is a **code move,
+  not a redesign** — the knowledge is captured here — so building any of them now
+  would be carrying cost for a maybe.
 
 
 - **No new migration format.** The convergent, idempotent, per-os/per-role
@@ -50,10 +54,10 @@ TRIGGER B (eventual): per-OS timer            -> git pull --ff-only             
               hook self-gates (primary worktree, on main) then fires a
               DETACHED converge job (does not block the pull)
                                     |
-                          converge = per-OS idempotent provisioner
+                          converge = scripts/converge.sh (per-OS routing)
                           + NixOS: nixos-rebuild switch against the committed lock
                                     |
-                          writes last-converge result (gitignored) + journal
+                          writes result to .machines/ (gitignored) + journal
 ```
 
 Both trigger paths do the *same* `git pull --ff-only origin main`. Empirically
@@ -65,85 +69,70 @@ hook.
 
 ## Components
 
-### 1. Committed `post-merge` hook + `.fleet/on-update.sh` delegate
+### 1. Committed `post-merge` hook
 
-- The generic hook lives in a committed dir, e.g. `agents/githooks/post-merge`
-  (POSIX sh). It is a thin dispatcher: self-gate, then run the repo's committed
-  `.fleet/on-update.sh` delegate if present, detached.
+- Lives in a committed dir, e.g. `agents/githooks/post-merge` (POSIX sh).
 - Wired via `git config core.hooksPath <abs>/agents/githooks`, set once by
-  `agents/bootstrap.sh` (runs per profile on every OS already). Git-for-Windows
-  runs `.sh` hooks under its bundled `sh`, so one hook covers all boxes.
+  `agents/bootstrap.sh` (runs per profile on every OS already), **only in the
+  `machines` clone**. Git-for-Windows runs `.sh` hooks under its bundled `sh`, so
+  one hook covers all boxes.
 - **Self-gates** (all must pass, else `exit 0`):
   ```sh
   # only the primary worktree — a linked worktree never converges
   [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] || exit 0
   # only the deploy branch
   [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || exit 0
-  # only if this repo declares post-update steps
-  [ -f .fleet/on-update.sh ] || exit 0
   ```
-- **Fires the delegate detached** and returns immediately:
+  `core.hooksPath` is per-repo and shared across a repo's worktrees, so the guard is
+  what enforces "worktrees push/ship freely, but never converge."
+- **Captures the changed range, then fires convergence detached**, returning
+  immediately:
+  - records `ORIG_HEAD` + `HEAD` SHAs to `.machines/converge-range` (see below) —
+    the detached job must not re-read `ORIG_HEAD`, which can move before it runs;
   - Linux/NixOS: `systemctl start --no-block machines-converge.service`
   - Windows: `schtasks /run /tn machines-converge` (or detached `Start-Process`)
-- `machines/.fleet/on-update.sh` is the convergence delegate (provision +
-  `nixos-rebuild`, per OS). It is the only delegate that exists now.
 
-**Scope decision (machines-only, generalizable):** the hook is wired **only into
-`machines`** for now — it is the only repo needing post-update action. The
-`.fleet/on-update.sh` convention (mirroring the existing `.orca/worktree-setup.sh`
-delegate) means any other repo can opt in later by committing its own
-`.fleet/on-update.sh` and having `bootstrap.sh` wire the hook there too — a config
-flip, not a redesign. Considered and deferred: `~/my/vps` — single-node, developed
-in place on the server, so it is its own source of truth and rarely pulls; an
-auto-converge-on-pull trigger has no value there (YAGNI). Sibling repos are
-therefore pull-only (below).
+Considered and deferred: `~/my/vps` — single-node, developed in place on the server,
+so it is its own source of truth and rarely pulls; an auto-converge-on-pull trigger
+has no value there (YAGNI). Sibling repos are therefore pull-only (below).
 
-### 2. Convergence: OS-agnostic plumbing + a per-OS delegate
+### 2. Convergence: generic plumbing + `scripts/converge.sh`
 
 Split responsibilities so no OS knowledge leaks into the plumbing:
 
 - **Plumbing** = the systemd unit (`machines-converge.service`) / Windows Scheduled
-  Task. It only: grants privilege, detaches, and runs `.fleet/on-update.sh`. It
-  knows nothing about *what* converges.
+  Task. It only: grants privilege, detaches, and runs `scripts/converge.sh`.
   - **Detached:** an inline hook would make every `/ship` block minutes-per-box,
     serially, with output swallowed by `fleet-pull.sh`'s `>/dev/null`.
     Fire-and-forget removes that regression.
   - **Privileged:** the Linux unit runs as **root**; the Windows task runs as
     **SYSTEM/admin**. The pull stays an unprivileged user action. This is how
     `nixos-rebuild switch` / `provision/windows.ps1` get privilege **without**
-    wiring passwordless sudo for the pulling user. The delegate assumes it is
+    wiring passwordless sudo for the pulling user. `converge.sh` assumes it is
     privileged.
 
-- **Delegate** = `machines/.fleet/on-update.sh` (POSIX sh, repo-owned) owns **all**
-  policy: detect the box class and route (idempotent, "sync software but skip
-  already-applied one-time settings"):
+- **`scripts/converge.sh`** (POSIX sh, committed) owns **all** policy: read the
+  captured range from `.machines/converge-range`, detect the box class, and route
+  (idempotent, "sync software but skip already-applied one-time settings"):
   - **NixOS** (`[ -e /etc/NIXOS ]`): `nixos-rebuild switch --flake .#$(hostname)`
     **against the committed `flake.lock`** — applies exactly the software/config the
-    shipper committed and tested. Gate the heavy rebuild on the merge actually
-    touching `*.nix` / `flake.*` (`git diff --name-only ORIG_HEAD HEAD`); otherwise
-    skip (symlinked config — Claude config, memory — is already live from the pull).
+    shipper committed and tested. Gate the heavy rebuild on the captured range
+    actually touching `*.nix` / `flake.*`; otherwise skip (symlinked config — Claude
+    config, memory — is already live from the pull).
   - **Linux / WSL / non-nix:** `bash provision/linux.sh` (or the manifest-driven
     `provision.sh` role executors). Each step is check-then-act; software install
     no-ops cheaply when present.
   - **Windows** (Git-for-Windows `uname` = `MINGW*`/`MSYS*`): `powershell -File
     provision/windows.ps1`.
 
-  Consolidating the `linux.sh`-vs-`provision.sh`-vs-`nixos-rebuild` routing in the
-  delegate keeps the hook and the unit/task fully generic — a second repo's delegate
-  can route however it likes.
-
-**Changed-range is captured at hook time, not delegate time.** The delegate runs
-detached, seconds-to-minutes later, and `ORIG_HEAD` can move if another pull fires
-in that window (timer ~10 min; a rebuild can outlast it). So the hook records the
-`ORIG_HEAD` and `HEAD` SHAs at fire time and hands them to the delegate (env vars or
-a state file the unit/task reads); the delegate's `*.nix`/`flake.*` gate diffs that
-captured range, never a live `ORIG_HEAD`.
+  Consolidating the `linux.sh`-vs-`provision.sh`-vs-`nixos-rebuild` routing in one
+  committed script keeps the hook and the unit/task fully generic.
 
 Constraint — **convergence must never dirty the tracked tree.** `bootstrap.sh`
-symlinks and provision writes config; every write must target a gitignored or
-out-of-repo path. If convergence ever modifies a tracked file, the clean-tree gate
-(below) permanently disables all future auto-pulls on that box. The plan must
-assert/verify this.
+symlinks and provision writes config; every write must target a gitignored path
+(`.machines/`, below) or somewhere outside the repo. If convergence ever modifies a
+tracked file, the clean-tree gate permanently disables all future auto-pulls on that
+box. The plan must assert/verify this.
 
 ### 3. Per-OS self-pull timer (Trigger B)
 
@@ -175,13 +164,36 @@ Timer behavior:
 Detached convergence + git discarding the hook's exit code = a failed provision or
 rebuild is otherwise invisible, which would defeat the whole "stop hand-tuning"
 premise. So:
-- Each converge run writes a `last-converge` record to a **gitignored** path
-  (e.g. `~/.local/state/machines/last-converge` / a Windows equivalent):
+- Each converge run writes a `last-converge` record into `.machines/` (below):
   `rev`, `ok|fail`, `timestamp`, one-line reason. Full output → journal
   (`journalctl -u machines-converge` / Task Scheduler history).
-- `fleet-pull.sh` reads that record back per member and adds a column, so `/ship`'s
-  table shows convergence status alongside the pull result. (Optional follow-up: a
-  standalone `/fleet-status`.)
+- `fleet-pull.sh` reads that record back per member (over the same SSH it already
+  uses) and adds a column, so `/ship`'s table shows convergence status alongside the
+  pull result. (Optional follow-up: a standalone `/fleet-status`.)
+
+### 5. `.machines/` — gitignored per-host state root
+
+A single gitignored directory at the `machines` repo root that doubles the repo as
+its own config/runtime root (à la `~/.config`), giving a **uniform path on every
+OS** — no `~/.local/state` vs `%LOCALAPPDATA%` divergence.
+
+- **Contents:** `converge-range` (the hook-captured `ORIG_HEAD`/`HEAD`),
+  `last-converge` (status record), plus any per-host config, caches, and runtime
+  files convergence or other tooling needs.
+- **Gitignored** (`.gitignore`: `/.machines/`) — so writes into it are invisible to
+  `git status --porcelain` / `git diff` and **never trip the clean-tree gate**. This
+  is precisely why it is a safe convergence write-target.
+- **Per-host by construction:** not synced by git, so each box owns its own
+  `.machines/`. Correct for state/caches/host-config. "Transferable" = a known,
+  uniform layout you can copy/back-up/seed between boxes *deliberately*, not one git
+  drags around.
+- **Worktree note:** each working tree has its own `.machines/`, but convergence only
+  runs in the primary checkout (§1 gate), so the primary's `.machines/` is
+  authoritative; tooling that reads host state should resolve the primary checkout,
+  not a linked worktree.
+- **Clean split:** committed code → `scripts/`; gitignored state → `.machines/`.
+  The committed/ignored boundary keeps the "never dirty the tree" constraint (§2)
+  structural rather than a thing to remember.
 
 ## Edge cases / semantics
 
@@ -238,5 +250,3 @@ stance — warranted now that `.nix` config lives in this repo. Safety:
   (systemd / `.ps1` Scheduled Task / provision-inlined user timer).
 - `agents/bootstrap.sh` — per-profile installer; wires `core.hooksPath`.
 - `provision/` — the idempotent per-os/per-role convergence substrate.
-- `.orca/worktree-setup.sh` — precedent for a committed per-repo delegate script
-  the convention (`.fleet/on-update.sh`) mirrors.
