@@ -1,16 +1,19 @@
-# Periodic `git pull --rebase` of this flake repo, so the machines keep
+# Periodic `git merge --ff-only` of this flake repo, so the machines keep
 # themselves current without a manual pull.
 #
 # AUTO-PULL ONLY — deliberately does NOT run `nixos-rebuild`. Because the Claude
 # config under claude/ is symlinked into ~/.claude (see modules/home/claude.nix),
 # a pull makes config + memory edits go live immediately with no rebuild. Changes
-# to system .nix modules just land on disk and take effect at your next
-# `just switch`. (A new claude/ hook/skill file is linked at that switch too — on
-# NixOS the git-hook auto-relink in claude/git-hooks/ is intentionally a no-op.)
+# to system .nix modules just land on disk; actual convergence (nixos-rebuild) is
+# fired separately by `services.machinesConverge`
+# (modules/system/machines-converge.nix) via a root path unit watching
+# .git/ORIG_HEAD, so this service stays a pure pull backend. (A new claude/
+# hook/skill file is linked at that switch too — on NixOS the git-hook
+# auto-relink in claude/git-hooks/ is intentionally a no-op.)
 #
 # Safety: runs as the repo owner (not root), only on the configured branch, only
-# when the working tree is clean (never clobbers WIP), and aborts + logs on a
-# rebase conflict rather than leaving the tree mid-rebase.
+# when the working tree is clean (never clobbers WIP), and skips + logs on a
+# diverged (non-fast-forward) upstream rather than leaving the tree mid-merge.
 {
   config,
   lib,
@@ -20,11 +23,11 @@
   cfg = config.services.nixRepoAutoPull;
 in {
   options.services.nixRepoAutoPull = {
-    enable = lib.mkEnableOption "periodic git pull --rebase of the flake repo checkout";
+    enable = lib.mkEnableOption "periodic git merge --ff-only of the flake repo checkout";
 
     repo = lib.mkOption {
       type = lib.types.str;
-      default = "/home/me/nix";
+      default = "/home/me/machines";
       description = "Path to the flake repo checkout to keep updated.";
     };
 
@@ -49,7 +52,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     systemd.services.nix-repo-auto-pull = {
-      description = "Pull --rebase the flake repo (Claude config + memory go live via symlinks)";
+      description = "Merge --ff-only the flake repo (Claude config + memory go live via symlinks)";
       after = ["network-online.target"];
       wants = ["network-online.target"];
       path = [pkgs.git pkgs.openssh];
@@ -82,11 +85,10 @@ in {
         up_rev=$(git rev-parse '@{u}')
         [ "$head_rev" = "$up_rev" ] && exit 0
 
-        if git rebase --quiet '@{u}'; then
+        if git merge --ff-only --quiet '@{u}'; then
           echo "auto-pulled ${repo}: $head_rev -> $(git rev-parse HEAD)"
         else
-          git rebase --abort || true
-          echo "rebase conflict in ${repo} — left untouched, pull manually" >&2
+          echo "diverged (non-ff) in ${repo} — skipping, resolve manually" >&2
           exit 1
         fi
       '';
