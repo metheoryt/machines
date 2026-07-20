@@ -37,4 +37,11 @@ is_fleet_repo "$work" && die "thepureapp excluded" || pass "thepureapp excluded"
 mkdir "$tmp/plain"
 is_fleet_repo "$tmp/plain" && die "plain dir excluded" || pass "plain dir excluded"
 
+# Personal origin but no tracked upstream: must be excluded by the @{u} gate.
+noup="$tmp/noup"; git init -q "$noup"; git -C "$noup" checkout -q -b main
+git -C "$noup" config user.email t@t; git -C "$noup" config user.name t
+git -C "$noup" remote add origin git@github.com:metheoryt/other.git
+: > "$noup/f"; git -C "$noup" add .; git -C "$noup" -c commit.gpgsign=false commit -qm c1
+is_fleet_repo "$noup" && die "no-upstream excluded" || pass "no-upstream excluded"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

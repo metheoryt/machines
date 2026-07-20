@@ -9,6 +9,11 @@
 # Testable: `FLEET_SELFPULL_LIB_ONLY=1 source` loads helpers without scanning.
 set -u
 
+# Never block on a credential/host prompt (mirrors modules/system/git-autofetch).
+export GIT_TERMINAL_PROMPT=0
+: "${GIT_SSH_COMMAND:=ssh -o BatchMode=yes -o ConnectTimeout=10}"
+export GIT_SSH_COMMAND
+
 # Scan roots — same shape as fleet-pull.sh's REMOTE_SCRIPT.
 FLEET_ROOTS="${FLEET_ROOTS:-$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly}"
 

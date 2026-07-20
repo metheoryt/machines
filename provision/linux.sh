@@ -426,6 +426,7 @@ Description=Fleet self-pull (ff-only) of all fleet-sync repos
 
 [Service]
 Type=oneshot
+TimeoutStartSec=8min
 ExecStart=/usr/bin/env bash $FSP
 EOF
   cat > "$_ud2/fleet-selfpull.timer" <<'UNIT'
