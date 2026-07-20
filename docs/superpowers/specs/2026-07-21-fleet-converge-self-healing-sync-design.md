@@ -54,8 +54,8 @@ TRIGGER B (eventual): per-OS timer            -> git pull --ff-only             
               hook self-gates (primary worktree, on main) then fires a
               DETACHED converge job (does not block the pull)
                                     |
-                          converge = scripts/converge.sh (per-OS routing)
-                          + NixOS: nixos-rebuild switch against the committed lock
+                          converge = scripts/converge.sh (per-OS routing;
+                          NixOS branch = nixos-rebuild switch against committed lock)
                                     |
                           writes result to .machines/ (gitignored) + journal
 ```
@@ -89,8 +89,16 @@ hook.
   immediately:
   - records `ORIG_HEAD` + `HEAD` SHAs to `.machines/converge-range` (see below) —
     the detached job must not re-read `ORIG_HEAD`, which can move before it runs;
-  - Linux/NixOS: `systemctl start --no-block machines-converge.service`
-  - Windows: `schtasks /run /tn machines-converge` (or detached `Start-Process`)
+  - Linux/NixOS (systemd present): `systemctl start --no-block machines-converge.service`
+  - Windows: `schtasks /run /tn machines-converge` — fires the SYSTEM/admin task
+    (§2). It must be `schtasks`, **not** a hook-spawned `Start-Process`: the latter
+    inherits the pulling user's token and would run `provision/windows.ps1` without
+    the privilege the design keeps out of the pulling user.
+  - **WSL / non-systemd Linux:** mirror the Trigger-B timer fallback — no
+    `machines-converge.service` exists, so route the same cron/user-timer backend
+    `provision/linux.sh` installs (§3). Privilege there is passwordless-sudo-or-user
+    scope, not a root unit; `converge.sh` skips the steps it can't perform and logs.
+    (On a WSL box `converge.sh` runs `provision/linux.sh`, never `nixos-rebuild`.)
 
 Considered and deferred: `~/my/vps` — single-node, developed in place on the server,
 so it is its own source of truth and rarely pulls; an auto-converge-on-pull trigger
@@ -191,9 +199,9 @@ OS** — no `~/.local/state` vs `%LOCALAPPDATA%` divergence.
   runs in the primary checkout (§1 gate), so the primary's `.machines/` is
   authoritative; tooling that reads host state should resolve the primary checkout,
   not a linked worktree.
-- **Clean split:** committed code → `scripts/`; gitignored state → `.machines/`.
-  The committed/ignored boundary keeps the "never dirty the tree" constraint (§2)
-  structural rather than a thing to remember.
+- **Clean split:** committed code (`scripts/converge.sh` + `agents/githooks/`) vs
+  gitignored state (`.machines/`). The committed/ignored boundary keeps the "never
+  dirty the tree" constraint (§2) structural rather than a thing to remember.
 
 ## Edge cases / semantics
 
@@ -238,8 +246,12 @@ stance — warranted now that `.nix` config lives in this repo. Safety:
 - Retarget default `repo` from stale `/home/me/nix` to the real checkout
   (`~/machines`).
 - `rebase` → `pull --ff-only` (see Diverged, above).
-- Add the detached-converge trigger (`ExecStartPost` or fold into the converge unit)
-  gated on `*.nix`/`flake.*` change.
+- **No converge trigger here.** The timer only ff-pulls; that pull fires the
+  committed `post-merge` hook, which fires convergence — the same unified path as
+  `/ship` (§Architecture). Do **not** add an `ExecStartPost` converge step: it would
+  double-fire on every timer pull and duplicate the `*.nix`/`flake.*` gate that
+  `converge.sh` already owns (§2 — "converge.sh owns all policy"). `self-update.nix`
+  stays a pure pull backend.
 
 ## Reused precedent (all in-repo)
 
