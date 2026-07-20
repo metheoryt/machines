@@ -21,6 +21,14 @@ it updates.
 
 ## Non-goals
 
+- **No setup skill.** The one-time wiring (hook `core.hooksPath`, timer, converge
+  unit/task, delegate) is single-repo and belongs in the existing installers
+  (`bootstrap.sh`, `provision.{sh,ps1}`, the nix module) which already run on every
+  box — not in an interactive skill. A `/fleet-onupdate-setup` skill (mirror of
+  `/orca-setup`: scaffold `.fleet/on-update.sh`, wire hooksPath, verify the task)
+  becomes worthwhile only when a **second** repo opts in. Deferred until then.
+
+
 - **No new migration format.** The convergent, idempotent, per-os/per-role
   provisioner already exists (`provision/`). We add the *trigger*, not a new DSL.
 - **No local version mutation.** Convergence *applies* the pulled state; it never
