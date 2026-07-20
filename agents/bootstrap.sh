@@ -5,6 +5,11 @@
 # macOS and Linux. On NixOS/nix-darwin the same links are also declared in
 # modules/home/claude.nix — either mechanism produces identical symlinks.
 #
+# It also brings up gortex (code-intelligence MCP server): installs the binary on
+# Windows if missing (NixOS gets it declaratively via pkgs/gortex.nix) and runs
+# the machine-local `gortex install --no-claude-md` wiring. See the "Gortex"
+# section below.
+#
 # The links point straight at the repo working tree, so editing a file in
 # ~/.claude (from ANY repo you're working in) edits the tracked file here; commit
 # from this repo and pull elsewhere to propagate.
@@ -267,6 +272,73 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
   link_entries_into "$SRC_DIR/plugin/hooks"  "$CODEX_DIR/hooks"
   link_entries_into "$CODEX_SRC/subagents"   "$CODEX_DIR/agents"
 fi
+
+# ── gortex: code-intelligence engine / MCP server ────────────────────────────
+# Two concerns, split by platform (see docs/superpowers/specs/2026-07-20-gortex-
+# bootstrap-wiring-design.md):
+#   binary — NixOS gets it declaratively (pkgs/gortex.nix + development.nix);
+#            Windows installs it here if missing. Other off-nix platforms are
+#            left to the user (no automated installer wired for them yet).
+#   wiring — `gortex install --no-claude-md` regenerates the machine-local
+#            skills/agents/hooks + user MCP config for the profile being
+#            provisioned. --no-claude-md is LOAD-BEARING: it keeps gortex's rule
+#            block OUT of the shared, git-tracked agents/AGENTS.md (reached via
+#            the ~/.claude/CLAUDE.md symlink), so bootstrap never mutates the
+#            fleet-synced instruction file. Generated artefacts stay machine-local
+#            and are never committed (see commit 4a4ec52). The daemon is NOT
+#            started here — `gortex mcp` (from .mcp.json) brings it up per session.
+
+# Resolve the gortex binary: PATH first, then the known Windows install dir (the
+# PS installer's user-PATH edit isn't visible to the already-running shell).
+gortex_bin() {
+  if command -v gortex >/dev/null 2>&1; then command -v gortex; return 0; fi
+  local win="${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/gortex/gortex.exe"
+  [ -x "$win" ] && { printf '%s' "$win"; return 0; }
+  return 1
+}
+
+# Windows only: install the binary if missing. Install-if-missing (never on every
+# run) so a plain `git pull`-triggered bootstrap doesn't re-download. Upgrades:
+# re-run the installer by hand — it floats to latest.
+ensure_gortex_binary() {
+  [ "$IS_WINDOWS" -eq 1 ] || return 0   # NixOS/macOS/other-Linux: not installed here
+  gortex_bin >/dev/null 2>&1 && { printf '  = gortex binary present\n'; return 0; }
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would install gortex (PowerShell installer)\n'; return 0
+  fi
+  printf '  + installing gortex (PowerShell installer)…\n'
+  powershell.exe -NoProfile -Command "irm https://get.gortex.dev/install.ps1 | iex" \
+    || printf '  ✗ gortex install failed — run manually: irm https://get.gortex.dev/install.ps1 | iex\n'
+}
+
+# All platforms except nix activation: regenerate machine-local wiring for the
+# profile in $CLAUDE_DIR. Idempotent — skips a profile already wired unless
+# GORTEX_REWIRE=1 forces a refresh (e.g. after a binary upgrade).
+ensure_gortex_wired() {
+  # nix activation also runs bootstrap.sh; keep that fast/offline. On NixOS the
+  # wiring runs from a login shell via `just gortex-setup` (GORTEX_ALLOW_NIX_WIRE
+  # overrides the skip if ever needed).
+  if [ -e /etc/NIXOS ] && [ -z "${GORTEX_ALLOW_NIX_WIRE:-}" ]; then
+    printf '  = skipping gortex wiring under NixOS (run: just gortex-setup)\n'; return 0
+  fi
+  local gx; gx="$(gortex_bin)" || { printf '  ! gortex not installed — skipping wiring\n'; return 0; }
+  # Marker: gortex hooks land in this profile's settings.local.json (default
+  # posture installs hooks). Cheap, robust across gortex versions.
+  if [ -z "${GORTEX_REWIRE:-}" ] && grep -q gortex "$CLAUDE_DIR/settings.local.json" 2>/dev/null; then
+    printf '  = gortex already wired: %s (GORTEX_REWIRE=1 to refresh)\n' "$CLAUDE_DIR"; return 0
+  fi
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would wire gortex: %s install --yes --agents claude-code --no-claude-md (%s)\n' "$gx" "$CLAUDE_DIR"
+    return 0
+  fi
+  printf '  + wiring gortex for %s…\n' "$CLAUDE_DIR"
+  "$gx" install --yes --agents claude-code --no-claude-md --claude-config-dir "$CLAUDE_DIR" \
+    || printf '  ✗ gortex install failed for %s\n' "$CLAUDE_DIR"
+}
+
+printf '\nGortex\n'
+ensure_gortex_binary
+ensure_gortex_wired
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
 # (merge / rebase / checkout) re-link without a manual bootstrap run. core.hooksPath

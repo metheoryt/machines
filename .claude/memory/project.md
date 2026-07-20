@@ -722,6 +722,27 @@ global + per-host memory). One bullet per fact under a topical heading.
   slash so it doesn't also match the committable `.gortex.yaml` wiring; `gortex init`
   re-sprays `.claude/skills/generated/gortex-*` even with `--no-skills`, so that path
   stays gitignored too. Never commit either — machine-local index state.
+- **`agents/bootstrap.sh` installs + wires gortex** (ce67699): Windows gets the
+  binary via the upstream PowerShell installer if missing (NixOS via
+  `pkgs/gortex.nix` + `me.nix` daemon); then `gortex install --no-claude-md` (re)wires
+  the profile. **`--no-claude-md` is load-bearing** — the shared `AGENTS.md` is
+  reached via the `~/.claude/CLAUDE.md` symlink, so without it bootstrap would gut the
+  fleet-synced instruction file on every run (that flag is the ONLY thing keeping the
+  wiring off a committed file). **Verified empirically:** `gortex install` otherwise
+  writes ONLY machine-local targets — `~/.claude.json` (MCP), gitignored
+  `settings.local.json` (hooks), and generated `skills/commands/agents/` — it does
+  **not** touch the shared, symlinked `agents/settings.json` (there is no
+  `--no-settings` flag, but none is needed). So the wiring step is safe to re-run.
+  Idempotency guard: skips when the profile is already wired (`gortex` present in
+  `settings.local.json`); `GORTEX_REWIRE=1` forces it. Skipped under nix activation
+  (`[ -e /etc/NIXOS ]`) — run it on latitude via `just gortex-setup`.
+- **Note:** the settings-normalizer (Claude Code itself, on `/config`/model changes)
+  rewrites `~/.claude/settings.json` **through the symlink** into the committed
+  `agents/settings.json`, reordering keys — a recurring source of a spurious
+  `M agents/settings.json`. It's cosmetic (no semantic change); not caused by gortex.
+- **`just update-gortex`** (`scripts/update-gortex.sh`, wired into `just update`) bumps
+  `pkgs/gortex.nix` version+hash — the NixOS half of the "float" story (Windows floats
+  via the installer). Resolves its target as `<scripts>/../pkgs/gortex.nix`.
 
 ## Pending follow-ups
 

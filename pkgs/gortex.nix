@@ -16,11 +16,11 @@
 #   nix hash convert --hash-algo sha256 --to sri <hex>
 stdenv.mkDerivation (finalAttrs: {
   pname = "gortex";
-  version = "0.56.0";
+  version = "0.60.0";
 
   src = fetchurl {
     url = "https://github.com/zzet/gortex/releases/download/v${finalAttrs.version}/gortex_linux_amd64.tar.gz";
-    hash = "sha256-yxpd9TOOo0VYlnn7pKj4V9nSuIzBYZeKM68dOR5XUOs=";
+    hash = "sha256-MbRFBuSO6UINeF1M7zjwz5QMebjn89WyJ6eAjp832cM=";
   };
 
   sourceRoot = ".";
