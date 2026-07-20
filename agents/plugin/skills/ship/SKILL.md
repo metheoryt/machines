@@ -38,7 +38,7 @@ HTTPS-push, gh-vs-git auth). Read those if anything below is unclear.
 
 Run the deterministic pull and show its table verbatim:
 
-    "$SCRIPT_DIR/fleet-pull.sh" "$(git remote get-url origin)"
+    agents/plugin/skills/ship/fleet-pull.sh "$(git remote get-url origin)"
 
 It FF-pulls `main` on every other member, skipping any that are unreachable,
 absent, dirty, or diverged. It never runs a destructive op. Report the table;
