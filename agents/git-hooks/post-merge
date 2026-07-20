@@ -26,7 +26,11 @@ case "$(uname -s 2>/dev/null)" in
   *)
     # WSL / non-systemd Linux: no root unit — background converge.sh directly.
     # (Its privilege is passwordless-sudo-or-user scope; it skips what it can't do.)
-    setsid sh "$converge" >/dev/null 2>&1 </dev/null &
+    if command -v setsid >/dev/null 2>&1; then
+      setsid sh "$converge" >/dev/null 2>&1 </dev/null &
+    else
+      nohup sh "$converge" >/dev/null 2>&1 </dev/null &
+    fi
     ;;
 esac
 exit 0

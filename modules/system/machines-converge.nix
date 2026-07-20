@@ -52,8 +52,14 @@ in {
 
     # Path unit: fire the service whenever .git/ORIG_HEAD changes. PathChanged
     # (not PathModified) so it also catches the file's first creation. Git
-    # rewrites ORIG_HEAD on every merge/ff-pull; an already-up-to-date pull skips
-    # merge and does NOT rewrite it — correct (nothing to converge).
+    # rewrites ORIG_HEAD on every `git pull`/merge INCLUDING an already-up-to-date
+    # one (only a bare `git fetch` leaves it untouched), so this path unit can
+    # fire even when nothing advanced (e.g. /ship's fleet-pull.sh pulls
+    # unconditionally with no head==upstream pre-check). That's harmless:
+    # converge.sh's range is converged-rev..HEAD, so a no-op fire sees an empty
+    # diff and skips the rebuild. self-update.nix's timer additionally guards
+    # head==upstream before merging, so on the timer path it won't even rewrite
+    # ORIG_HEAD on a no-op.
     systemd.paths.machines-converge = {
       description = "Fire convergence when the machines repo pulls (ORIG_HEAD changes)";
       wantedBy = ["paths.target"];

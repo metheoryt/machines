@@ -15,7 +15,8 @@ set -u
 # put in a throwaway repo) $0 stays the *sourcing* script, but BASH_SOURCE[0]
 # is the sourced file — this is what lets REPO resolve to the right checkout
 # in both modes.
-REPO="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE:-$0}")/.." && pwd)"   # scripts/ -> repo root
+REPO="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE:-$0}")/.." && pwd)" || exit 0   # scripts/ -> repo root
+[ -n "$REPO" ] || exit 0
 STATE="$REPO/.machines"
 CONVERGED_REV="$STATE/converged-rev"
 STATUS_FILE="$STATE/last-converge"

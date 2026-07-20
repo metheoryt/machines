@@ -106,11 +106,17 @@
         extraSpecialArgs = specialArgs // {hostname = hostName;};
         modules = [./modules/home/me.nix];
       };
+
+    # bind once, expose under both the short flake attr (`just` uses `latitude`)
+    # and the OS hostname (`nixos-rebuild --flake .#$(hostname)` / converge.sh
+    # resolve by hostname `latitude5520`).
+    latitudeSystem = mkHost "latitude" "latitude5520" [
+      nixos-hardware.nixosModules.dell-latitude-5520
+    ];
   in {
     nixosConfigurations = {
-      latitude = mkHost "latitude" "latitude5520" [
-        nixos-hardware.nixosModules.dell-latitude-5520
-      ];
+      latitude = latitudeSystem;
+      latitude5520 = latitudeSystem;
     };
 
     homeConfigurations = {
