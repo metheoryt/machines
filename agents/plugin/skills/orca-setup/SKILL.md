@@ -31,8 +31,10 @@ in `cyphy:worktree-agent`.
 ## Step 2 — Scaffold `$BASE/.orca/worktree-setup.sh` (committed → synced)
 
 Copy the template verbatim if the repo has no delegate yet; if it exists, DO NOT
-clobber — show a diff and only offer to refresh the marker-delimited managed
-blocks.
+clobber — show a diff and let the user decide. On a refresh, only ever regenerate
+the `orca-setup:managed:gortex-readiness` block (skill-owned). NEVER regenerate
+`orca-setup:managed:repo-steps` — that block holds the user's own repo-specific
+steps and must be preserved.
 
 ```bash
 TEMPLATE=~/machines/agents/plugin/skills/orca-setup/worktree-setup.template.sh
@@ -55,6 +57,8 @@ Check how the repo is currently wired, then print guidance. This reads
 `orca-data.json` read-only — safe with Orca open.
 
 ```bash
+# Assumes Orca's default profile; a non-default profile yields ABSENT (harmless —
+# you just re-paste the idempotent one-liner). Point DATA elsewhere if needed.
 DATA="$HOME/.config/orca/profiles/local-default/orca-data.json"
 DISPATCH='bash "$HOME/machines/scripts/orca-worktree-setup.sh"'
 STATUS=$(~/machines/agents/plugin/skills/orca-setup/orca-status.sh "$DATA" "$ORIGIN" "$DISPATCH" "$BASE")
