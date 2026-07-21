@@ -36,6 +36,8 @@ ENVIRONMENT:
 
 ## LATITUDE verification
 - [x] Task 3 dry-build: PASS on latitude5520 (2026-07-21). Evaluated clean; built machines-converge.path/.service + retargeted nix-repo-auto-pull.service; net-tools-2.10 fetched (pkgs.nettools/hostname OK); flake hostname-alias resolved.
-- [ ] Live converge chain: after `just switch`, real ff-pull → machines-converge.path fires → machines-converge.service runs → git gates pass as ROOT (safe.directory env) → nixos-rebuild switch. STILL PENDING (needs live switch on latitude; sudo/tty over ssh).
+- [x] Live converge chain fired on latitude (2026-07-21): switched → real ff-pull → machines-converge.path fired → root machines-converge.service ran converge.sh → git CLI gates PASSED as root → class=nixos, range computed.
+- [x] CAUGHT LIVE BUG (fix a1d90aa): nixos-rebuild aborted with libgit2 error 7 "repository path is not owned by current user". The GIT_CONFIG_* env trio fixes the git CLI only; Nix's flake fetcher uses libgit2, which ignores GIT_CONFIG_* and runs its own ownership check. Dry-build (runs as me) never hit it. Fix: ExecStartPre writes safe.directory into root's global gitconfig (both CLI + libgit2 read it); dropped the env trio. Deployed to latitude, ExecStartPre confirmed present.
+- [ ] Final confirm: fixed unit yields status=ok on a real-commit trigger (in progress).
 
 ## Notes
