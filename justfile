@@ -102,13 +102,12 @@ boot: _check-machines-link
     sudo nixos-rebuild boot --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Configuration set for next boot!"
 
-# Update flake inputs (and out-of-tree pinned packages like rustdesk, zed, pycharm)
+# Update flake inputs (and out-of-tree pinned packages like rustdesk, orca)
 update:
     @echo "📦 Updating flake inputs..."
     nix flake update --flake {{flake_dir}}
     @just update-rustdesk
-    @just update-zed
-    @just update-pycharm
+    @just update-orca
     @just update-gortex
     @echo "✅ Flake inputs updated!"
 
@@ -117,15 +116,10 @@ update-rustdesk:
     @echo "📦 Checking for new RustDesk release..."
     {{flake_dir}}/scripts/update-rustdesk.sh
 
-# Bump zed-bin.nix to the latest stable upstream release (also run by `update`)
-update-zed:
-    @echo "📦 Checking for new Zed release..."
-    {{flake_dir}}/scripts/update-zed.sh
-
-# Bump pycharm-bin.nix to the latest upstream release (also run by `update`)
-update-pycharm:
-    @echo "📦 Checking for new PyCharm release..."
-    {{flake_dir}}/scripts/update-pycharm.sh
+# Bump orca-bin.nix to the latest upstream release (also run by `update`)
+update-orca:
+    @echo "📦 Checking for new Orca release..."
+    {{flake_dir}}/scripts/update-orca.sh
 
 # Bump pkgs/gortex.nix to the latest upstream release (also run by `update`).
 # NixOS-only (needs `nix store prefetch-file`); the Windows boxes float via the

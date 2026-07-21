@@ -99,8 +99,6 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `home/ssh.nix` | SSH client config generated from fleet.json |
 | `home/claude.nix` | Claude Code profile bootstrap wiring |
 | `home/orca-bin.nix` | Orca IDE AppImage wrapper |
-| `home/pycharm-bin.nix` | PyCharm AppImage wrapper |
-| `home/zed-bin.nix` | Zed AppImage wrapper |
 | `home/rustdesk-bin.nix` | RustDesk client wrapper |
 | `home/rustdesk-config.nix` | RustDesk server key + known-peer IDs |
 

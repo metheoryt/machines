@@ -7,10 +7,6 @@
   # Upstream 1.4.7 Flutter build, repackaged from the official .deb because
   # nixpkgs lags (rustdesk-flutter 1.4.5). Already wraps in WAYLAND_DISPLAY="".
   rustdesk = pkgs.callPackage ./rustdesk-bin.nix {};
-  # Upstream Zed, repackaged from the official tarball (nixpkgs lags at 1.3.6).
-  zed-bin = pkgs.callPackage ./zed-bin.nix {};
-  # nixpkgs jetbrains.pycharm bumped to latest upstream (it's the same tarball).
-  pycharm = pkgs.callPackage ./pycharm-bin.nix {};
   # Orca — worktree IDE for AI agents; upstream AppImage (not in nixpkgs).
   orca = pkgs.callPackage ./orca-bin.nix {};
   # Same derivation as the system package (modules/programs/development.nix);
@@ -38,7 +34,6 @@ in {
     telegram-desktop
 
     # Development tools
-    pycharm # upstream-latest override — see ./pycharm-bin.nix (nixpkgs lags)
     orca # worktree IDE for AI agents — see ./orca-bin.nix (upstream AppImage)
     claude-code
     codex # OpenAI Codex CLI (config provisioned by bootstrap's personal run); attr unverified on Windows — confirm with `just check` on a Nix host
@@ -365,6 +360,19 @@ in {
 
   # Seed the mutable theme include ONCE (never overwrites a user-set value), so a
   # fresh machine gets the default theme. Switch it later with `ghostty-theme <name>`.
+  # Prune the stale ~/.local/bin/orca-ide symlink left by Orca's in-app
+  # "install shell command" (CliInstaller). It points at the AppImage's own
+  # resources/bin/orca-ide launcher, execs the UNwrapped Electron binary (dies on
+  # libnspr4.so), and — being on PATH ahead of the Nix profile — SHADOWS the
+  # working Nix-wrapped orca-ide. See modules/home/orca-bin.nix's GOTCHA. Guarded
+  # on -L so we only ever remove a symlink, never a real file the user placed.
+  home.activation.orcaCliShadowPrune = config.lib.dag.entryAfter ["writeBoundary"] ''
+    stale="$HOME/.local/bin/orca-ide"
+    if [ -L "$stale" ]; then
+      run rm -v "$stale"
+    fi
+  '';
+
   # Default pairs Ghostty's native dark/light auto-switch (follows GNOME's
   # color-scheme setting) with delta's dark:Dracula/light:GitHub split above.
   home.activation.ghosttyThemeSeed = config.lib.dag.entryAfter ["writeBoundary"] ''
@@ -472,34 +480,6 @@ in {
     associations.added = {
       "x-scheme-handler/tg" = "org.telegram.desktop.desktop";
       "x-scheme-handler/tonsite" = "org.telegram.desktop.desktop";
-    };
-  };
-
-  programs.zed-editor = {
-    enable = true;
-    # Upstream prebuilt — see ./zed-bin.nix. nixpkgs zed-editor lags.
-    package = zed-bin;
-    userSettings = {
-      # Auto-update is compiled into the upstream binary; the Nix store is
-      # read-only and we manage versions via `just update-zed`, so disable it.
-      auto_update = false;
-      agent = {
-        default_model = {
-          provider = "anthropic";
-          model = "claude-sonnet-4-6-latest";
-          enable_thinking = false;
-        };
-        favorite_models = [];
-        model_parameters = [];
-      };
-      agent_servers."claude-acp".type = "registry";
-      ui_font_size = 16;
-      buffer_font_size = 15;
-      theme = {
-        mode = "system";
-        light = "One Light";
-        dark = "One Dark";
-      };
     };
   };
 
