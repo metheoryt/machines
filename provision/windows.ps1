@@ -318,8 +318,11 @@ if (-not (Test-Path $convergeScript)) {
     $pullAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
         -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$selfpullPs1`""
     $pullTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-        -RepetitionInterval (New-TimeSpan -Minutes 10) `
-        -RepetitionDuration ([TimeSpan]::MaxValue)
+        -RepetitionInterval (New-TimeSpan -Minutes 10)
+    # [TimeSpan]::MaxValue serializes to P99999999DT23H59M59S, which
+    # Register-ScheduledTask rejects as "incorrectly formatted or out of range".
+    # An empty Duration means "repeat indefinitely" and registers cleanly.
+    $pullTrigger.Repetition.Duration = ''
     $pullTrigger.RandomDelay = 'PT2M'   # jitter so boxes don't hit GitHub together
     $pullSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
