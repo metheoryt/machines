@@ -8,11 +8,10 @@
 # wrapType2 exposes the app as bin/${pname} (i.e. `orca-ide`); the extracted
 # tree gives us the desktop entry + hicolor icons to install.
 #
-# No update automation (unlike zed-bin's `just update-orca`) — bump manually:
-#   v=1.4.141   # new version
-#   nix store prefetch-file --json \
-#     https://github.com/stablyai/orca/releases/download/v$v/orca-linux.AppImage
-# then edit `version` + `hash` below from the printed SRI hash.
+# To bump: run `just update-orca` (also triggered by `just update`/`just
+# upgrade`), which rewrites `version` + `hash` below from the latest release.
+# Manual: edit `version`, then `nix store prefetch-file --json \
+#   https://github.com/stablyai/orca/releases/download/v$version/orca-linux.AppImage`.
 #
 # GOTCHA — do NOT use Orca's in-app "install shell command" (its CliInstaller):
 # on NixOS it writes ~/.local/bin/orca-ide → resources/bin/orca-ide (the AppImage's
@@ -20,19 +19,20 @@
 # `libnspr4.so: cannot open shared object file` — it bypasses this appimageTools
 # bwrap wrapper (the only thing that supplies nss/nspr/glib/cups). ~/.local/bin
 # also precedes the Nix profile on PATH, so that stale symlink SHADOWS the working
-# `orca-ide` here. Fix: `rm ~/.local/bin/orca-ide` and rely on this Nix-wrapped
-# binary for both GUI and CLI.
+# `orca-ide` here. The `home.activation.orcaCliShadowPrune` script in
+# modules/home/me.nix removes that symlink on every switch; rely on this
+# Nix-wrapped binary for both GUI and CLI.
 {
   lib,
   appimageTools,
   fetchurl,
 }: let
   pname = "orca-ide";
-  version = "1.4.141";
+  version = "1.4.148";
 
   src = fetchurl {
     url = "https://github.com/stablyai/orca/releases/download/v${version}/orca-linux.AppImage";
-    hash = "sha256-T2PyhuLjyitN/A9VFaur7SFlZ8Y53za5ifNGbgAEjIo=";
+    hash = "sha256-jELQCfwtwUuO73Uw4Lks3dZuTGRYzMMRtMz1qLDVsO8=";
   };
 
   appimageContents = appimageTools.extract {inherit pname version src;};
