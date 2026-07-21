@@ -50,21 +50,30 @@ in {
       script = "${pkgs.bash}/bin/bash ${cfg.repo}/scripts/converge.sh";
     };
 
-    # Path unit: fire the service whenever .git/ORIG_HEAD changes. PathChanged
-    # (not PathModified) so it also catches the file's first creation. Git
-    # rewrites ORIG_HEAD on every `git pull`/merge INCLUDING an already-up-to-date
-    # one (only a bare `git fetch` leaves it untouched), so this path unit can
-    # fire even when nothing advanced (e.g. /ship's fleet-pull.sh pulls
-    # unconditionally with no head==upstream pre-check). That's harmless:
-    # converge.sh's range is converged-rev..HEAD, so a no-op fire sees an empty
-    # diff and skips the rebuild. self-update.nix's timer additionally guards
-    # head==upstream before merging, so on the timer path it won't even rewrite
-    # ORIG_HEAD on a no-op.
+    # Path unit: fire the service whenever the repo's HEAD advances. We watch
+    # .git/logs/HEAD (the HEAD reflog), NOT .git/ORIG_HEAD, for two reasons:
+    #   1. Coverage: ORIG_HEAD is written by `git merge`/`reset`/`rebase`, but a
+    #      plain fast-forward `git pull` (the fleet's common path, --ff-only
+    #      everywhere) does NOT reliably rewrite it — so ORIG_HEAD silently
+    #      misses real advances. logs/HEAD is APPENDED on every HEAD movement,
+    #      fast-forward included, so it can't miss a pull that moved HEAD.
+    #   2. Robustness: git updates ORIG_HEAD by atomic rename-replace (write
+    #      .lock, rename over the file), which swaps the inode and lets
+    #      systemd's inotify watch go stale after the first event — the observed
+    #      "first pull fires, second is missed" failure. logs/HEAD is appended
+    #      in place (stable inode), so the watch survives repeated events.
+    # PathChanged fires on IN_CLOSE_WRITE, which git's append-and-close on
+    # logs/HEAD produces, and also catches the file's first creation.
+    # A refs-only `git fetch` (the git-autofetch timer) does NOT move HEAD, so it
+    # never appends here — no spurious fires. converge.sh's own git calls
+    # (rev-parse/diff/ls-files) don't move HEAD either, so no self-retrigger.
+    # A no-op fire is harmless regardless: converge.sh's range is
+    # converged-rev..HEAD, so an empty diff skips the rebuild.
     systemd.paths.machines-converge = {
-      description = "Fire convergence when the machines repo pulls (ORIG_HEAD changes)";
+      description = "Fire convergence when the machines repo's HEAD advances (reflog append)";
       wantedBy = ["paths.target"];
       pathConfig = {
-        PathChanged = "${cfg.repo}/.git/ORIG_HEAD";
+        PathChanged = "${cfg.repo}/.git/logs/HEAD";
         Unit = "machines-converge.service";
       };
     };
