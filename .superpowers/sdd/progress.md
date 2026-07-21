@@ -37,10 +37,10 @@ ENVIRONMENT:
 ## LATITUDE verification
 - [x] Task 3 dry-build: PASS on latitude5520 (2026-07-21). Evaluated clean; built machines-converge.path/.service + retargeted nix-repo-auto-pull.service; net-tools-2.10 fetched (pkgs.nettools/hostname OK); flake hostname-alias resolved.
 - [x] Live converge chain fired on latitude (2026-07-21): switched → real ff-pull → machines-converge.path fired → root machines-converge.service ran converge.sh → git CLI gates PASSED as root → class=nixos, range computed.
-- [x] CAUGHT LIVE BUG (fix a1d90aa): nixos-rebuild aborted with libgit2 error 7 "repository path is not owned by current user". The GIT_CONFIG_* env trio fixes the git CLI only; Nix's flake fetcher uses libgit2, which ignores GIT_CONFIG_* and runs its own ownership check. Dry-build (runs as me) never hit it. Fix: ExecStartPre writes safe.directory into root's global gitconfig (both CLI + libgit2 read it); dropped the env trio. Deployed to latitude, ExecStartPre confirmed present.
-- [ ] Final confirm: fixed unit yields status=ok on a real-commit trigger (in progress).
+- [x] LIVE BUG #1 — libgit2 ownership (fix a1d90aa): nixos-rebuild aborted with libgit2 error 7 "repository path is not owned by current user". GIT_CONFIG_* env fixes the git CLI only; Nix's flake fetcher uses libgit2, which ignores GIT_CONFIG_* and runs its own ownership check. Dry-build (runs as me) never hit it. Fix: ExecStartPre writes safe.directory into root's global gitconfig (both CLI + libgit2 read it); dropped the env trio. VERIFIED: root nixos-rebuild switch succeeds, status=ok.
+- [x] LIVE BUG #2 — trigger missed 2nd consecutive advance (fix 41cf9db): path unit watched .git/ORIG_HEAD, which (a) a fast-forward pull does not reliably rewrite, and (b) git rewrites via atomic rename-replace, staling systemd's inotify watch after the first event. Switched PathChanged to .git/logs/HEAD (appended in place on every HEAD advance; refs-only fetch + converge's read-only git calls don't move HEAD → no spurious/self fires). VERIFIED via 2-consecutive-advance test: both C1 and C2 fired, converged-rev tracked HEAD each time.
+- [x] Non-nix skip path VERIFIED: range with no *.nix/flake change → status=ok "config already live via symlinks", converged-rev advances (no growing range).
+
+## ALL VERIFICATION COMPLETE — feature live on latitude + both Windows boxes. main @ 78e58f3.
 
 ## Notes
-
-## trigger-test advance 1 (110123)
-## trigger-test advance 2 (110148)
