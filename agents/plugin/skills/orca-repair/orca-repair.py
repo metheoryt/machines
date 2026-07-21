@@ -41,16 +41,41 @@ RUNTIME_FILE = os.path.expanduser("~/.config/orca/orca-runtime.json")
 
 
 # ── Orca-IDE liveness (the gotcha: do NOT trust $TERM_PROGRAM) ────────────────
+def _orca_kind(cmd):
+    """Classify an Orca process by its (lowercased) cmdline.
+
+    'daemon' — the headless background daemon (daemon-entry.js) that outlives the
+               window; 'ide' — the desktop UI. None if not an Orca process at all.
+    """
+    if "orca-ide" not in cmd and "squashfs-root/orca" not in cmd:
+        return None
+    return "daemon" if "daemon-entry" in cmd else "ide"
+
+
 def orca_running():
-    """Return a live Orca IDE pid if the desktop app is up, else None."""
+    """Return (pid, kind) for a live Orca process if one is up, else None.
+
+    kind is 'ide' (the desktop UI — its presence is also signalled by
+    orca-runtime.json) or 'daemon' (the headless daemon-entry.js). The UI wins
+    when both are up. BOTH own orca-data.json, so --apply must not write while
+    either runs — but the caller distinguishes them, because a lingering daemon
+    with the window already gone is the common, confusing case.
+
+    Liveness is by orca-runtime.json + /proc — NOT $TERM_PROGRAM, which can read
+    'Orca' in a plain terminal launched from an Orca session.
+    """
     self_pid = os.getpid()
+    daemon = None  # remember a daemon but keep looking for the UI, which wins
     try:
         rt = json.load(open(RUNTIME_FILE))
         pid = rt.get("pid")
         if pid and os.path.exists(f"/proc/{pid}"):
             cmd = open(f"/proc/{pid}/cmdline", "rb").read().decode("utf-8", "replace").lower()
-            if "orca-ide" in cmd or "squashfs-root/orca" in cmd:
-                return pid
+            kind = _orca_kind(cmd)
+            if kind == "ide":
+                return (pid, "ide")
+            if kind == "daemon":
+                daemon = (pid, "daemon")
     except Exception:
         pass
     for p in glob.glob("/proc/[0-9]*/cmdline"):
@@ -63,9 +88,27 @@ def orca_running():
             continue
         if "orca-repair" in cmd:  # never match this script
             continue
-        if "orca-ide" in cmd or "squashfs-root/orca" in cmd:
-            return pid
-    return None
+        kind = _orca_kind(cmd)
+        if kind == "ide":
+            return (pid, "ide")
+        if kind == "daemon" and daemon is None:
+            daemon = (pid, "daemon")
+    return daemon
+
+
+def apply_should_block(info):
+    """Given orca_running()'s result, is it unsafe to WRITE orca-data.json?
+
+    Only the IDE UI (the Electron main process) owns orca-data.json — verified by
+    inspecting the app bundle: the view-state store (`workspaceSessionsByHostId`)
+    is written solely by out/main/index.js, while the headless daemon
+    (daemon-entry.js) is a PTY/terminal host that never touches it. So a
+    daemon-only state is SAFE to write through — block only on the UI, not on a
+    harmless lingering daemon. (Note: the daemon does NOT serve the live worktree
+    query either — that also lives in the UI process — so a lingering daemon does
+    not help detection; it just isn't a reason to refuse the write.)
+    """
+    return bool(info) and info[1] == "ide"
 
 
 # ── Pure logic (unit-tested; no I/O) ──────────────────────────────────────────
@@ -103,6 +146,21 @@ def plan_repair(data, env_ids, live_by_env, match=()):
         if flagged:
             ghosts[rt] = sorted(flagged)
     return {"orphaned_runtimes": orphaned, "ghosts_by_runtime": ghosts}
+
+
+def unverifiable_runtimes(data, env_ids, live_by_env):
+    """Runtimes whose env IS registered (so the block is NOT orphaned) and has
+    recents, but whose env was not reachable for a live query — so stale recents
+    could not be checked. Pure: used only to WARN, never to prune. Without this,
+    an empty result while the live registry is down reads as a false "all clean".
+    """
+    out = []
+    wsh = data.get("workspaceSessionsByHostId", {})
+    for rt, block in wsh.items():
+        eid = env_id_of(rt)
+        if eid in env_ids and eid not in live_by_env and recent_ids(block):
+            out.append(rt)
+    return out
 
 
 def _scrub_ids(block, wtids):
@@ -189,11 +247,21 @@ def main():
     if not os.path.exists(args.data):
         print(f"✗ not found: {args.data}"); sys.exit(1)
 
-    pid = orca_running()
-    if args.apply and pid:
-        print(f"✗ Orca IDE is running (pid {pid}). Fully quit it, then re-run --apply\n"
-              f"  from a non-Orca terminal. (Scan without --apply is safe while it's open.)")
+    info = orca_running()
+    if args.apply and apply_should_block(info):
+        print(f"✗ Orca IDE is running (pid {info[0]}). Fully quit it (app Quit, not\n"
+              f"  kill-a-child — Electron respawns children), then re-run --apply from a\n"
+              f"  non-Orca terminal. (Scan without --apply is safe while it's open.)")
         sys.exit(1)
+    if args.apply and info and info[1] == "daemon":
+        # Daemon-only: the UI (sole writer of orca-data.json) is down, so writing
+        # is safe — a lingering PTY/terminal daemon is NOT a reason to refuse.
+        # It does not serve the live worktree query (that needs the UI), so with
+        # the UI down stale recents can't be checked live — use --match for those.
+        print(f"ℹ IDE UI is down; only Orca's background terminal daemon (pid {info[0]}) is\n"
+              f"  up. It doesn't own orca-data.json, so it's safe to write past — not a\n"
+              f"  blocker. (It does NOT serve the live stale-recent query — that needs the\n"
+              f"  UI — so with the UI down, prune a known ghost id with --match.)\n")
 
     data = json.load(open(args.data))
     env_ids = gather_env_ids()
@@ -206,6 +274,8 @@ def main():
             print("! orca CLI not found — scanning offline (orphaned blocks + --match only)\n")
 
     plan = plan_repair(data, env_ids, live, match=tuple(args.match))
+    # --match deliberately bypasses the live query, so don't nag about it then.
+    unverifiable = [] if args.match else unverifiable_runtimes(data, env_ids, live)
     print("Ghost scan:")
     if plan["orphaned_runtimes"]:
         for rt in plan["orphaned_runtimes"]:
@@ -213,8 +283,22 @@ def main():
     for rt, ids in plan["ghosts_by_runtime"].items():
         for i in ids:
             print(f"  • stale recent in {rt}:\n      {i}")
-    if not plan["orphaned_runtimes"] and not plan["ghosts_by_runtime"]:
+
+    nothing = not plan["orphaned_runtimes"] and not plan["ghosts_by_runtime"]
+    if nothing:
         print("  (nothing to prune)")
+
+    # Live registry unreachable => stale recents could NOT be checked. Say so
+    # loudly — otherwise an empty result reads as a false "all clean".
+    if unverifiable:
+        why = "--offline was passed" if args.offline else "the live registry was unreachable (Orca's UI not running?)"
+        print(f"\n! stale-recent detection was SKIPPED for {len(unverifiable)} live environment(s): {why}.")
+        print("  Orphaned-block detection is unaffected, but ghost recents can't be confirmed this way.")
+        print("  Either re-scan with Orca's UI OPEN (only the running UI answers the live query),")
+        print("  or, if you already know the ghost id, target it directly (no live query needed):")
+        print("      --match <worktree-id-substring>")
+
+    if nothing:
         return
 
     if not args.apply:
