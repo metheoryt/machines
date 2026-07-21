@@ -86,24 +86,17 @@ global + per-host memory). One bullet per fact under a topical heading.
   keyed by repo path — machine-local, Orca-owned (it rewrites the file and keeps
   `.bak.N` backups). So the string is greppable, and a repo only gets it after
   it's been opened in Orca once.
-- **Orca headless serve on WSL — hard-won facts (2026-07-17).** (a) Orca ships
-  NO `orca` binary on Linux; the only `orca`-named files in the AppImage are
-  per-OS launcher *scripts* (darwin/win32). The real CLI is `out/cli/index.js`
-  run through the bundled Electron binary in Node mode:
-  `ELECTRON_RUN_AS_NODE=1 <squashfs-root>/orca-ide <…>/out/cli/index.js "$@"`
-  (VS Code launcher model). Runs fully headless — no X/xvfb. `orca-serve.sh`
-  writes exactly this wrapper to `~/.local/bin/orca`. (b) WSL's per-user systemd
-  manager (`user@UID`) commonly fails to start ("Failed to spawn executor:
-  Device or resource busy" → result 'resources'), so user units + linger don't
-  work; `orca-serve.sh` falls back to a SYSTEM unit (`User=me`, After tailscaled)
-  — needs sudo. (c) Orca's pairing code (deviceToken + keypair) is PERSISTED in
-  `~/.config/orca` and STABLE across serve restarts, so a `Restart=`/reboot
-  service keeps the client paired. Node = `100.64.0.6`; Headscale given-name
-  (MagicDNS) renamed `desktop-wsl-ubuntu-26-04` → **`desktop-ubuntu26`**
-  (`desktop-ubuntu26.gg.ez`) on 2026-07-19 via `sudo headscale nodes rename
-  desktop-ubuntu26 -i 6`. Reported hostname on the box is still the long form
-  (needs interactive sudo to change) — cosmetic; given-name is durable unless the
-  node fully re-registers (new machine key on a `wsl --unregister` rebuild).
+- **Orca `serve` on WSL was REMOVED (2026-07-21).** Orca now runs on the Windows
+  host and opens the WSL project directly; the per-distro `orca serve` runtime,
+  its systemd unit, the `~/.local/bin/orca` CLI shim, and `provision/orca-serve.sh`
+  are all gone. `provision/tailscale-wsl.sh` (tailnet identity) + `ssh-wsl.sh`
+  (fleet SSH) stay — the WSL box is still a first-class tailnet/SSH node.
+- **The `desktop` WSL distro is its own tailnet node.** Node `100.64.0.6`;
+  Headscale given-name (MagicDNS) `desktop-ubuntu26` (`desktop-ubuntu26.gg.ez`),
+  renamed from `desktop-wsl-ubuntu-26-04` on 2026-07-19 via `sudo headscale nodes
+  rename desktop-ubuntu26 -i 6`. Reported hostname on the box is still the long
+  form (cosmetic; given-name is durable unless the node fully re-registers on a
+  `wsl --unregister` rebuild). Enrolled by `provision/tailscale-wsl.sh`.
 - **SSH into the WSL box (2026-07-19).** `ssh-wsl.sh` now installs
   `fleet-authorized-keys` into the box's own `~/.ssh/authorized_keys` (inbound
   trust; was a leaf that only trusted OUTward before). This ROG box's key
