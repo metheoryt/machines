@@ -1,9 +1,23 @@
 {
   "env": {},
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "mcp__gortex__*"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "opus",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"SESSION NAMING RULE: If you are generating a recap of a resumed session, check whether the session already has a user-assigned name (it will appear in the status line or system context as a quoted name the user explicitly chose). Auto-generated names like long hex strings, random word pairs, or anything that looks machine-generated do not count. If the session appears unnamed or has an auto-generated name, end your recap with a clearly separated block:\\n---\\nSuggested rename: `/rename <3-5-word-kebab-case-topic>`\\n---\\nDerive the topic slug from the main task discussed in the session. Keep it lowercase-hyphenated, no generic words like \\\"session\\\" or \\\"work\\\".\"}}'",
+            "statusMessage": "Loading session context..."
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -18,7 +32,8 @@
     "code-review@claude-plugins-official": true,
     "sentry@claude-plugins-official": true,
     "pure-connectors@pure-team": true,
-    "pure-dev@pure-team": true
+    "pure-dev@pure-team": true,
+    "caveman@caveman": true
   },
   "extraKnownMarketplaces": {
     "pure-team": {
@@ -27,9 +42,14 @@
         "path": "/home/me/pure/claude-plugins"
       },
       "autoUpdate": true
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
     }
   },
-  "model": "opus",
   "advisorModel": "opus",
   "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
@@ -38,21 +58,8 @@
     "mode": "hold"
   },
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "theme": "auto",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"SESSION NAMING RULE: If you are generating a recap of a resumed session, check whether the session already has a user-assigned name (it will appear in the status line or system context as a quoted name the user explicitly chose). Auto-generated names like long hex strings, random word pairs, or anything that looks machine-generated do not count. If the session appears unnamed or has an auto-generated name, end your recap with a clearly separated block:\\n---\\nSuggested rename: `/rename <3-5-word-kebab-case-topic>`\\n---\\nDerive the topic slug from the main task discussed in the session. Keep it lowercase-hyphenated, no generic words like \\\"session\\\" or \\\"work\\\".\"}}'",
-            "statusMessage": "Loading session context..."
-          }
-        ]
-      }
-    ]
-  },
-  "skipWorkflowUsageWarning": true
+  "voiceEnabled": true
 }
