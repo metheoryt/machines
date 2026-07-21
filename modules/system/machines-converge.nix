@@ -36,16 +36,16 @@ in {
       serviceConfig = {
         Type = "oneshot";
         # nixos-rebuild needs a writable /nix, network, and the flake path.
-        # GIT_CONFIG_*: root git over a repo owned by `me` otherwise aborts
-        # every git call with "detected dubious ownership" (git >=2.35.2) —
-        # inject safe.directory as ephemeral command-scope config, scoped to
-        # this service only, instead of polluting root's global gitconfig.
-        Environment = [
-          "HOME=/root"
-          "GIT_CONFIG_COUNT=1"
-          "GIT_CONFIG_KEY_0=safe.directory"
-          "GIT_CONFIG_VALUE_0=${cfg.repo}"
-        ];
+        Environment = ["HOME=/root"];
+        # Root running git/nixos-rebuild over a repo owned by `me` aborts on
+        # ownership: the git CLI says "detected dubious ownership" (git
+        # >=2.35.2), and Nix's flake fetcher fails with libgit2 error 7
+        # ("repository path is not owned by current user"). The git CLI honours
+        # GIT_CONFIG_* env, but libgit2 does NOT — it only reads real git config
+        # files. So mark the repo safe in root's GLOBAL gitconfig (HOME=/root =>
+        # /root/.gitconfig), which BOTH the git CLI and libgit2 consult.
+        # --replace-all keeps it idempotent (no duplicate lines across runs).
+        ExecStartPre = "${pkgs.git}/bin/git config --global --replace-all safe.directory ${cfg.repo}";
       };
       script = "${pkgs.bash}/bin/bash ${cfg.repo}/scripts/converge.sh";
     };
