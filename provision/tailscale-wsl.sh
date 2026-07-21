@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # provision/tailscale-wsl.sh — enroll THIS WSL2 distro as a distinct node on the
-# fleet's Headscale tailnet (control https://cc.cyphy.kz), so a server running
-# inside the distro (Orca, ssh, rustdesk) is reachable from other tailnet nodes
+# fleet's Headscale tailnet (control https://cc.cyphy.kz), so a service running
+# inside the distro (ssh, rustdesk) is reachable from other tailnet nodes
 # at its OWN 100.64.x.y — independent of the Windows host's own Tailscale.
-# Pairs with provision/orca-serve.sh.
+# Pairs with provision/ssh-wsl.sh.
 #
 # Model: one tailscaled PER distro (NOT host mirrored-networking), so N distros
-# on one Windows host each get a distinct identity and Orca can use the default
-# port 6768 everywhere. Inbound arrives via the VPS DERP relay (region 999)
-# through WSL's default NAT — no port forwarding, no .wslconfig change.
+# on one Windows host each get a distinct identity with no port juggling.
+# Inbound arrives via the VPS DERP relay (region 999) through WSL's default
+# NAT — no port forwarding, no .wslconfig change.
 #
 # Zero-touch re-enroll: the resolved pre-auth key is persisted to
 # /etc/headscale/authkey (root:root 0600) and a systemd *system* oneshot
@@ -262,4 +262,4 @@ fi
 IP="$(tailscale ip -4 2>/dev/null | head -1)"
 [ -n "$IP" ] || die "enrolled but no tailnet IPv4 yet — check 'tailscale status'."
 ok "node '$HOSTNAME_TS' up at $IP  (MagicDNS: ${HOSTNAME_TS}.${MAGICDNS_SUFFIX})"
-printf '\nNext: bash %s\n' "$(dirname "$0")/orca-serve.sh"
+printf '\nNext: bash %s\n' "$(dirname "$0")/ssh-wsl.sh"

@@ -3,7 +3,7 @@
 # key-only sshd trusting the fleet's public keys (inbound), a persisted ed25519
 # fleet key trusted by the other boxes (outbound), and a merged ~/.ssh/config
 # fleet block so `ssh latitude`/`ssh server`/`ssh hub` Just Work from inside the
-# distro. Companion to tailscale-wsl.sh + orca-serve.sh.
+# distro. Companion to tailscale-wsl.sh.
 #
 # Model: a LEAF node, not a fleet.json member. The distro reaches out to the
 # fleet AND accepts inbound fleet logins (it installs fleet-authorized-keys into
