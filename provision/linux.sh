@@ -44,10 +44,23 @@ case "$(uname -m)" in
   *) die "gortex ships x86_64-linux only; this box is $(uname -m). See provision/README.md." ;;
 esac
 
+# Privilege detection. converge (scripts/converge.sh) fires this DETACHED with no
+# controlling terminal, as the unprivileged pulling user — so a `sudo` that needs
+# a password can't authenticate ("sudo: a terminal is required to authenticate")
+# and the old unconditional SUDO="sudo" made the CORE apt tier die on every pull.
+# Probe what root we can actually get and never block: passwordless sudo → use
+# `sudo -n`; an interactive TTY → allow a normal password prompt; otherwise no
+# root is reachable (PRIV=0) and the CORE apt tier degrades to a warn.
 SUDO=""
+PRIV=1
 if [ "$(id -u)" -ne 0 ]; then
-  have sudo || die "not root and sudo not found — install sudo or run as root"
-  SUDO="sudo"
+  if have sudo && sudo -n true 2>/dev/null; then
+    SUDO="sudo -n"          # passwordless sudo — never prompts, never blocks
+  elif have sudo && [ -t 0 ]; then
+    SUDO="sudo"             # interactive terminal — allow a password prompt
+  else
+    PRIV=0                  # no root available non-interactively (e.g. converge)
+  fi
 fi
 
 mkdir -p "$HOME/.local/bin"
@@ -55,18 +68,26 @@ mkdir -p "$HOME/.local/bin"
 printf '\n\033[1mProvisioning %s from %s\033[0m\n\n' "$(uname -n)" "$REPO"
 
 # ── CORE 1: base apt packages ─────────────────────────────────────────────────
-info "Installing base packages (apt)…"
-export DEBIAN_FRONTEND=noninteractive
-$SUDO apt-get update -qq || die "apt-get update failed"
-# All of these are in Debian main / Ubuntu universe. Kept intentionally lean —
-# extras (bat, fish, direnv, delta) are best-effort below.
-$SUDO apt-get install -y --no-install-recommends \
-  git curl wget ca-certificates xz-utils unzip \
-  build-essential pkg-config \
-  python3 python3-venv python3-pip \
-  ripgrep fd-find fzf jq \
-  || die "apt base install failed"
-ok "base packages installed"
+# Requires root. When none is reachable non-interactively (PRIV=0, e.g. a
+# converge run on a box whose user needs an interactive sudo password), SKIP
+# rather than die — this is the "skips what it can't do" contract the post-merge
+# hook documents. A first, privileged run (interactive or root) still installs.
+if [ "$PRIV" -eq 0 ]; then
+  warn "no root available non-interactively — skipping apt base install (assuming a prior privileged run set up the base tier). Re-run with a TTY or as root to (re)install."
+else
+  info "Installing base packages (apt)…"
+  export DEBIAN_FRONTEND=noninteractive
+  $SUDO apt-get update -qq || die "apt-get update failed"
+  # All of these are in Debian main / Ubuntu universe. Kept intentionally lean —
+  # extras (bat, fish, direnv, delta) are best-effort below.
+  $SUDO apt-get install -y --no-install-recommends \
+    git curl wget ca-certificates xz-utils unzip \
+    build-essential pkg-config \
+    python3 python3-venv python3-pip \
+    ripgrep fd-find fzf jq \
+    || die "apt base install failed"
+  ok "base packages installed"
+fi
 
 # fd-find installs the binary as `fdfind` on Debian/Ubuntu — add the friendly name.
 have fdfind && ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"

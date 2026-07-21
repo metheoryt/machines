@@ -40,6 +40,17 @@ touches_nix "$rev1" "$rev2" && pass "touches_nix detects .nix" || die "touches_n
 # touches_nix: empty low (first run) -> treat as changed (hit).
 touches_nix "" "$rev2" && pass "touches_nix first-run is hit" || die "touches_nix first-run is hit"
 
+# touches_linux: only provisioning-relevant paths (the linux provisioner / its
+# version inputs) count — a content-only pull must NOT trigger a reprovision.
+echo doc > "$repo/docs.md"; git -C "$repo" add .; git -C "$repo" commit -qm c3
+rev3="$(git -C "$repo" rev-parse HEAD)"
+mkdir -p "$repo/provision"; echo x > "$repo/provision/linux.sh"
+git -C "$repo" add .; git -C "$repo" commit -qm c4
+rev4="$(git -C "$repo" rev-parse HEAD)"
+touches_linux "$rev2" "$rev3" && die "touches_linux false-positive on non-provisioning change" || pass "touches_linux ignores content-only change"
+touches_linux "$rev3" "$rev4" && pass "touches_linux detects provision/linux.sh" || die "touches_linux detects provision/linux.sh"
+touches_linux "" "$rev4" && pass "touches_linux first-run is hit" || die "touches_linux first-run is hit"
+
 # on_main_primary: true on main in primary checkout.
 on_main_primary && pass "on_main_primary true on main" || die "on_main_primary true on main"
 

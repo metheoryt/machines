@@ -56,6 +56,14 @@ touches_nix() {
   changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$)'
 }
 
+# touches_linux <low> <high>: 0 if any provisioning-relevant path changed in
+# range — the linux provisioner itself or the inputs it acts on. A content-only
+# pull (docs, memory, other-OS scripts) needs no reprovision; the agent config
+# is relinked by the post-merge hook's job 1, so agents/** alone does NOT count.
+touches_linux() {
+  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/fleet-selfpull\.sh$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
+}
+
 # write_status <rev> <ok|fail> <reason>: record outcome; advance converged-rev
 # only on ok (a failure retries the same range on the next fire).
 write_status() {
@@ -91,6 +99,10 @@ converge_main() {
         write_status "$high" fail "provision/windows.ps1 failed"
       fi ;;
     linux)
+      if [ -n "$low" ] && ! touches_linux "$low" "$high"; then
+        write_status "$high" ok "linux: no provisioning-relevant change — agent config already relinked by post-merge hook"
+        exit 0
+      fi
       if bash "$REPO/provision/linux.sh"; then
         write_status "$high" ok "provision/linux.sh"
       else
