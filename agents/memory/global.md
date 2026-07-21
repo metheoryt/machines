@@ -453,3 +453,21 @@ elsewhere to sync. Do NOT put secrets here.
 - **Model tiering by task type** is the working convention: haiku for pure
   transcription/mechanical edits, sonnet for judgment edits and per-task review, opus
   reserved for the final whole-branch cross-cutting review.
+
+## NixOS + git gotchas (fleet convergence, learned 2026-07-21)
+
+- **Root running `nixos-rebuild`/`nix build` over a `me`-owned flake repo fails
+  with libgit2 error 7 "repository path is not owned by current user".** Nix's
+  `git+file://` flake fetcher uses libgit2, which IGNORES the `GIT_CONFIG_COUNT/
+  KEY/VALUE` env trio (that only steers the git CLI). Fix: put
+  `safe.directory = <repo>` in a real gitconfig file root reads — e.g. a systemd
+  `ExecStartPre` doing `git config --global --replace-all safe.directory <repo>`
+  (HOME=/root ⇒ /root/.gitconfig). A dry-build run as `me` never reproduces it;
+  only the root path does.
+- **A systemd `.path` unit watching `.git/ORIG_HEAD` silently misses pulls.**
+  (a) A fast-forward `git pull` doesn't reliably rewrite ORIG_HEAD; (b) git
+  rewrites it via atomic rename-replace, staling systemd's inotify watch after
+  the first event (classic "first fire lands, second is missed"). Watch
+  `.git/logs/HEAD` instead — appended in place (stable inode) on every HEAD
+  advance, ff included; refs-only `git fetch` and read-only git calls don't
+  append to it, so no spurious/self fires.
