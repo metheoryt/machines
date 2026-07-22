@@ -48,29 +48,41 @@ got="$(self_alias)"
 [ "$got" = "latitude" ] && pass "self_alias=latitude" || die "self_alias -> '$got' (want latitude)"
 
 # --- mock ssh: each alias has its own fake $HOME under $tmp/home/<alias>. ---
-# `ssh [-o ..] <alias> true`      -> reachability (fail if alias in UNREACHABLE)
-# `ssh <alias> bash -s <target>`  -> run stdin script locally with HOME=that box
+# `ssh [-o ..] <alias> bash -c true`      -> reachability (fail if alias in UNREACHABLE)
+# `ssh <alias> bash -s <target>`          -> run stdin script locally with HOME=that box
+# `ssh <alias> <powershell ... -s -- ..>` -> windows work call, same idea
 UNREACHABLE="$tmp/unreachable"; : > "$UNREACHABLE"
 mkdir -p "$tmp/home"
 mock_ssh() {
   while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
   local alias="$1"; shift
-  # Reachability probe (bash -c true, or legacy bare true) always ends in
-  # "true"; the work call (bash -s <target>) always ends in the target.
-  if [ "${@: -1}" = "true" ]; then
-    # Real ssh drains its stdin; model that so the "ssh in a loop eats the
-    # member list" bug is reproducible. Harmless because run_member's probe
-    # redirects stdin from /dev/null — if that `</dev/null` is ever removed,
-    # this drain consumes main()'s `while read … done < <(jq …)` input and the
-    # "all non-self members processed" assertion below goes RED.
-    cat >/dev/null 2>&1 || true
-    # Model a PowerShell/Windows box: no bare `true`, only bash works.
-    # A bare-`true` probe ($1 != "bash") fails; a bash-wrapped probe succeeds.
-    if [ "$alias" = "winbox" ] && [ "${1:-}" != "bash" ]; then return 1; fi
-    grep -qx "$alias" "$UNREACHABLE" && return 1 || return 0
-  fi
-  # $@ is now: bash -s <target> ; run it locally with this box's HOME on stdin.
-  HOME="$tmp/home/$alias" bash "${@:2}"
+  local remote="$*"
+  # Reachability probe: remote command CONTAINS `-c true` (both `bash -c true`
+  # and the windows PowerShell `... bash.exe" -c true }` fragment contain it).
+  # NOTE: detecting via "ends in true" is a trap — the windows probe ends in
+  # `}` (the PowerShell if/else close brace), not `true`, so that check would
+  # fall through to the work branch and pass vacuously for windows/winbox.
+  case "$remote" in
+    *"-c true"*)
+      # Real ssh drains its stdin; model that so the "ssh in a loop eats the
+      # member list" bug is reproducible. Harmless because run_member's probe
+      # redirects stdin from /dev/null — if that `</dev/null` is ever removed,
+      # this drain consumes main()'s `while read … done < <(jq …)` input and
+      # the "all non-self members processed" assertion below goes RED.
+      cat >/dev/null 2>&1 || true
+      # Model a PowerShell/Windows box: no bare `true`, only bash works.
+      case "$remote" in
+        *bash.exe*|bash\ *) : ;;                        # bash reached -> ok
+        *) [ "$alias" = winbox ] && return 1 ;;          # winbox: no bash -> down
+      esac
+      grep -qx "$alias" "$UNREACHABLE" && return 1 || return 0
+      ;;
+  esac
+  # Work call: run REMOTE_SCRIPT (on stdin) with this box's HOME. The script's
+  # single positional arg (target) is the LAST token of the flattened command
+  # for both `bash -s <target>` and Git Bash `-s -- "<target>"`.
+  local target; target="$(printf '%s' "$remote" | awk '{gsub(/"/,"",$NF); print $NF}')"
+  HOME="$tmp/home/$alias" bash -s "$target"
 }
 export -f mock_ssh 2>/dev/null || true
 SSH="mock_ssh"
@@ -102,24 +114,24 @@ git -C "$tmp/home/server/my/machines" push -q origin main
 git -C "$tmp/home/server/my/machines" reset -q --hard HEAD~1   # now 1 behind
 # The remote probe matches on the ORIGIN url; point target at the bare upstream.
 tgt_server="$(normalize_url "$up")"
-got="$(run_member server "$tgt_server")"
+got="$(run_member server linux "$tgt_server")"
 case "$got" in OK\ *..*) pass "server OK (ff)";; *) die "server -> '$got' (want OK ff)";; esac
 
 # desktop: no matching checkout -> SKIP absent
 mkdir -p "$tmp/home/desktop"
-got="$(run_member desktop "$absent_target")"
+got="$(run_member desktop linux "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "desktop absent" || die "desktop -> '$got' (want SKIP absent)"
 
 # latitude: dirty checkout -> SKIP dirty
 mkrepo "$tmp/home/latitude/machines"
 echo x > "$tmp/home/latitude/machines/dirty"
 tgt_lat="$(normalize_url git@github.com:metheoryt/machines.git)"
-got="$(run_member latitude "$tgt_lat")"
+got="$(run_member latitude linux "$tgt_lat")"
 [ "$got" = "SKIP dirty" ] && pass "latitude dirty" || die "latitude -> '$got' (want SKIP dirty)"
 
 # hub: unreachable -> SKIP unreachable
 echo hub >> "$UNREACHABLE"
-got="$(run_member hub "$target")"
+got="$(run_member hub linux "$target")"
 [ "$got" = "SKIP unreachable" ] && pass "hub unreachable" || die "hub -> '$got' (want SKIP unreachable)"
 
 # desktop (reused, now that "desktop absent" already ran): diverged checkout
@@ -136,7 +148,7 @@ git -C "$tmp/clone-diverged" commit -q --allow-empty -m upstream-ahead
 git -C "$tmp/clone-diverged" push -q origin main
 git -C "$tmp/home/desktop/machines" commit -q --allow-empty -m local-ahead
 tgt_div="$(normalize_url "$up_div")"
-got="$(run_member desktop "$tgt_div")"
+got="$(run_member desktop linux "$tgt_div")"
 [ "$got" = "SKIP diverged | conv:none" ] && pass "desktop diverged" || die "desktop -> '$got' (want SKIP diverged | conv:none)"
 
 # extra: clean checkout already at the bare upstream's HEAD, no new commits
@@ -147,7 +159,7 @@ mkrepo "$tmp/home/extra/machines"
 git -C "$tmp/home/extra/machines" remote set-url origin "$up_uptodate"
 git -C "$tmp/home/extra/machines" push -q origin main
 tgt_uptodate="$(normalize_url "$up_uptodate")"
-got="$(run_member extra "$tgt_uptodate")"
+got="$(run_member extra linux "$tgt_uptodate")"
 [ "$got" = "OK up-to-date | conv:none" ] && pass "extra up-to-date" || die "extra -> '$got' (want OK up-to-date | conv:none)"
 
 # --- full run via main(): self (latitude, LOCAL_TAILNET_IP=100.64.0.2) excluded ---
@@ -174,7 +186,7 @@ rows="$(printf '%s\n' "$out" | grep -cE '^(desktop|hub|server) ')"
 # SKIP absent, NOT SKIP unreachable. This is the regression guard for Fix 1:
 # it is RED if run_member's probe reverts to bare `true`, GREEN with `bash -c true`.
 mkdir -p "$tmp/home/winbox"
-got="$(run_member winbox "$absent_target")"
+got="$(run_member winbox windows "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "winbox reachable via bash probe" || die "winbox -> '$got' (want SKIP absent)"
 
 # --- convergence column: REMOTE_SCRIPT reports .machines/last-converge ---
@@ -191,6 +203,22 @@ conv_token="$(
   else echo "conv:none"; fi
 )"
 [ "$conv_token" = "conv:ok@1234567" ] && pass "converge token from last-converge" || die "converge token: got '$conv_token'"
+
+# canonical-path-first: a checkout at $HOME/machines is found even though the
+# roots list would also scan $HOME/*/. Build one at the canonical path only.
+mkdir -p "$tmp/home/canon"
+up_canon="$tmp/upstream-canon.git"; git init -q --bare "$up_canon"
+mkrepo "$tmp/home/canon/machines"
+git -C "$tmp/home/canon/machines" remote set-url origin "$up_canon"
+git -C "$tmp/home/canon/machines" push -q origin main
+tgt_canon="$(normalize_url "$up_canon")"
+got="$(run_member canon linux "$tgt_canon")"
+[ "$got" = "OK up-to-date | conv:none" ] && pass "canonical \$HOME/machines found" \
+  || die "canon -> '$got' (want OK up-to-date)"
+
+# /mnt/c root removed: REMOTE_SCRIPT must not reference /mnt/c any more.
+printf '%s' "$REMOTE_SCRIPT" | grep -q '/mnt/c' \
+  && die "REMOTE_SCRIPT still references /mnt/c" || pass "no /mnt/c root in REMOTE_SCRIPT"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

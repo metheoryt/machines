@@ -11,6 +11,9 @@ SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLEET_JSON="${FLEET_JSON:-$SCRIPT_DIR/../../../../fleet.json}"
 SSH="${SSH:-ssh}"
 
+# shellcheck source=../lib/fleet-dispatch.sh
+. "$SCRIPT_DIR/../lib/fleet-dispatch.sh"
+
 # Canonicalize a git remote URL to host/owner/repo (lowercase host, no
 # scheme/user/.git) so scp-form and https forms of the same repo compare equal.
 normalize_url() {
@@ -45,7 +48,7 @@ self_alias() {
 # Script piped to each member. $1 = normalized target url. Prints ONE token.
 REMOTE_SCRIPT='set -u
 target="$1"
-roots="$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly /mnt/c/Users/*/"
+roots="$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly"
 norm() {
   local u="$1"
   u="${u%.git}"; u="${u#ssh://}"; u="${u#git+ssh://}"; u="${u#https://}"; u="${u#http://}"
@@ -53,13 +56,22 @@ norm() {
   printf "%s" "$u" | awk -F/ "{ \$1=tolower(\$1) }1" OFS=/
 }
 found=""
-for root in $roots; do
-  for d in "$root" "$root"/*; do
-    { [ -d "$d/.git" ] || [ -f "$d/.git" ]; } || continue
-    o="$(git -C "$d" remote get-url origin 2>/dev/null)" || continue
-    if [ "$(norm "$o")" = "$target" ]; then found="$d"; break 2; fi
+# Canonical path first: machines always lives at $HOME/machines. Only fall back
+# to the root scan (for other fleet-sync repos) if the canonical clone is absent
+# or has a different origin.
+if { [ -d "$HOME/machines/.git" ] || [ -f "$HOME/machines/.git" ]; }; then
+  o="$(git -C "$HOME/machines" remote get-url origin 2>/dev/null)" || o=""
+  [ -n "$o" ] && [ "$(norm "$o")" = "$target" ] && found="$HOME/machines"
+fi
+if [ -z "$found" ]; then
+  for root in $roots; do
+    for d in "$root" "$root"/*; do
+      { [ -d "$d/.git" ] || [ -f "$d/.git" ]; } || continue
+      o="$(git -C "$d" remote get-url origin 2>/dev/null)" || continue
+      if [ "$(norm "$o")" = "$target" ]; then found="$d"; break 2; fi
+    done
   done
-done
+fi
 [ -n "$found" ] || { echo "SKIP absent"; exit 0; }
 [ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] || { echo "SKIP dirty"; exit 0; }
 before="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
@@ -80,16 +92,12 @@ echo "$pull | conv:$conv"'
 
 # Reachability probe + remote run for one member. Prints one status token.
 run_member() {
-  local alias="$1" target="$2"
-  # `</dev/null` is load-bearing: without it, ssh drains the caller's stdin,
-  # which in main()'s `while read … done < <(jq …)` loop is the member list —
-  # so the probe would swallow the remaining members and the loop would stop
-  # after the first one. (A shell-function mock does not reproduce this.)
-  if ! $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -c true </dev/null 2>/dev/null; then
+  local alias="$1" platform="$2" target="$3"
+  if ! fd_probe "$alias" "$platform"; then
     printf 'SKIP unreachable\n'; return 0
   fi
   local res
-  res="$(printf '%s' "$REMOTE_SCRIPT" | $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s "$target" 2>/dev/null)"
+  res="$(printf '%s' "$REMOTE_SCRIPT" | fd_run "$alias" "$platform" "$target")"
   printf '%s\n' "${res:-SKIP no-output}"
 }
 
@@ -101,12 +109,12 @@ main() {
   self="$(self_alias)"
   printf 'Fleet pull of %s  (self: %s)\n' "$target" "${self:-unknown}"
   printf '%-10s %s\n' 'MEMBER' 'RESULT'
-  local m
-  while read -r m; do
+  local m plat
+  while IFS=$'\t' read -r m plat; do
     [ -n "$m" ] || continue
     [ "$m" = "$self" ] && continue
-    printf '%-10s %s\n' "$m" "$(run_member "$m" "$target")"
-  done < <(jq -r '.machines | keys[]' "$FLEET_JSON" 2>/dev/null)
+    printf '%-10s %s\n' "$m" "$(run_member "$m" "${plat:-linux}" "$target")"
+  done < <(jq -r '.machines | to_entries[] | [.key, (.value.platform // "linux")] | @tsv' "$FLEET_JSON" 2>/dev/null)
   return 0
 }
 
