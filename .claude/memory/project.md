@@ -64,6 +64,18 @@ global + per-host memory). One bullet per fact under a topical heading.
 - Firewall rules in `provision/windows.ps1` must be written to converge
   (remove-then-recreate), not create-if-absent — re-running against a host
   with a stale-scoped rule would otherwise leave the old scope in place.
+- **Fleet dispatch is now platform-aware, via
+  `agents/plugin/skills/lib/fleet-dispatch.sh`** (`fd_probe`/`fd_run`/
+  `fd_wsl_hosts`, sourced by `/ship`'s `fleet-pull.sh` and kb-refresh's
+  `fleet-gather.sh`). `/ship` + kb-refresh now reach every fleet host's
+  `$HOME/machines` clone: Windows-native members (`desktop`, `server`) via Git
+  Bash dispatched through PowerShell's call operator (live-verified
+  2026-07-22), and self-declared WSL hosts — never in `fleet.json` — via
+  `wsl -l -q` + each distro's gitignored `fleet.local.json`, reached at
+  `<nickname>.gg.ez` (implemented; WSL-discovery not yet live-verified
+  end-to-end). The old `/mnt/c` cross-filesystem root was REMOVED — `machines`
+  is now located canonical-path-first (`$HOME/machines`), root-scan fallback
+  second. Half-provision a WSL host with `just provision-wsl <nickname>`.
 
 ### Fleet transport is migrating AmneziaWG → Headscale (2026-07-13)
 

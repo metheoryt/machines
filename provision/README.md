@@ -255,3 +255,41 @@ both NixOS `authorizedKeys.keyFiles` *and* Windows
 `administrators_authorized_keys`, so `id_fleet` grants **administrator** SSH into
 the fleet boxes. The fleet trusting the leaf is the point — just know the blast
 radius if `C:\Users\<winuser>\.fleet` is ever read.
+
+## Self-declaring as a fleet host (`provision-wsl`)
+
+Half-provision a WSL distro as a first-class, self-declaring fleet host in one
+shot. It never becomes a `fleet.json` entry (its OS hostname collides with its
+Windows parent, and it's disposable) — but `/ship` and kb-refresh discover and
+reach it automatically once it's declared:
+
+    just provision-wsl <nickname>
+    # equivalently, from inside the distro:
+    bash ~/machines/provision/provision-wsl.sh <nickname>
+
+Chain (each step already documented above; idempotent, safe to re-run):
+
+1. `tailscale-wsl.sh --hostname <nickname>` — enroll on the tailnet as
+   `<nickname>.gg.ez`.
+2. `ssh-wsl.sh` — fleet SSH identity (client key + server).
+3. `linux.sh` — software + timers; also merges
+   `provision/fleet-authorized-keys` into `~/.ssh/authorized_keys`
+   (inbound fleet SSH trust, idempotent).
+4. `fleet-local.sh --nickname <nickname>` — writes the gitignored
+   `fleet.local.json` self-declaration (`{nickname, fleet:true, platform}`) at
+   the repo root.
+
+`<nickname>` is both the tailnet node name and the `fleet.local.json`
+nickname — the same string a Windows parent's `wsl -l -q` + `fleet.local.json`
+read reports back.
+
+**Discovery is automatic, no `fleet.json` edit needed.** `/ship`
+(`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) both source the shared
+`agents/plugin/skills/lib/fleet-dispatch.sh` helper, which — for every Windows
+`fleet.json` member — enumerates its WSL distros (`wsl -l -q`) and reads each
+one's `$HOME/machines/fleet.local.json`; any distro with `.self.fleet == true`
+is pulled directly at `<nickname>.gg.ez`. A distro that ran `provision-wsl`
+is reachable on the very next `/ship` or kb-refresh run. (This WSL-discovery
+path is implemented but not yet exercised end-to-end on a live box; the
+Windows-native dispatch path in `fleet-dispatch.sh` — reaching `desktop`/
+`server`'s own `C:\Users\<winuser>\machines` clone — has been.)

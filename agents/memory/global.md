@@ -38,16 +38,24 @@ elsewhere to sync. Do NOT put secrets here.
   dispatches to WSL bash — specifically the **DEFAULT WSL distro** (`bash.exe`),
   which on `desktop` is **Ubuntu-26.04** (`$HOME=/home/me`). A non-default distro
   is never reached this way.
-- **`/ship`'s fleet-pull touches ONE clone per box (first match), inside the
-  default WSL distro only.** On `desktop` it pulls `/home/me/machines` (WSL
-  Ubuntu-26.04, first in the roots search) — NOT the Windows-native clone at
-  `C:\Users\methe\machines` (`/mnt/c/Users/methe/machines`). But that C: clone
-  does NOT need a manual pull: the **`fleet-selfpull` Windows Scheduled Task**
-  (registered by `provision/windows.ps1` step 8) ff-pulls every fleet-sync repo
-  under `%USERPROFILE%`/`\my`/`\GitHub` **every ~10 min**, so it self-catches-up
-  after any `/ship` push (verified 2026-07-21: task Ready, LastTaskResult=0).
-  Guards: skips if dirty / not on `main` / no upstream. A non-default WSL distro
-  is reached by neither mechanism.
+- **`/ship` (`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) now reach EVERY
+  fleet host's `$HOME/machines` clone**, via the shared
+  `agents/plugin/skills/lib/fleet-dispatch.sh` helper (`fd_probe`/`fd_run`/
+  `fd_wsl_hosts`). **Windows-native clones** (`desktop`, `server`) are reached
+  by launching Git Bash (`C:\Program Files\Git\bin\bash.exe`) through
+  PowerShell's call operator (`&`), keyed on `platform: windows` in
+  `fleet.json` — this runs the remote script against the Windows clone
+  (`$HOME=/c/Users/<winuser>`), not the WSL default distro (live-verified
+  2026-07-22: `fd_run desktop windows` → `HOME=/c/Users/methe` + the Windows
+  clone's commit). **Self-declared WSL hosts** are discovered by their Windows
+  parent via `wsl -l -q` + reading each distro's gitignored
+  `fleet.local.json`; any distro with `.self.fleet == true` is pulled directly
+  at `<nickname>.gg.ez`. WSL distros are NEVER added to `fleet.json` — they
+  self-declare via `just provision-wsl <nickname>` (implemented; the WSL
+  discovery path itself isn't yet end-to-end live-verified, unlike the
+  Windows-native path above). `machines` is located canonical-path-first
+  (`$HOME/machines`); the old `/mnt/c/Users/*/` cross-filesystem root — which
+  is what let a WSL host wrongly reach the Windows clone — was REMOVED.
 - **Inline `ssh host bash -lc '<cmd>'` (single-quoted) FAILS on the fleet — use
   `bash -lc "'<cmd>'"` (nested) or pipe `bash -s`.** ssh flattens its argv into ONE
   command string, so the LOCAL single-quotes are stripped before the remote shell

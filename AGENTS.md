@@ -111,6 +111,20 @@ the machine manifest, and the `ssh-server` role (`modules/system/ssh-server.nix`
 story. The old AmneziaWG mesh was retired from the repo 2026-07-17 (AmneziaWG
 survives only as the VPS's obfuscated VPN for RU relatives).
 
+Self-declared WSL hosts are first-class fleet hosts that never appear in
+`fleet.json`: each carries a gitignored `fleet.local.json`
+(`{nickname, fleet:true, platform}`), written by `provision/fleet-local.sh` as
+the last step of `just provision-wsl <nickname>` (chain: `tailscale-wsl.sh →
+ssh-wsl.sh → linux.sh → fleet-local.sh`). Its Windows parent discovers it
+live via `wsl -l -q` + reading each distro's `fleet.local.json`, and reaches
+it directly at `<nickname>.gg.ez` (its own tailnet node) — not through a
+`fleet.json` entry. The shared dispatch primitive
+`agents/plugin/skills/lib/fleet-dispatch.sh` (`fd_probe`/`fd_run`/
+`fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and kb-refresh's
+`fleet-gather.sh`; it also handles the Windows-native members (`desktop`,
+`server`) by dispatching through Git Bash via PowerShell's call operator,
+keyed on `platform: windows` in `fleet.json`.
+
 ### Host configurations
 
 Currently a single NixOS host:
@@ -154,6 +168,10 @@ Runs at system level (`nixosModules.default`) with `useGlobalPkgs = true` and `u
 - The server's *live* OS hostname is now `g513ie` — renamed from
   `methe-server` via `Rename-Computer` + reboot on the box, verified live
   2026-07-20.
+- **Self-declared WSL hosts add a third identity, outside this two-layer
+  scheme entirely**: they are not a `fleet.json` member, so there's no
+  logical-name/OS-hostname pair — just a `fleet.local.json` nickname that IS
+  the tailnet node name, reached directly at `<nickname>.gg.ez`.
 
 ### latitude5520 (Dell Latitude 5520)
 
