@@ -20,9 +20,9 @@ mock_ssh() {
   local alias="$1"; shift
   local remote="$*"
   printf '%s\t%s\n' "$alias" "$remote" >> "$LOG"
-  # Probe branch: remote command ends in `true`.
+  # Probe branch: remote command contains `-c true` (both linux & windows probes).
   case "$remote" in
-    *true)
+    *"-c true"*)
       # winbox models Windows: a probe that never invokes bash fails; a Git-Bash
       # (`&`/`bash.exe`) or `bash`-wrapped probe passes.
       case "$remote" in
