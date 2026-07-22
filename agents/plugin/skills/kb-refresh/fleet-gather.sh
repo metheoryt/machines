@@ -7,6 +7,12 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # fleet.json (repo root) is the machine manifest; four levels up from the skill dir.
 FLEET_JSON="${FLEET_JSON:-$SKILL_DIR/../../../../fleet.json}"
 
+# shellcheck source=../lib/fleet-dispatch.sh
+. "$SKILL_DIR/../lib/fleet-dispatch.sh"
+
+# Headscale MagicDNS suffix for reaching discovered WSL hosts by nickname.
+MAGICDNS_SUFFIX="${MAGICDNS_SUFFIX:-gg.ez}"
+
 fleet_hosts() {
   # Emit one TSV row per non-hub workstation: alias<TAB>platform<TAB>hostname<TAB>user.
   # The hub is the only member with ssh.host set (it's the VPS) — exclude it.
@@ -84,6 +90,70 @@ detect_hosts() {
   done < <(fleet_hosts "$json")
 }
 
+# harvest_host <alias> <platform> <hostid> <user> <out> <state> <match...> —
+# reachability probe, distiller push, watermark seed, in-place distill,
+# watermark merge-back, digest pull for ONE remote box. Dispatch goes through
+# fd_run/fd_probe (agents/plugin/skills/lib/fleet-dispatch.sh) so a `windows`
+# platform reaches the Windows-native clone via Git Bash instead of landing in
+# the WSL default-distro bash. Used for both a fleet.json member (main's
+# member loop) and a discovered WSL guest (harvested as a plain `linux`
+# platform target, same push/distill/pull).
+#
+# Every failure path below is `continue`-shaped: it logs and returns 0 rather
+# than letting a bad host abort the whole gather (the script runs
+# `set -euo pipefail`). Two sites push BOTH a fixed remote command AND a file's
+# content over the same fd_run stdin (`cat > dest` + payload) — this relies on
+# bash reading script input a line at a time from a non-seekable stream so the
+# trailing payload bytes still reach the spawned `cat`; verified for a bare
+# script (Task 4) but NOT yet for script+payload through the Windows Git-Bash
+# hop (deferred to Task 10 Step 5 live verification).
+harvest_host() {
+  local alias="$1" platform="$2" hostid="$3" user="$4" out="$5" state="$6"
+  shift 6
+  local -a matches=("$@")
+
+  if ! printf 'mkdir -p ~/.cache/kb-digests' | fd_run "$alias" "$platform" >/dev/null 2>&1; then
+    echo "[$alias] skipped (unreachable)" >&2
+    return 0
+  fi
+
+  # Push the distiller (drop the deployed-symlink dependency) + seed the
+  # git-tracked watermark, both via `cat > dest` (rsync fails on Windows).
+  if ! { printf 'cat > ~/.cache/distill.py\n'; cat "$SKILL_DIR/distill.py"; } \
+       | fd_run "$alias" "$platform"; then
+    echo "[$alias] distiller push failed" >&2
+    return 0
+  fi
+  { printf 'cat > ~/.cache/kb-harvest-state.json\n'; cat "$state"; } \
+    | fd_run "$alias" "$platform" \
+    || echo "[$alias] state seed failed (remote falls back to its own cache)" >&2
+
+  # Distill every root for this platform (Windows: profile + WSL; unix: home).
+  local roots=(); mapfile -t roots < <(roots_for_platform "$platform" "$user")
+  echo "[$alias] distilling in-place as '$hostid' (${#roots[@]} root(s))…" >&2
+  if ! remote_distill_script \
+       | fd_run "$alias" "$platform" "$hostid" "${#roots[@]}" "${roots[@]}" "${matches[@]}"; then
+    echo "[$alias] remote distill failed" >&2
+    return 0
+  fi
+
+  # Merge the remote's advanced watermark back (only its `sessions`).
+  local tmp_state; tmp_state="$(mktemp)"
+  if printf 'cat ~/.cache/kb-harvest-state.json' | fd_run "$alias" "$platform" > "$tmp_state" 2>/dev/null; then
+    python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
+      || echo "[$alias] state merge-back failed" >&2
+  fi
+  rm -f "$tmp_state"
+
+  # Pull digests via tar (rsync fails on Windows). Exclude manifest.tsv — the
+  # local manifest accumulates and a plain copy would clobber it.
+  echo "[$alias] pulling digests…" >&2
+  printf 'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null' \
+    | fd_run "$alias" "$platform" \
+    | tar xf - -C "$out" 2>/dev/null \
+    || echo "[$alias] digest pull failed" >&2
+}
+
 # Usage: fleet-gather.sh --out DIR --state FILE --match SUBSTR [--match SUBSTR ...]
 main() {
   command -v jq >/dev/null 2>&1 || { echo "fleet-gather: jq required" >&2; return 3; }
@@ -112,60 +182,37 @@ main() {
   local alias platform hostid user
   while IFS=$'\t' read -r alias platform hostid user; do
     # Self-exclusion: compare the remote's resolved identity to ours. The probe
-    # MUST be bash-wrapped — a bare `ssh $h hostname` runs in PowerShell and
-    # returns the native Windows name.
-    #
-    # Remote bash commands use NESTED quoting: `bash -lc "'…'"`. ssh flattens its
-    # argv into one command string, so LOCAL single-quotes are consumed before the
-    # remote shell sees them — `bash -lc 'mkdir -p ~/x'` would arrive as
-    # `bash -lc mkdir -p ~/x`, and `bash -c` runs only the word `mkdir` (no args).
-    # The inner single-quotes must travel to the remote intact, hence "'…'".
+    # goes through fd_run so a `windows` member dispatches via Git Bash instead
+    # of landing in PowerShell (which would report the native Windows name, not
+    # `hostname`'s bash-side answer) — see fleet-dispatch.sh for the mechanics.
     local remote_live
-    remote_live="$(ssh -n "$alias" bash -lc "'hostname'" 2>/dev/null || true)"
+    remote_live="$(printf 'hostname' | fd_run "$alias" "$platform" 2>/dev/null || true)"
     if [ -n "$remote_live" ] && \
        [ "$(local_host_id "$FLEET_JSON" "$remote_live")" = "$self_id" ]; then
       echo "[$alias] is this box, skipping self" >&2
       continue
     fi
 
-    # Reachability + cache dir (nested-quoted so the command survives the ssh flatten).
-    if ! ssh -n "$alias" bash -lc "'mkdir -p ~/.cache/kb-digests'" 2>/dev/null; then
-      echo "[$alias] skipped (unreachable)" >&2
-      continue
-    fi
+    harvest_host "$alias" "$platform" "$hostid" "$user" "$out" "$state" "${matches[@]}"
 
-    # Push the distiller (drop the deployed-symlink dependency) + seed the
-    # git-tracked watermark, both via cat (rsync fails on Windows).
-    if ! ssh "$alias" bash -lc "'cat > ~/.cache/distill.py'" < "$SKILL_DIR/distill.py"; then
-      echo "[$alias] distiller push failed" >&2
-      continue
+    # WSL guests of a windows member: each self-declared (fleet.local.json
+    # `.self.fleet == true`) distro is harvested as a plain `linux` platform
+    # target over its tailnet nickname, reusing the same harvest_host body.
+    # (No self-exclusion here per Task 10 brief — a WSL nickname and this box's
+    # fleet detect.hostname live in different namespaces, so a comparison would
+    # never meaningfully fire; mirror fleet-pull.sh's exact check instead if
+    # that ever becomes a real topology.) Note: if the windows member above was
+    # unreachable, this still issues its own probe (wsl.exe -l -q) against the
+    # same dead box — a wasted timeout, not a correctness issue.
+    if [ "$platform" = windows ]; then
+      local nick wsl_hostid
+      while IFS= read -r nick; do
+        [ -n "$nick" ] || continue
+        wsl_hostid="$(local_host_id "$FLEET_JSON" "$nick")"
+        harvest_host "$nick${MAGICDNS_SUFFIX:+.$MAGICDNS_SUFFIX}" linux "$wsl_hostid" "" \
+          "$out" "$state" "${matches[@]}"
+      done < <(fd_wsl_hosts "$alias" "$platform")
     fi
-    ssh "$alias" bash -lc "'cat > ~/.cache/kb-harvest-state.json'" < "$state" \
-      || echo "[$alias] state seed failed (remote falls back to its own cache)" >&2
-
-    # Distill every root for this platform (Windows: profile + WSL; unix: home).
-    local roots=(); mapfile -t roots < <(roots_for_platform "$platform" "$user")
-    echo "[$alias] distilling in-place as '$hostid' (${#roots[@]} root(s))…" >&2
-    if ! remote_distill_script | \
-         ssh "$alias" bash -s -- "$hostid" "${#roots[@]}" "${roots[@]}" "${matches[@]}"; then
-      echo "[$alias] remote distill failed" >&2
-      continue
-    fi
-
-    # Merge the remote's advanced watermark back (only its `sessions`).
-    local tmp_state; tmp_state="$(mktemp)"
-    if ssh -n "$alias" bash -lc "'cat ~/.cache/kb-harvest-state.json'" > "$tmp_state" 2>/dev/null; then
-      python3 "$SKILL_DIR/distill.py" --merge-from "$tmp_state" --state "$state" >/dev/null \
-        || echo "[$alias] state merge-back failed" >&2
-    fi
-    rm -f "$tmp_state"
-
-    # Pull digests via tar (rsync fails on Windows). Exclude manifest.tsv — the
-    # local manifest accumulates and a plain copy would clobber it.
-    echo "[$alias] pulling digests…" >&2
-    ssh -n "$alias" bash -lc "'cd ~/.cache/kb-digests 2>/dev/null && tar cf - --exclude=manifest.tsv . 2>/dev/null'" \
-      | tar xf - -C "$out" 2>/dev/null \
-      || echo "[$alias] digest pull failed" >&2
   done < <(detect_hosts "$FLEET_JSON")
 }
 
