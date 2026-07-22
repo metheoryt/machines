@@ -58,8 +58,10 @@ if [ "$(id -u)" -ne 0 ]; then
     SUDO="sudo -n"          # passwordless sudo — never prompts, never blocks
   elif have sudo && [ -t 0 ]; then
     SUDO="sudo"             # interactive terminal — allow a password prompt
+  elif [ -t 0 ]; then
+    die "not root and sudo not found — install sudo or run as root"   # human, no path to root
   else
-    PRIV=0                  # no root available non-interactively (e.g. converge)
+    PRIV=0                  # non-interactive with no reachable root (e.g. converge) — skip privileged steps
   fi
 fi
 
