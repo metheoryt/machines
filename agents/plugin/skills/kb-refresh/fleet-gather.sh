@@ -66,9 +66,11 @@ nroots="$1"; shift
 roots=(); for _ in $(seq 1 "$nroots"); do roots+=("$1"); shift; done
 margs=(); for m in "$@"; do margs+=(--match "$m"); done
 mkdir -p ~/.cache/kb-digests
+PY=python3
+python3 -c '' >/dev/null 2>&1 || PY=python
 for root in "${roots[@]}"; do
   root="${root/#\~/$HOME}"
-  python3 ~/.cache/distill.py --projects-root "$root" \
+  "$PY" ~/.cache/distill.py --projects-root "$root" \
     --out ~/.cache/kb-digests --state ~/.cache/kb-harvest-state.json \
     --host "$host" "${margs[@]}"
 done
