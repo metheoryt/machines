@@ -348,3 +348,10 @@ shell-with PACKAGE:
 # mangles (C:Users… → not found) — same reason agent-bootstrap stays relative.
 provision *ARGS:
     bash provision/provision.sh {{ARGS}}
+
+# Half-provision THIS WSL distro as a self-declaring, ephemeral fleet host.
+# <nickname> = tailnet node name (also its fleet.local.json nickname). Run from
+# inside the distro. Relative path (not {{flake_dir}}) — same Windows-path reason
+# as agent-bootstrap/provision.
+provision-wsl nickname:
+    bash provision/provision-wsl.sh {{nickname}}
