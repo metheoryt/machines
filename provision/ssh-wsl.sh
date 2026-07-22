@@ -71,13 +71,15 @@ ssh_wsl_sanitize() {
 # are added by the caller. Deterministic; the only IO is invoking jq on $1.
 ssh_wsl_render_config() {
   jq -r '
-    [ .machines | to_entries[] |
+    ( [ .machines | to_entries[] |
       ( [ "Host " + .key ]
         + ( if (.value.ssh.host // null) != null then [ "  HostName " + .value.ssh.host ] else [] end )
         + ( if (.value.ssh.user // "me") != "me" then [ "  User " + .value.ssh.user ] else [] end )
         + [ "  IdentityFile ~/.ssh/id_fleet", "  StrictHostKeyChecking accept-new" ]
       ) | join("\n")
-    ] | join("\n\n")
+    ] )
+    + [ "Host *.gg.ez\n  User me\n  IdentityFile ~/.ssh/id_fleet\n  StrictHostKeyChecking accept-new" ]
+    | join("\n\n")
   ' <<<"$1"
 }
 

@@ -55,6 +55,16 @@ in {
           ControlPath = "~/.ssh/master-%r@%n:%p";
           ControlPersist = "no";
         };
+
+        # Wildcard for self-declared WSL fleet hosts reachable by MagicDNS name
+        # (<nickname>.gg.ez). User `me`, fleet key. Declared members keep their
+        # own per-host blocks (rendered from fleet.json); the bare-name blocks and
+        # this suffix wildcard don't overlap. Precedes "*" so it isn't shadowed.
+        "*.gg.ez" = {
+          User = "me";
+          IdentityFile = "~/.ssh/id_fleet";
+          StrictHostKeyChecking = "accept-new";
+        };
       }
       // builtins.mapAttrs mkBlock params.machines;
   };

@@ -45,15 +45,27 @@ if command -v jq >/dev/null 2>&1; then
 
   echo "$RENDERED" | grep -q '^  HostName cyphy.kz$' || fail 'render: hub HostName cyphy.kz'
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 1 ] || fail 'render: only the hub gets a HostName'
-  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 2 ] || fail 'render: exactly the two non-me members get a User line'
+  # 3 User lines: server (methe), hub (debian), and the trailing *.gg.ez wildcard (me).
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 3 ] || fail 'render: the two non-me members plus the wildcard get a User line'
   echo "$RENDERED" | grep -q '^  User methe$'  || fail 'render: server → User methe'
   echo "$RENDERED" | grep -q '^  User debian$' || fail 'render: hub → User debian'
-  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 3 ] || fail 'render: every block has IdentityFile'
-  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 3 ] || fail 'render: every block has StrictHostKeyChecking'
+  echo "$RENDERED" | grep -q '^  User me$'     || fail 'render: wildcard → User me'
+  # 4 blocks now: latitude, server, hub, and the trailing *.gg.ez wildcard.
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 4 ] || fail 'render: every block (incl. wildcard) has IdentityFile'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 4 ] || fail 'render: every block (incl. wildcard) has StrictHostKeyChecking'
   echo "$RENDERED" | grep -q '^Host latitude$' || fail 'render: latitude block present'
   # The default-me member (latitude) must NOT carry a User line. Extract its block.
   LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
   echo "$LAT_BLOCK" | grep -q '^  User ' && fail 'render: default-me member must have no User line'
+
+  # The trailing *.gg.ez wildcard block must be present, last, and exact.
+  echo "$RENDERED" | grep -q '^Host \*\.gg\.ez$' || fail 'render: wildcard *.gg.ez block present'
+  WILDCARD_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host \*\.gg\.ez$/{f=1} f{print}')"
+  EXPECTED_WILDCARD='Host *.gg.ez
+  User me
+  IdentityFile ~/.ssh/id_fleet
+  StrictHostKeyChecking accept-new'
+  eq "$WILDCARD_BLOCK" "$EXPECTED_WILDCARD" 'render: wildcard block is the exact expected stanza and comes last'
 
   # ── ssh_wsl_host_label (maps hostname → fleet name; needs jq) ────────────────
   HL_FIXTURE='{ "machines": {
