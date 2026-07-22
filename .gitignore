@@ -53,3 +53,8 @@ provision/secrets/
 # construction — never synced. See docs/superpowers/specs/2026-07-21-fleet-
 # converge-self-healing-sync-design.md §5.
 /.machines/
+
+# Per-host WSL self-declaration for the fleet (provision/fleet-local.sh). A host
+# declares itself a fleet member locally without a committed fleet.json entry;
+# the Windows parent discovers it via `wsl -l`. Per-host, never synced.
+fleet.local.json
