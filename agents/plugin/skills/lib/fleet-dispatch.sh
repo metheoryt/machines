@@ -53,3 +53,30 @@ fd_run() {
       ;;
   esac
 }
+
+# fd_wsl_hosts <alias> <platform> — for a windows member, echo the tailnet
+# nickname of each WSL distro that self-declares fleet:true in
+# $HOME/machines/fleet.local.json. One per line. Empty for non-windows members.
+#
+# `wsl -l -q` historically emits UTF-16LE with NULs + CRLF — strip \000 and \r
+# before parsing. The per-distro marker read runs the distro's OWN bash so it
+# expands its $HOME (single-quoted so neither PowerShell nor the local shell
+# eats it); the exact remote quoting is confirmed by the live discovery task.
+fd_wsl_hosts() {
+  local alias="$1" platform="$2"
+  [ "$platform" = windows ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  local distros d marker
+  distros="$($SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" 'wsl.exe -l -q' </dev/null 2>/dev/null \
+    | tr -d '\000\r')"
+  printf '%s\n' "$distros" | while IFS= read -r d; do
+    d="$(printf '%s' "$d" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -n "$d" ] || continue
+    marker="$($SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" \
+      "wsl.exe -d $d -- bash -lc 'cat \$HOME/machines/fleet.local.json 2>/dev/null'" </dev/null 2>/dev/null \
+      | tr -d '\000\r')"
+    [ -n "$marker" ] || continue
+    printf '%s' "$marker" | jq -e '.self.fleet == true' >/dev/null 2>&1 || continue
+    printf '%s' "$marker" | jq -r '.self.nickname // empty'
+  done
+}

@@ -21,7 +21,7 @@ FLEET="$tmp/fleet.json"
 cat > "$FLEET" <<'JSON'
 { "machines": {
   "latitude": { "tailnet": { "ip": "100.64.0.2" } },
-  "desktop":  { "tailnet": { "ip": "100.64.0.4" } },
+  "desktop":  { "platform":"windows", "tailnet": { "ip": "100.64.0.4" } },
   "server":   { "tailnet": { "ip": "100.64.0.3" } },
   "hub":      { "tailnet": { "ip": "100.64.0.1" } }
 } }
@@ -179,6 +179,66 @@ printf '%s' "$out" | grep -qE '^hub .*unreachable'&& pass "table hub unreachable
 rows="$(printf '%s\n' "$out" | grep -cE '^(desktop|hub|server) ')"
 [ "$rows" -eq 3 ] && pass "loop processed all 3 non-self members (stdin intact)" \
   || die "loop stopped early: only $rows/3 member rows in: $out"
+
+# --- WSL discovery: a windows member enumerates an opt-in distro; main() pulls
+# it directly by nickname. Build the discovered host's checkout + a mock that
+# answers wsl-enumeration for `desktop` and treats `wsl-desktop` as a normal box.
+mkdir -p "$tmp/home/wsl-desktop"
+up_wsl="$tmp/upstream-wsl.git"; git init -q --bare "$up_wsl"
+mkrepo "$tmp/home/wsl-desktop/machines"
+git -C "$tmp/home/wsl-desktop/machines" remote set-url origin "$up_wsl"
+git -C "$tmp/home/wsl-desktop/machines" push -q origin main
+git -C "$tmp/home/wsl-desktop/machines" commit -q --allow-empty -m ahead
+git -C "$tmp/home/wsl-desktop/machines" push -q origin main
+git -C "$tmp/home/wsl-desktop/machines" reset -q --hard HEAD~1   # 1 behind → OK ff
+
+# Extend mock_ssh ADDITIVELY: two new case arms answer WSL enumeration +
+# per-distro marker read, added BEFORE the existing probe dispatch. The
+# existing `-c true` CONTAINS-based probe detection (NOT "ends in true") and
+# the existing work branch are otherwise untouched — reverting to the
+# ends-in-true idiom would make the windows/winbox probe assertions pass
+# vacuously (the windows probe command ends in `}`, a PowerShell brace, not
+# `true`). See the CRITICAL note in the task-5 brief.
+mock_ssh() {
+  while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
+  local alias="$1"; shift
+  local remote="$*"
+  case "$remote" in
+    *"-l -q"*) printf 'wsl-desktop\r\n'; return 0 ;;
+    *"wsl.exe -d wsl-desktop"*) printf '{"self":{"nickname":"wsl-desktop","fleet":true,"platform":"linux"}}'; return 0 ;;
+  esac
+  # Reachability probe: remote command CONTAINS `-c true` (both `bash -c true`
+  # and the windows PowerShell `... bash.exe" -c true }` fragment contain it).
+  # NOTE: detecting via "ends in true" is a trap — the windows probe ends in
+  # `}` (the PowerShell if/else close brace), not `true`, so that check would
+  # fall through to the work branch and pass vacuously for windows/winbox.
+  case "$remote" in
+    *"-c true"*)
+      # Real ssh drains its stdin; model that so the "ssh in a loop eats the
+      # member list" bug is reproducible. Harmless because run_member's probe
+      # redirects stdin from /dev/null — if that `</dev/null` is ever removed,
+      # this drain consumes main()'s `while read … done < <(jq …)` input and
+      # the "all non-self members processed" assertion below goes RED.
+      cat >/dev/null 2>&1 || true
+      # Model a PowerShell/Windows box: no bare `true`, only bash works.
+      case "$remote" in
+        *bash.exe*|bash\ *) : ;;                        # bash reached -> ok
+        *) [ "$alias" = winbox ] && return 1 ;;          # winbox: no bash -> down
+      esac
+      grep -qx "$alias" "$UNREACHABLE" && return 1 || return 0
+      ;;
+  esac
+  # Work call: run REMOTE_SCRIPT (on stdin) with this box's HOME. The script's
+  # single positional arg (target) is the LAST token of the flattened command
+  # for both `bash -s <target>` and Git Bash `-s -- "<target>"`.
+  local target; target="$(printf '%s' "$remote" | awk '{gsub(/"/,"",$NF); print $NF}')"
+  HOME="$tmp/home/$alias" bash -s "$target"
+}
+
+out="$(FLEET_JSON="$FLEET" LOCAL_TAILNET_IP="100.64.0.2" SSH="mock_ssh" MAGICDNS_SUFFIX="" \
+       main "$up_wsl" 2>/dev/null)"
+printf '%s' "$out" | grep -qE '^wsl-desktop .*OK' && pass "WSL host discovered + pulled" \
+  || die "WSL host row missing: $out"
 
 # winbox: models a PowerShell/Windows box where a bare `true` probe fails but
 # a bash-wrapped probe (`bash -c true`) succeeds. Empty $HOME (no checkout),

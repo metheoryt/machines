@@ -62,5 +62,31 @@ case "$out" in
   *) die "fd_run windows -> '$out'" ;;
 esac
 
+# --- fd_wsl_hosts: mock `wsl.exe -l -q` + per-distro marker reads. ---
+# Distro list: two distros. Ubuntu-26.04 opts in (fleet:true), Ubuntu-24.04 does not.
+mock_ssh_wsl() {
+  while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
+  local alias="$1"; shift
+  local remote="$*"
+  case "$remote" in
+    *"-l -q"*)
+      # Model Windows UTF-16-ish noise: NULs + CR interspersed.
+      printf 'U\000b\000u\000n\000t\000u\000-\0002\0006\000.\0000\0004\000\r\000\n'
+      printf 'U\000b\000u\000n\000t\000u\000-\0002\0004\000.\0000\0004\000\r\000\n'
+      ;;
+    *Ubuntu-26.04*fleet.local.json*|*Ubuntu-26.04*)
+      printf '{"self":{"nickname":"desktop-ubuntu26","fleet":true,"platform":"linux"}}' ;;
+    *Ubuntu-24.04*)
+      printf '{"self":{"nickname":"scratch","fleet":false,"platform":"linux"}}' ;;
+  esac
+}
+SSH="mock_ssh_wsl"
+got="$(fd_wsl_hosts desktop windows)"
+[ "$got" = "desktop-ubuntu26" ] && pass "fd_wsl_hosts opt-in only" || die "fd_wsl_hosts -> '$got'"
+# non-windows returns nothing
+got="$(fd_wsl_hosts latitude nixos)"
+[ -z "$got" ] && pass "fd_wsl_hosts skips non-windows" || die "fd_wsl_hosts non-windows -> '$got'"
+SSH="mock_ssh"   # restore for any later cases
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"
