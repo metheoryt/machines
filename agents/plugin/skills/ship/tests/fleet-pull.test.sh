@@ -189,6 +189,28 @@ mkdir -p "$tmp/home/winbox"
 got="$(run_member winbox windows "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "winbox reachable via bash probe" || die "winbox -> '$got' (want SKIP absent)"
 
+# --- main()'s platform threading: a real "platform":"windows" fleet.json entry
+# must flow through main()'s jq @tsv parse into run_member/fd_probe/fd_run, not
+# just via a direct run_member call. A separate fixture keeps this isolated
+# from the linux-only fixture used by the full-run assertions above. winbox's
+# $HOME is already set up (empty -> absent) and the mock's windows probe is
+# already wired (see mock_ssh: bash.exe reached -> ok, bare `true` -> down for
+# winbox). If main() ever dropped/mis-threaded the platform field (defaulting
+# everything to "linux"), the probe would use bare `true`, winbox's special-
+# cased failure would fire, and this would read "SKIP unreachable" instead.
+FLEET_WIN="$tmp/fleet-win.json"
+cat > "$FLEET_WIN" <<JSON
+{ "machines": {
+  "latitude": { "tailnet": { "ip": "100.64.0.2" } },
+  "winbox":   { "tailnet": { "ip": "100.64.0.9" }, "platform": "windows" }
+} }
+JSON
+out_win="$(FLEET_JSON="$FLEET_WIN" LOCAL_TAILNET_IP="100.64.0.2" SSH="mock_ssh" \
+           main "git@github.com:metheoryt/machines.git" 2>/dev/null)"
+printf '%s' "$out_win" | grep -qE '^winbox[[:space:]]+SKIP absent' \
+  && pass "main() threads platform=windows into run_member" \
+  || die "main() windows row wrong: $out_win (want winbox ... SKIP absent, not SKIP unreachable)"
+
 # --- convergence column: REMOTE_SCRIPT reports .machines/last-converge ---
 # Build a found-repo with a last-converge record; run the token-builder snippet
 # the remote script uses and assert the converge token is derived from it.
@@ -215,6 +237,33 @@ tgt_canon="$(normalize_url "$up_canon")"
 got="$(run_member canon linux "$tgt_canon")"
 [ "$got" = "OK up-to-date | conv:none" ] && pass "canonical \$HOME/machines found" \
   || die "canon -> '$got' (want OK up-to-date)"
+
+# canonical-path PRIORITY: the test above can't tell the canonical-first `if`
+# block apart from the fallback scan, because $HOME/machines is ALSO the first
+# match the fallback scan would find (root=$HOME's own "$root"/* glob visits
+# $HOME's direct children in alphabetical order, and "machines" would be
+# reached there regardless). To force a real race we need a competing repo
+# that the fallback scan reaches BEFORE $HOME/machines if the canonical-first
+# block were absent: a sibling directly under $HOME sorting alphabetically
+# ahead of "machines" (verified: "decoy" < "machines" -> checked first in the
+# same root=$HOME glob pass). Give the two DIFFERENT, distinguishable status
+# tokens (canonical clean+up-to-date; decoy dirty) so a pass here proves the
+# canonical clone's token won, not the decoy's.
+mkdir -p "$tmp/home/prio"
+up_prio="$tmp/upstream-prio.git"; git init -q --bare "$up_prio"
+mkrepo "$tmp/home/prio/machines"
+git -C "$tmp/home/prio/machines" remote set-url origin "$up_prio"
+git -C "$tmp/home/prio/machines" push -q origin main
+# competing sibling: same origin, but DIRTY -> distinguishable "SKIP dirty".
+mkrepo "$tmp/home/prio/decoy"
+git -C "$tmp/home/prio/decoy" remote set-url origin "$up_prio"
+git -C "$tmp/home/prio/decoy" push -q origin main
+echo x > "$tmp/home/prio/decoy/dirty"
+tgt_prio="$(normalize_url "$up_prio")"
+got="$(run_member prio linux "$tgt_prio")"
+[ "$got" = "OK up-to-date | conv:none" ] \
+  && pass "canonical wins over earlier-sorted dirty sibling (decoy)" \
+  || die "prio -> '$got' (want OK up-to-date; canonical-first must beat scan order, not '$got')"
 
 # /mnt/c root removed: REMOTE_SCRIPT must not reference /mnt/c any more.
 printf '%s' "$REMOTE_SCRIPT" | grep -q '/mnt/c' \
