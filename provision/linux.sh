@@ -484,6 +484,36 @@ else
   warn "fleet-selfpull installed but not scheduled (no systemd user manager or cron)"
 fi
 
+# ── BEST-EFFORT: inbound fleet SSH trust (ssh-server role) ────────────────────
+# Merge provision/fleet-authorized-keys into ~/.ssh/authorized_keys so this box
+# accepts inbound fleet logins (mirrors ssh-server.nix keyFiles / windows.ps1
+# step 7 / ssh-wsl.sh step 4). Snapshot copy — re-run after a new member joins.
+# Idempotent by key body. sshd itself is configured by ssh-wsl.sh (key-only);
+# here we only ensure the authorized_keys trust so a bare linux.sh re-run keeps it.
+info "Ensuring inbound fleet SSH trust…"
+MESH_KEYS="$REPO/provision/fleet-authorized-keys"
+if [ ! -f "$MESH_KEYS" ]; then
+  warn "provision/fleet-authorized-keys not found — skipped inbound fleet trust"
+else
+  mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+  AUTHK="$HOME/.ssh/authorized_keys"
+  tmp_ak="$(mktemp)"
+  # keep existing lines; append each fleet key whose body (2nd field) is absent.
+  awk '
+    function blank(s){ return s ~ /^[[:space:]]*$/ }
+    FNR==NR { if (blank($0)) next; print; if ($1 !~ /^#/ && $2 != "") have[$2]=1; next }
+    blank($0) || $1 ~ /^#/ { next }
+    $2 != "" && !($2 in have) { print; have[$2]=1 }
+  ' "$AUTHK" "$MESH_KEYS" 2>/dev/null > "$tmp_ak" || cat "$MESH_KEYS" > "$tmp_ak"
+  if [ -f "$AUTHK" ] && cmp -s "$tmp_ak" "$AUTHK"; then
+    ok "authorized_keys already trusts the fleet"
+  else
+    install -m600 "$tmp_ak" "$AUTHK"
+    ok "installed fleet keys → $AUTHK (inbound trust)"
+  fi
+  rm -f "$tmp_ak"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf '\n\033[1mDone.\033[0m %s warning(s).\n\n' "$WARNINGS"
 cat <<EOF
