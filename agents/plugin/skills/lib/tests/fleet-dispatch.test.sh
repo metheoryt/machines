@@ -52,7 +52,7 @@ fd_probe winbox windows && pass "winbox reachable via bash probe" || die "winbox
 
 # fd_run linux → `bash -s` with args; stdin forwarded verbatim.
 out="$(printf 'SCRIPT-BODY' | fd_run latitude nixos target-arg)"
-[ "$out" = 'bash -s target-arg||SCRIPT-BODY' ] && pass "fd_run linux argv+stdin" \
+[ "$out" = 'bash -s -- target-arg||SCRIPT-BODY' ] && pass "fd_run linux argv+stdin" \
   || die "fd_run linux -> '$out'"
 
 # fd_run windows → Git Bash `-s -- <args>`; stdin forwarded verbatim.

@@ -49,7 +49,7 @@ fd_run() {
       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" "$(_fd_win_call "$q")" 2>/dev/null
       ;;
     *)
-      $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s "$@" 2>/dev/null
+      $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s -- "$@" 2>/dev/null
       ;;
   esac
 }
