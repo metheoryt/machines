@@ -38,6 +38,18 @@ elsewhere to sync. Do NOT put secrets here.
   dispatches to WSL bash — specifically the **DEFAULT WSL distro** (`bash.exe`),
   which on `desktop` is **Ubuntu-26.04** (`$HOME=/home/me`). A non-default distro
   is never reached this way.
+- **`ssh <windows-host>` is ELEVATED; the local Claude shell on that same box is
+  not.** Windows OpenSSH hands admin-group users (`methe` is one) a full,
+  un-UAC-split token, while an interactive Claude session runs unelevated —
+  `IsInRole(Administrator)` is `True` over SSH, `False` locally. So admin-ACL'd
+  state is *silently invisible* locally: on `server` (g513ie, 2026-07-24)
+  `(Get-ScheduledTask).Count` = **209** locally vs **284** over `ssh server`, and
+  the task being hunted was among the 75 missing. NOT a sandbox effect —
+  `dangerouslyDisableSandbox` returns the same 209. **When working on Scheduled
+  Tasks, services, or anything else admin-gated on a Windows fleet box, go through
+  `ssh <host>` even when you are already ON that host** (it's a loopback, same
+  filesystem — a path written over SSH is the same file locally). Absence of a
+  result in the local shell is not evidence of absence.
 - **`/ship` (`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) now reach EVERY
   fleet host's `$HOME/machines` clone**, via the shared
   `agents/plugin/skills/lib/fleet-dispatch.sh` helper (`fd_probe`/`fd_run`/
