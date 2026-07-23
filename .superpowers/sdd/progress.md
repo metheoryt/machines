@@ -44,3 +44,29 @@ ENVIRONMENT:
 ## ALL VERIFICATION COMPLETE — feature live on latitude + both Windows boxes. main @ 78e58f3.
 
 ## Notes
+
+## LIVE GATE RESULTS (2026-07-23)
+- fleet-pull deploy: server OK 59d4d70..2c91e07 (Windows-native clone FF-pulled via Git Bash!), desktop SKIP dirty, hub SKIP absent. WSL discovery ran clean (empty, no marker yet).
+- python3-under-Git-Bash (final-review #1): CONFIRMED bug. desktop python3=Store-stub (Permission denied), python=3.13.14 works. server python3=3.14.2 works. FIXED commit a818490 (remote_distill_script falls back python3->python via execution test). Verified live: desktop resolves `python`, server resolves `python3`.
+- fd_wsl_hosts enumeration live-verified: desktop lists Ubuntu-26.04/docker-desktop/Ubuntu-24.04, returns empty (no marker) correctly.
+- desktop WSL Ubuntu-26.04 clone: clean, on main, at 59d4d70 (behind), origin correct -> ready for provision-wsl after git pull.
+
+## FOLLOW-UP DOC GAP (not in plan Task 11 scope): kb-refresh/SKILL.md still describes OLD model (WSL-bash dispatch, /mnt/c paths, "Windows harvests both Windows profile AND WSL"). Task 10 changed this to Git-Bash Windows-native + WSL-as-separate-host. Offer to update SKILL.md + reviewer Minor #2 (drop vestigial /mnt/c from roots_for_platform windows) as a follow-up.
+
+## TASK 9 BLOCKED ON USER: provision-wsl must run on desktop box (WSL distro). Instructions presented.
+
+## ALL LIVE GATES PASSED (2026-07-23) — FEATURE COMPLETE
+- Task 9 (WSL discovery e2e): PASS. provision-wsl on desktop distro succeeded; fd_wsl_hosts -> desktop-ubuntu26; marker read quoting works (no fix needed); ssh desktop-ubuntu26.gg.ez works (inbound trust + Host *.gg.ez wildcard); /ship shows distinct desktop-ubuntu26 row.
+- Task 12 (final /ship): PASS. server + desktop-ubuntu26 FF-pulled to c7d9ac9 via Git-Bash / direct WSL dispatch. desktop=SKIP dirty (pre-existing box state), hub=SKIP absent (no clone).
+- Task 10 Step 5 (kb-refresh gather): PASS after 3 live-gate fixes. All hosts distill (latitude 65, desktop 20, server 14, desktop-ubuntu26 25-43). No "remote distill failed".
+  * FIX a818490: remote distiller python3->python fallback (desktop python3=Store stub, Permission denied).
+  * FIX c7d9ac9: dropped dead /mnt/c root (missing under Git Bash, failed set -e) + pinned encoding=utf-8 on distill.py's 6 opens (native Windows Python cp1252 choked on U+2192).
+  * DISPROVEN: reviewer's "binary tar through Windows hop corrupts" — raw tar pull works (desktop 20, server 14 verified directly). No base64 needed.
+  * BENIGN: desktop-windows (/c/Users/methe/.claude/projects) and desktop-ubuntu26 (WSL ~/.claude/projects) share the SAME 20 sessions (identical sids + cwd C:\Users\methe\machines) — the WSL distro mirrors the Windows Claude profile. Flat out-dir dedups by sid (last-writer-wins, identical content). Not data loss.
+
+## PUSHED: main @ c7d9ac9 (origin up to date). Feature live on server + desktop-ubuntu26.
+
+## OPEN FOLLOW-UPS (not blockers):
+1. kb-refresh/SKILL.md still describes OLD model (WSL-bash dispatch, /mnt/c, "Windows harvests both profile AND WSL"). Should update to: Git-Bash Windows-native harvest + WSL as separate self-declared host. (Task 11 scope didn't include it.)
+2. desktop's Windows clone (C:\Users\methe\machines) is DIRTY -> /ship keeps SKIP dirty. User must commit/stash/discard on that box.
+3. Branch fleet-reach-every-clone still exists (kept as safety) — safe to delete now.
