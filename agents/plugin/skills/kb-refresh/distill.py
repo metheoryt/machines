@@ -93,7 +93,7 @@ def resume_offset(state_sessions, session_id, lines):
 def _load_state(state_path):
     if os.path.exists(state_path):
         try:
-            with open(state_path) as f:
+            with open(state_path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return {}
@@ -143,15 +143,15 @@ def run(projects_root, matches, out_dir, state_path, host=None):
                 f"# range: lines {start}..{len(lines)} "
                 f"({meta.get('first_ts')} .. {meta.get('last_ts')})\n\n"
             )
-            with open(os.path.join(out_dir, f"{sid}.md"), "w") as f:
+            with open(os.path.join(out_dir, f"{sid}.md"), "w", encoding="utf-8") as f:
                 f.write(header + digest_body + "\n")
             written += 1
             manifest.append(f"{sid}\t{host}\t{meta.get('cwd')}\t{start}\t{len(lines)}\t{meta.get('last_ts')}")
 
-    with open(os.path.join(out_dir, "manifest.tsv"), "a") as f:
+    with open(os.path.join(out_dir, "manifest.tsv"), "a", encoding="utf-8") as f:
         for row in manifest:
             f.write(row + "\n")
-    with open(state_path, "w") as f:
+    with open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, sort_keys=True)
     return {"sessions_seen": seen, "sessions_with_new": with_new, "digests_written": written}
 
@@ -168,7 +168,7 @@ def merge_sessions_into(local_state_path, remote_state_path):
     if not os.path.exists(remote_state_path):
         return 0
     try:
-        with open(remote_state_path) as f:
+        with open(remote_state_path, encoding="utf-8") as f:
             remote_state = json.load(f)
     except (json.JSONDecodeError, OSError):
         return 0
@@ -184,7 +184,7 @@ def merge_sessions_into(local_state_path, remote_state_path):
             local_sessions[sid] = remote_entry
             merged += 1
 
-    with open(local_state_path, "w") as f:
+    with open(local_state_path, "w", encoding="utf-8") as f:
         json.dump(local_state, f, indent=2, sort_keys=True)
     return merged
 

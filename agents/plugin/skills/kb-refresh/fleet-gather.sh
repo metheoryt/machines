@@ -28,18 +28,14 @@ fleet_hosts() {
 }
 
 roots_for_platform() {
-  # Projects roots to distill on the remote, in order. Windows boxes keep live
-  # transcripts in the Windows profile AND (partially) in WSL — distill both.
-  local platform="$1" user="$2"
-  case "$platform" in
-    windows)
-      printf '/mnt/c/Users/%s/.claude/projects\n' "$user"
-      printf '~/.claude/projects\n'
-      ;;
-    *)
-      printf '~/.claude/projects\n'
-      ;;
-  esac
+  # Projects root to distill on the remote. Every platform harvests the box's
+  # own Claude profile at ~/.claude/projects; the remote distiller expands ~ to
+  # $HOME, which on Windows (via Git Bash, per fd_run) is
+  # /c/Users/<user>/.claude/projects — the Windows-native profile. Self-declared
+  # WSL distros are separate fleet hosts harvested directly (via fd_wsl_hosts),
+  # so there is no /mnt/c cross-mount root here (it does not exist under Git
+  # Bash and would fail the set -e remote distill).
+  printf '~/.claude/projects\n'
 }
 
 local_host_id() {
