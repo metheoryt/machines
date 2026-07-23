@@ -50,15 +50,22 @@ which a human approves before anything is written.
   identity) it: seeds that box's `~/.cache/kb-harvest-state.json` with the
   authoritative git-tracked watermark and pushes `distill.py` (both via `cat`
   over ssh — no deployed skill needed on the remote); runs `distill.py`
-  **in place** against the seeded state, once per projects root for the box's
-  platform (Windows: the Windows profile `/mnt/c/Users/<ssh.user>/.claude/projects`
-  **and** WSL `~/.claude/projects`; unix: `~/.claude/projects`); pulls the
-  remote state back and merges only its `sessions` map via
+  **in place** against the seeded state at `~/.claude/projects` (on a
+  `platform: windows` member this resolves, via Git Bash, to
+  `/c/Users/<ssh.user>/.claude/projects` — the Windows-native profile); pulls
+  the remote state back and merges only its `sessions` map via
   `distill.py --merge-from`; then pulls the resulting digests via `tar`
-  (excluding `manifest.tsv`). Every remote command is bash-wrapped, so the
-  Windows members (whose ssh lands in PowerShell) dispatch correctly to WSL
-  bash; raw transcripts never leave their machine. No fleet aliases configured
-  → silently local-only.
+  (excluding `manifest.tsv`). Every remote command dispatches through the shared
+  helper `../lib/fleet-dispatch.sh` (`fd_run`/`fd_probe`), so a `platform:
+  windows` member (whose ssh lands in PowerShell) runs against the
+  **Windows-native** clone via Git Bash instead of landing in the WSL
+  default-distro bash. Self-declared WSL distros are **separate** fleet hosts,
+  not reached through their Windows parent's dispatch: for each Windows member,
+  `fd_wsl_hosts` enumerates its distros (`wsl -l -q`), reads each distro's
+  `~/machines/fleet.local.json`, and harvests any `fleet:true` distro directly
+  at `<nickname>.gg.ez` as a plain linux host (same seed/distill/pull path). Raw
+  transcripts never leave their machine. No fleet aliases configured → silently
+  local-only.
 - `distill.py` reads only lines beyond each session's watermark
   (`last_line`/`id_hash` in the state file), so a session already fully
   harvested contributes nothing on a re-run; a resumed session contributes
