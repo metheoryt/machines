@@ -76,13 +76,25 @@ if [ -z "$found" ]; then
   done
 fi
 [ -n "$found" ] || { echo "SKIP absent"; exit 0; }
-[ -z "$(git -C "$found" status --porcelain 2>/dev/null)" ] || { echo "SKIP dirty"; exit 0; }
+# Only TRACKED changes count as dirty. Untracked files never block a fast-forward
+# (git leaves them untouched, and refuses the merge rather than clobber one whose
+# path an incoming commit adds — handled as SKIP pull-blocked below), so ignoring
+# them here lets a box carrying stray untracked files still receive main.
+[ -z "$(git -C "$found" status --porcelain --untracked-files=no 2>/dev/null)" ] || { echo "SKIP dirty"; exit 0; }
 before="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
 if git -C "$found" pull --ff-only origin main >/dev/null 2>&1; then
   after="$(git -C "$found" rev-parse --short HEAD 2>/dev/null)"
   if [ "$before" = "$after" ]; then pull="OK up-to-date"; else pull="OK $before..$after"; fi
 else
-  pull="SKIP diverged"
+  # FF failed. The fetch above already advanced origin/main; if HEAD carries
+  # commits origin lacks, the histories truly diverged. Otherwise the FF was
+  # blocked for another, non-destructive reason — e.g. an untracked file whose
+  # path an incoming commit adds, which git refuses rather than overwrite.
+  if [ -n "$(git -C "$found" rev-list origin/main..HEAD 2>/dev/null)" ]; then
+    pull="SKIP diverged"
+  else
+    pull="SKIP pull-blocked"
+  fi
 fi
 conv="none"
 cf="$found/.machines/last-converge"

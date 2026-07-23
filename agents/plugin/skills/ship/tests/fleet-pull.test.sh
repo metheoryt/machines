@@ -94,6 +94,11 @@ mkrepo() { # $1 = dir ; makes a repo with origin = machines, one commit
   git -C "$1" remote add origin git@github.com:metheoryt/machines.git
 }
 
+dirty_tracked() { # $1 = repo dir ; commit a tracked file, then leave a working-tree modification to it
+  echo base > "$1/tracked.txt"; git -C "$1" add tracked.txt; git -C "$1" commit -q -m tracked
+  echo change >> "$1/tracked.txt"
+}
+
 target="$(normalize_url git@github.com:metheoryt/machines.git)"
 # A target guaranteed not to collide with any real checkout the unscoped
 # `/mnt/c/Users/*/` root in REMOTE_SCRIPT might stumble onto on the host
@@ -122,9 +127,10 @@ mkdir -p "$tmp/home/desktop"
 got="$(run_member desktop linux "$absent_target")"
 [ "$got" = "SKIP absent" ] && pass "desktop absent" || die "desktop -> '$got' (want SKIP absent)"
 
-# latitude: dirty checkout -> SKIP dirty
+# latitude: dirty checkout (TRACKED modification) -> SKIP dirty. An UNTRACKED
+# file alone must NOT trip this (see the untracked-file test below).
 mkrepo "$tmp/home/latitude/machines"
-echo x > "$tmp/home/latitude/machines/dirty"
+dirty_tracked "$tmp/home/latitude/machines"
 tgt_lat="$(normalize_url git@github.com:metheoryt/machines.git)"
 got="$(run_member latitude linux "$tgt_lat")"
 [ "$got" = "SKIP dirty" ] && pass "latitude dirty" || die "latitude -> '$got' (want SKIP dirty)"
@@ -150,6 +156,44 @@ git -C "$tmp/home/desktop/machines" commit -q --allow-empty -m local-ahead
 tgt_div="$(normalize_url "$up_div")"
 got="$(run_member desktop linux "$tgt_div")"
 [ "$got" = "SKIP diverged | conv:none" ] && pass "desktop diverged" || die "desktop -> '$got' (want SKIP diverged | conv:none)"
+
+# untracked file ONLY (no tracked changes), clean + behind origin -> the FF still
+# runs (untracked files never block a fast-forward). Regression guard for the
+# ignore-untracked change.
+mkdir -p "$tmp/home/untk"
+up_untk="$tmp/upstream-untk.git"; git init -q --bare "$up_untk"
+mkrepo "$tmp/home/untk/machines"
+git -C "$tmp/home/untk/machines" remote set-url origin "$up_untk"
+git -C "$tmp/home/untk/machines" push -q origin main
+git -C "$tmp/home/untk/machines" commit -q --allow-empty -m ahead
+git -C "$tmp/home/untk/machines" push -q origin main
+git -C "$tmp/home/untk/machines" reset -q --hard HEAD~1        # 1 behind -> FF-able
+echo stray > "$tmp/home/untk/machines/stray.txt"              # UNTRACKED only
+tgt_untk="$(normalize_url "$up_untk")"
+got="$(run_member untk linux "$tgt_untk")"
+case "$got" in OK\ *..*) pass "untracked file does not block FF pull";; *) die "untk -> '$got' (want OK ff, untracked must not block)";; esac
+
+# untracked file that COLLIDES with an incoming tracked file -> git refuses the
+# FF rather than clobber it -> SKIP pull-blocked (NOT diverged), and the local
+# untracked file is preserved byte-for-byte (the safety guarantee).
+mkdir -p "$tmp/home/coll"
+up_coll="$tmp/upstream-coll.git"; git init -q --bare "$up_coll"
+mkrepo "$tmp/home/coll/machines"
+git -C "$tmp/home/coll/machines" remote set-url origin "$up_coll"
+git -C "$tmp/home/coll/machines" push -q origin main
+echo upstream > "$tmp/home/coll/machines/collide.txt"        # a tracked file added upstream
+git -C "$tmp/home/coll/machines" add collide.txt
+git -C "$tmp/home/coll/machines" commit -q -m add-collide
+git -C "$tmp/home/coll/machines" push -q origin main
+git -C "$tmp/home/coll/machines" reset -q --hard HEAD~1       # behind, without collide.txt tracked
+echo local-untracked > "$tmp/home/coll/machines/collide.txt" # UNTRACKED, would be overwritten by FF
+tgt_coll="$(normalize_url "$up_coll")"
+got="$(run_member coll linux "$tgt_coll")"
+[ "$got" = "SKIP pull-blocked | conv:none" ] && pass "untracked collision -> SKIP pull-blocked" \
+  || die "coll -> '$got' (want SKIP pull-blocked | conv:none)"
+[ "$(cat "$tmp/home/coll/machines/collide.txt")" = "local-untracked" ] \
+  && pass "untracked collision file NOT clobbered (safe)" \
+  || die "collide.txt was overwritten: $(cat "$tmp/home/coll/machines/collide.txt")"
 
 # extra: clean checkout already at the bare upstream's HEAD, no new commits
 # either side -> OK up-to-date.
@@ -314,11 +358,11 @@ up_prio="$tmp/upstream-prio.git"; git init -q --bare "$up_prio"
 mkrepo "$tmp/home/prio/machines"
 git -C "$tmp/home/prio/machines" remote set-url origin "$up_prio"
 git -C "$tmp/home/prio/machines" push -q origin main
-# competing sibling: same origin, but DIRTY -> distinguishable "SKIP dirty".
+# competing sibling: same origin, but DIRTY (tracked modification) -> the
+# distinguishable "SKIP dirty" token, so a pass proves canonical's token won.
 mkrepo "$tmp/home/prio/decoy"
 git -C "$tmp/home/prio/decoy" remote set-url origin "$up_prio"
-git -C "$tmp/home/prio/decoy" push -q origin main
-echo x > "$tmp/home/prio/decoy/dirty"
+dirty_tracked "$tmp/home/prio/decoy"
 tgt_prio="$(normalize_url "$up_prio")"
 got="$(run_member prio linux "$tgt_prio")"
 [ "$got" = "OK up-to-date | conv:none" ] \
