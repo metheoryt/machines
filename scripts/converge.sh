@@ -51,9 +51,14 @@ changed_paths() {
   fi
 }
 
-# touches_nix <low> <high>: 0 if any *.nix / flake.nix / flake.lock in range.
+# touches_nix <low> <high>: 0 if any *.nix / flake.nix / flake.lock in range —
+# plus fleet.json, which is a Nix INPUT, not just a shell manifest
+# (modules/system/fleet.nix reads it with fromJSON and modules/home/ssh.nix
+# renders every ~/.ssh/config host block from it). Without it, adding a fleet
+# member never reaches a NixOS host: converge finds no .nix change, writes ok,
+# and advances converged-rev — a permanent silent skip.
 touches_nix() {
-  changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$)'
+  changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$|^fleet\.json$)'
 }
 
 # touches_linux <low> <high>: 0 if any provisioning-relevant path changed in

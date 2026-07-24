@@ -40,6 +40,14 @@ touches_nix "$rev1" "$rev2" && pass "touches_nix detects .nix" || die "touches_n
 # touches_nix: empty low (first run) -> treat as changed (hit).
 touches_nix "" "$rev2" && pass "touches_nix first-run is hit" || die "touches_nix first-run is hit"
 
+# touches_nix: fleet.json is a Nix INPUT (modules/system/fleet.nix reads it with
+# fromJSON; modules/home/ssh.nix renders ~/.ssh/config host blocks from it), so a
+# manifest-only pull must rebuild — otherwise adding a fleet member never reaches
+# any NixOS host and converge writes ok + advances converged-rev anyway.
+echo '{"machines":{}}' > "$repo/fleet.json"; git -C "$repo" add .; git -C "$repo" commit -qm cfleet
+revf="$(git -C "$repo" rev-parse HEAD)"
+touches_nix "$rev2" "$revf" && pass "touches_nix detects fleet.json" || die "touches_nix detects fleet.json"
+
 # touches_linux: only provisioning-relevant paths (the linux provisioner / its
 # version inputs) count — a content-only pull must NOT trigger a reprovision.
 echo doc > "$repo/docs.md"; git -C "$repo" add .; git -C "$repo" commit -qm c3
