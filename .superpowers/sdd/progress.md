@@ -32,3 +32,13 @@ Minor findings (for final review triage):
 - Task 2 Minor (final-review triage): rewritten fixture dropped the bare-URL (no .git) canonicalization case from the WIRED loop; still 3 URL forms covered. Plan-mandated (brief verbatim). Not fixed.
 - Task 3: complete (commit 07e5427, review clean; spec ✅). grep: gortex-readiness=0, repo-steps=2, legacy=1 (CONFLICT note only), agents/worktree-setup.sh=3, ORCA_GORTEX=0, worktree-teardown.sh=3.
 - Task 3 nit (accepted): CONFLICT bullet uses abbreviated legacy path (no `bash "..."` wrapper) — matches brief text + its grep check; guidance still IDs the retired dispatcher.
+- Task 4: complete (commit 5fcc78a, review clean; spec ✅, no findings). Deleted scripts/orca-worktree-setup.sh + scripts/orca-worktree.d/backend-api.sh; refreshed 2 project.md bullets. Both suites ALL PASS. Only non-docs legacy refs remaining are the 2 plan-mandated ones (orca-status test fixture + SKILL.md CONFLICT note).
+- Task 4 NOTE: on-disk task-4-brief.md was STALE (contained an unrelated plan's "Document Orca worktree workflow" task — scratchpad collision with an earlier SDD run). Implementer detected it, recovered from ledger+plan, produced correct commit. task-brief filename-collision bug; harmless here.
+
+Minor findings (final-review triage):
+- M1 (Task 1): Case 16 tautological (gate redundant w/ never-clobber; no regression hole). Plan-mandated.
+- M2 (Task 2): fixture dropped bare-URL (no .git) canonicalization case; 3 URL forms still covered. Plan-mandated.
+- M3 (Task 3): CONFLICT bullet uses abbreviated legacy path (no bash-wrapper); matches brief + grep check.
+- M4 (Task 1 test noise): worktree-dispatcher.test.sh Case 13 (line ~141) leaks a shell redirection error to stderr (`.claude/settings.local.json: No such file or directory`) when $main/.claude doesn't pre-exist — the `2>/dev/null` doesn't cover the shell's open-failure. Tests still ALL PASS but output not pristine. Trivial fix: mkdir -p "$main/.claude" before the printf.
+
+ALL 4 TASKS COMPLETE. Awaiting final whole-branch review.
