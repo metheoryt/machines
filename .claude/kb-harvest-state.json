@@ -2,9 +2,9 @@
   "last_refresh": {
     "commit": "dd3d74b",
     "date": "2026-07-24",
-    "scope": "fleet-minus-server harvest (latitude5520 local + desktop-ubuntu26 WSL; 56 digests). server/g513ie remote distill FAILED \u2014 its watermark did not advance, re-run retries just that box. Big project.md prune: 803->~430 lines, retired AWG-mesh saga archived to docs/fleet-mesh-history.md.",
-    "sessions_processed": 125,
-    "server_pending": true,
+    "scope": "Full-fleet harvest incl. server/g513ie. server was retried 2026-07-24 via its WSL python3 over /mnt/c (Windows-native side has no working python \u2014 only Store stubs; permission denied); 4 g513ie sessions distilled, all already covered by existing project.md gortex-bootstrap bullets (no new durable facts). Big project.md prune: 803->456 lines, retired AWG-mesh saga archived to docs/fleet-mesh-history.md; plus a caveman filler-strip pass over the loaded memory tiers.",
+    "server_pending": false,
+    "sessions_processed": 129,
     "tiers_touched": [
       ".claude/memory/project.md",
       "docs/fleet-mesh-history.md",
@@ -116,8 +116,8 @@
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "9107f60fb6eefeca178fa78667ba49a581ff90bf",
-      "last_line": 1842,
-      "last_ts": "2026-07-23T21:01:32.814Z"
+      "last_line": 1970,
+      "last_ts": "2026-07-24T01:49:58.061Z"
     },
     "23bbd86b-54ec-4598-8111-19fe22f5df99": {
       "cwd": "C:\\Users\\methe\\GitHub\\machines",
@@ -224,6 +224,13 @@
       "last_line": 28,
       "last_ts": "2026-07-14T17:06:36.613Z"
     },
+    "431c838f-417a-4af1-ae05-3aa94033dcf3": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g513ie",
+      "id_hash": "f210a4aae81ebdcb55e0ac3e6ac0dec2707db51a",
+      "last_line": 553,
+      "last_ts": "2026-07-19T22:52:57.309Z"
+    },
     "47704878-dc21-42a5-b069-561d7b80c9ad": {
       "cwd": "/home/me/machines",
       "host": "desktop-ubuntu26",
@@ -242,8 +249,8 @@
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "f2652c58bd0da3c7009673a75eb2c5ab8918940d",
-      "last_line": 559,
-      "last_ts": "2026-07-22T15:39:10.735Z"
+      "last_line": 643,
+      "last_ts": "2026-07-24T01:53:46.961Z"
     },
     "4b330491-b4ca-4731-934c-97ef50516f79": {
       "cwd": "/home/me/machines",
@@ -466,8 +473,8 @@
       "cwd": "/home/me/orca/workspaces/machines/caveman",
       "host": "latitude5520",
       "id_hash": "53b525d30f7135bf8c19c13d2c4525ce57dabb1e",
-      "last_line": 55,
-      "last_ts": "2026-07-24T00:52:17.720Z"
+      "last_line": 360,
+      "last_ts": "2026-07-24T01:55:11.568Z"
     },
     "83095302-4347-41d7-a1d4-e0c912f5b108": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -623,6 +630,13 @@
       "last_line": 893,
       "last_ts": "2026-07-06T15:21:51.338Z"
     },
+    "af31005d-4dcd-48bd-9e7f-fba79f619290": {
+      "cwd": "C:\\Users\\methe\\orca\\workspaces\\machines\\server-machines-sync-main",
+      "host": "g513ie",
+      "id_hash": "747c86b647c0555cf8e0be1734269b656a91b48f",
+      "last_line": 36,
+      "last_ts": "2026-07-19T20:46:20.089Z"
+    },
     "b420690b-22a5-4fca-a0ef-cee7080f6676": {
       "cwd": "C:\\Users\\methe\\machines",
       "host": "methe-server",
@@ -742,6 +756,13 @@
       "last_line": 79,
       "last_ts": "2026-07-19T13:23:41.775Z"
     },
+    "cf565343-e067-4e1f-8e48-b5087893f218": {
+      "cwd": "C:\\Users\\methe\\orca\\workspaces\\machines\\sync-main",
+      "host": "g513ie",
+      "id_hash": "63dad9af5c3f9cd6522ac1b0dee5d76a3fbbb56e",
+      "last_line": 33,
+      "last_ts": "2026-07-19T19:37:59.139Z"
+    },
     "cfd6e12c-98d2-4ffa-9213-258e7e9b5f4d": {
       "cwd": "/home/me/orca/workspaces/machines/ssh-over-fleet",
       "host": "latitude5520",
@@ -797,6 +818,13 @@
       "id_hash": "c0abd98ff51bfbbdd25039d86ce336e16053bc18",
       "last_line": 272,
       "last_ts": "2026-07-20T20:30:34.594Z"
+    },
+    "d9ef38ed-64f3-452a-82f9-075915321abd": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g513ie",
+      "id_hash": "e0a2041234d41ae4b0602498e04ba51740860eb5",
+      "last_line": 50,
+      "last_ts": "2026-07-19T19:43:07.349Z"
     },
     "dc3e7e73-f226-4856-ac95-d6ad8f07d827": {
       "cwd": "/home/me/machines",

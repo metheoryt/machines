@@ -1,6 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against dd3d74b on 2026-07-24 (fleet-minus-server; g513ie not harvested) -->
+<!-- KB refreshed against dd3d74b on 2026-07-24 (full fleet incl. g513ie) -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
