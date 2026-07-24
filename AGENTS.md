@@ -21,7 +21,7 @@ Windows:
   Services live in the sibling `vps` repo.
 
 The NixOS hosts use Home Manager (system-level integration) and share a common
-module set with host-specific overrides. The repo also carries the Windows
+module set with host-specific overrides. The repo also carries Windows
 install/reinstall + backup scripts (`hosts/desktop/windows/`) and shared Win11
 install media (`install-media/`).
 

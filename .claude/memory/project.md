@@ -3,19 +3,19 @@
 <!-- KB refreshed against dd3d74b on 2026-07-24 (fleet-minus-server; g513ie not harvested) -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
-global + per-host memory). One bullet per fact under a topical heading.
+global + per-host). One bullet per fact under a topical heading.
 
 ## Workflow
 
 - **Git workflow — one framework, see `agents/docs/git-workflow.md`.** `main` is
   the fleet-sync truth. **main-checkout mode** (on `main` in `~/machines`): commit
-  on `main`, push when ready; big/isolated work → spawn a worktree. **worktree
+  on `main`, push when ready; big/isolated work spawns a worktree. **worktree
   mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
 - `just quick` (`scripts/quick-check.sh`) treats `nix flake check` failures as
   non-fatal and only hard-gates on required-file presence + a one-host dry-build
-  — it can pass green while `nix flake check` is red. For reliable per-host
+  — can pass green while `nix flake check` is red. For reliable per-host
   validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
 - **The Windows fleet boxes have no Nix.** Any `nix eval` / `nix build --dry-run` /
   `nix flake check` step must be deferred to a NixOS member (currently only
@@ -32,7 +32,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   atomic rename). Plus per-OS `fleet-selfpull` timers (NixOS systemd / Windows
   Scheduled Task / WSL), all `git pull --ff-only` on a jitter. NixOS rebuilds against
   the committed `flake.lock`, never a local update. Design under `docs/superpowers/`.
-- **git-autofetch now has three implementations** — NixOS (systemd timer), Windows
+- **git-autofetch has three implementations** — NixOS (systemd timer), Windows
   (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback) — all sharing one
   root-scan model (`find` under `$HOME` depth 4, skipping node_modules/.cache/.direnv)
   doing refs-only `git fetch --all --prune`, never pulling (keeps the prompt's
@@ -59,9 +59,9 @@ global + per-host memory). One bullet per fact under a topical heading.
 - **Hostname-normalization convention — spec approved 2026-07-19, DONE
   2026-07-20**
   (`docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md`).
-  Two layers, applied fleet-wide: **logical name** (stable, role-based) = fleet
+  Two layers, fleet-wide: **logical name** (stable, role-based) = fleet
   key = SSH alias = tailnet node = repo `hosts/<dir>`; **model name** = the box's
-  OS hostname = `detect.hostname` = the hardware model, lowercased
+  OS hostname = `detect.hostname` = hardware model, lowercased
   (`latitude5520`, `g614jv`, `g513ie`, `27608`). Repo-dir renames DONE
   (Phase 1, 2026-07-20): `g16` → `hosts/desktop`, `homeserver` →
   `hosts/server`, committed. OS-hostname rename DONE (Phase 2, 2026-07-20):
@@ -80,10 +80,10 @@ global + per-host memory). One bullet per fact under a topical heading.
 - Firewall rules in `provision/windows.ps1` must be written to converge
   (remove-then-recreate), not create-if-absent — re-running against a host
   with a stale-scoped rule would otherwise leave the old scope in place.
-- **Fleet dispatch is now platform-aware, via
+- **Fleet dispatch is platform-aware, via
   `agents/plugin/skills/lib/fleet-dispatch.sh`** (`fd_probe`/`fd_run`/
   `fd_wsl_hosts`, sourced by `/ship`'s `fleet-pull.sh` and kb-refresh's
-  `fleet-gather.sh`). `/ship` + kb-refresh now reach every fleet host's
+  `fleet-gather.sh`). `/ship` + kb-refresh reach every fleet host's
   `$HOME/machines` clone: Windows-native members (`desktop`, `server`) via Git
   Bash dispatched through PowerShell's call operator (live-verified
   2026-07-22), and self-declared WSL hosts — never in `fleet.json` — via
@@ -93,14 +93,12 @@ global + per-host memory). One bullet per fact under a topical heading.
   is now located canonical-path-first (`$HOME/machines`), root-scan fallback
   second. Half-provision a WSL host with `just provision-wsl <nickname>`.
 
-### Fleet transport is migrating AmneziaWG → Headscale (2026-07-13)
+### Fleet transport migrated AmneziaWG → Headscale (2026-07-13; retired 07-17)
 
-- **DECISION:** the OWN fleet's mesh transport moves from AmneziaWG to
+- **DECISION:** the OWN fleet's mesh transport moved from AmneziaWG to
   **Headscale** (self-hosted Tailscale control server). AmneziaWG stays ONLY as
   the obfuscated VPN for Russia-based relatives + friends' peers on the VPS hub.
-  The extensive AWG-mesh work below (Phases 0–5b, "whole fleet mesh up") is now
-  **LEGACY for our own machines** — kept as history, still live until each box
-  is cut over to the tailnet.
+  AWG-mesh blow-by-blow (Phases 0–5b) archived → `docs/fleet-mesh-history.md`.
 - Headscale is LIVE on the VPS: v0.29.2 + embedded DERP (region 999, STUN
   udp/3478), served at `https://cc.cyphy.kz` behind Caddy (LE cert). `derp.urls:
   []` → all relayed traffic rides our OWN DERP. SQLite DB, user `fleet` (id 1),
@@ -164,22 +162,17 @@ global + per-host memory). One bullet per fact under a topical heading.
   `~/.ssh/authorized_keys` and reads `C:\ProgramData\ssh\administrators_authorized_keys`
   (ACL: Administrators+SYSTEM only). (d) Default shell is `cmd.exe`; set
   `HKLM:\SOFTWARE\OpenSSH\DefaultShell` for PowerShell.
-- **KEY CORRECTION 2026-07-15: MagicDNS is ALREADY LIVE tailnet-wide** (Headscale
-  `magic_dns: true` + `override_local_dns: true`; `accept-dns` ON — verified on
-  homeserver: `homeserver.fleet.mesh`→`100.64.0.3` AND bare `homeserver` resolve via
-  the search domain). So the SSH-over-tailnet spec's premise ("MagicDNS needs
-  accept-dns, which isn't set") was STALE — the whole hosts-file machinery
-  (`fleet-hosts.nix` + `hosts` role) is largely REDUNDANT (offline-fallback value is
-  illusory: no tailnet = no 100.64 route = name resolution moot anyway). MagicDNS uses
-  the Headscale GIVEN-NAMES, not fleet.json keys.
+- **MagicDNS is LIVE tailnet-wide** (Headscale `magic_dns: true` +
+  `override_local_dns: true`; `accept-dns` ON). MagicDNS uses the Headscale
+  GIVEN-NAMES, not fleet.json keys.
 - **Fleet rename + MagicDNS adoption COMPLETE (2026-07-15; blow-by-blow archived →
   `docs/fleet-mesh-history.md`).** Durable outcome: given-names + SSH aliases + repo
   dirs are `hub`/`latitude`/`server`/`desktop`; MagicDNS suffix `gg.ez` live tailnet-
   wide; the hosts-file machinery (`fleet-hosts.nix` + `hosts` role) was DELETED
-  (supersedes the "largely REDUNDANT" note above — it no longer exists); `ssh.nix`
-  slimmed (hub→`cyphy.kz`/`debian`, server/desktop→`methe`, latitude→bare MagicDNS);
-  latitude pins `--accept-dns` via a `tailscale-accept-dns` oneshot. Flake attr is
-  decoupled from the OS hostname (`nixos_attr` justfile var).
+  (no longer exists); `ssh.nix` slimmed (hub→`cyphy.kz`/`debian`,
+  server/desktop→`methe`, latitude→bare MagicDNS); latitude pins `--accept-dns` via
+  a `tailscale-accept-dns` oneshot. Flake attr is decoupled from the OS hostname
+  (`nixos_attr` justfile var).
 - **AWG mesh retired from the machines repo (2026-07-17).** SSH-server role moved
   to `modules/system/ssh-server.nix` (`fleet.sshServer`, keys-only sshd on
   `tailscale0` + LAN). Deleted `mesh-vpn.nix`, slimmed params → `fleet.nix`
@@ -194,8 +187,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   `me@wsl-desktop`) is trusted on **latitude, server, AND the Debian hub**, and
   its `~/.ssh/config` resolves `ssh latitude`/`ssh server`/`ssh hub` correctly
   (hub → `cyphy.kz`/`debian`). Verified end-to-end from inside the distro (auth
-  OK to all three; `ssh server whoami` → `methe-server\methe`). Closes the
-  ssh-wsl "code complete, real-box apply pending" item for this host. GOTCHAs:
+  OK to all three; `ssh server whoami` → `methe-server\methe`). GOTCHAs:
   (a) the wsl `me` user has NO passwordless sudo, so `ssh-wsl.sh` can't be driven
   non-interactively — its first `sudo apt-get install` `die`s without a TTY; if a
   `wsl --unregister` rebuild needs it, re-run from inside the distro. (b) `ssh
@@ -211,13 +203,13 @@ global + per-host memory). One bullet per fact under a topical heading.
 
 - Kernel is back on `pkgs.linuxPackages_latest` (linux-7.1.3) in
   `modules/system/base.nix` (branch `update-nix-linux-kernel`, 2026-07-19). HISTORY:
-  it was pinned to the LTS `pkgs.linuxPackages` (6.18.38) on 2026-07-08 (commit
+  pinned to the LTS `pkgs.linuxPackages` (6.18.38) on 2026-07-08 (commit
   `e2345ba`) solely because the out-of-tree AmneziaWG module wouldn't compile on
   7.x (`socket.c: 'ipv6_stub' undeclared`). That blocker is gone — the AWG mesh
   was retired (2026-07-17, commit `8952af9`; fleet moved to Headscale/Tailscale,
   userspace, no out-of-tree kernel module), so the bump back was safe. NVIDIA-
   safety (CLAUDE.md's steadier-track preference) does NOT bind here: this flake
-  builds ONLY latitude5520, which is Intel-only and doesn't import `nvidia.nix`.
+  builds ONLY latitude5520, Intel-only, doesn't import `nvidia.nix`.
   Verified: full `latitude5520` toplevel builds green on 7.1.3. If an NVIDIA host
   (g16) is ever re-added as a NixOS target, reconsider pinning IT back to
   `linuxPackages` — `base.nix` is shared. (Historical gotcha, still true of any
@@ -225,9 +217,9 @@ global + per-host memory). One bullet per fact under a topical heading.
   kernel-changing `switch`, the module fails `Module <x> not found in
   .../<old-kernel>` until you REBOOT into the new kernel.)
 - AmneziaVPN CLIENT fully retired from our own machines (2026-07-19, same branch):
-  removed the `amnezia-vpn-wrapped` package from `modules/home/me.nix`, the
-  `AmneziaVPN` systemd service from `hosts/latitude/nixos/configuration.nix`, and
-  the `Amnezia.AmneziaWG` + `AmneziaVPN.AmneziaVPN` winget entries from both
+  removed `amnezia-vpn-wrapped` from `modules/home/me.nix`, the `AmneziaVPN`
+  systemd service from `hosts/latitude/nixos/configuration.nix`, and the
+  `Amnezia.AmneziaWG` + `AmneziaVPN.AmneziaVPN` winget entries from both
   `hosts/{g16,homeserver}/windows/winget-packages.json`. The obfuscated AWG VPN
   HUB (for RU relatives/friends) is untouched — it lives in the `vps` repo, not
   here. Only historical "why the mesh was retired" comments still mention AWG.
@@ -315,7 +307,7 @@ global + per-host memory). One bullet per fact under a topical heading.
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
   `fleet-gather.sh` distills in-place on other fleet boxes and copies back
   only digests (via `cat`/`tar`, never raw transcripts).
-  - `fleet-gather.sh` now harvests the **Windows** fleet members (desktop=g614jv,
+  - `fleet-gather.sh` harvests the **Windows** fleet members (desktop=g614jv,
     server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
     every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
     and transports state/digests over `cat`/`tar` (no rsync), distills both the
@@ -330,8 +322,8 @@ global + per-host memory). One bullet per fact under a topical heading.
   (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
   `methe-server.md` — not fleet aliases), threaded via a single
   `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
-  computes it off-nix). Using a curated short name drifts from what
-  nix/bootstrap resolve and misdirects the host-memory link.
+  computes it off-nix). A curated short name drifts from what nix/bootstrap
+  resolve and misdirects the host-memory link.
 - `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
   guard that fails loud if the repo's expected symlink location is dangling —
   added after repo-rename events silently broke agent-config linking.

@@ -50,7 +50,7 @@ elsewhere to sync. Do NOT put secrets here.
   `ssh <host>` even when you are already ON that host** (it's a loopback, same
   filesystem — a path written over SSH is the same file locally). Absence of a
   result in the local shell is not evidence of absence.
-- **`/ship` (`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) now reach EVERY
+- **`/ship` (`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) reach EVERY
   fleet host's `$HOME/machines` clone**, via the shared
   `agents/plugin/skills/lib/fleet-dispatch.sh` helper (`fd_probe`/`fd_run`/
   `fd_wsl_hosts`). **Windows-native clones** (`desktop`, `server`) are reached
