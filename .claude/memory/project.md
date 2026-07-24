@@ -106,7 +106,7 @@ global + per-host). One bullet per fact under a topical heading.
   `vps/headscale/config.yaml` (sanitized, no secrets). Enroll a node:
   `tailscale up --login-server https://cc.cyphy.kz --authkey <KEY>`.
 - **Orca's per-project worktree setup-script is stored in plain JSON** (probed
-  2026-07-19). The field you paste `bash "$HOME/machines/scripts/orca-worktree-setup.sh"`
+  2026-07-19). The field you paste `bash "$HOME/machines/agents/worktree-setup.sh"`
   into lives in `~/.config/orca/profiles/local-default/orca-data.json` at
   `.repos[].hookSettings.scripts.setup` (mirrored under `.projectHostSetups[]`),
   keyed by repo path — machine-local, Orca-owned (it rewrites the file and keeps
@@ -313,11 +313,17 @@ global + per-host). One bullet per fact under a topical heading.
     and transports state/digests over `cat`/`tar` (no rsync), distills both the
     Windows-profile and WSL projects roots, and stamps digests with the fleet
     `detect.hostname`. Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
-- `scripts/orca-worktree-setup.sh` is the generic dispatcher Orca runs on each
-  new worktree: it symlinks gitignored config (`.env`,
-  `.claude/settings.local.json`) from the main checkout, then delegates to
-  `$repo/.orca/worktree-setup.sh` or `scripts/orca-worktree.d/<main-basename>.sh`;
-  it is always non-fatal (exits 0) so it can't block worktree creation.
+- The Orca worktree dispatchers are `agents/worktree-setup.sh` (Setup hook) and
+  `agents/worktree-teardown.sh` (Archive/delete hook). Setup gortex-tracks the
+  worktree (only when the daemon is already up), links the generic gitignored
+  config set (`.env`, `.claude/settings.local.json`), then delegates to the
+  first repo-local script found (`.orca/worktree-setup.sh` →
+  `docker/worktree-setup.sh` → `.worktree/setup.sh` → `scripts/worktree-setup.sh`).
+  Teardown runs a repo-local teardown (if present) then gortex-untracks +
+  reconciles. Both are always non-fatal (exit 0) so they can't block worktree
+  creation/deletion. The paste-into-Orca one-liners are
+  `bash "$HOME/machines/agents/worktree-setup.sh"` (Setup) and
+  `bash "$HOME/machines/agents/worktree-teardown.sh"` (Archive).
 - Per-host agent-memory filenames use the raw OS hostname
   (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
   `methe-server.md` — not fleet aliases), threaded via a single

@@ -10,10 +10,13 @@ committed `.orca/worktree-setup.sh` scaffold, and a **read-only** check of the
 current Orca wiring — then hands YOU the exact setup-script command to paste into
 Orca's UI. It never edits `orca-data.json` and never asks you to close Orca.
 
-Background: `scripts/orca-worktree-setup.sh` is the shared dispatcher Orca runs on
-each fresh worktree; it links generic gitignored config, then delegates to this
-repo's `.orca/worktree-setup.sh`. Overlay conventions for the working agent live
-in `cyphy:worktree-agent`.
+Background: `agents/worktree-setup.sh` / `agents/worktree-teardown.sh` are the
+shared dispatchers Orca runs on each fresh worktree (Setup hook) and on delete
+(Archive hook). Setup gortex-tracks the worktree (when the daemon is up), links the
+generic gitignored config set, then delegates to this repo's
+`.orca/worktree-setup.sh`; teardown runs a repo-local teardown (if any), then
+gortex-untracks + reconciles. Overlay conventions for the working agent live in
+`cyphy:worktree-agent`.
 
 ## Step 1 — Guard & identity
 
@@ -31,10 +34,13 @@ in `cyphy:worktree-agent`.
 ## Step 2 — Scaffold `$BASE/.orca/worktree-setup.sh` (committed → synced)
 
 Copy the template verbatim if the repo has no delegate yet; if it exists, DO NOT
-clobber — show a diff and let the user decide. On a refresh, only ever regenerate
-the `orca-setup:managed:gortex-readiness` block (skill-owned). NEVER regenerate
+clobber — show a diff and let the user decide. NEVER regenerate
 `orca-setup:managed:repo-steps` — that block holds the user's own repo-specific
-steps and must be preserved.
+steps and must be preserved. On a refresh of a delegate scaffolded by an older
+version, STRIP any legacy `orca-setup:managed:gortex-readiness` block (from the
+matching `>>>` to `<<<` marker line, inclusive) — gortex readiness is no longer
+part of the delegate; the dispatcher owns all gortex handling now and never starts
+the daemon.
 
 ```bash
 TEMPLATE=~/machines/agents/plugin/skills/orca-setup/worktree-setup.template.sh
@@ -48,38 +54,54 @@ fi
 
 Tell the user this file is committed and syncs across the fleet, and that
 repo-specific steps go in the `orca-setup:managed:repo-steps` block. Gortex
-readiness is opt-in — it runs only when the worktree is created with
-`ORCA_GORTEX=1` in the environment. Offer to `git add "$DEST"`.
+tracking is handled entirely by the dispatcher (no per-repo opt-in, no daemon
+start — it tracks only when the daemon is already up). Offer to `git add "$DEST"`.
 
-## Step 3 — Print the setup command (read-only status; no writes)
+## Step 3 — Print the setup + teardown commands (read-only status; no writes)
 
 Check how the repo is currently wired, then print guidance. This reads
 `orca-data.json` read-only — safe with Orca open.
 
 ```bash
 # Assumes Orca's default profile; a non-default profile yields ABSENT (harmless —
-# you just re-paste the idempotent one-liner). Point DATA elsewhere if needed.
+# you just re-paste the idempotent one-liners). Point DATA elsewhere if needed.
 DATA="$HOME/.config/orca/profiles/local-default/orca-data.json"
-DISPATCH='bash "$HOME/machines/scripts/orca-worktree-setup.sh"'
-STATUS=$(~/machines/agents/plugin/skills/orca-setup/orca-status.sh "$DATA" "$ORIGIN" "$DISPATCH" "$BASE")
-echo "$STATUS"
+SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
+TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
+~/machines/agents/plugin/skills/orca-setup/orca-status.sh "$DATA" "$ORIGIN" "$SETUP" "$TEARDOWN" "$BASE"
 ```
 
-Turn the token into guidance:
+The helper prints two lines, one per Orca hook slot:
 
-- **`WIRED`** → "Already pointed at the dispatcher — nothing to paste."
-- **`UNWIRED`** or **`ABSENT`** → print the one-liner and where it goes:
+```
+setup<TAB><WIRED|UNWIRED|ABSENT|CONFLICT<TAB><value>>
+archive<TAB><WIRED|UNWIRED|ABSENT|CONFLICT<TAB><value>>
+```
 
-  > Paste this into Orca → the repo's settings → **Setup script** field:
+Turn each slot's token into guidance. Orca's **Setup script** field takes the
+`setup` one-liner; its **Archive script** field (run on worktree delete) takes the
+`teardown` one-liner:
+
+- **`WIRED`** → "This slot already points at the dispatcher — nothing to paste."
+- **`UNWIRED`** / **`ABSENT`** → print the matching one-liner and where it goes:
+
+  > Paste into Orca → the repo's settings:
   >
-  >     bash "$HOME/machines/scripts/orca-worktree-setup.sh"
+  > **Setup script** field:
+  >
+  >     bash "$HOME/machines/agents/worktree-setup.sh"
+  >
+  > **Archive script** field (runs on worktree delete):
+  >
+  >     bash "$HOME/machines/agents/worktree-teardown.sh"
   >
   > (If `ABSENT`: the repo isn't listed in Orca yet — open it once so it appears,
   > then paste. Orca applies it on the next worktree it creates.)
 
-- **`CONFLICT\t<value>`** → "A different setup script is configured (`<value>`).
-  Replace it with the dispatcher one-liner only if you mean to; otherwise leave
-  it." Never presume — the user decides.
+- **`CONFLICT\t<value>`** → "A different script is configured (`<value>`)." If
+  `<value>` is the **legacy** `…/scripts/orca-worktree-setup.sh`, tell the user it
+  is retired and should be replaced with the new one-liner. For any other value,
+  never presume — the user decides.
 
 ## Notes
 

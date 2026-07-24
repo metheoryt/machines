@@ -30,6 +30,9 @@ Deltas are opinions, not laws. Don't restate what global.md / CLAUDE.md cover.
 - No premature *code* abstraction — don't extract incidental duplication until it
   repeats (~rule of three). Distinct from concept modeling above.
 - Comments explain *why*, not *what*.
+- caveman-compress = local/private agent memory only (CLAUDE.md, todos). Committed
+  team docs (KB, ADRs, specs) use the tone-lean pass, never caveman — caveman
+  fragments are a *louder* AI tell, opposite of the low-noise goal.
 
 ## OOP — keep in mind
 
