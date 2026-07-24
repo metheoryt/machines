@@ -1,6 +1,7 @@
 # provision/lib/tiers.sh — the provisioning tiers (source me; do not execute).
 # Bodies moved verbatim out of provision/linux.sh; that script is now the driver
 # that resolves a profile (fleet.json "profile") and picks a tier list.
+# The profile → tier-list table that selects among these lives in the driver.
 # Consumers: provision/linux.sh. Requires the driver's helpers (info/ok/warn/die/
 # have) and globals (REPO, SUDO, PRIV, WARNINGS, APT_UPDATED) to be set BEFORE
 # sourcing.
