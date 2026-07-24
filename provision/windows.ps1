@@ -334,24 +334,50 @@ if (-not (Test-Path $convergeScript)) {
         -Principal $convPrincipal -Settings $convSettings -Force | Out-Null
     Info "registered 'machines-converge' (SYSTEM, on-demand)."
 
-    # (2) fleet-selfpull - every 10 min, as the user, with jitter.
-    $selfpullPs1 = Join-Path $RepoDir 'provision\fleet-selfpull.ps1'
-    $pullAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
-        -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$selfpullPs1`""
-    $pullTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-        -RepetitionInterval (New-TimeSpan -Minutes 10)
-    # [TimeSpan]::MaxValue serializes to P99999999DT23H59M59S, which
-    # Register-ScheduledTask rejects as "incorrectly formatted or out of range".
-    # An empty Duration means "repeat indefinitely" and registers cleanly.
-    $pullTrigger.Repetition.Duration = ''
-    $pullTrigger.RandomDelay = 'PT2M'   # jitter so boxes don't hit GitHub together
-    $pullSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
-        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 9)
-    $pullPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
-    Register-ScheduledTask -TaskName 'fleet-selfpull' -Action $pullAction -Trigger $pullTrigger `
-        -Settings $pullSettings -Principal $pullPrincipal -Force | Out-Null
-    Info "registered 'fleet-selfpull' (every 10 min, jittered)."
+    # (2) fleet-selfpull - every 10 min, as the interactive user, with jitter.
+    # converge re-runs this whole script under the SYSTEM machines-converge task.
+    # There $env:USERNAME is the machine account, which S4U cannot map
+    # (ERROR_NONE_MAPPED, 0x80070534): the registration then throws and fails the
+    # entire converge. So resolve the real console user when running as SYSTEM;
+    # if there is none (headless converge), leave any task the interactive install
+    # already created in place rather than aborting.
+    $runningAsSystem = ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -eq 'S-1-5-18')
+    if ($runningAsSystem) {
+        # DOMAIN\user of the console session, or $null when nobody is logged on.
+        $pullUser = (Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).UserName
+    } else {
+        $pullUser = $env:USERNAME
+    }
+    if (-not $pullUser) {
+        if (Get-ScheduledTask -TaskName 'fleet-selfpull' -EA SilentlyContinue) {
+            Info "fleet-selfpull already registered; headless SYSTEM run, no console user - leaving it."
+        } else {
+            Warn "fleet-selfpull not registered and no interactive user to own it - run provision\windows.ps1 once from your normal login to create it."
+        }
+    } else {
+        $selfpullPs1 = Join-Path $RepoDir 'provision\fleet-selfpull.ps1'
+        $pullAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$selfpullPs1`""
+        $pullTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 10)
+        # [TimeSpan]::MaxValue serializes to P99999999DT23H59M59S, which
+        # Register-ScheduledTask rejects as "incorrectly formatted or out of range".
+        # An empty Duration means "repeat indefinitely" and registers cleanly.
+        $pullTrigger.Repetition.Duration = ''
+        $pullTrigger.RandomDelay = 'PT2M'   # jitter so boxes don't hit GitHub together
+        $pullSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+            -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 9)
+        $pullPrincipal = New-ScheduledTaskPrincipal -UserId $pullUser -LogonType S4U -RunLevel Limited
+        # Defense-in-depth: a residual principal hiccup must warn, not brick converge.
+        try {
+            Register-ScheduledTask -TaskName 'fleet-selfpull' -Action $pullAction -Trigger $pullTrigger `
+                -Settings $pullSettings -Principal $pullPrincipal -Force | Out-Null
+            Info "registered 'fleet-selfpull' (every 10 min, jittered) as $pullUser."
+        } catch {
+            Warn "fleet-selfpull registration failed for '$pullUser': $($_.Exception.Message) - leaving any existing task."
+        }
+    }
 }
 
 # ---- Done --------------------------------------------------------------------
