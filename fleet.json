@@ -24,6 +24,7 @@
       "platform": "debian",
       "tailnet": { "ip": "100.64.0.1" },
       "ssh": { "user": "debian", "host": "cyphy.kz" },
+      "profile": "hub",
       "roles": ["base", "ssh-server", "agents", "dotfiles", "backup-client"],
       "detect": { "hostname": "27608" }
     }
