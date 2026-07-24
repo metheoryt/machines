@@ -1,14 +1,16 @@
 {
   "last_refresh": {
-    "commit": "2e7423f",
-    "date": "2026-07-19",
-    "scope": "Phase 2 fleet-wide harvest (latitude5520 local + methe-server + g614jv via Windows-profile transcripts); 47 digests, ~26 facts approved",
-    "sessions_processed": 105,
+    "commit": "dd3d74b",
+    "date": "2026-07-24",
+    "scope": "fleet-minus-server harvest (latitude5520 local + desktop-ubuntu26 WSL; 56 digests). server/g513ie remote distill FAILED \u2014 its watermark did not advance, re-run retries just that box. Big project.md prune: 803->~430 lines, retired AWG-mesh saga archived to docs/fleet-mesh-history.md.",
+    "sessions_processed": 125,
+    "server_pending": true,
     "tiers_touched": [
-      "agents/memory/global.md",
       ".claude/memory/project.md",
-      "agents/hosts/methe-server.md",
-      "agents/hosts/g614jv.md"
+      "docs/fleet-mesh-history.md",
+      "AGENTS.md",
+      "agents/memory/global.md",
+      "agents/hosts/g513ie.md"
     ]
   },
   "sessions": {
@@ -18,6 +20,13 @@
       "id_hash": "f04a8a356666cdff54d4f136e7da4ad325919c2f",
       "last_line": 572,
       "last_ts": "2026-07-07T22:27:58.090Z"
+    },
+    "001c2c09-4d96-4a81-a357-37219cdcae05": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-worktrees",
+      "host": "latitude5520",
+      "id_hash": "ca7d438e12596dc70908f32fc60bd4f596ef0223",
+      "last_line": 829,
+      "last_ts": "2026-07-20T12:07:50.601Z"
     },
     "019af167-2dc5-4a25-9880-279837ab89a3": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -89,12 +98,26 @@
       "last_line": 412,
       "last_ts": "2026-07-07T23:07:42.038Z"
     },
+    "1f023324-7a54-4a2a-83c3-2c38b6eaf69a": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "9a4d5041768383625c1cbfc582f2263698907f91",
+      "last_line": 54,
+      "last_ts": "2026-07-23T20:51:09.383Z"
+    },
     "20023ba9-de26-4f91-84b5-afad4f5582e9": {
       "cwd": "/home/me/machines",
       "host": "g614jv",
       "id_hash": "050e8a7d7de1d37e24f0f379a150a03819b9ed2a",
       "last_line": 86,
       "last_ts": "2026-07-09T16:51:17.977Z"
+    },
+    "207311cb-721f-4471-ac4e-d2531996e5c6": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "9107f60fb6eefeca178fa78667ba49a581ff90bf",
+      "last_line": 1842,
+      "last_ts": "2026-07-23T21:01:32.814Z"
     },
     "23bbd86b-54ec-4598-8111-19fe22f5df99": {
       "cwd": "C:\\Users\\methe\\GitHub\\machines",
@@ -156,7 +179,7 @@
       "cwd": "C:\\Users\\methe\\machines",
       "host": "g614jv",
       "id_hash": "e8bca709157f6f0ba03b77ec00c4ec99a858489e",
-      "last_line": 49,
+      "last_line": 50,
       "last_ts": "2026-07-18T08:25:41.402Z"
     },
     "36b474ac-4d7a-42b8-8e07-7064c6fb3714": {
@@ -173,12 +196,26 @@
       "last_line": 497,
       "last_ts": "2026-07-17T18:40:08.730Z"
     },
+    "3eb5bd43-5290-4b54-abb9-f3240f1ee948": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "50960cffe393f222756dc3ef19b169f6b4a234d4",
+      "last_line": 170,
+      "last_ts": "2026-07-20T13:26:05.962Z"
+    },
     "3f7986b8-447d-4a3d-9a0f-f630685c4756": {
       "cwd": "C:\\Users\\methe\\machines",
       "host": "g614jv",
       "id_hash": "369f2aa4cca098ab6bd3261216f251787ab8ca96",
       "last_line": 311,
       "last_ts": "2026-07-06T19:06:09.766Z"
+    },
+    "413ff7f2-c9db-46d0-af39-c4684fdfcdf6": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "07df22e5aae085c47f0d3cb61bd76780a5587c26",
+      "last_line": 51,
+      "last_ts": "2026-07-21T10:33:52.356Z"
     },
     "4160f434-6a56-423a-8ae2-dce35d12454d": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -187,12 +224,26 @@
       "last_line": 28,
       "last_ts": "2026-07-14T17:06:36.613Z"
     },
+    "47704878-dc21-42a5-b069-561d7b80c9ad": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "f7fa00bff1ef3f9ca4b1a32e6bd373847586cc04",
+      "last_line": 49,
+      "last_ts": "2026-07-20T17:47:04.003Z"
+    },
     "4968b77e-543a-4cbe-97b2-1a4affc194ad": {
       "cwd": "C:\\Users\\methe\\machines",
       "host": "methe-server",
       "id_hash": "9ec367d183ca2d858c7c5215a9a4d1d3dd3e9c02",
       "last_line": 1119,
       "last_ts": "2026-07-13T17:47:23.005Z"
+    },
+    "49c91349-628b-49ac-8f31-7e68500a88f3": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f2652c58bd0da3c7009673a75eb2c5ab8918940d",
+      "last_line": 559,
+      "last_ts": "2026-07-22T15:39:10.735Z"
     },
     "4b330491-b4ca-4731-934c-97ef50516f79": {
       "cwd": "/home/me/machines",
@@ -205,7 +256,7 @@
       "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
       "host": "latitude5520",
       "id_hash": "16e9ec3c6ca1fd3b6a2bf4bcb1458e6ffee70e29",
-      "last_line": 1204,
+      "last_line": 1205,
       "last_ts": "2026-07-19T16:07:42.465Z"
     },
     "4e37fff7-f0d2-4967-97af-ac5754566c39": {
@@ -247,8 +298,8 @@
       "cwd": "/home/me/orca/workspaces/machines/orca-setup-script-hint",
       "host": "latitude5520",
       "id_hash": "d2417e5de79ba9b09157f05b9b501595f0ae2bfb",
-      "last_line": 270,
-      "last_ts": "2026-07-19T15:55:17.110Z"
+      "last_line": 892,
+      "last_ts": "2026-07-19T21:18:46.560Z"
     },
     "584d9248-c110-48db-98cc-9127f44be44a": {
       "cwd": "/home/me/machines",
@@ -271,6 +322,13 @@
       "last_line": 580,
       "last_ts": "2026-07-15T19:54:32.336Z"
     },
+    "5f2c5b91-a65b-49ab-bb6d-2410fcb35c58": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b99e99dfbfa8da1a4a570da98be3d961a633d081",
+      "last_line": 34,
+      "last_ts": "2026-07-21T09:55:38.239Z"
+    },
     "5f807bd8-1fab-46d2-84a5-63b6de6a4e1b": {
       "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
       "host": "latitude5520",
@@ -278,12 +336,26 @@
       "last_line": 60,
       "last_ts": "2026-07-17T16:44:52.881Z"
     },
+    "613767b9-8534-4b5c-ad12-9f757aed019d": {
+      "cwd": "/home/me/orca/workspaces/machines/fix-orca-stale-workspaces",
+      "host": "latitude5520",
+      "id_hash": "3558061cc5c28c074aae40cd69e12389a91cba2f",
+      "last_line": 471,
+      "last_ts": "2026-07-22T16:26:42.962Z"
+    },
     "621ca828-0889-406c-9632-1047ba55bdab": {
       "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
       "host": "latitude5520",
       "id_hash": "dadc731a8df99a6066b593f5f80912681c675f01",
       "last_line": 1893,
       "last_ts": "2026-07-17T16:37:39.461Z"
+    },
+    "62c471ab-2527-41d4-b24a-3ca2cfc8e6b5": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "ff81aaa38c8e8608b87aed83452dfaff65d06836",
+      "last_line": 89,
+      "last_ts": "2026-07-20T20:57:13.390Z"
     },
     "64735ef3-fabb-411f-91a3-720b25a6dfcf": {
       "cwd": "/home/me/machines",
@@ -327,6 +399,13 @@
       "last_line": 11,
       "last_ts": "2026-07-09T10:30:36.108Z"
     },
+    "6eeceba8-bc74-435e-9bfc-28aaf7259b99": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "4cec648585c6e7e11fd0b95e094270f7f6d15a77",
+      "last_line": 887,
+      "last_ts": "2026-07-21T11:03:46.989Z"
+    },
     "6ef60dd7-e3de-4761-826b-d23a7f2861a9": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
@@ -348,6 +427,20 @@
       "last_line": 35,
       "last_ts": "2026-07-05T21:08:39.640Z"
     },
+    "736d8526-95b0-42ef-985c-25f3478041a4": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "25d814a9ea8036281235607fa48b0eaee10172c3",
+      "last_line": 37,
+      "last_ts": "2026-07-21T09:47:59.558Z"
+    },
+    "7637cf4d-a9f8-46cf-bac9-a81b53936a01": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "873dadbc5b8c02c58e0b90eed9d390c7e63d6692",
+      "last_line": 66,
+      "last_ts": "2026-07-20T19:00:51.905Z"
+    },
     "77518c17-8e2c-4e25-8eb2-157b3d643dfa": {
       "cwd": "C:\\Users\\methe\\machines",
       "host": "methe-server",
@@ -355,12 +448,26 @@
       "last_line": 58,
       "last_ts": "2026-07-07T17:22:49.885Z"
     },
+    "7c349288-4e86-4514-aee4-10fdc8e11076": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "16a0c4dce32970e3dfa25a5ddf66fae8f0b6297f",
+      "last_line": 40,
+      "last_ts": "2026-07-20T13:32:07.911Z"
+    },
     "814ffea6-314b-4463-91d0-6cc02172ab96": {
       "cwd": "/home/me/machines",
       "host": "latitude5520",
       "id_hash": "cc146650de9a19e06a34a4f1eb52d375d4e2d211",
       "last_line": 26,
       "last_ts": "2026-07-17T11:03:37.737Z"
+    },
+    "826d73d2-6cde-44b2-8ab9-f90c89658e8c": {
+      "cwd": "/home/me/orca/workspaces/machines/caveman",
+      "host": "latitude5520",
+      "id_hash": "53b525d30f7135bf8c19c13d2c4525ce57dabb1e",
+      "last_line": 55,
+      "last_ts": "2026-07-24T00:52:17.720Z"
     },
     "83095302-4347-41d7-a1d4-e0c912f5b108": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -396,6 +503,13 @@
       "id_hash": "d686925146f6de763847622960cfdfd7aad0a343",
       "last_line": 239,
       "last_ts": "2026-07-14T09:22:28.379Z"
+    },
+    "8c866a7f-4dd5-4198-b6b3-8e12ce900f4c": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "c7ee295f44d7fec81f62274420926c1acd6582d3",
+      "last_line": 893,
+      "last_ts": "2026-07-19T19:34:39.357Z"
     },
     "8f0e270d-a046-47c8-9b51-62a180922a53": {
       "cwd": "/home/me/machines",
@@ -471,8 +585,15 @@
       "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
       "host": "latitude5520",
       "id_hash": "72cd67a975123a1b9124e2944896f0b73828d967",
-      "last_line": 164,
-      "last_ts": "2026-07-19T16:19:18.096Z"
+      "last_line": 673,
+      "last_ts": "2026-07-19T19:20:56.368Z"
+    },
+    "a0240c6d-c9a6-429b-8fc1-2c62c84f1de2": {
+      "cwd": "/home/me/orca/workspaces/machines/caveman",
+      "host": "latitude5520",
+      "id_hash": "3818d3fb0c8ff08e0c5db0afb01df265682e144e",
+      "last_line": 32,
+      "last_ts": "2026-07-24T00:49:21.764Z"
     },
     "a2287911-468e-4783-9fcf-1900dc4b639b": {
       "cwd": "/home/me/orca/workspaces/machines/update-nix-linux-kernel",
@@ -548,7 +669,7 @@
       "cwd": "C:\\Users\\methe\\machines",
       "host": "g614jv",
       "id_hash": "c15b9486f2372a25500d455a5ca2044ccee5052a",
-      "last_line": 435,
+      "last_line": 437,
       "last_ts": "2026-07-19T08:43:24.739Z"
     },
     "bffaeb01-a2a7-4482-a930-072a350f4d5d": {
@@ -564,6 +685,13 @@
       "id_hash": "01b58ddc56a2876126ed1610376bfab2bcb74b93",
       "last_line": 25,
       "last_ts": "2026-07-05T18:56:41.421Z"
+    },
+    "c3c430cb-263b-4099-adf3-250109f6acaa": {
+      "cwd": "/home/me/orca/workspaces/machines/test",
+      "host": "desktop-ubuntu26",
+      "id_hash": "591cac75baf7274b3339cb8064c09e81b4b19576",
+      "last_line": 16,
+      "last_ts": "2026-07-19T16:59:36.664Z"
     },
     "c58a025a-b506-4770-8842-186f692e8327": {
       "cwd": "/home/me/orca/workspaces/machines/orca-hosts-ui-research",
@@ -663,6 +791,13 @@
       "last_line": 32,
       "last_ts": "2026-07-16T18:11:05.102Z"
     },
+    "d4934cfe-654b-4361-9d31-06062481c895": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "c0abd98ff51bfbbdd25039d86ce336e16053bc18",
+      "last_line": 272,
+      "last_ts": "2026-07-20T20:30:34.594Z"
+    },
     "dc3e7e73-f226-4856-ac95-d6ad8f07d827": {
       "cwd": "/home/me/machines",
       "host": "g614jv",
@@ -683,6 +818,13 @@
       "id_hash": "319f1f36feae5638ab548bf20c93b2eefc919a5a",
       "last_line": 64,
       "last_ts": "2026-07-14T18:16:43.089Z"
+    },
+    "e99f5266-28a6-4fbf-bdd3-2dba4545a419": {
+      "cwd": "/home/me/orca/workspaces/machines/fix-orca-stale-workspaces",
+      "host": "latitude5520",
+      "id_hash": "fd0071ca4016fe0bab6881d0e3e299b6bebeaa0a",
+      "last_line": 466,
+      "last_ts": "2026-07-21T14:57:22.773Z"
     },
     "eddb2751-71aa-44ae-aaad-c7ddf4b33382": {
       "cwd": "/home/me/machines",

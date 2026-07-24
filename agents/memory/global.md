@@ -156,6 +156,9 @@ elsewhere to sync. Do NOT put secrets here.
   sessions); API-key sessions get a cost/balance segment instead. Switching
   profiles swaps the OAuth credential in `~/.claude/.credentials.json` +
   `~/.claude.json`'s `oauthAccount`, not the config dir.
+- The `statusLine` setting is read ONCE at session start — no hot-reload. A
+  post-pull bootstrap that re-links `settings.json` won't change the statusline
+  until the session restarts.
 - Claude Code's "auto mode" is a permission mode, not a model choice — set via
   `permissions.defaultMode: "auto"` in settings.json (enum:
   default/acceptEdits/bypassPermissions/plan/auto).
@@ -442,6 +445,10 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Windows & WSL scripting footguns
 
+- **PowerShell 5.1 (`powershell.exe`) decodes BOM-less UTF-8 as cp1252** — a
+  `.ps1`/`.psm1` carrying non-ASCII bytes (em-dashes) then throws spurious "string
+  is missing the terminator" parse errors. Add a UTF-8 BOM for 5.1+7 parity (PS 7
+  reads either).
 - **Non-interactive git push over HTTPS fails on Windows.** Git Credential Manager
   (Windows Hello / TPM-protected token) needs an interactive unlock an agent shell
   can't trigger — symptoms like "could not read Username" or a Russian "ключ не

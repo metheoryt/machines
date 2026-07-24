@@ -90,6 +90,7 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `system/ssh-server.nix` | keys-only sshd over the tailnet — the fleet SSH-server role |
 | `system/self-update.nix` | self-update mechanism |
 | `system/git-autofetch/` | auto-fetch timer |
+| `system/machines-converge.nix` | NixOS convergence trigger — root `.path` unit watches `.git/logs/HEAD`, fires a rebuild after an ff-pull |
 | `desktop/gnome.nix` | GDM + GNOME (Wayland), PipeWire audio, XDG portals, fonts (JetBrainsMono Nerd Font, Noto, Fira Code), excluded GNOME apps |
 | `hardware/asus-rog.nix` | **orphaned** — `charge-upto` command + systemd service, ROG keyboard evdev fixes (mic mute, Fn+arrows), DPCD backlight kernel params; no host imports it since NixOS g16 was removed |
 | `hardware/dell-latitude.nix` | `charge-upto` command + systemd service, Intel compute runtime, Thunderbolt (bolt service), fstrim |
