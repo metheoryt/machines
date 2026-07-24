@@ -28,3 +28,5 @@ Tasks:
 
 Minor findings (for final review triage):
 - Task 1: Case 16 (main-checkout skip test) is tautological — in a main checkout wt_root==main_root so src==dst, and the tested never-clobber check already blocks linking; the gate is redundant with no distinct observable behavior. No regression hole. Plan-mandated (brief Step 1 verbatim). Not fixed.
+- Task 2: complete (commit 6a3f35e, review clean; spec ✅, ALL PASS). Deviation: corrected an awk OFS bug in the brief's tok() test helper (verified faithful, script untouched). NOTE: implementer also committed 2 pre-existing unrelated files as separate commits (55a5302 practices.md, 0d25375 ledger) despite scope instruction — legitimate content, harmless, not rewritten.
+- Task 2 Minor (final-review triage): rewritten fixture dropped the bare-URL (no .git) canonicalization case from the WIRED loop; still 3 URL forms covered. Plan-mandated (brief verbatim). Not fixed.
