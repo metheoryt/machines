@@ -67,4 +67,19 @@ write_status "$rev2" fail "boom"
 eq "$(cat "$repo/.machines/converged-rev")" "$rev2" "write_status fail leaves converged-rev"
 grep -q '^status=fail$' "$repo/.machines/last-converge" && pass "last-converge status=fail" || die "last-converge status=fail"
 
+# ensure_git_safe: marks REPO safe in the converging user's GLOBAL git config so
+# a privileged converge (root/SYSTEM) on a user-owned checkout doesn't hit git's
+# "dubious ownership" fatal and silently skip. Isolate HOME so --global writes to
+# the throwaway tree, not the test runner's real ~/.gitconfig.
+# Isolate HOME *and* XDG_CONFIG_HOME: git --global honours $XDG_CONFIG_HOME/git/
+# config when set, so a leaked XDG (e.g. a read-only NixOS ~/.config) would defeat
+# the HOME override and hijack the write.
+_oldhome="$HOME"; _oldxdg="${XDG_CONFIG_HOME:-}"
+export HOME="$tmp/fakehome"; mkdir -p "$HOME"; unset XDG_CONFIG_HOME
+ensure_git_safe
+eq "$(git config --global --get-all safe.directory 2>/dev/null)" "$repo" "ensure_git_safe marks REPO safe in global config"
+ensure_git_safe   # second call must not accumulate a duplicate
+eq "$(git config --global --get-all safe.directory 2>/dev/null | grep -c .)" "1" "ensure_git_safe is idempotent (no dup)"
+export HOME="$_oldhome"; [ -n "$_oldxdg" ] && export XDG_CONFIG_HOME="$_oldxdg"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

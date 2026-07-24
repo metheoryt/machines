@@ -74,7 +74,24 @@ write_status() {
   return 0
 }
 
+# ensure_git_safe: git refuses to operate on a repo owned by another user
+# ("dubious ownership") — exactly the case here, where this privileged converge
+# (root / SYSTEM) runs against the user-owned checkout. Left unhandled, every git
+# query below fails and converge silently skips (on_main_primary sees an empty
+# branch != main). Mark the repo safe in the converging user's GLOBAL git config
+# BEFORE the first git call; --replace-all keeps it idempotent (no duplicate
+# accumulation across runs). This mirrors machines-converge.nix's ExecStartPre
+# for the non-NixOS (Windows / bare-Linux) triggers, which have no such pre-hook.
+# On Windows, git compares against the mixed drive-letter path (C:/Users/…), not
+# the MSYS /c/… form $REPO carries, so translate via cygpath -m when present.
+ensure_git_safe() {
+  safe="$REPO"
+  command -v cygpath >/dev/null 2>&1 && safe="$(cygpath -m "$REPO" 2>/dev/null || echo "$REPO")"
+  git config --global --replace-all safe.directory "$safe" 2>/dev/null || true
+}
+
 converge_main() {
+  ensure_git_safe
   on_main_primary || { log "skip: not primary-worktree-on-main"; exit 0; }
   low="$(range_low)"
   high="$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" || { log "no HEAD"; exit 0; }
