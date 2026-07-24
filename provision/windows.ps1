@@ -101,8 +101,8 @@ if ($devOn) {
     if ($devOn) { Info "enabled." } else { throw "Developer Mode still off - symlinks will fail. Enable it via Settings > Privacy & security > For developers, then re-run." }
 }
 
-# ---- 2. Git + Git Bash -------------------------------------------------------
-Step "2. Git + Git Bash"
+# ---- 2. Git + Git Bash + Python ----------------------------------------------
+Step "2. Git + Git Bash + Python"
 if (-not (Have git)) {
     if (-not (Have winget)) { throw "git and winget both missing. Install Git (https://git-scm.com), then re-run." }
     Warn "git not found - installing via winget..."
@@ -120,6 +120,27 @@ $GitBash = $gitBashCands | Where-Object { $_ -and (Test-Path $_) } | Select-Obje
 if (-not $GitBash) { throw "Git Bash (bash.exe) not found under any Git install dir. Reinstall Git for Windows." }
 Info "git:  $(git --version)"
 Info "bash: $GitBash"
+
+# Python (real, non-Store) - kb-refresh's distill.py and agents/statusline-command.sh
+# need a python that Git Bash can exec. The Microsoft Store python/python3/py aliases
+# under ...\WindowsApps are execve-hostile from Git Bash ("Permission denied") AND
+# can't be gated by `Have` (the stub satisfies Get-Command), so probe for a real
+# python.org exe under %LOCALAPPDATA%\Programs\Python and install via `--source winget`
+# (avoids the Store PythonManager) when absent. A real install lands ahead of the Store
+# alias on PATH, which is what makes `python`/`py` resolve for distill (verified on the
+# desktop box, where distill works via the probe's python3->python fallback).
+$pyReal = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+if ($pyReal) {
+    Info "python: $(& $pyReal.FullName --version 2>&1)"
+} elseif (Have winget) {
+    Warn "real python not found (only Store stubs) - installing via winget..."
+    winget install --id Python.Python.3.13 -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    winget install --id Python.Launcher   -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    Update-PathFromRegistry
+} else {
+    Warn "python missing and winget unavailable - install Python 3 from https://python.org, then re-run (kb-refresh distill needs it)."
+}
 
 # ---- 3. Claude Code ----------------------------------------------------------
 Step "3. Claude Code CLI"
