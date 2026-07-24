@@ -324,6 +324,25 @@ global + per-host). One bullet per fact under a topical heading.
   creation/deletion. The paste-into-Orca one-liners are
   `bash "$HOME/machines/agents/worktree-setup.sh"` (Setup) and
   `bash "$HOME/machines/agents/worktree-teardown.sh"` (Archive).
+- **`settings.json` + `codex/hooks.json` are bootstrap COPIES, not symlinks**
+  (`copy_managed` in `agents/bootstrap.sh`, added 2026-07-25). Orca injects its
+  `agent-hooks` block into the live files (`/home/me/.orca/agent-hooks/*.sh`); as
+  symlinks those writes dirtied the tracked baseline and jammed convergence's
+  clean-tree gate. `copy_managed` seeds a real file + a sibling `.<name>.srchash`
+  stamp, re-seeding ONLY when the committed baseline hash changes (a pull/switch),
+  so tool injection stays machine-local and the working tree never dirties. Re-seed
+  fires from provisioning (post-merge / linux.sh / windows.ps1 / nixos switch),
+  never from worktree-setup (the copy is machine-global). Every OTHER agent file
+  stays a `link`. On NixOS a copy is durable only after commit+switch (the store
+  bootstrap must carry the new `copy_managed`).
+- **Claude merges `~/.claude/settings.json` + `settings.local.json` by
+  WHOLE-KEY REPLACE for object maps** (`enabledPlugins`, `extraKnownMarketplaces`)
+  — a partial split is silently ignored or wipes the other file's entries (Claude
+  bugs #17942/#25086). Only ARRAYS union (`permissions.allow`). So: keep
+  `enabledPlugins`/`extraKnownMarketplaces` whole in the committed `settings.json`
+  baseline; only array-valued opt-in config (e.g. `mcp__gortex__*` allow) may live
+  in machine-local `settings.local.json`. gortex permission was moved there
+  2026-07-25 so the baseline carries only manually-configured, portable settings.
 - Per-host agent-memory filenames use the raw OS hostname
   (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
   `methe-server.md` — not fleet aliases), threaded via a single
