@@ -138,7 +138,7 @@ printf 'SECRET=1\n' > "$main/.env"
 check "setup symlinks .env from main into the worktree" '[ -L "$wt/.env" ] && [ "$(cat "$wt/.env")" = "SECRET=1" ]'
 
 # Case 13: nested-path config is linked with its parent dir created.
-printf '{"x":1}\n' > "$main/.claude/settings.local.json" 2>/dev/null || { mkdir -p "$main/.claude"; printf '{"x":1}\n' > "$main/.claude/settings.local.json"; }
+mkdir -p "$main/.claude"; printf '{"x":1}\n' > "$main/.claude/settings.local.json"
 ( cd "$wt" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
 check "setup symlinks nested .claude/settings.local.json" '[ -L "$wt/.claude/settings.local.json" ]'
 
