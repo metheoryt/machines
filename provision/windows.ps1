@@ -135,7 +135,7 @@ if ($pyReal) {
     Info "python: $(& $pyReal.FullName --version 2>&1)"
 } elseif (Have winget) {
     Warn "real python not found (only Store stubs) - installing via winget..."
-    winget install --id Python.Python.3.13 -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    winget install --id Python.Python.3.14 -e --source winget --accept-source-agreements --accept-package-agreements --silent
     winget install --id Python.Launcher   -e --source winget --accept-source-agreements --accept-package-agreements --silent
     Update-PathFromRegistry
 } else {

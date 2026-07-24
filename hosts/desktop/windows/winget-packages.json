@@ -35,7 +35,7 @@
 				{ "PackageIdentifier" : "PaulPacifico.ShutterEncoder" },
 				{ "PackageIdentifier" : "PKI.NCALayer" },
 				{ "PackageIdentifier" : "Python.Launcher" },
-				{ "PackageIdentifier" : "Python.Python.3.13" },
+				{ "PackageIdentifier" : "Python.Python.3.14" },
 				{ "PackageIdentifier" : "RadolynLabs.AyuGramDesktop" },
 				{ "PackageIdentifier" : "restic.restic" },
 				{ "PackageIdentifier" : "seerge.g-helper" },
