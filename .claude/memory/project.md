@@ -60,7 +60,11 @@ global + per-host). One bullet per fact under a topical heading.
   look healthy) and `.machines/last-converge` never appears. Boxes provisioned before
   the fix can't self-heal through Trigger B — the reaped converge is what would
   rewrite the unit — so each needs ONE manual `git pull` (whose converge is not in a
-  unit cgroup) or a manual `bash provision/linux.sh`.
+  unit cgroup) or a manual `bash provision/linux.sh`. Done on `hub` and on
+  `desktop-ubuntu26` (desktop's WSL Ubuntu-26.04) 2026-07-25. Desktop's OTHER WSL
+  distro, Ubuntu-24.04, has a stale `~/machines` (on `main`, clean, at `2815efb`)
+  with `fleet-selfpull.timer` **inactive** — it was never enrolled in Trigger B, so
+  it needs a `provision/linux.sh` run, not just a pull.
 - **git-autofetch has three implementations** — NixOS (systemd timer), Windows
   (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback) — all sharing one
   root-scan model (`find` under `$HOME` depth 4, skipping node_modules/.cache/.direnv)
