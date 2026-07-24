@@ -42,3 +42,8 @@ Minor findings (final-review triage):
 - M4 (Task 1 test noise): worktree-dispatcher.test.sh Case 13 (line ~141) leaks a shell redirection error to stderr (`.claude/settings.local.json: No such file or directory`) when $main/.claude doesn't pre-exist — the `2>/dev/null` doesn't cover the shell's open-failure. Tests still ALL PASS but output not pristine. Trivial fix: mkdir -p "$main/.claude" before the printf.
 
 ALL 4 TASKS COMPLETE. Awaiting final whole-branch review.
+
+FINAL WHOLE-BRANCH REVIEW (opus): initially CHANGES REQUIRED — found 1 NEW Important: agents/plugin/skills/orca-setup/tests/template.test.sh (a THIRD test file the plan never scoped) still asserted the retired gortex-readiness/ORCA_GORTEX contract → RED + banned-flag violation. M1-M3 accepted; M4 folded into fix.
+FIX (commit d8a1ac3): rewrote template.test.sh to the migrated contract (asserts no gortex-readiness block, no ORCA_GORTEX, clean exit 0) + fixed Case 13 stderr leak. Verified: template.test.sh 8 PASS pristine; worktree-dispatcher.test.sh ALL PASS pristine; ORCA_GORTEX only survives as absence-assertions in the test.
+STATUS: COMPLETE on main @ d8a1ac3 (feature range dd3d74b..d8a1ac3). Not pushed (in-place on main; push/PR not authorized).
+MANUAL FOLLOW-UP (user, per machine — orca-data.json is not synced): re-paste the two one-liners into Orca — Setup field: bash "$HOME/machines/agents/worktree-setup.sh"; Archive field: bash "$HOME/machines/agents/worktree-teardown.sh". orca-status.sh flags any repo still on the legacy setup string as CONFLICT.
