@@ -454,6 +454,12 @@ global + per-host). One bullet per fact under a topical heading.
 
 ## Pending follow-ups
 
+- **Profile-aware `touches_linux` (deferred by decision 2026-07-25).** The regex is
+  profile-blind, so a routine `pkgs/gortex.nix` bump re-runs hub's whole tier list on
+  a box that never runs gortex. Cheap now that the list is lean (8 tiers, all
+  idempotent), so it was left as-is rather than teaching `converge.sh` about
+  profiles. Fix only if the churn starts costing something.
+
 - **Retire the WSL distro as a separate fleet host (in-flight, stated 2026-07-19).**
   Direction: the ROG G16 laptop's WSL distro should stop being provisioned as its own
   tailnet node + SSH leaf (`provision/ssh-wsl.sh`, `provision/tailscale-wsl.sh`, node
