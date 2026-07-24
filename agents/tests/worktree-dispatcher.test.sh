@@ -64,10 +64,10 @@ calls="$(mktemp)"
 ( cd "$wt" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg3" GORTEX_CALLS="$calls" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
 check "setup skips track when worktree already listed" '! grep -q "^track " "$calls"'
 
-# Case 5: main checkout (not a linked worktree) -> no track call.
-calls="$(mktemp)"
-( cd "$main" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$calls" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
-check "setup skips track in the main checkout" '! grep -q "^track " "$calls"'
+# Case 5: main checkout (not a linked worktree) -> takes main-checkout branch (distinctive log).
+err="$(mktemp)"
+( cd "$main" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" 2>"$err" >/dev/null )
+check "setup takes the main-checkout branch in the main checkout" 'grep -q "main checkout" "$err"'
 
 # Case 6: repo-local setup script runs; first candidate wins.
 touched="$(mktemp)"; rm -f "$touched"
