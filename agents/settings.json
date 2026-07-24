@@ -1,9 +1,7 @@
 {
   "env": {},
   "permissions": {
-    "allow": [
-      "mcp__gortex__*"
-    ],
+    "allow": [],
     "defaultMode": "auto"
   },
   "model": "opus",

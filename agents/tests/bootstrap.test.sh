@@ -27,4 +27,36 @@ out2="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -
 check "tests dir excluded from hook linking" \
   '! printf "%s" "$out2" | grep -q "hooks/tests"'
 
+# Case 3: copy_managed — the churn-free real-copy handler for settings.json /
+# codex hooks.json. Source bootstrap in lib-only mode (defines helpers, runs no
+# bootstrap) with CLAUDE_CONFIG_DIR pointed at a throwaway dir so the source-time
+# mkdir lands there, not real ~/.claude.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+BOOTSTRAP_LIB_ONLY=1 CLAUDE_CONFIG_DIR="$tmp/claude" . "$boot" >/dev/null 2>&1
+
+src="$tmp/base.json"; dest="$tmp/live.json"
+printf 'BASE-V1\n' > "$src"
+
+# (a) first seed: dest is a REAL file with src's content — never a symlink.
+copy_managed "$src" "$dest" >/dev/null
+check "copy_managed seeds a real file, not a symlink" '[ -f "$dest" ] && [ ! -L "$dest" ]'
+check "copy_managed seeds baseline content"           '[ "$(cat "$dest")" = "BASE-V1" ]'
+
+# (b) baseline UNCHANGED → local injection (Orca's block) is preserved (stamp hit).
+printf 'BASE-V1\nORCA-INJECTED\n' > "$dest"
+copy_managed "$src" "$dest" >/dev/null
+check "copy_managed keeps local edits when baseline unchanged" 'grep -q ORCA-INJECTED "$dest"'
+
+# (c) baseline CHANGES → re-seed, clobbering the stale local copy (Orca re-injects on launch).
+printf 'BASE-V2\n' > "$src"
+copy_managed "$src" "$dest" >/dev/null
+check "copy_managed re-seeds when baseline changed" '[ "$(cat "$dest")" = "BASE-V2" ]'
+
+# (d) migration: an existing SYMLINK at dest (the pre-fix state) becomes a real copy.
+other="$tmp/other.json"; printf 'OTHER\n' > "$other"
+lnk="$tmp/waslink.json"; ln -s "$other" "$lnk"
+copy_managed "$src" "$lnk" >/dev/null
+check "copy_managed migrates a symlink to a real copy"  '[ -f "$lnk" ] && [ ! -L "$lnk" ]'
+check "copy_managed migration writes baseline content"  '[ "$(cat "$lnk")" = "BASE-V2" ]'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

@@ -149,6 +149,70 @@ link() {
   fi
 }
 
+# hash_file <path>: content hash for change-detection. sha256 preferred; cksum
+# fallback keeps it working on a stripped Windows Git Bash without coreutils sha.
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else cksum "$1" | cut -d' ' -f1; fi
+}
+
+# copy_managed <abs-src> <abs-dest>: maintain dest as a REAL FILE seeded from the
+# committed src — deliberately NOT a symlink. A tool that writes through the live
+# config (Orca injecting its agent-hooks block into settings.json / codex hooks.json)
+# then mutates only this local copy, never the tracked repo file — so the working
+# tree never dirties and convergence's clean-tree gate never jams. The tracked
+# file stays the deliberate shared baseline; changes to it are explicit commits.
+#
+# Propagation without churn: a sibling .<name>.srchash stamp records the hash of
+# the committed src at the last seed. Re-copy ONLY when (a) dest is missing or is
+# still a symlink (first migration off the old link), or (b) the committed src
+# changed since the last seed (a pull / provisioning brought new baseline). Between
+# committed changes the live copy — including any tool injection — is left
+# untouched, so a running tool's hooks survive bootstrap runs (the tool re-injects
+# on launch, not on file change; an unconditional overwrite would silently disable
+# them mid-session). Re-seed fires from provisioning (post-merge hook, linux.sh /
+# windows.ps1, nixos switch) — never from the per-worktree setup script, which
+# operates a layer below this machine-global profile file.
+copy_managed() {
+  local src="$1" dest="$2" stamp srchash
+  if [ ! -e "$src" ]; then
+    printf '  ! missing in repo, skipping: %s\n' "$src"
+    return
+  fi
+  stamp="$(dirname "$dest")/.$(basename "$dest").srchash"
+  srchash="$(hash_file "$src")"
+  if [ -f "$dest" ] && [ ! -L "$dest" ] \
+     && [ "$(cat "$stamp" 2>/dev/null)" = "$srchash" ]; then
+    printf '  = already synced (local edits kept): %s\n' "$dest"
+    skipped=$((skipped + 1))
+    return
+  fi
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would sync (real copy): %s -> %s\n' "$dest" "$src"
+    would_link=$((would_link + 1))
+    return
+  fi
+  # A symlink carries no content (the baseline lives in the repo) — just drop it.
+  # A real file with NO stamp was never managed by us (hand-authored, or a pre-fix
+  # copy): back it up first, matching link()'s safety. A real file WITH a stamp is
+  # our own copy being re-seeded (baseline changed) — clobber it without cluttering
+  # the backup tree. backup_target moves it aside, so the rm below is a no-op then.
+  if [ -e "$dest" ] && [ ! -L "$dest" ] && [ ! -f "$stamp" ]; then
+    backup_target "$dest" && backed=$((backed + 1))
+  fi
+  rm -f "$dest"                       # drop the old symlink (or leftover)
+  mkdir -p "$(dirname "$dest")"
+  if cp "$src" "$dest" 2>/dev/null; then
+    printf '%s\n' "$srchash" > "$stamp" 2>/dev/null || true
+    printf '  + synced (real copy): %s -> %s\n' "$dest" "$src"
+    linked=$((linked + 1))
+  else
+    printf '  ✗ could not copy: %s\n' "$dest"
+    failed=$((failed + 1))
+  fi
+}
+
 # host_id: this machine's hostname, sanitized to a filename. Prefers Windows
 # COMPUTERNAME (ME-G614JV), else `hostname` (g16 / latitude5520 on the nix
 # laptops). This is only the off-nix fallback: on NixOS, claude.nix passes the
@@ -180,6 +244,11 @@ link_entries_into() {
   done
 }
 
+# Lib-only mode: `BOOTSTRAP_LIB_ONLY=1 . bootstrap.sh` loads the helper functions
+# (link / copy_managed / hash_file / …) without running the profile bootstrap —
+# used by tests/bootstrap.test.sh to exercise copy_managed in isolation.
+if [ -n "${BOOTSTRAP_LIB_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
+
 printf 'Bootstrapping Claude config\n  repo:  %s\n  live:  %s\n\n' "$SRC_DIR" "$CLAUDE_DIR"
 
 # Shared whole-file links (every profile).
@@ -190,15 +259,21 @@ done
 # block above): ~/.claude -> settings.json, ~/.claude-<postfix> ->
 # settings.<postfix>.json. Falls back to the primary settings.json if the
 # profile's own file isn't committed. The machine-local settings.local.json
-# (personal: gortex hooks; pure: PURE_SENTRY_TOKEN secret) is never linked — it
-# stays local and is reunited at load via env deep-merge.
+# (personal: gortex hooks + gortex permission allow; pure: PURE_SENTRY_TOKEN
+# secret) is never linked — it stays local and Claude merges it over settings.json.
+#
+# copy_managed, NOT link: Orca injects its agent-hooks block into the live
+# settings.json, and Claude itself writes it (/plugin, /config). As a symlink both
+# land in the tracked repo file and jam convergence. A real copy keeps those writes
+# machine-local; the tracked baseline changes only by deliberate commit, re-seeded
+# here when it changes. See copy_managed's header for the churn-free stamp logic.
 if [ "$POSTFIX" = default ]; then
   settings_src="$SRC_DIR/settings.json"
 else
   settings_src="$SRC_DIR/settings.$POSTFIX.json"
   [ -e "$settings_src" ] || settings_src="$SRC_DIR/settings.json"
 fi
-link "$settings_src" "$CLAUDE_DIR/settings.json"
+copy_managed "$settings_src" "$CLAUDE_DIR/settings.json"
 
 # Memory & knowledge base. Global instructions + global memory store are shared
 # across all machines; the per-host file is chosen by hostname (imported by
@@ -266,7 +341,10 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
   link "$SRC_DIR/memory/personality" "$CODEX_DIR/memory/personality"
   link "$host_src"                    "$CODEX_DIR/host-memory.md"
 
-  link "$CODEX_SRC/hooks.json" "$CODEX_DIR/hooks.json"
+  # copy_managed, NOT link: Orca injects its agent-hooks block into the live
+  # hooks.json; a symlink would dirty the tracked repo file. Codex never
+  # self-writes it, so the copy has no propagation cost beyond baseline edits.
+  copy_managed "$CODEX_SRC/hooks.json" "$CODEX_DIR/hooks.json"
 
   link_entries_into "$SRC_DIR/plugin/skills" "$CODEX_DIR/skills"
   link_entries_into "$SRC_DIR/plugin/hooks"  "$CODEX_DIR/hooks"
