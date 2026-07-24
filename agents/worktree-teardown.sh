@@ -42,7 +42,7 @@ fi
 
 # Reconcile: prune any tracked path whose directory no longer exists on disk.
 if [ -f "$CONFIG" ]; then
-  while IFS= read -r line; do
+  while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *"path:"*) : ;;
       *) continue ;;

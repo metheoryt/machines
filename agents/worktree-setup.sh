@@ -32,7 +32,7 @@ gitdir=$(git rev-parse --absolute-git-dir)
 config_has_path() {
   local target="$1" line p
   [ -f "$CONFIG" ] || return 1
-  while IFS= read -r line; do
+  while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *"- path:"*|*"path:"*) : ;;
       *) continue ;;
