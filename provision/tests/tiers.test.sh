@@ -61,4 +61,13 @@ has "$(plan_host wsl-scratch)" 'profile: workstation \(default\)' "unknown hostn
 out="$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; declare -F tier_apt_min >/dev/null && echo LOADED' _ "$TIERS")"
 eq "$out" "LOADED" "TIERS_LIB_ONLY sources without side effects"
 
+# Every fleet.json machine must already have a committed per-host memory stub:
+# agents/bootstrap.sh seeds a MISSING one inside the repo, which leaves the tree
+# dirty and permanently disables fleet-selfpull's clean-tree gate on that box.
+for h in $(jq -r '.machines[].detect.hostname' "$HERE/../../fleet.json"); do
+  [ -f "$HERE/../../agents/hosts/$h.md" ] \
+    && pass "host memory stub committed for $h" \
+    || die "host memory stub committed for $h"
+done
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"
