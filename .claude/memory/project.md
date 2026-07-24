@@ -32,6 +32,35 @@ global + per-host). One bullet per fact under a topical heading.
   atomic rename). Plus per-OS `fleet-selfpull` timers (NixOS systemd / Windows
   Scheduled Task / WSL), all `git pull --ff-only` on a jitter. NixOS rebuilds against
   the committed `flake.lock`, never a local update. Design under `docs/superpowers/`.
+- **`provision/linux.sh` is a DRIVER, not a script.** Tier bodies live in
+  `provision/lib/tiers.sh` as `tier_<name>` functions; the driver resolves a profile
+  (`MACHINES_PROFILE` env > `fleet.json` `"profile"` by OS hostname > `workstation`)
+  and runs that profile's ordered tier list. `MACHINES_TIERS_DRY_RUN=1 bash
+  provision/linux.sh` prints the plan and exits — do that before touching a tier.
+  Adding a new provisioning path under `provision/lib/` REQUIRES adding it to
+  `touches_linux()` in `scripts/converge.sh`, or a pull touching only that file
+  makes converge write `ok` AND advance `converged-rev` — a permanent silent skip,
+  not a delayed apply.
+- **hub is enrolled (2026-07-25).** `~/machines` clone, profile `hub` (lean tier
+  list: `apt_min agents_config git_base agent_clis(claude) shell_init(--no-fish)
+  autofetch selfpull ssh_trust`), `FLEET_ROOTS` pinned to `~/machines` so `~/vps`
+  stays a deliberate manual pull. Three hazards a future change must not
+  reintroduce: (1) `tier_ssh_accounts` must NEVER run on hub — it writes
+  `IdentitiesOnly` on a fresh unregistered key into hub's empty `~/.ssh/config` and
+  kills its only GitHub auth (`id_rsa`), i.e. the ff-pull itself, on a remote box;
+  (2) every `fleet.json` hostname needs a COMMITTED `agents/hosts/<host>.md` —
+  `bootstrap.sh` seeds a missing one untracked, leaving the tree permanently dirty
+  and `selfpull_one` returning `SKIP dirty` forever; (3) the `touches_linux` gap
+  above. All three are guarded by `provision/tests/tiers.test.sh`.
+- **A systemd-user `fleet-selfpull` unit MUST carry `KillMode=process`** (fixed
+  2026-07-25, found live on hub). The pull fires `post-merge`, which backgrounds
+  `converge.sh` with `setsid` — that leaves the session but NOT the unit's cgroup, so
+  the default `KillMode=control-group` SIGKILLs the converge ~3s later when the
+  oneshot finishes. Symptom is nasty: Trigger B pulls forever (HEAD advances, timers
+  look healthy) and `.machines/last-converge` never appears. Boxes provisioned before
+  the fix can't self-heal through Trigger B — the reaped converge is what would
+  rewrite the unit — so each needs ONE manual `git pull` (whose converge is not in a
+  unit cgroup) or a manual `bash provision/linux.sh`.
 - **git-autofetch has three implementations** — NixOS (systemd timer), Windows
   (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback) — all sharing one
   root-scan model (`find` under `$HOME` depth 4, skipping node_modules/.cache/.direnv)
