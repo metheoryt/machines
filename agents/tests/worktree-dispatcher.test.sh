@@ -130,4 +130,34 @@ calls="$(mktemp)"
 check "reconcile untracks the missing path when config has no trailing newline" \
   'grep -q "untrack '"$missing2"'" "$calls"'
 
+# Case 12: generic config linking — a .env in main is symlinked into a fresh worktree.
+fb="$(mk_fakebin)"; read -r main wt <<<"$(mk_repo_with_worktree)"
+cfg="$(mktemp)"; printf 'repos:\n    - path: %s\n' "$main" > "$cfg"
+printf 'SECRET=1\n' > "$main/.env"
+( cd "$wt" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
+check "setup symlinks .env from main into the worktree" '[ -L "$wt/.env" ] && [ "$(cat "$wt/.env")" = "SECRET=1" ]'
+
+# Case 13: nested-path config is linked with its parent dir created.
+printf '{"x":1}\n' > "$main/.claude/settings.local.json" 2>/dev/null || { mkdir -p "$main/.claude"; printf '{"x":1}\n' > "$main/.claude/settings.local.json"; }
+( cd "$wt" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
+check "setup symlinks nested .claude/settings.local.json" '[ -L "$wt/.claude/settings.local.json" ]'
+
+# Case 14: a pre-existing dest file is NOT clobbered.
+read -r main2 wt2 <<<"$(mk_repo_with_worktree)"
+cfg2="$(mktemp)"; printf 'repos:\n    - path: %s\n' "$main2" > "$cfg2"
+printf 'MAIN=1\n' > "$main2/.env"; printf 'LOCAL=1\n' > "$wt2/.env"
+( cd "$wt2" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg2" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
+check "setup does not clobber an existing dest file" '[ ! -L "$wt2/.env" ] && [ "$(cat "$wt2/.env")" = "LOCAL=1" ]'
+
+# Case 15: idempotent — re-run exits 0 and leaves the link intact.
+( cd "$wt" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 ); rc=$?
+check "setup re-run is idempotent (exit 0, link intact)" '[ "'$rc'" -eq 0 ] && [ -L "$wt/.env" ]'
+
+# Case 16: link step is skipped in the main checkout (.env stays a real file, not a symlink).
+read -r main3 wt3 <<<"$(mk_repo_with_worktree)"
+cfg3="$(mktemp)"; printf 'repos:\n    - path: %s\n' "$main3" > "$cfg3"
+printf 'X=1\n' > "$main3/.env"
+( cd "$main3" && PATH="$fb:$PATH" GORTEX_CONFIG="$cfg3" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
+check "link step skipped in main checkout (.env not a symlink)" '[ ! -L "$main3/.env" ]'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

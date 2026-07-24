@@ -64,6 +64,22 @@ else
   fi
 fi
 
+# 1b. Link generic gitignored config from the main checkout into a fresh linked
+#     worktree (a fresh worktree carries only committed files). Idempotent; never
+#     clobber; a dangling symlink counts as already-linked. Skipped in the main
+#     checkout, where there is nothing distinct to link into.
+if [ "$gitdir" != "$common" ]; then
+  for rel in .env .claude/settings.local.json; do
+    src="$main_root/$rel"
+    dst="$wt_root/$rel"
+    if [ -e "$src" ] && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
+      mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst" \
+        && log "linked $rel" \
+        || log "WARN: failed to link $rel"
+    fi
+  done
+fi
+
 # 2. Then the repo-local setup script (first executable candidate wins).
 for rel in .orca/worktree-setup.sh docker/worktree-setup.sh .worktree/setup.sh scripts/worktree-setup.sh; do
   cand="$wt_root/$rel"
