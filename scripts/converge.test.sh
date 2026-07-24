@@ -51,6 +51,17 @@ touches_linux "$rev2" "$rev3" && die "touches_linux false-positive on non-provis
 touches_linux "$rev3" "$rev4" && pass "touches_linux detects provision/linux.sh" || die "touches_linux detects provision/linux.sh"
 touches_linux "" "$rev4" && pass "touches_linux first-run is hit" || die "touches_linux first-run is hit"
 
+# touches_linux: the tier library and the manifest helpers are on the provisioning
+# path too (provision/linux.sh only drives them) — a tiers-only pull MUST reprovision,
+# or converge writes ok + advances converged-rev and never applies it.
+mkdir -p "$repo/provision/lib"
+echo x > "$repo/provision/lib/tiers.sh"; git -C "$repo" add .; git -C "$repo" commit -qm c5
+rev5="$(git -C "$repo" rev-parse HEAD)"
+touches_linux "$rev4" "$rev5" && pass "touches_linux detects provision/lib/tiers.sh" || die "touches_linux detects provision/lib/tiers.sh"
+echo y > "$repo/provision/lib/fleet.sh"; git -C "$repo" add .; git -C "$repo" commit -qm c6
+rev6="$(git -C "$repo" rev-parse HEAD)"
+touches_linux "$rev5" "$rev6" && pass "touches_linux detects provision/lib/fleet.sh" || die "touches_linux detects provision/lib/fleet.sh"
+
 # on_main_primary: true on main in primary checkout.
 on_main_primary && pass "on_main_primary true on main" || die "on_main_primary true on main"
 

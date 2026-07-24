@@ -60,8 +60,12 @@ touches_nix() {
 # range — the linux provisioner itself or the inputs it acts on. A content-only
 # pull (docs, memory, other-OS scripts) needs no reprovision; the agent config
 # is relinked by the post-merge hook's job 1, so agents/** alone does NOT count.
+# provision/linux.sh is only the DRIVER: the tier bodies live in
+# provision/lib/tiers.sh and the profile resolution in provision/lib/fleet.sh, so
+# both count too — otherwise a tiers-only pull matches nothing, converge writes
+# ok, advances converged-rev, and the change is never applied on any linux box.
 touches_linux() {
-  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/fleet-selfpull\.sh$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
+  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/lib/tiers\.sh$|^provision/lib/fleet\.sh$|^provision/fleet-selfpull\.sh$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
 }
 
 # write_status <rev> <ok|fail> <reason>: record outcome; advance converged-rev
