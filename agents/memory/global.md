@@ -445,6 +445,17 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## Windows & WSL scripting footguns
 
+- **MS Store app-execution-alias stubs shadow real tools.** The `python`/`python3`/`py`/
+  `winget` shims under `%LOCALAPPDATA%\Microsoft\WindowsApps` are 0-byte reparse points
+  the Windows shell special-cases; Git Bash's `execve` can't run them → "Permission
+  denied" (exit 126), and they sit ahead of real installs on PATH. `winget` also fails
+  over a **non-interactive SSH** session (`ApplicationFailedException`) — Store-packaged
+  apps won't launch there, so you can't `winget install` a fleet box over SSH. Fixes:
+  install a real (non-Store) python.org build (`winget install --source winget` on-box,
+  or the `python-3.x-amd64.exe` `/quiet InstallAllUsers=0 PrependPath=1` silent installer
+  over SSH) — a real exe lands ahead of the alias on PATH and Git Bash can exec it. (This
+  is why the Windows fleet boxes need Python provisioned: kb-refresh's distill.py runs
+  under Git Bash; the Store stub can't.)
 - **PowerShell 5.1 (`powershell.exe`) decodes BOM-less UTF-8 as cp1252** — a
   `.ps1`/`.psm1` carrying non-ASCII bytes (em-dashes) then throws spurious "string
   is missing the terminator" parse errors. Add a UTF-8 BOM for 5.1+7 parity (PS 7
