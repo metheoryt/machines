@@ -458,6 +458,13 @@ tier_selfpull() {
     {
       printf '[Unit]\nDescription=Fleet self-pull (ff-only) of all fleet-sync repos\n\n'
       printf '[Service]\nType=oneshot\nTimeoutStartSec=8min\n'
+      # The pull fires the repo's post-merge hook, which backgrounds converge.sh
+      # with setsid — but setsid does not leave the unit's cgroup. Under the
+      # default KillMode=control-group systemd SIGKILLs whatever is left there
+      # the moment this oneshot finishes (~3s), so the converge is reaped before
+      # it can rebuild/provision and Trigger B silently never applies anything.
+      # KillMode=process limits the kill to the main process.
+      printf 'KillMode=process\n'
       [ -n "$roots" ] && printf 'Environment=FLEET_ROOTS=%s\n' "$roots"
       printf 'ExecStart=/usr/bin/env bash %s\n' "$FSP"
     } > "$_ud2/fleet-selfpull.service"

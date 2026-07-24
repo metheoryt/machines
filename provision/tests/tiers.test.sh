@@ -61,6 +61,14 @@ has "$(plan_host wsl-scratch)" 'profile: workstation \(default\)' "unknown hostn
 out="$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; declare -F tier_apt_min >/dev/null && echo LOADED' _ "$TIERS")"
 eq "$out" "LOADED" "TIERS_LIB_ONLY sources without side effects"
 
+# The generated fleet-selfpull unit MUST carry KillMode=process: the pull fires
+# post-merge, which backgrounds converge.sh inside this unit's cgroup, and the
+# default control-group kill reaps it ~3s later when the oneshot finishes —
+# Trigger B then pulls forever and never applies anything.
+grep -q 'KillMode=process' "$TIERS" \
+  && pass "fleet-selfpull unit sets KillMode=process" \
+  || die "fleet-selfpull unit sets KillMode=process"
+
 # Every fleet.json machine must already have a committed per-host memory stub:
 # agents/bootstrap.sh seeds a MISSING one inside the repo, which leaves the tree
 # dirty and permanently disables fleet-selfpull's clean-tree gate on that box.
