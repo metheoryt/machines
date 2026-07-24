@@ -159,3 +159,34 @@ just shell
 - Timezone: `Asia/Almaty`
 - Locale: `ru_RU.UTF-8`
 - State version: 25.05
+
+## Worktree dispatchers
+
+`worktree-setup.sh` / `worktree-teardown.sh` (fleet root) are tool-agnostic hooks
+for the git-worktree lifecycle. Run with CWD = the worktree, no arguments.
+
+- **Orca IDE:** point the *Create worktree* hook at
+  `~/machines/agents/worktree-setup.sh` and the *Delete worktree* hook at
+  `~/machines/agents/worktree-teardown.sh` (absolute paths; the fleet repo path is
+  stable across machines).
+- **Manual:** run either from inside a worktree.
+
+**What they do.** Setup: gortex-`track`s the worktree (`--as-worktree`) *first*, then
+runs the repo's own setup script. Teardown: runs the repo's own teardown script
+*first*, then `gortex untrack`s the worktree and reconciles (prunes any tracked
+`~/.config/gortex/config.yaml` path missing on disk — catches worktrees removed
+outside the IDE).
+
+**gortex coupling is guarded and personal.** Every gortex action is gated on
+`gortex daemon status`; with the daemon down or gortex absent the gortex step is a
+silent no-op, so committed work repos and non-gortex teammates are unaffected.
+gortex is `track`ed only when the *main* checkout is already covered by the daemon.
+
+**Repo-local script candidates** (first executable match wins, then stop):
+`.orca/` → `docker/` → `.worktree/` → `scripts/`, basename
+`worktree-setup.sh`/`setup.sh` (or `-teardown.sh`/`teardown.sh`). backend-api ships
+`docker/worktree-setup.sh` + `docker/worktree-teardown.sh`; they carry no gortex
+references.
+
+**Caveat:** reconcile prunes *any* tracked path gone from disk, including a
+temporarily-unmounted drive — re-track it on return.
