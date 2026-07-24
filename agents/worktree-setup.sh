@@ -34,7 +34,7 @@ config_has_path() {
   [ -f "$CONFIG" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      *"- path:"*|*"path:"*) : ;;
+      *"- path:"*) : ;;
       *) continue ;;
     esac
     p=${line#*path:}

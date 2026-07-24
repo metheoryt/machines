@@ -44,7 +44,7 @@ fi
 if [ -f "$CONFIG" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      *"path:"*) : ;;
+      *"- path:"*) : ;;
       *) continue ;;
     esac
     p=${line#*path:}
