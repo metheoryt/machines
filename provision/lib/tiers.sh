@@ -440,10 +440,14 @@ EOF
 #
 # tier_selfpull [fleet_roots]: a non-empty arg pins FLEET_ROOTS in the generated
 # unit / cron line, so only those roots are scanned (hub: just ~/machines, so the
-# vps repo that defines its live services is never auto-pulled). systemd expands
-# %h; cron does not, so the cron line gets $HOME substituted in.
+# vps repo that defines its live services is never auto-pulled). Unpinned,
+# fleet-selfpull.sh defaults to "$HOME $HOME/my …" — i.e. it would find ~/vps.
+# `%h` in the arg is expanded to $HOME HERE, for both schedulers: cron never
+# expands specifiers, and a literal %h reaching either one silently scans nothing
+# (the box then looks enrolled but never pulls).
 tier_selfpull() {
   local roots="${1:-}"
+  roots="${roots//%h/$HOME}"
   info "Installing fleet self-pull timer…"
   FSP="$REPO/provision/fleet-selfpull.sh"
   if [ ! -f "$FSP" ]; then
@@ -476,9 +480,8 @@ UNIT
       warn "could not enable fleet-selfpull.timer"
     fi
   elif have crontab; then
-    # cron does not expand systemd's %h — translate it before writing the line.
-    local roots_cron="${roots//%h/$HOME}" cron_env=""
-    [ -n "$roots_cron" ] && cron_env="FLEET_ROOTS='$roots_cron' "
+    local cron_env=""
+    [ -n "$roots" ] && cron_env="FLEET_ROOTS='$roots' "
     if crontab -l 2>/dev/null | grep -qF "$FSP"; then
       ok "fleet-selfpull cron already present"
     elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); %s/usr/bin/env bash %s >/dev/null 2>&1\n' "$cron_env" "$FSP"; } \
