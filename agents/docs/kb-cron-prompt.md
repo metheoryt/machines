@@ -227,7 +227,9 @@ left modified.
 
 ---
 
-## Planned follow-up: the reflection job
+## The reflection job (the other half)
+
+Written up in `kb-reflection-prompt.md`, in this directory.
 
 This job is deliberately **append-only** — it adds observations and never
 deletes or rewrites. That is what makes it safe to run unattended across many
