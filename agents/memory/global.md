@@ -158,6 +158,15 @@ elsewhere to sync. Do NOT put secrets here.
   (never rebase — fleet repos), then continue; treat it as normal, not as the
   prompt's "dirty tree, defer Lane 2" abort condition.
   <!-- src: airdrome c4d5423 | 2026-07-26 -->
+- **A transcript slug dir outlives the checkout it was named after, so a slug is
+  not evidence the repo is on that box.** `~/.claude/projects/<cwd-with-dashes>/`
+  is never garbage-collected when the working copy is deleted; what remains can be
+  an empty husk (only a `memory/` subdir, zero `.jsonl`). Seen 2026-07-26:
+  `C--Users-methe-GitHub-airdrome` still listed on the Windows side of `g614jv`
+  while nothing named `airdrome` exists anywhere under `C:\Users\methe`. Before
+  concluding a box holds unharvested sessions — or that a repo is checked out
+  there — check for `.jsonl` files, not just the directory.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
 
 ## Evaluating a new dependency
 
