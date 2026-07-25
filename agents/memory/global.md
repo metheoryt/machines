@@ -117,6 +117,29 @@ elsewhere to sync. Do NOT put secrets here.
   appending the comment again produces a doubled comment ("me@wsl-desktop
   me@wsl-desktop") — strip to type+body before re-stamping.
 
+## kb-refresh / fleet-gather.sh gotchas
+
+- **Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives
+  `SKILL_DIR` with a plain `cd … && pwd` (logical, not `-P`), so when the skill is
+  reached through the `~/.claude/skills/cyphy` symlink, four-up resolves to
+  `~/.claude/fleet.json` — which does not exist. `fleet_hosts` then returns empty
+  and the whole run degrades to **local-only with no warning**, indistinguishable
+  from "no fleet configured". Use
+  `~/machines/agents/plugin/skills/kb-refresh/fleet-gather.sh` or
+  `FLEET_JSON=$HOME/machines/fleet.json`.
+- **The remote digest dir `~/.cache/kb-digests` is never pruned**, and the pull is
+  `tar cf - .` over the whole dir, so every run re-delivers previous runs' digests
+  (carrying their remote mtimes — so the *stale* ones can sort **newer** than the
+  genuinely fresh local ones, and nothing in the file marks which run delivered
+  it). The authoritative "new this run" list is the locally written
+  `manifest.tsv`, never `ls`/mtime of the out dir — otherwise you re-map facts
+  that are already committed.
+- **Self-exclusion is by OS hostname, which a WSL distro shares with its Windows
+  parent.** Running kb-refresh inside WSL on `g614jv` prints `[desktop] is this
+  box, skipping self` and never harvests the Windows-native
+  `/c/Users/<user>/.claude/projects` profile. Run it from the Windows side to
+  cover those sessions.
+
 ## Evaluating a new dependency
 
 - **Inspect a not-yet-adopted dependency's real defaults and source with
