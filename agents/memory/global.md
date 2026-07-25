@@ -139,6 +139,25 @@ elsewhere to sync. Do NOT put secrets here.
   box, skipping self` and never harvests the Windows-native
   `/c/Users/<user>/.claude/projects` profile. Run it from the Windows side to
   cover those sessions.
+- On Linux the four-up `fleet.json` default resolves **correctly** through the
+  `~/.claude/skills/cyphy` symlink, because the kernel resolves `..` physically
+  after following the symlink — a logical `pwd` only affects the string, not what
+  the OS opens. Verified on `g614jv` (WSL): `SKILL_DIR` printed
+  `/home/me/.claude/skills/cyphy/skills/kb-refresh`, and
+  `$SKILL_DIR/../../../../fleet.json` opened `/home/me/machines/fleet.json`. So the
+  local-only degradation is not universal — it presumably needs a path layer that
+  normalizes `..` lexically (MSYS/Git Bash) or a copied rather than symlinked skill
+  dir. Passing `FLEET_JSON` explicitly is harmless and still the safe habit.
+  <!-- conflicts-with: "**Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives `SKILL_DIR` with a plain `cd … && pwd` (logical, not `-P`), so when the skill is reached through the `~/.claude/skills/cyphy` symlink, four-up resolves to `~/.claude/fleet.json` — which does not exist." -->
+  <!-- src: airdrome c4d5423 | 2026-07-26 -->
+- **`git -C ~/machines pull --ff-only` (the cron prompt's Lane 2 preflight) can abort
+  on a clean tree.** A prior unattended run commits shared memory locally and, if its
+  push step never ran, leaves `main` ahead while origin moves on — the tree is clean
+  and `git status` says nothing, yet the pull fails `Not possible to fast-forward`.
+  Seen on `g614jv`: 1 ahead / 3 behind. Reconcile with `git merge origin/main`
+  (never rebase — fleet repos), then continue; treat it as normal, not as the
+  prompt's "dirty tree, defer Lane 2" abort condition.
+  <!-- src: airdrome c4d5423 | 2026-07-26 -->
 
 ## Evaluating a new dependency
 
