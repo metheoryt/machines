@@ -62,31 +62,49 @@ start — it tracks only when the daemon is already up). Offer to `git add "$DES
 Check how the repo is currently wired, then print guidance. This reads
 `orca-data.json` read-only — safe with Orca open.
 
-**The one-liner is platform-specific** — see "Why Windows differs" below. Resolve
-Orca's data file first; whichever location exists tells you which platform's
-one-liner to print.
+**The one-liner form follows the REPO's world, not the machine's** — see "Why
+Windows differs" below. Orca emits a `setup-runner.sh` for a Linux/WSL checkout and
+a `setup-runner.cmd` for a Windows (`C:\…`) checkout, so one Windows box can
+legitimately need both forms: a repo at `\\wsl.localhost\…` takes the Linux
+one-liner, one at `C:/Users/…` takes the Windows one. You are inside the repo, so
+`uname -s` is the correct probe — **run /orca-setup from the repo's own shell
+world** (Git Bash for a `C:\…` checkout, WSL for a WSL checkout).
 
 ```bash
-# Assumes Orca's default profile; a non-default profile yields ABSENT (harmless —
-# you just re-paste the idempotent one-liners). Point DATA elsewhere if needed.
-# %APPDATA% in POSIX form — $APPDATA itself is backslashed and fails `[ -f ]`.
-WIN_DATA="$HOME/AppData/Roaming/orca/profiles/local-default/orca-data.json"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    SETUP='"%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"'
+    TEARDOWN='"%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"'
+    ;;
+  *)
+    SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
+    TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
+    ;;
+esac
 
-if [ -f "$WIN_DATA" ]; then
-  DATA="$WIN_DATA"
-  SETUP='"%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"'
-  TEARDOWN='"%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"'
-else
-  DATA="$HOME/.config/orca/profiles/local-default/orca-data.json"
-  SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
-  TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
-fi
-~/machines/agents/plugin/skills/orca-setup/orca-status.sh "$DATA" "$ORIGIN" "$SETUP" "$TEARDOWN" "$BASE"
+# One machine can host more than one Orca install — g614jv has a Windows Orca AND a
+# WSL-native one, each with its own orca-data.json. Report every candidate; assumes
+# the default profile (a non-default profile just yields ABSENT, harmless).
+STATUS=~/machines/agents/plugin/skills/orca-setup/orca-status.sh
+# The /mnt/c glob is unquoted on purpose: the Windows user name differs from the
+# WSL one ($USER is `me`, the Windows profile is `methe`).
+for DATA in "$HOME/.config/orca/profiles/local-default/orca-data.json" \
+            "$HOME/AppData/Roaming/orca/profiles/local-default/orca-data.json" \
+            /mnt/c/Users/*/AppData/Roaming/orca/profiles/local-default/orca-data.json; do
+  [ -f "$DATA" ] || continue
+  printf '== %s\n' "$DATA"
+  "$STATUS" "$DATA" "$ORIGIN" "$SETUP" "$TEARDOWN" "$BASE"
+done
 ```
 
-Run this from the **same shell world as the Orca install** — Git Bash (MINGW64) on
-the Windows boxes, not WSL. From WSL neither candidate path resolves and you would
-silently print the Linux one-liner for a Windows Orca.
+An install reporting `ABSENT` for **both** slots does not know this repo — ignore it
+and read the other one.
+
+Caveat: when the same repo is checked out in **both** worlds on one box (e.g.
+`C:/Users/methe/machines` *and* `\\wsl.localhost\…\home\me\machines`), its
+`projectId` appears twice in one `orca-data.json` and `orca-status.sh` reports only
+the first. Confirm against the `repos[]` entry whose `path` is this checkout before
+telling the user a slot is `WIRED`.
 
 The helper prints two lines, one per Orca hook slot:
 
@@ -106,29 +124,31 @@ Turn each slot's token into guidance. Orca's **Setup script** field takes the
   > `$SETUP`, the **Archive script** field (runs on worktree delete) gets
   > `$TEARDOWN`, exactly as the block above resolved them for this platform:
   >
-  > Linux:
+  > Linux / WSL checkout:
   >
   >     bash "$HOME/machines/agents/worktree-setup.sh"
   >     bash "$HOME/machines/agents/worktree-teardown.sh"
   >
-  > Windows:
+  > Windows (`C:\…`) checkout:
   >
-  >     "%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"
-  >     "%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"
+  >     "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"
+  >     "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"
   >
   > (If `ABSENT`: the repo isn't listed in Orca yet — open it once so it appears,
   > then paste. Orca applies it on the next worktree it creates.)
 
 - **`CONFLICT\t<value>`** → "A different script is configured (`<value>`)." If
   `<value>` is the **legacy** `…/scripts/orca-worktree-setup.sh`, tell the user it
-  is retired and should be replaced with the new one-liner. On Windows, a `<value>`
-  of the bare Linux form `bash "$HOME/…"` is likewise **broken, not a preference** —
-  say so and replace it. For any other value, never presume — the user decides.
+  is retired and should be replaced with the new one-liner. On a **Windows
+  checkout**, a `<value>` of the bare Linux form `bash "$HOME/…"` is likewise
+  **broken, not a preference** — say so and replace it. For any other value, never
+  presume — the user decides.
 
 ## Why Windows differs
 
-Orca wraps whatever is in the field into `.git/worktrees/<wt>/orca/setup-runner.cmd`
-and runs it through **cmd.exe**, which breaks the Linux one-liner two ways:
+For a Windows (`C:\…`) checkout Orca wraps whatever is in the field into
+`.git/worktrees/<wt>/orca/setup-runner.cmd` and runs it through **cmd.exe**, which
+breaks the Linux one-liner two ways:
 
 1. **`bash` resolves to the WSL launcher.** Git's `bin` is not on the machine PATH,
    so `where bash` returns `C:\Windows\System32\bash.exe` first. Launched from
@@ -138,12 +158,14 @@ and runs it through **cmd.exe**, which breaks the Linux one-liner two ways:
 2. **cmd.exe does not expand `$HOME`.** Even with the right bash, `bash "$HOME/…"`
    passes a literal `$HOME/…` as a *filename*, which bash does not expand.
 
-The Windows form fixes both: an absolute `%ProgramFiles%`-rooted path to Git Bash
-(cmd *does* expand `%…%`), and `-c` so the string is a *command*, where bash expands
-`$HOME` itself. Verified on `g513ie`: `bash -c` (non-login) already gets the full
-MSYS PATH (`git`, `sed`) and Orca's cwd (the worktree), so no `-l` / `CHERE_INVOKING`
-is needed. Do not quote `$HOME` inside the `-c` string — cmd does not process `\"`;
-the fleet's `$HOME` (`/c/Users/methe`) has no spaces.
+The Windows form fixes both: an absolute `%ProgramW6432%`-rooted path to Git Bash
+(cmd *does* expand `%…%`; `ProgramW6432` over `ProgramFiles` so a 32-bit cmd cannot
+land in `Program Files (x86)`), and `-c` so the string is a *command*, where bash
+expands `$HOME` itself. Verified on `g513ie`: `bash -c` (non-login) already gets the
+full MSYS PATH (`/mingw64/bin/git`, `/usr/bin/sed`) and Orca's cwd (the worktree),
+so no `-l` / `CHERE_INVOKING` is needed. Do not quote `$HOME` inside the `-c`
+string — cmd does not process `\"`; the fleet's `$HOME` (`/c/Users/methe`) has no
+spaces.
 
 ## Notes
 
@@ -152,7 +174,14 @@ the fleet's `$HOME` (`/c/Users/methe`) has no spaces.
   the custom rules travel; only the paste repeats.
 - This skill performs no Orca-config writes and no destructive git ops.
 - Orca's data file lives at `~/.config/orca/profiles/local-default/orca-data.json`
-  on Linux but `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows.
+  on Linux but `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows
+  (`~/AppData/Roaming/…` from Git Bash, `/mnt/c/Users/<u>/AppData/Roaming/…` from
+  WSL). Probe `$APPDATA` itself only if you convert it — it is backslashed and
+  fails `[ -f ]`.
+- **Re-pasting only affects worktrees Orca creates afterwards.** An existing
+  worktree keeps the `setup-runner.cmd` already written under
+  `.git/worktrees/<wt>/orca/`; to repair it, run the dispatcher by hand from inside
+  that worktree (`bash ~/machines/agents/worktree-setup.sh`) or recreate it.
 - Hand-testing a `setup-runner.cmd` **from MINGW64 needs `cmd //c`, not `cmd /c`** —
   MSYS path conversion rewrites the lone `/c` into a path, cmd never sees the switch
   and drops to an interactive prompt, producing bogus "`'…' is not recognized`"
