@@ -62,25 +62,15 @@ start — it tracks only when the daemon is already up). Offer to `git add "$DES
 Check how the repo is currently wired, then print guidance. This reads
 `orca-data.json` read-only — safe with Orca open.
 
-**The one-liner form follows the REPO's world, not the machine's** — see "Why
-Windows differs" below. Orca emits a `setup-runner.sh` for a Linux/WSL checkout and
-a `setup-runner.cmd` for a Windows (`C:\…`) checkout, so one Windows box can
-legitimately need both forms: a repo at `\\wsl.localhost\…` takes the Linux
-one-liner, one at `C:/Users/…` takes the Windows one. You are inside the repo, so
-`uname -s` is the correct probe — **run /orca-setup from the repo's own shell
-world** (Git Bash for a `C:\…` checkout, WSL for a WSL checkout).
+**One value covers every checkout — do not branch on platform.** Orca unites all
+checkouts of a GitHub project under a single `projectId`, so its Setup/Archive
+fields cannot hold a different string per checkout, even when the same project is
+cloned to both a Windows disk and a WSL root on one box. The one-liner is therefore
+a **cmd/sh polyglot** that self-routes; see "How the polyglot routes" below.
 
 ```bash
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*)
-    SETUP='"%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"'
-    TEARDOWN='"%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"'
-    ;;
-  *)
-    SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
-    TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
-    ;;
-esac
+SETUP='rem= ; bash "$HOME/machines/agents/worktree-setup.sh" # & "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"'
+TEARDOWN='rem= ; bash "$HOME/machines/agents/worktree-teardown.sh" # & "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"'
 
 # One machine can host more than one Orca install — g614jv has a Windows Orca AND a
 # WSL-native one, each with its own orca-data.json. Report every candidate; assumes
@@ -103,8 +93,8 @@ and read the other one.
 Caveat: when the same repo is checked out in **both** worlds on one box (e.g.
 `C:/Users/methe/machines` *and* `\\wsl.localhost\…\home\me\machines`), its
 `projectId` appears twice in one `orca-data.json` and `orca-status.sh` reports only
-the first. Confirm against the `repos[]` entry whose `path` is this checkout before
-telling the user a slot is `WIRED`.
+the first. Since the polyglot is one value for every checkout, this only affects
+whether the report is accurate — paste it into any slot that is not already `WIRED`.
 
 The helper prints two lines, one per Orca hook slot:
 
@@ -120,35 +110,50 @@ Turn each slot's token into guidance. Orca's **Setup script** field takes the
 - **`WIRED`** → "This slot already points at the dispatcher — nothing to paste."
 - **`UNWIRED`** / **`ABSENT`** → print the matching one-liner and where it goes:
 
-  > Paste into Orca → the repo's settings — the **Setup script** field gets
-  > `$SETUP`, the **Archive script** field (runs on worktree delete) gets
-  > `$TEARDOWN`, exactly as the block above resolved them for this platform:
+  > Paste into Orca → the repo's settings. One value each, same on every platform —
+  > **Setup script**:
   >
-  > Linux / WSL checkout:
+  >     rem= ; bash "$HOME/machines/agents/worktree-setup.sh" # & "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"
   >
-  >     bash "$HOME/machines/agents/worktree-setup.sh"
-  >     bash "$HOME/machines/agents/worktree-teardown.sh"
+  > **Archive script** (runs on worktree delete):
   >
-  > Windows (`C:\…`) checkout:
+  >     rem= ; bash "$HOME/machines/agents/worktree-teardown.sh" # & "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"
   >
-  >     "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"
-  >     "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"
+  > Paste it **verbatim** — every character carries weight (see below).
   >
   > (If `ABSENT`: the repo isn't listed in Orca yet — open it once so it appears,
   > then paste. Orca applies it on the next worktree it creates.)
 
 - **`CONFLICT\t<value>`** → "A different script is configured (`<value>`)." If
   `<value>` is the **legacy** `…/scripts/orca-worktree-setup.sh`, tell the user it
-  is retired and should be replaced with the new one-liner. On a **Windows
-  checkout**, a `<value>` of the bare Linux form `bash "$HOME/…"` is likewise
-  **broken, not a preference** — say so and replace it. For any other value, never
+  is retired and should be replaced with the polyglot. A `<value>` of the bare Linux
+  form `bash "$HOME/…"` is likewise **broken on any Windows checkout of that
+  project, not a preference** — say so and replace it. For any other value, never
   presume — the user decides.
 
-## Why Windows differs
+## How the polyglot routes
 
-For a Windows (`C:\…`) checkout Orca wraps whatever is in the field into
-`.git/worktrees/<wt>/orca/setup-runner.cmd` and runs it through **cmd.exe**, which
-breaks the Linux one-liner two ways:
+Orca picks the runner from the **checkout path**, and that is what does the routing:
+a Linux/WSL checkout gets `.git/worktrees/<wt>/orca/setup-runner.sh` (run by bash), a
+Windows (`C:\…`) checkout gets `setup-runner.cmd` (run by cmd.exe). Verified on
+g614jv: every `\\wsl.localhost\…` worktree has a `setup-runner.sh` and no `.cmd`
+sibling. The single field value must therefore be legal in both, and each side runs
+only its own half:
+
+    rem= ; bash "$HOME/…/worktree-setup.sh" # & "%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/…/worktree-setup.sh"
+    └────────────── bash half ─────────────┘ │ └──────────────── cmd half ────────────────────┘
+
+- **bash** — `rem=` is an empty variable assignment (a no-op that satisfies the
+  runner's `set -e`), the dispatcher runs, and `#` comments out the entire cmd half.
+- **cmd.exe** — Orca emits `call <value>`; `call rem=` swallows its own segment, the
+  unquoted `&` splits the line, and only the cmd half executes.
+
+**`call` is load-bearing.** Verified on g513ie: without it, a bare `rem` swallows the
+`&` too and the cmd half never runs — silently, exit 0. Orca does prefix `call `
+today; if that ever changes, the Windows half regresses to the same silent no-op this
+one-liner was written to fix.
+
+The cmd half exists because cmd.exe breaks the plain Linux one-liner two ways:
 
 1. **`bash` resolves to the WSL launcher.** Git's `bin` is not on the machine PATH,
    so `where bash` returns `C:\Windows\System32\bash.exe` first. Launched from
@@ -158,14 +163,18 @@ breaks the Linux one-liner two ways:
 2. **cmd.exe does not expand `$HOME`.** Even with the right bash, `bash "$HOME/…"`
    passes a literal `$HOME/…` as a *filename*, which bash does not expand.
 
-The Windows form fixes both: an absolute `%ProgramW6432%`-rooted path to Git Bash
-(cmd *does* expand `%…%`; `ProgramW6432` over `ProgramFiles` so a 32-bit cmd cannot
-land in `Program Files (x86)`), and `-c` so the string is a *command*, where bash
-expands `$HOME` itself. Verified on `g513ie`: `bash -c` (non-login) already gets the
-full MSYS PATH (`/mingw64/bin/git`, `/usr/bin/sed`) and Orca's cwd (the worktree),
-so no `-l` / `CHERE_INVOKING` is needed. Do not quote `$HOME` inside the `-c`
-string — cmd does not process `\"`; the fleet's `$HOME` (`/c/Users/methe`) has no
-spaces.
+The cmd half fixes both: an absolute `%ProgramW6432%`-rooted path to Git Bash (cmd
+*does* expand `%…%`; `ProgramW6432` over `ProgramFiles` so a 32-bit cmd cannot land
+in `Program Files (x86)`), and `-c` so the string is a *command*, where bash expands
+`$HOME` itself. Verified on `g513ie`: `bash -c` (non-login) already gets the full
+MSYS PATH (`/mingw64/bin/git`, `/usr/bin/sed`) and Orca's cwd (the worktree), so no
+`-l` / `CHERE_INVOKING` is needed. Do not quote `$HOME` inside the `-c` string — cmd
+does not process `\"`; the fleet's `$HOME` (`/c/Users/methe`) has no spaces.
+
+If Orca ever stops emitting `call`, the fallback is to move the polyglot into a
+committed, repo-relative launcher (`.orca/worktree-hook.cmd`, exec-bit set, LF
+endings, opening with the `:;` bat/sh label trick) and set the field to that
+relative path — cwd is the worktree in both worlds.
 
 ## Notes
 
