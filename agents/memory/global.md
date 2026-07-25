@@ -117,6 +117,14 @@ elsewhere to sync. Do NOT put secrets here.
   appending the comment again produces a doubled comment ("me@wsl-desktop
   me@wsl-desktop") — strip to type+body before re-stamping.
 
+## Evaluating a new dependency
+
+- **Inspect a not-yet-adopted dependency's real defaults and source with
+  `uv run --with "<pkg>" python -c ...` rather than trusting memory or adding it
+  to the project first.** This is how dramatiq's dangerous `TimeLimit` (10 min,
+  force-kills the thread) / `Retries` (20) defaults and `dramatiq-dashboard`'s
+  unsatisfiable pins were both caught before any code was written.
+
 ## Home-Manager & bootstrap gotchas
 
 - Home-Manager's `checkLinkTargets` aborts activation ("Existing file would be
@@ -442,6 +450,20 @@ elsewhere to sync. Do NOT put secrets here.
   surface every `text_matched`-bound spot; adopt at `standard`, ratchet to
   `strict`). Pyright won't load the django-stubs mypy plugin, so the "often
   missed" tier above still stands.
+
+- **The MCP graph tools lag one session behind `gortex track`.** After
+  `gortex track <path>` + `gortex daemon reload`, the tools do NOT register in the
+  session that ran them (the client connected before coverage existed) — verify
+  the graph in-session with the `gortex query …` CLI and expect
+  `search_symbols`/`find_usages` only from the next session on.
+- **Trim what `gortex init` sprays.** It writes ~20
+  `.claude/skills/generated/gortex-*/SKILL.md` routing files plus a
+  marker-bounded "Community Skills" table into CLAUDE.md/AGENTS.md, and adapter
+  files for editors that go unused (`.gemini`/`GEMINI.md`, `.vscode`,
+  `.windsurfrules`, `.rules`, `.github/copilot-instructions.md`). Standing
+  preference: delete the unused adapters, `git rm` the generated skills and
+  gitignore `.claude/skills/generated/`, drop the table — keep only the Claude
+  Code wiring plus `AGENTS.md` (Codex is used).
 
 ## Windows & WSL scripting footguns
 
