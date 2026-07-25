@@ -62,14 +62,31 @@ start — it tracks only when the daemon is already up). Offer to `git add "$DES
 Check how the repo is currently wired, then print guidance. This reads
 `orca-data.json` read-only — safe with Orca open.
 
+**The one-liner is platform-specific** — see "Why Windows differs" below. Resolve
+Orca's data file first; whichever location exists tells you which platform's
+one-liner to print.
+
 ```bash
 # Assumes Orca's default profile; a non-default profile yields ABSENT (harmless —
 # you just re-paste the idempotent one-liners). Point DATA elsewhere if needed.
-DATA="$HOME/.config/orca/profiles/local-default/orca-data.json"
-SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
-TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
+# %APPDATA% in POSIX form — $APPDATA itself is backslashed and fails `[ -f ]`.
+WIN_DATA="$HOME/AppData/Roaming/orca/profiles/local-default/orca-data.json"
+
+if [ -f "$WIN_DATA" ]; then
+  DATA="$WIN_DATA"
+  SETUP='"%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"'
+  TEARDOWN='"%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"'
+else
+  DATA="$HOME/.config/orca/profiles/local-default/orca-data.json"
+  SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
+  TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
+fi
 ~/machines/agents/plugin/skills/orca-setup/orca-status.sh "$DATA" "$ORIGIN" "$SETUP" "$TEARDOWN" "$BASE"
 ```
+
+Run this from the **same shell world as the Orca install** — Git Bash (MINGW64) on
+the Windows boxes, not WSL. From WSL neither candidate path resolves and you would
+silently print the Linux one-liner for a Windows Orca.
 
 The helper prints two lines, one per Orca hook slot:
 
@@ -85,23 +102,48 @@ Turn each slot's token into guidance. Orca's **Setup script** field takes the
 - **`WIRED`** → "This slot already points at the dispatcher — nothing to paste."
 - **`UNWIRED`** / **`ABSENT`** → print the matching one-liner and where it goes:
 
-  > Paste into Orca → the repo's settings:
+  > Paste into Orca → the repo's settings — the **Setup script** field gets
+  > `$SETUP`, the **Archive script** field (runs on worktree delete) gets
+  > `$TEARDOWN`, exactly as the block above resolved them for this platform:
   >
-  > **Setup script** field:
+  > Linux:
   >
   >     bash "$HOME/machines/agents/worktree-setup.sh"
-  >
-  > **Archive script** field (runs on worktree delete):
-  >
   >     bash "$HOME/machines/agents/worktree-teardown.sh"
+  >
+  > Windows:
+  >
+  >     "%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"
+  >     "%ProgramFiles%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-teardown.sh"
   >
   > (If `ABSENT`: the repo isn't listed in Orca yet — open it once so it appears,
   > then paste. Orca applies it on the next worktree it creates.)
 
 - **`CONFLICT\t<value>`** → "A different script is configured (`<value>`)." If
   `<value>` is the **legacy** `…/scripts/orca-worktree-setup.sh`, tell the user it
-  is retired and should be replaced with the new one-liner. For any other value,
-  never presume — the user decides.
+  is retired and should be replaced with the new one-liner. On Windows, a `<value>`
+  of the bare Linux form `bash "$HOME/…"` is likewise **broken, not a preference** —
+  say so and replace it. For any other value, never presume — the user decides.
+
+## Why Windows differs
+
+Orca wraps whatever is in the field into `.git/worktrees/<wt>/orca/setup-runner.cmd`
+and runs it through **cmd.exe**, which breaks the Linux one-liner two ways:
+
+1. **`bash` resolves to the WSL launcher.** Git's `bin` is not on the machine PATH,
+   so `where bash` returns `C:\Windows\System32\bash.exe` first. Launched from
+   Orca's non-interactive context it dies with `Bash/Service/E_UNEXPECTED`, exit 1 —
+   the hook silently never runs (symptom: a fresh worktree is missing its
+   `.claude/settings.local.json` link).
+2. **cmd.exe does not expand `$HOME`.** Even with the right bash, `bash "$HOME/…"`
+   passes a literal `$HOME/…` as a *filename*, which bash does not expand.
+
+The Windows form fixes both: an absolute `%ProgramFiles%`-rooted path to Git Bash
+(cmd *does* expand `%…%`), and `-c` so the string is a *command*, where bash expands
+`$HOME` itself. Verified on `g513ie`: `bash -c` (non-login) already gets the full
+MSYS PATH (`git`, `sed`) and Orca's cwd (the worktree), so no `-l` / `CHERE_INVOKING`
+is needed. Do not quote `$HOME` inside the `-c` string — cmd does not process `\"`;
+the fleet's `$HOME` (`/c/Users/methe`) has no spaces.
 
 ## Notes
 
@@ -109,3 +151,9 @@ Turn each slot's token into guidance. Orca's **Setup script** field takes the
   the paste is per machine. The committed `.orca/worktree-setup.sh` DOES sync, so
   the custom rules travel; only the paste repeats.
 - This skill performs no Orca-config writes and no destructive git ops.
+- Orca's data file lives at `~/.config/orca/profiles/local-default/orca-data.json`
+  on Linux but `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows.
+- Hand-testing a `setup-runner.cmd` **from MINGW64 needs `cmd //c`, not `cmd /c`** —
+  MSYS path conversion rewrites the lone `/c` into a path, cmd never sees the switch
+  and drops to an interactive prompt, producing bogus "`'…' is not recognized`"
+  errors that have nothing to do with the real failure.
