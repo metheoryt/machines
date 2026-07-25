@@ -33,6 +33,14 @@ put secrets here (this file is tracked in git).
   integration wraps `sudo --preserve-env=TERMINFO` — matters here because
   nearly every daily `just` command shells through `sudo` and would otherwise
   lose Ghostty's terminfo.
+- **This box cannot reach GitHub over SSH — `~/.ssh/id_ed25519` exists but is not
+  registered on the account.** `ssh -T git@github.com` answers `Permission denied
+  (publickey)`, so every `git pull`/`push` here fails, and any fleet-wide FF-pull
+  (`ship`, or the kb-refresh cron job's push step) silently leaves latitude behind
+  on `machines` *and* `~/my/airdrome` while the other members converge. Same class
+  as the g614jv work-distro key gap. Fix: `gh auth refresh -s admin:public_key`
+  then `gh ssh-key add ~/.ssh/id_ed25519.pub` on this box.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
 
 ## Mesh / secrets (RETIRED — paths only)
 
