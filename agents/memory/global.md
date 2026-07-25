@@ -167,6 +167,17 @@ elsewhere to sync. Do NOT put secrets here.
   concluding a box holds unharvested sessions — or that a repo is checked out
   there — check for `.jsonl` files, not just the directory.
   <!-- src: airdrome ff21a95 | 2026-07-26 -->
+- **The cron prompt's `last_refresh.commit` is the pre-write HEAD, so Track B's
+  baseline permanently lags one refresh and every run re-diffs the previous run's
+  own docs commit.** Verified against the full history of airdrome's
+  `.claude/kb-harvest-state.json`: the field has never once equalled the refresh
+  commit it was written by (`ef148b8` → committed as `c4d5423`, `c4d5423` →
+  `ff21a95`, `ff21a95` → `10a649e`). The result is that a repo with no real
+  activity between runs still shows a non-empty `<base>..HEAD`, consisting
+  entirely of kb writes — which reads as drift and isn't. Fix without contradicting
+  the doc: keep the base semantics, but have Track B skip commits whose subject is
+  `docs(kb): refresh knowledge base against …`.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
 
 ## Evaluating a new dependency
 
