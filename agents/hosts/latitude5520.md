@@ -67,13 +67,15 @@ put secrets here (this file is tracked in git).
   embedded in the Docker bullet.
   <!-- conflicts-with: "The catch: the unregistered GitHub key above means this box's clones can't be brought up to date" -->
   <!-- src: airdrome eed2745 | 2026-07-27 -->
-- **Not always-on — plan around it.** This is a laptop, and it is routinely off
-  the tailnet for long stretches (`tailscale status` on 2026-07-27: `offline, last
-  seen 9h ago`; `fleet-gather.sh` skipped it as unreachable that run). Anything
-  that treats latitude as a standing fallback — the fleet's only usable Docker
-  daemon, a scheduled job's remote test box, a fleet-wide FF-pull target — has to
-  tolerate it simply being down, not just SSH-blocked. Absence here is normal, not
-  a fault to diagnose.
+- **Not always-on — plan around it.** This is a laptop, so its availability is not
+  guaranteed the way a server's is; it does go offline (`tailscale status` on
+  2026-07-27: `offline, last seen 9h ago`; `fleet-gather.sh` skipped it as
+  unreachable that run, and SSH timed out rather than refusing). Anything that
+  treats latitude as a standing fallback — the fleet's only usable Docker daemon, a
+  scheduled job's remote test box, a fleet-wide FF-pull target — has to tolerate it
+  being simply down, which is a different failure from the SSH-blocked one above
+  and needs no diagnosis.
+  <!-- conflicts-with: "The fleet machines are mutually reachable over SSH via the Tailscale/Headscale tailnet — assume it, don't re-probe each session." -->
   <!-- src: airdrome eed2745 | 2026-07-27 -->
 
 ## Mesh / secrets (RETIRED — paths only)
