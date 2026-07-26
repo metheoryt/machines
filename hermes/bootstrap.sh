@@ -51,9 +51,6 @@ fi
 # ── SOUL.md — link if present ─────────────────────────────────────────────────
 link "$SRC_DIR/SOUL.md" "$HERMES_HOME/SOUL.md"
 
-# ── Statusline script — link for shell prompt integration ─────────────────────
-link "$SRC_DIR/hermes-statusline.sh" "$HERMES_HOME/hermes-statusline.sh"
-
 # ── Skills — individual symlinks per tracked skill dir ────────────────────────
 link_entries_into "$SRC_DIR/skills" "$HERMES_HOME/skills"
 
