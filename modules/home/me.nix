@@ -272,7 +272,7 @@ in {
   programs.starship = {
     enable = true;
     settings = {
-      format = "$custom\n$all$character";
+      format = "$all$character";
       character = {
         success_symbol = "[➜](bold green)";
         error_symbol = "[➜](bold red)";
@@ -298,12 +298,7 @@ in {
         disabled = false;
         impure_msg = "[impure shell](bold red)";
         pure_msg = "[pure shell](bold green)";
-        format = "via [☃️ $state( \\($name\\))](bold blue) ";
-      };
-      custom.hermes = {
-        command = "bash ~/.hermes/hermes-statusline.sh";
-        when = "true";
-        shell = "bash";
+        format = "via [☃️ $state( \($name\))](bold blue) ";
       };
     };
   };
