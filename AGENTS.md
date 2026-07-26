@@ -98,7 +98,8 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `programs/development.nix` | nix-ld, Docker (auto-start + auto-prune), Python 3.13 + uv, dev tools (git, gh, jq, ripgrep, ast-grep, fd, bat, etc.), direnv + nix-direnv, Fish + Zsh |
 | `home/me.nix` | Home Manager for user `me`: packages, git config, Fish aliases/functions, Starship prompt, Ghostty config, GNOME dconf settings, fastfetch |
 | `home/ssh.nix` | SSH client config generated from fleet.json |
-| `home/claude.nix` | Claude Code profile bootstrap wiring |
+|| `home/claude.nix` | Claude Code profile bootstrap wiring |
+|| `hermes/` | Hermes Agent version-controlled config — `config.yaml`, `skills/`, `memories/`; `bootstrap.sh` links into `~/.hermes/` |
 | `home/orca-bin.nix` | Orca IDE AppImage wrapper |
 | `home/rustdesk-bin.nix` | RustDesk client wrapper |
 | `home/rustdesk-config.nix` | RustDesk server key + known-peer IDs |
