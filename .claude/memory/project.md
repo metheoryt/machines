@@ -169,6 +169,18 @@ global + per-host). One bullet per fact under a topical heading.
   `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows (`/mnt/c/Users/<winuser>/…`
   from WSL — the Windows profile name differs from `$USER`), and one box can host two
   installs: g614jv has both a Windows Orca and a WSL-native one.
+- **The Windows-native `machines` clones are converge-only — never Orca projects**
+  (decided 2026-07-26). Development happens in **g614jv's WSL `~/machines`**, the
+  active copy. `C:\Users\methe\machines` exists on g614jv for fleet/desktop-only work
+  and on g513ie for server-only work; neither does development, so neither needs Orca
+  worktrees, and both were unregistered from Orca. **Unregistering costs nothing** —
+  Orca plays no part in fleet sync: `fleet-pull.sh` reaches those clones directly over
+  SSH (members `desktop` and `server` both resolve to `C:\Users\methe\machines`) and
+  convergence fires from `core.hooksPath` → `agents/git-hooks/post-merge`, verified
+  present on g513ie. Keep the clones on disk regardless: on g614jv it is the link
+  target for the Windows-native Claude profile. Net effect — with every Orca project
+  registered at a WSL path, the `C:/`-registration hook breakage above is unreachable
+  in practice.
 - **Hand-testing an Orca `setup-runner.cmd` from MINGW64 needs `cmd //c`, not
   `cmd /c`** — MSYS path conversion rewrites the lone `/c` into a path, cmd never
   sees the switch and drops to an interactive prompt, emitting bogus

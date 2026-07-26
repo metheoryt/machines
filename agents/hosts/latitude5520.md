@@ -33,14 +33,25 @@ put secrets here (this file is tracked in git).
   integration wraps `sudo --preserve-env=TERMINFO` — matters here because
   nearly every daily `just` command shells through `sudo` and would otherwise
   lose Ghostty's terminfo.
-- **This box cannot reach GitHub over SSH — `~/.ssh/id_ed25519` exists but is not
-  registered on the account.** `ssh -T git@github.com` answers `Permission denied
-  (publickey)`, so every `git pull`/`push` here fails, and any fleet-wide FF-pull
-  (`ship`, or the kb-refresh cron job's push step) silently leaves latitude behind
-  on `machines` *and* `~/my/airdrome` while the other members converge. Same class
-  as the g614jv work-distro key gap. Fix: `gh auth refresh -s admin:public_key`
-  then `gh ssh-key add ~/.ssh/id_ed25519.pub` on this box.
-  <!-- src: airdrome ff21a95 | 2026-07-26 -->
+- **This box cannot reach GitHub over SSH — but NOT because the key is unregistered.**
+  `ssh -T git@github.com` answers `Permission denied (publickey)` (also with
+  `-i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes`), so every `git pull`/`push` here
+  fails and any fleet-wide FF-pull (`ship`, or the kb-refresh cron push step) leaves
+  latitude behind on `machines` *and* `~/my/airdrome` — `fleet-pull.sh` reports it as
+  `SKIP pull-blocked`. **Corrects the earlier diagnosis in ff21a95/f45c5fd:** the key
+  IS on the account — `gh api users/metheoryt/keys` lists
+  `SHA256:D9mySr0zEynxvjAtEsGPerUDkuQ5QdiPChpD3DHZunU`, exactly latitude's
+  `id_ed25519`, and re-adding it fails with "key is already in use". So the fault is
+  local. Prime suspect: the private key is **passphrase-protected with no agent in a
+  non-interactive SSH session** (`~/.ssh/agent` exists; `ssh-keygen -y -f
+  ~/.ssh/id_ed25519` hung, consistent with a passphrase prompt) — which can never
+  work for `fleet-pull.sh`, since that runs non-interactively. Also check for a
+  private/public mismatch or bad perms. Diagnose on the box:
+  `ssh-keygen -y -f ~/.ssh/id_ed25519 | ssh-keygen -lf -` (compare to the SHA256
+  above) and `ssh -vv -T git@github.com 2>&1 | grep -Ei 'offering|denied|Authentications'`.
+  If it is a passphrase, the fix is a persistent user-level agent or a
+  passphrase-less key for automation — not another `gh ssh-key add`.
+  <!-- src: airdrome ff21a95 | 2026-07-26; corrected 2026-07-26 -->
 - **This is the fleet's only box with a real, directly usable Docker daemon.**
   Native Linux engine — `docker version` answers with a live server (29.6.1 on
   2026-07-26), no Docker Desktop shim in the way. The Windows members run their
