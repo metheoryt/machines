@@ -145,6 +145,34 @@ global + per-host). One bullet per fact under a topical heading.
   keyed by repo path — machine-local, Orca-owned (it rewrites the file and keeps
   `.bak.N` backups). So the string is greppable, and a repo only gets it after
   it's been opened in Orca once.
+- **In Orca, the registered PATH *is* the environment — there is no environment /
+  runtime / distro field** (probed 2026-07-26). A `projectHostSetup` carries only
+  `projectId / hostId / path / kind / hookSettings`, and `hostId` is `local` for
+  Windows and WSL alike. Orca derives the hook runner from that path:
+  `\\wsl.localhost\…` → `.git/worktrees/<wt>/orca/setup-runner.sh` (bash), `C:/…` →
+  `setup-runner.cmd` (cmd.exe). Entries are stored **per `(projectId, path)`**, so a
+  repo registered in both worlds appears twice under one `projectId` — `orca-status.sh`
+  reports only the first, which is why g614jv read `WIRED` off its unused `C:/`
+  entry while the WSL entry Orca actually uses was empty. Drill down with
+  `jq -r '.projectHostSetups[]|[.projectId,.path,(.hookSettings.scripts.setup//"-")]|@tsv'`.
+  **Fleet convention: register every project at its WSL path.** On a `C:/…`
+  registration the standard one-liner fails *silently* two ways — cmd.exe resolves
+  `bash` to the WSL launcher `C:\Windows\System32\bash.exe`
+  (`Bash/Service/E_UNEXPECTED`, the same trap `agents/plugin/skills/lib/fleet-dispatch.sh`
+  documents for `ssh <windows-member> bash …`) and never expands `$HOME`, so the
+  hook looks configured and does nothing (symptom: fresh worktree missing its
+  `.claude/settings.local.json` link). If a Windows registration is unavoidable, the
+  value that works is
+  `"%ProgramW6432%\Git\bin\bash.exe" -c "bash $HOME/machines/agents/worktree-setup.sh"`
+  — verified on g513ie; non-login `bash -c` already has the full MSYS PATH and Orca's
+  cwd, so no `-l` / `CHERE_INVOKING`. Orca's data file is at
+  `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows (`/mnt/c/Users/<winuser>/…`
+  from WSL — the Windows profile name differs from `$USER`), and one box can host two
+  installs: g614jv has both a Windows Orca and a WSL-native one.
+- **Hand-testing an Orca `setup-runner.cmd` from MINGW64 needs `cmd //c`, not
+  `cmd /c`** — MSYS path conversion rewrites the lone `/c` into a path, cmd never
+  sees the switch and drops to an interactive prompt, emitting bogus
+  `'…' is not recognized` errors unrelated to the real failure.
 - **Orca `serve` on WSL was REMOVED (2026-07-21).** Orca now runs on the Windows
   host and opens the WSL project directly; the per-distro `orca serve` runtime,
   its systemd unit, the `~/.local/bin/orca` CLI shim, and `provision/orca-serve.sh`
