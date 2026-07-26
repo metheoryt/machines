@@ -33,6 +33,24 @@ put secrets here (this file is tracked in git).
   integration wraps `sudo --preserve-env=TERMINFO` — matters here because
   nearly every daily `just` command shells through `sudo` and would otherwise
   lose Ghostty's terminfo.
+- **This box cannot reach GitHub over SSH — `~/.ssh/id_ed25519` exists but is not
+  registered on the account.** `ssh -T git@github.com` answers `Permission denied
+  (publickey)`, so every `git pull`/`push` here fails, and any fleet-wide FF-pull
+  (`ship`, or the kb-refresh cron job's push step) silently leaves latitude behind
+  on `machines` *and* `~/my/airdrome` while the other members converge. Same class
+  as the g614jv work-distro key gap. Fix: `gh auth refresh -s admin:public_key`
+  then `gh ssh-key add ~/.ssh/id_ed25519.pub` on this box.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
+- **This is the fleet's only box with a real, directly usable Docker daemon.**
+  Native Linux engine — `docker version` answers with a live server (29.6.1 on
+  2026-07-26), no Docker Desktop shim in the way. The Windows members run their
+  engine behind Docker Desktop, whose per-distro WSL integration toggle leaves the
+  Orca worktree distro on `g614jv` unable to reach it at all, so anything needing
+  containers (a repo's compose Postgres, hence its test suite) has to run here.
+  The catch: the unregistered GitHub key above means this box's clones can't be
+  brought up to date, so it is container-capable and code-stale at the same time —
+  fix the key before relying on it as the test box.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
 
 ## Mesh / secrets (RETIRED — paths only)
 

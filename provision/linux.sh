@@ -64,8 +64,8 @@ fi
 case "$PROFILE" in
   workstation)
     TIERS=(apt_min apt_dev agents_config git_base gortex
-           "agent_clis claude codex" shell_init autofetch
-           ssh_accounts selfpull ssh_trust) ;;
+           "agent_clis claude codex hermes" shell_init autofetch
+           ssh_accounts selfpull ssh_trust hermes_config hermes_dashboard) ;;
   hub)
     # Lean server tier. Deliberately absent: apt_dev, gortex, codex, and
     # ssh_accounts — the last would overwrite hub's ~/.ssh/config with

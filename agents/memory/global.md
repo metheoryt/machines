@@ -117,6 +117,95 @@ elsewhere to sync. Do NOT put secrets here.
   appending the comment again produces a doubled comment ("me@wsl-desktop
   me@wsl-desktop") — strip to type+body before re-stamping.
 
+## kb-refresh / fleet-gather.sh gotchas
+
+- **Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives
+  `SKILL_DIR` with a plain `cd … && pwd` (logical, not `-P`), so when the skill is
+  reached through the `~/.claude/skills/cyphy` symlink, four-up resolves to
+  `~/.claude/fleet.json` — which does not exist. `fleet_hosts` then returns empty
+  and the whole run degrades to **local-only with no warning**, indistinguishable
+  from "no fleet configured". Use
+  `~/machines/agents/plugin/skills/kb-refresh/fleet-gather.sh` or
+  `FLEET_JSON=$HOME/machines/fleet.json`.
+- **The remote digest dir `~/.cache/kb-digests` is never pruned**, and the pull is
+  `tar cf - .` over the whole dir, so every run re-delivers previous runs' digests
+  (carrying their remote mtimes — so the *stale* ones can sort **newer** than the
+  genuinely fresh local ones, and nothing in the file marks which run delivered
+  it). The authoritative "new this run" list is the locally written
+  `manifest.tsv`, never `ls`/mtime of the out dir — otherwise you re-map facts
+  that are already committed.
+- **Self-exclusion is by OS hostname, which a WSL distro shares with its Windows
+  parent.** Running kb-refresh inside WSL on `g614jv` prints `[desktop] is this
+  box, skipping self` and never harvests the Windows-native
+  `/c/Users/<user>/.claude/projects` profile. Run it from the Windows side to
+  cover those sessions.
+- On Linux the four-up `fleet.json` default resolves **correctly** through the
+  `~/.claude/skills/cyphy` symlink, because the kernel resolves `..` physically
+  after following the symlink — a logical `pwd` only affects the string, not what
+  the OS opens. Verified on `g614jv` (WSL): `SKILL_DIR` printed
+  `/home/me/.claude/skills/cyphy/skills/kb-refresh`, and
+  `$SKILL_DIR/../../../../fleet.json` opened `/home/me/machines/fleet.json`. So the
+  local-only degradation is not universal — it presumably needs a path layer that
+  normalizes `..` lexically (MSYS/Git Bash) or a copied rather than symlinked skill
+  dir. Passing `FLEET_JSON` explicitly is harmless and still the safe habit.
+  <!-- conflicts-with: "**Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives `SKILL_DIR` with a plain `cd … && pwd` (logical, not `-P`), so when the skill is reached through the `~/.claude/skills/cyphy` symlink, four-up resolves to `~/.claude/fleet.json` — which does not exist." -->
+  <!-- src: airdrome c4d5423 | 2026-07-26 -->
+- **`git -C ~/machines pull --ff-only` (the cron prompt's Lane 2 preflight) can abort
+  on a clean tree.** A prior unattended run commits shared memory locally and, if its
+  push step never ran, leaves `main` ahead while origin moves on — the tree is clean
+  and `git status` says nothing, yet the pull fails `Not possible to fast-forward`.
+  Seen on `g614jv`: 1 ahead / 3 behind. Reconcile with `git merge origin/main`
+  (never rebase — fleet repos), then continue; treat it as normal, not as the
+  prompt's "dirty tree, defer Lane 2" abort condition.
+  <!-- src: airdrome c4d5423 | 2026-07-26 -->
+- **A transcript slug dir outlives the checkout it was named after, so a slug is
+  not evidence the repo is on that box.** `~/.claude/projects/<cwd-with-dashes>/`
+  is never garbage-collected when the working copy is deleted; what remains can be
+  an empty husk (only a `memory/` subdir, zero `.jsonl`). Seen 2026-07-26:
+  `C--Users-methe-GitHub-airdrome` still listed on the Windows side of `g614jv`
+  while nothing named `airdrome` exists anywhere under `C:\Users\methe`. Before
+  concluding a box holds unharvested sessions — or that a repo is checked out
+  there — check for `.jsonl` files, not just the directory.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
+- **The cron prompt's `last_refresh.commit` is the pre-write HEAD, so Track B's
+  baseline permanently lags one refresh and every run re-diffs the previous run's
+  own docs commit.** Verified against the full history of airdrome's
+  `.claude/kb-harvest-state.json`: the field has never once equalled the refresh
+  commit it was written by (`ef148b8` → committed as `c4d5423`, `c4d5423` →
+  `ff21a95`, `ff21a95` → `10a649e`). The result is that a repo with no real
+  activity between runs still shows a non-empty `<base>..HEAD`, consisting
+  entirely of kb writes — which reads as drift and isn't. Fix without contradicting
+  the doc: keep the base semantics, but have Track B skip commits whose subject is
+  `docs(kb): refresh knowledge base against …`.
+  <!-- src: airdrome ff21a95 | 2026-07-26 -->
+  - Second-repo sighting: qaz-code's first refresh recorded
+    `last_refresh.commit = 4c25471` while committing as `c5ec625`. Same offset,
+    different repo — the lag is in the prompt's Step 6 wording ("HEAD sha from
+    Step 0"), not in one repo's state file.
+    <!-- src: qaz-code c5ec625 | 2026-07-26 -->
+- **A repo that gitignores `.claude` wholesale silently breaks the whole harvest,
+  and the failure is invisible until the next run.** The state file
+  `.claude/kb-harvest-state.json` is only load-bearing if it is *git-tracked*: the
+  watermark advances at gather time, so if it can never be committed, every run
+  re-reports the same sessions or (worse, once a stale untracked copy exists)
+  reports "0 digests" forever. Plenty of repos have a bare `.claude` line from a
+  "gitignore local config" commit. **Check before gathering** —
+  `git check-ignore -v .claude/kb-harvest-state.json .claude/memory/project.md` —
+  and fix it with negations, not `git add -f` (a force-added file still confuses
+  the next run's `git status` preflight). A bare `.claude` cannot be negated from
+  inside, because git never descends into an excluded directory; the pattern has to
+  become `.claude/*` first:
+
+      .claude/*
+      !.claude/kb-harvest-state.json
+      !.claude/memory/
+      .claude/memory/*
+      !.claude/memory/project.md
+
+  Verify with `git add -A --dry-run` — it must list exactly those two paths and no
+  `settings.local.json`.
+  <!-- src: qaz-code 4c25471 | 2026-07-26 -->
+
 ## Evaluating a new dependency
 
 - **Inspect a not-yet-adopted dependency's real defaults and source with
@@ -440,6 +529,18 @@ elsewhere to sync. Do NOT put secrets here.
   (`overlay_register` + `overlay_push` — a per-MCP-session editor-buffer view, no
   second index). Overlays model in-flight *unsaved* edits on the base graph; they
   are NOT a way to index an arbitrary checked-out branch's on-disk state.
+- **"Never index a worktree" is a cost claim, and the cost is scale-dependent — for
+  a small repo it is noise.** Tracking the Orca worktree
+  `orca/workspaces/qaz-code/weekly-ubuntu26-…` (a ~4k-line Python repo) took
+  **1.0s and 816 nodes**, not "warmup + hundreds of MB". The distinction that
+  actually matters is not worktree-vs-base but *ephemeral-vs-long-lived*: a
+  spawned agent's throwaway worktree should ride the base index, but a persistent
+  Orca worktree that is itself a session's cwd has no base index covering it —
+  graph tools stay dark and the Read/Grep deny-hooks get inconsistent with reality.
+  There, `gortex track <worktree-path> --wait` is the right call; measure before
+  refusing on cost.
+  <!-- conflicts-with: "**Worktree-isolated agents — don't re-index the worktree in gortex.** A git worktree is a new path → either untracked (graph tools off, enforcement hooks misfire for that agent) or a full re-index (warmup + hundreds of MB, *per* worktree)." -->
+  <!-- src: qaz-code 4c25471 | 2026-07-26 -->
 - **`/gortex-align` skill does the alignment.** When a gortex-backed repo could
   be tuned — wiring not committed, or a Python project resolving to
   `text_matched` — offer the `gortex-align` skill. It detects the daemon (won't

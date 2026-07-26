@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Agent backend server (headless)
+Documentation=https://hermes-agent.nousresearch.com/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hermes serve --host 0.0.0.0 --port 9119 --skip-build --no-open
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+Environment=HERMES_HOME=%h/.hermes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -76,6 +76,11 @@ agent-bootstrap-profile postfix:
     @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
     @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
 
+# Bootstrap Hermes Agent config (~/.hermes)
+hermes-bootstrap:
+    @echo "🔗 Bootstrapping Hermes Agent config..."
+    @bash hermes/bootstrap.sh
+
 # NixOS-only: run the machine-local `gortex install --no-claude-md` wiring, which
 # bootstrap.sh skips under home-manager activation (kept fast/offline there). The
 # binary + daemon come from pkgs/gortex.nix + me.nix; this fills in the per-profile

@@ -57,12 +57,54 @@ Machine-local Codex state (`config.toml`, `auth.json`, sessions, caches) is
 git-ignored (`agents/codex/.gitignore`) and never tracked. `~/.codex` is now
 produced solely by `bootstrap.sh` — run directly off-nix (Windows/macOS/
 non-Nix Linux), or invoked on NixOS by `claude.nix`'s activation script, which
-provisions `~/.codex` as part of the personal `~/.claude` profile run
+provisioned as part of the personal `~/.claude` profile run
 (bootstrap's `IS_PERSONAL` block). The Claude side works the same way:
 `claude.nix` invokes `bootstrap.sh` per registered profile instead of
 reimplementing the symlink logic, so `~/.claude` and `~/.codex` both converge
 on `bootstrap.sh` as the single deployer rather than the old dual-mechanism
 model.
+
+### Hermes Agent (`~/.hermes`) — same pattern, own config dir
+
+Hermes Agent config is version-controlled in `hermes/` (repo root) and
+bootstrapped with `hermes/bootstrap.sh` — mirroring the Claude/Codex pattern:
+
+- `hermes/config.yaml` → `~/.hermes/config.yaml` (copy_managed, NOT symlink —
+  Hermes self-writes it at runtime via `hermes config set …`)
+- `hermes/skills/` → individual symlinks in `~/.hermes/skills/` (each skill
+  dir linked separately so machine-local skills coexist)
+- `hermes/memories/` → individual symlinks in `~/.hermes/memories/`
+- `hermes/SOUL.md` → `~/.hermes/SOUL.md` (symlink, if present)
+
+Secrets (`.env`, `auth.json`) and volatile state (`state.db`, sessions, caches)
+are gitignored. Bootstrap:
+
+```bash
+just hermes-bootstrap       # or: bash hermes/bootstrap.sh
+```
+
+On WSL, provisioning (`just provision-wsl`) installs Hermes via
+`tier_agent_clis hermes` and bootstraps config via `tier_hermes_config`.
+
+### Hermes dashboard (systemd user service)
+
+A `hermes serve` backend running on `0.0.0.0:9119` so the Windows Desktop app
+can connect at `<nickname>.gg.ez:9119`. Managed as a systemd user service
+(service file: `hermes/hermes-serve.service`; provisioned by
+`tier_hermes_dashboard`).
+
+**Setup (one-time, per host):** basic auth credentials must be in
+`~/.hermes/.env` before the service starts — the tier warns if they're missing:
+
+```
+HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
+HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<choose a strong password>
+HERMES_DASHBOARD_BASIC_AUTH_SECRET=$(openssl rand -base64 32)
+```
+
+On the Windows Desktop app, connect to `http://<wsl-nickname>.gg.ez:9119` with
+those credentials. The frontend login gate appears automatically when the
+backend detects the non-loopback bind.
 
 ## What's NOT tracked (and never copy in)
 
