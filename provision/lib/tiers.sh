@@ -137,6 +137,16 @@ tier_agents_config() {
   ok "agent config linked"
 }
 
+# ── CORE 2b: Hermes Agent config ─────────────────────────────────────────────
+# hermes/bootstrap.sh symlinks the version-controlled config into ~/.hermes/.
+# config.yaml is copy_managed (Hermes self-writes it); skills + memory are
+# individual symlinks so machine-local additions coexist with tracked ones.
+tier_hermes_config() {
+  info "Linking synced Hermes config…"
+  bash "$REPO/hermes/bootstrap.sh" || die "hermes/bootstrap.sh failed"
+  ok "Hermes config linked"
+}
+
 # ── CORE 3: git identity + basics (cheap, high-value; mirrors modules/home/me.nix) ──
 tier_git_base() {
   info "Configuring git…"
@@ -197,6 +207,15 @@ tier_agent_clis() {
           CODEX_NON_INTERACTIVE=1 curl -fsSL https://chatgpt.com/codex/install.sh | sh >/dev/null 2>&1 \
             && ok "codex installed" \
             || warn "codex install failed — retry: curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+        fi ;;
+      hermes)
+        if have hermes; then
+          ok "hermes already installed"
+        else
+          info "Installing Hermes Agent…"
+          curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash >/dev/null 2>&1 \
+            && ok "hermes installed" \
+            || warn "hermes install failed — retry: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
         fi ;;
       *) warn "unknown agent CLI '$c' — skipped" ;;
     esac
