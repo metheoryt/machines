@@ -147,6 +147,40 @@ tier_hermes_config() {
   ok "Hermes config linked"
 }
 
+# ── BEST-EFFORT: Hermes dashboard (systemd user service) ─────────────────────
+# Installs hermes-serve.service so the Windows Desktop app can connect at
+# <nickname>.gg.ez:9119. Idempotent; the service file is a managed copy from
+# the repo (hermes/hermes-serve.service).
+tier_hermes_dashboard() {
+  info "Installing Hermes dashboard service…"
+  local svc="$HOME/.config/systemd/user/hermes-serve.service"
+
+  # Warn if basic auth is not configured — the service needs it for non-loopback bind.
+  if ! grep -q "HERMES_DASHBOARD_BASIC_AUTH_USERNAME" "$HOME/.hermes/.env" 2>/dev/null; then
+    warn "dashboard basic auth not configured in ~/.hermes/.env"
+    cat <<'AUTHMSG'
+    Dashboard bound to 0.0.0.0 requires auth. Set in ~/.hermes/.env:
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<strong password>
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET=$(openssl rand -base64 32)
+    chmod 600 ~/.hermes/.env
+AUTHMSG
+  fi
+
+  if ! systemctl --user show-environment >/dev/null 2>&1; then
+    warn "systemd user manager not available — skipping hermes dashboard service"
+    return
+  fi
+
+  cp "$REPO/hermes/hermes-serve.service" "$svc"
+  systemctl --user daemon-reload
+  if systemctl --user enable --now hermes-serve.service >/dev/null 2>&1; then
+    ok "hermes-serve.service (systemd-user) installed → 0.0.0.0:9119"
+  else
+    warn "hermes-serve.service failed to start — check: systemctl --user status hermes-serve"
+  fi
+}
+
 # ── CORE 3: git identity + basics (cheap, high-value; mirrors modules/home/me.nix) ──
 tier_git_base() {
   info "Configuring git…"

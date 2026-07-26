@@ -86,6 +86,26 @@ just hermes-bootstrap       # or: bash hermes/bootstrap.sh
 On WSL, provisioning (`just provision-wsl`) installs Hermes via
 `tier_agent_clis hermes` and bootstraps config via `tier_hermes_config`.
 
+### Hermes dashboard (systemd user service)
+
+A `hermes serve` backend running on `0.0.0.0:9119` so the Windows Desktop app
+can connect at `<nickname>.gg.ez:9119`. Managed as a systemd user service
+(service file: `hermes/hermes-serve.service`; provisioned by
+`tier_hermes_dashboard`).
+
+**Setup (one-time, per host):** basic auth credentials must be in
+`~/.hermes/.env` before the service starts — the tier warns if they're missing:
+
+```
+HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
+HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<choose a strong password>
+HERMES_DASHBOARD_BASIC_AUTH_SECRET=$(openssl rand -base64 32)
+```
+
+On the Windows Desktop app, connect to `http://<wsl-nickname>.gg.ez:9119` with
+those credentials. The frontend login gate appears automatically when the
+backend detects the non-loopback bind.
+
 ## What's NOT tracked (and never copy in)
 
 Secrets, transcripts, caches and auto-regenerated state stay machine-local in
