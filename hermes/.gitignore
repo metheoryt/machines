@@ -1,0 +1,26 @@
+# Secrets — never commit
+.env
+auth.json
+auth.lock
+
+# Runtime state — volatile per host
+state.db
+state.db-*
+sessions/
+cache/
+audio_cache/
+image_cache/
+gateway*
+channel_directory.json
+context_length_cache.yaml
+.update_check
+.skills_prompt_snapshot.json
+.hermes_history
+hooks/
+kanban/
+kanban.db*
+log/
+logs/
+
+# Machine-local backups from bootstrap.sh
+.bootstrap-bak/
