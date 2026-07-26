@@ -68,4 +68,9 @@ else
     "$linked" "$skipped" "$backed" "$failed"
 fi
 [ -d "$BAK_ROOT" ] && printf 'Previous real files saved under %s\n' "$BAK_ROOT"
-[ "${failed:-0}" -gt 0 ] && exit 1
+# Explicit exit: a trailing `[ ... ] && exit 1` would leave the script's status at 1
+# on the success path (false test = non-zero list), failing provision/linux.sh.
+if [ "${failed:-0}" -gt 0 ]; then
+  exit 1
+fi
+exit 0
