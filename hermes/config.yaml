@@ -11,7 +11,15 @@ browser:
   cloud_provider: browser-use
   use_gateway: true
 display:
-  tool_progress: all
+  tool_progress: false
+  show_reasoning: false
+  compact: true
+  credits_notices: false
+  turn_completion_explainer: false
+  show_commentary: false
+  show_cost: false
+  streaming: false
+  timestamps: false
 tts:
   provider: openai
   use_gateway: true
