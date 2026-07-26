@@ -178,6 +178,11 @@ elsewhere to sync. Do NOT put secrets here.
   the doc: keep the base semantics, but have Track B skip commits whose subject is
   `docs(kb): refresh knowledge base against …`.
   <!-- src: airdrome ff21a95 | 2026-07-26 -->
+  - Second-repo sighting: qaz-code's first refresh recorded
+    `last_refresh.commit = 4c25471` while committing as `c5ec625`. Same offset,
+    different repo — the lag is in the prompt's Step 6 wording ("HEAD sha from
+    Step 0"), not in one repo's state file.
+    <!-- src: qaz-code c5ec625 | 2026-07-26 -->
 - **A repo that gitignores `.claude` wholesale silently breaks the whole harvest,
   and the failure is invisible until the next run.** The state file
   `.claude/kb-harvest-state.json` is only load-bearing if it is *git-tracked*: the
