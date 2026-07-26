@@ -178,6 +178,28 @@ elsewhere to sync. Do NOT put secrets here.
   the doc: keep the base semantics, but have Track B skip commits whose subject is
   `docs(kb): refresh knowledge base against …`.
   <!-- src: airdrome ff21a95 | 2026-07-26 -->
+- **A repo that gitignores `.claude` wholesale silently breaks the whole harvest,
+  and the failure is invisible until the next run.** The state file
+  `.claude/kb-harvest-state.json` is only load-bearing if it is *git-tracked*: the
+  watermark advances at gather time, so if it can never be committed, every run
+  re-reports the same sessions or (worse, once a stale untracked copy exists)
+  reports "0 digests" forever. Plenty of repos have a bare `.claude` line from a
+  "gitignore local config" commit. **Check before gathering** —
+  `git check-ignore -v .claude/kb-harvest-state.json .claude/memory/project.md` —
+  and fix it with negations, not `git add -f` (a force-added file still confuses
+  the next run's `git status` preflight). A bare `.claude` cannot be negated from
+  inside, because git never descends into an excluded directory; the pattern has to
+  become `.claude/*` first:
+
+      .claude/*
+      !.claude/kb-harvest-state.json
+      !.claude/memory/
+      .claude/memory/*
+      !.claude/memory/project.md
+
+  Verify with `git add -A --dry-run` — it must list exactly those two paths and no
+  `settings.local.json`.
+  <!-- src: qaz-code 4c25471 | 2026-07-26 -->
 
 ## Evaluating a new dependency
 
@@ -502,6 +524,18 @@ elsewhere to sync. Do NOT put secrets here.
   (`overlay_register` + `overlay_push` — a per-MCP-session editor-buffer view, no
   second index). Overlays model in-flight *unsaved* edits on the base graph; they
   are NOT a way to index an arbitrary checked-out branch's on-disk state.
+- **"Never index a worktree" is a cost claim, and the cost is scale-dependent — for
+  a small repo it is noise.** Tracking the Orca worktree
+  `orca/workspaces/qaz-code/weekly-ubuntu26-…` (a ~4k-line Python repo) took
+  **1.0s and 816 nodes**, not "warmup + hundreds of MB". The distinction that
+  actually matters is not worktree-vs-base but *ephemeral-vs-long-lived*: a
+  spawned agent's throwaway worktree should ride the base index, but a persistent
+  Orca worktree that is itself a session's cwd has no base index covering it —
+  graph tools stay dark and the Read/Grep deny-hooks get inconsistent with reality.
+  There, `gortex track <worktree-path> --wait` is the right call; measure before
+  refusing on cost.
+  <!-- conflicts-with: "**Worktree-isolated agents — don't re-index the worktree in gortex.** A git worktree is a new path → either untracked (graph tools off, enforcement hooks misfire for that agent) or a full re-index (warmup + hundreds of MB, *per* worktree)." -->
+  <!-- src: qaz-code 4c25471 | 2026-07-26 -->
 - **`/gortex-align` skill does the alignment.** When a gortex-backed repo could
   be tuned — wiring not committed, or a Python project resolving to
   `text_matched` — offer the `gortex-align` skill. It detects the daemon (won't
