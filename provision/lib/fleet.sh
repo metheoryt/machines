@@ -11,9 +11,27 @@ fleet_machines() {
     jq -r '.machines | keys[]' "$(fleet_manifest_path)"
 }
 
+# fleet_hostname [hostname]: this box's OS hostname with any DNS/mDNS suffix
+# stripped, so it can be matched against fleet.json's bare `detect.hostname`.
+#
+# macOS is why this exists: `hostname` / `uname -n` there return the Bonjour name
+# (`air.local`) whenever configd has no better name to offer — which is the
+# normal state on DHCP, even after `scutil --set HostName air`. An exact match
+# would then miss, dropping provision.sh to its interactive picker and making
+# macos.sh resolve its profile from the default instead of the manifest.
+#
+# Mirrors agents/bootstrap.sh's host_id(), which has always done `${h%%.*}` for
+# the same reason — this brings the fleet resolvers in line with it rather than
+# inventing a second convention. Harmless everywhere else: no fleet member's
+# detect.hostname contains a dot (latitude5520, g614jv, g513ie, 27608, air).
+fleet_hostname() {
+    local h="${1:-$(hostname)}"
+    printf '%s' "${h%%.*}"
+}
+
 # Echo the machine whose detect.hostname matches this box; return 1 if none.
 fleet_detect() {
-    local h; h="$(hostname)"
+    local h; h="$(fleet_hostname)"
     local m
     m="$(jq -r --arg h "$h" \
         '.machines | to_entries[] | select(.value.detect.hostname == $h) | .key' \
@@ -43,7 +61,8 @@ fleet_profile() {
 # Unlike every other helper here this must work WITHOUT jq: hub ships python3 but
 # no jq, and profile resolution happens before the apt tier can install it.
 fleet_profile_for_host() {
-    local h="${1:-$(hostname)}" mf
+    local h mf
+    h="$(fleet_hostname "${1:-}")"   # strip .local etc — see fleet_hostname
     mf="$(fleet_manifest_path)"
     if command -v jq >/dev/null 2>&1; then
         jq -r --arg h "$h" \

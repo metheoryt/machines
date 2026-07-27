@@ -26,6 +26,17 @@ eq "$(fleet_platform latitude)" "nixos" "fleet_platform latitude == nixos"
 eq "$(fleet_profile_for_host 27608)" "hub" "for_host 27608 == hub"
 eq "$(fleet_profile_for_host latitude5520)" "workstation" "for_host latitude5520 == workstation"
 eq "$(fleet_profile_for_host air)" "workstation" "for_host air == workstation"
+
+# macOS reports the Bonjour name (`air.local`) from `hostname`/`uname -n` whenever
+# configd has no better name — the normal DHCP case, even after
+# `scutil --set HostName air`. Resolution must survive that, or provision.sh
+# drops to its interactive picker and macos.sh resolves its profile from the
+# default rather than the manifest. Mirrors agents/bootstrap.sh's host_id().
+eq "$(fleet_hostname air.local)" "air" "fleet_hostname strips the mDNS suffix"
+eq "$(fleet_hostname air)" "air" "fleet_hostname leaves a bare name alone"
+eq "$(fleet_hostname latitude5520.lan)" "latitude5520" "fleet_hostname strips any DNS suffix"
+eq "$(fleet_profile_for_host air.local)" "workstation" "for_host air.local resolves like air"
+eq "$(fleet_profile_for_host 27608.example.net)" "hub" "for_host tolerates a suffix on the hub too"
 eq "$(fleet_profile_for_host no-such-box)" "" "for_host unknown host is empty"
 
 # jq-free path: hub has no jq, so resolution must fall back to python3. Build a
@@ -36,5 +47,11 @@ mkdir -p "$tmp/bin"
 for b in bash python3 dirname; do ln -s "$(command -v "$b")" "$tmp/bin/$b"; done
 nojq="$(PATH="$tmp/bin" bash -c 'source "$1"; fleet_profile_for_host 27608' _ "$LIB")"
 eq "$nojq" "hub" "for_host resolves without jq (python3 fallback)"
+
+# The suffix strip happens before the jq/python3 branch, so it must hold on the
+# jq-free path too — asserted rather than assumed, since hub is the box that
+# runs it and a regression there is invisible until a provision fails.
+nojq_sfx="$(PATH="$tmp/bin" bash -c 'source "$1"; fleet_profile_for_host 27608.example.net' _ "$LIB")"
+eq "$nojq_sfx" "hub" "for_host strips the suffix on the python3 fallback too"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"
