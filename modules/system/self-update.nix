@@ -55,7 +55,9 @@ in {
       description = "Merge --ff-only the flake repo (Claude config + memory go live via symlinks)";
       after = ["network-online.target"];
       wants = ["network-online.target"];
-      path = [pkgs.git pkgs.openssh];
+      # coreutils for `sleep` in the fetch retry — bash has no builtin, and a
+      # system unit gets no ambient /run/current-system/sw/bin.
+      path = [pkgs.git pkgs.openssh pkgs.coreutils];
       serviceConfig = {
         Type = "oneshot";
         User = cfg.user;
@@ -83,11 +85,22 @@ in {
         # logged `Permission denied (publickey)` and systemd still reported
         # "Finished successfully". latitude sat 23 commits behind for hours that
         # way, invisible to `systemctl status` — the only trace was journalctl.
-        # Exiting non-zero surfaces it in `systemctl --failed`; a transient
-        # network blip self-heals on the next timer fire.
-        if ! git fetch --quiet; then
-          echo "fetch failed — cannot reach the remote (credential or network)" >&2
-          exit 1
+        #
+        # Retry once before failing, because one specific failure here is benign
+        # and RECURRING: git-autofetch fetches the same repos on *:00/10:00 while
+        # this unit runs on *:00/5:00, so they collide at :00/:20/:40 and the
+        # loser dies with
+        #   cannot lock ref 'refs/remotes/origin/main': is at X but expected Y
+        # Observed live 2026-07-28 — both units started at the same second. That
+        # race is self-correcting (the other fetch is updating the very ref we
+        # want), so failing on it would mark the unit failed 3x/hour and train
+        # you to ignore the status this change exists to make meaningful.
+        if ! git fetch --quiet 2>/dev/null; then
+          sleep 10
+          if ! git fetch --quiet; then
+            echo "fetch failed twice — remote unreachable (credential or network)" >&2
+            exit 1
+          fi
         fi
         git rev-parse '@{u}' >/dev/null 2>&1 || { echo "no upstream for ${branch} — skipping"; exit 0; }
 
