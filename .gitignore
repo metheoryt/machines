@@ -38,6 +38,10 @@ nixos-hardware/
 # hooks). Machine-local by convention — keep out of git.
 .claude/settings.local.json
 
+# Claude Code harness-managed worktrees (EnterWorktree). Machine-local scratch
+# checkouts of this same repo — never commit them into it.
+.claude/worktrees/
+
 # OpenClaude per-repo local state — machine-local, keep out of git
 .openclaude/
 

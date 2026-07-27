@@ -29,7 +29,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust " \
+   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex, no codex.
