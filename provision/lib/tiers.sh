@@ -624,6 +624,67 @@ tier_ssh_accounts() {
   fi
 }
 
+# ── BEST-EFFORT: outbound fleet SSH client config ─────────────────────────────
+# The counterpart to tier_ssh_trust: that one makes this box ACCEPT fleet logins,
+# this one lets it MAKE them (`ssh latitude`, `ssh hub`).
+#
+# On a NixOS host modules/home/ssh.nix generates ~/.ssh/config from fleet.json,
+# and on a WSL distro provision/ssh-wsl.sh does the same. A macOS box has
+# neither, and tier_ssh_accounts is NOT a substitute — it writes only the
+# GitHub-account blocks, so without this tier ~/.ssh/config on the Mac contains
+# no fleet hosts at all and `ssh latitude` falls back to the local account name
+# with no identity file.
+#
+# Rather than a third renderer that would drift from the other two, this sources
+# ssh-wsl.sh's pure helpers through its documented SSH_WSL_LIB_ONLY hook. Those
+# functions are jq over fleet.json with no WSL assumptions; everything
+# WSL-specific in that script (apt, systemd sshd, the key persisted on the
+# Windows host) lives below the guard and never runs here.
+#
+# Deliberately NOT appending this box's pubkey to provision/fleet-authorized-keys:
+# that is a one-time enrollment that dirties the repo and needs a commit, so it
+# stays a manual step. This tier only ever touches ~/.ssh/.
+tier_fleet_ssh() {
+  info "Wiring outbound fleet SSH…"
+  local helper="$REPO/provision/ssh-wsl.sh" fleet_json="$REPO/fleet.json"
+  if [ ! -f "$helper" ] || [ ! -f "$fleet_json" ]; then
+    warn "ssh-wsl.sh or fleet.json missing — skipping outbound fleet SSH config"
+    return 0
+  fi
+  have jq || { warn "jq not found — skipping outbound fleet SSH config"; return 0; }
+
+  # shellcheck source=provision/ssh-wsl.sh
+  SSH_WSL_LIB_ONLY=1 source "$helper" || {
+    warn "could not source ssh-wsl.sh helpers — skipping outbound fleet SSH config"
+    return 0
+  }
+
+  mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+  local key="$HOME/.ssh/id_fleet"
+  if [ -e "$key" ]; then
+    ok "fleet key ~/.ssh/id_fleet exists"
+  elif ssh-keygen -t ed25519 -f "$key" -C "me@$(uname -n)" -N "" >/dev/null 2>&1; then
+    ok "generated ~/.ssh/id_fleet"
+    warn "ENROLLMENT NEEDED: append the line below to provision/fleet-authorized-keys, commit, and pull on the other members — until then no fleet box will accept this one:"
+    printf '      %s\n' "$(cat "${key}.pub")" >&2
+  else
+    warn "ssh-keygen for the fleet key failed — skipping outbound fleet SSH config"
+    return 0
+  fi
+
+  local cfg="$HOME/.ssh/config" block merged
+  touch "$cfg"
+  block="$(printf '%s\n%s\n%s' \
+    "$CONFIG_MARKER_BEGIN" \
+    "$(ssh_wsl_render_config "$(cat "$fleet_json")")" \
+    "$CONFIG_MARKER_END")"
+  merged="$(ssh_wsl_merge_config "$(cat "$cfg")" "$block")"
+  printf '%s\n' "$merged" > "$cfg"
+  chmod 600 "$cfg"
+  ok "wrote fleet host blocks → ~/.ssh/config"
+  return 0
+}
+
 # ── BEST-EFFORT: shell init (WSL-safe — no chsh) ──────────────────────────────
 # tier_shell_init [--no-fish]: append PATH + starship/direnv hooks to ~/.bashrc,
 # guarded so re-runs don't duplicate. We do NOT chsh (unreliable in WSL); to live

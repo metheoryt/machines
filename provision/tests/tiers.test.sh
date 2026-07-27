@@ -79,8 +79,34 @@ grep -q 'KillMode=process' "$TIERS" \
 # makes these assertions possible at all; if someone moves the precondition
 # above the dry-run exit, every case below starts failing with "targets macOS".
 eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_brew_min tier_brew_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
+   "tier_brew_min tier_brew_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
    "macos workstation tier list and order"
+
+# tier_fleet_ssh is darwin-only ON PURPOSE. NixOS gets its fleet client config
+# from modules/home/ssh.nix and a WSL distro from provision/ssh-wsl.sh; only
+# macOS has neither. Adding it to the linux list would fight ssh-wsl.sh over the
+# same marked span in ~/.ssh/config.
+hasnt "$ws" '^tier_fleet_ssh$' "linux does not run tier_fleet_ssh"
+has   "$mac" '^tier_fleet_ssh$' "macos runs tier_fleet_ssh"
+
+# Both tiers write ~/.ssh/config, each inside its OWN marker pair, and each
+# preserves everything outside its markers — so the two blocks coexist and the
+# order is not load-bearing for correctness. Pinned anyway: the guarantee that
+# matters is that BOTH markers survive a full run, and a future edit that made
+# either tier rewrite the file wholesale would silently drop the other's block.
+# The distinct marker strings are what makes coexistence work — assert they
+# differ, which is the actual invariant.
+_m_accounts='# >>> machines-bootstrap ssh accounts >>>'
+_m_fleet='# >>> fleet-ssh (managed by ssh-wsl.sh) >>>'
+[ "$_m_accounts" != "$_m_fleet" ] \
+  && pass "ssh_accounts and fleet_ssh use distinct config markers" \
+  || die "ssh_accounts and fleet_ssh share a marker — they would clobber each other"
+grep -qF "$_m_accounts" "$TIERS" \
+  && pass "ssh_accounts marker unchanged in tiers.sh" \
+  || die "ssh_accounts marker changed — update this test and re-check coexistence"
+grep -qF "CONFIG_MARKER_BEGIN=\"$_m_fleet\"" "$HERE/../ssh-wsl.sh" \
+  && pass "fleet_ssh marker unchanged in ssh-wsl.sh" \
+  || die "ssh-wsl.sh CONFIG_MARKER_BEGIN changed — tier_fleet_ssh reuses it"
 
 # The apt/brew swap is the ONLY package-manager difference: darwin must never
 # reach an apt tier, and linux must never reach a brew one.
@@ -90,7 +116,8 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # Beyond that swap the two lists must stay identical — that is the payoff of
 # sharing tiers.sh. Compare with the package tiers stripped out; a drift here
 # means a tier was added to one driver and forgotten in the other.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_(apt|brew)_(min|dev)$' | tr '\n' ' '; }
+# tier_fleet_ssh is excluded too — darwin-only by design, justified above.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|fleet_ssh)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

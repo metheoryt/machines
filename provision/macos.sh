@@ -74,7 +74,8 @@ case "$PROFILE" in
   workstation)
     TIERS=(brew_min brew_dev agents_config git_base gortex
            "agent_clis claude codex hermes" shell_init autofetch
-           ssh_accounts selfpull ssh_trust hermes_config hermes_dashboard) ;;
+           ssh_accounts fleet_ssh selfpull ssh_trust
+           hermes_config hermes_dashboard) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — macos.sh supports workstation only" ;;
 esac

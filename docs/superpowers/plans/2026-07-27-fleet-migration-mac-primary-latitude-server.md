@@ -306,6 +306,21 @@ sudo scutil --set ComputerName air
 
 Must match `detect.hostname` in `fleet.json`.
 
+- [ ] **Step 1b: Verify the hostname is BARE `air`, not `air.local`**
+
+```bash
+hostname
+uname -n
+```
+
+Both must print exactly `air`. macOS frequently keeps handing back `air.local` (or a DHCP-assigned name) even after `scutil`, and `fleet_detect` / `fleet_profile_for_host` match `detect.hostname` with **exact string equality**. If it returns `air.local`, three things break quietly:
+
+1. `provision/macos.sh` prints `profile: workstation (default)` instead of `(from fleet.json)` — it still works, but it is no longer manifest-driven.
+2. `provision/provision.sh` cannot auto-detect the machine and drops to the interactive `select` prompt.
+3. `agents/bootstrap.sh` seeds a **second** stub at `agents/hosts/air.local.md` *inside the repo*, dirtying the tree and permanently disabling `fleet-selfpull`'s clean-tree gate — exactly the failure `tiers.test.sh` exists to prevent.
+
+If `.local` persists, the reliable fix is to also clear the DHCP-supplied name: `sudo scutil --set HostName air` again after a reboot, and check `sudo scutil --get HostName`. Do not paper over it by adding an `air.local` entry to `fleet.json`.
+
 - [ ] **Step 2: Install Tailscale and join Headscale**
 
 Install the Tailscale macOS app (the standalone variant, not the App Store one — the App Store build cannot set a custom control server), then:
@@ -337,10 +352,13 @@ whoami
 
 ```bash
 ping -c2 latitude.gg.ez && ping -c2 desktop.gg.ez
-ssh latitude 'echo ok'
 ```
 
-From latitude: `ssh air 'echo ok'` (after Step 5).
+> **`ssh latitude` will NOT work at this point, and that is expected.** The bare-name blocks come from `~/.ssh/config`, which on a Mac nothing has written yet. On NixOS `modules/home/ssh.nix` generates it; on a WSL distro `provision/ssh-wsl.sh` does; macOS has neither, and `tier_ssh_accounts` is **not** a substitute — it writes only the GitHub-account blocks. Without a fleet block, `ssh latitude` resolves via the MagicDNS search suffix at best and then authenticates as the local macOS account with no identity file.
+>
+> This is closed by **`tier_fleet_ssh`**, which runs inside `provision/macos.sh` in Task 6 Step 1. It reuses `ssh-wsl.sh`'s renderer (via its `SSH_WSL_LIB_ONLY` hook) so all three platforms emit the same blocks from the same `fleet.json`. Defer the outbound check to Task 6 Step 1b.
+
+Inbound only for now — from latitude, after Step 5: `ssh air 'echo ok'`.
 
 - [ ] **Step 5: Enable inbound SSH (role `ssh-server`)**
 
@@ -383,6 +401,36 @@ The path is **`agents/hosts/air.md`** (committed in `62babbd`), not `~/machines/
 
 ```bash
 readlink ~/.claude/host-memory.md   # → …/machines/agents/hosts/air.md
+```
+
+- [ ] **Step 1b: Register the generated SSH keys BEFORE any further clone** ⚠️
+
+`macos.sh` runs `tier_ssh_accounts`, which writes a `~/.ssh/config` block with **`IdentitiesOnly yes`** pointing at freshly generated keys (`~/.ssh/id_metheoryt`, `~/.ssh/id_cyphy671`) that GitHub has never seen. `IdentitiesOnly` means ssh will offer *only* that key — so from this moment every `git clone`/`push` over SSH fails until the key is registered. This is the documented hazard that makes the `hub` profile skip the tier entirely (`provision/lib/tiers.sh`, `tier_ssh_accounts` header). The tier does warn, but the warning scrolls past inside a 13-tier run.
+
+The Step 1 clone of `machines` itself is fine — it happens before `macos.sh` runs. Everything after is not.
+
+```bash
+gh auth login          # SSH → select ~/.ssh/id_metheoryt.pub
+ssh -T git@github.com  # expect: "Hi metheoryt! You've successfully authenticated"
+ssh -T git@github-cyphy
+```
+
+- [ ] **Step 1c: Verify outbound fleet SSH now works**
+
+`tier_fleet_ssh` (also in the `macos.sh` run) writes the fleet host blocks that Task 5 Step 4 deliberately deferred:
+
+```bash
+grep -A3 '^Host latitude$' ~/.ssh/config
+ssh latitude 'echo ok'
+```
+
+It also generates `~/.ssh/id_fleet` and prints an **ENROLLMENT NEEDED** warning with the public key. Until that key is in `provision/fleet-authorized-keys` and pulled on the other members, no fleet box will accept an inbound connection from the Mac:
+
+```bash
+cat ~/.ssh/id_fleet.pub >> ~/machines/provision/fleet-authorized-keys
+cd ~/machines && git add provision/fleet-authorized-keys \
+  && git commit -m "feat(fleet): trust air's fleet key" && git push
+# then on each other member: git pull  (NixOS: plus a rebuild so keyFiles re-reads)
 ```
 
 - [ ] **Step 3: Clone the work repos**
@@ -1322,6 +1370,9 @@ NTFS-over-USB works for large read-mostly media but costs performance and gives 
 | 2026-07-27 | `62babbd` | **Task 3** complete — `darwin` platform, `air` member at `100.64.0.7`, role-executor arms, `agents/hosts/air.md`, new `roles.test.sh`, dispatch pinned. All 8 test files green; latitude toplevel dry-builds; `Host air` present in the generated SSH config. |
 | 2026-07-27 | `1fc2015` | Plan corrections folded in; Task 1 Steps 2-3 recorded (Kingston pending). |
 | 2026-07-27 | `04c0309` | **Task 4** complete — `provision/macos.sh` + the darwin half of `lib/tiers.sh` (brew tiers, launchd branches, per-platform gortex asset, zsh init). Shared library, not a fork. shellcheck clean; plists validated with `plistlib`. |
+| 2026-07-27 | *(next)* | `tier_fleet_ssh` — closes a gap that would have broken Task 5 Step 4. See below. |
+
+**Gap found and closed after Task 4 (outbound fleet SSH on a non-Nix, non-WSL box).** `~/.ssh/config` is generated by `modules/home/ssh.nix` on NixOS and by `provision/ssh-wsl.sh` on WSL. macOS has neither, and `tier_ssh_accounts` only writes GitHub-account blocks — so the Mac would have had **no fleet host blocks at all** and `ssh latitude` would have failed, silently invalidating Task 5 Step 4's verification. Rather than write a third renderer that would drift from the other two, `tier_fleet_ssh` sources `ssh-wsl.sh`'s pure helpers through its existing `SSH_WSL_LIB_ONLY=1` hook (the WSL-specific apt/systemd/Windows-key parts all live below that guard) and merges the rendered block under `ssh-wsl.sh`'s own markers. Darwin-only in the tier list, because adding it on Linux would fight `ssh-wsl.sh` over the same marked span. `provision/tests/fleet-ssh-tier.test.sh` runs the real tier against a throwaway `$HOME` and asserts the per-member blocks, the `*.gg.ez` wildcard, `IdentityFile` on every block, 0600 perms, idempotency, and coexistence with a foreign `ssh_accounts` block.
 
 **Decision recorded (Task 4):** `macos.sh` shares `provision/lib/tiers.sh` rather than carrying its own tier bodies. The alternative — a self-contained `macos.sh` — was rejected because it duplicates six portable tiers (`agents_config`, `hermes_config`, `git_base`, `agent_clis`, `ssh_accounts`, `ssh_trust`) that would then need every fix applied twice. `tiers.test.sh` now asserts the two drivers' tier lists are identical once the package tiers are stripped, so the sharing is enforced rather than merely intended.
 
