@@ -256,9 +256,13 @@ elsewhere to sync. Do NOT put secrets here.
   and the gap widens by one commit per run with nothing flagging it. Seen on
   airdrome 2026-07-28: several consecutive `docs(kb): refresh` commits stacked on
   `metheoryt/ubuntu26-airdrome-kb-refresh-daily` while `/home/me/my/airdrome`
-  `main` still sat at `ff21a95`. Not universal — qaz-code's refresh commit
-  (`c5ec625`) did reach its base `main` — so it is per-repo drift, not a broken
-  mechanism. Cheapest check when reading a cron-refreshed repo's memory:
+  `main` still sat at `ff21a95`. The behaviour is the same in every repo — the
+  cron prompt has no merge step at all — so a repo whose refresh commits *have*
+  reached `main` (qaz-code's `c5ec625`) only got there because someone worked in
+  the base checkout afterwards and fast-forwarded it in passing. Don't go looking
+  for a config difference between two cron jobs; there isn't one. Whether a repo's
+  memory is current on `main` is purely a function of unrelated human activity.
+  Cheapest check when reading a cron-refreshed repo's memory:
   `git log --oneline main..<refresh-branch>`. The durable fix is either a final
   FF-merge step in Lane 1 or accepting that the branch, not `main`, is the source
   of truth for that repo's memory.
