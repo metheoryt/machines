@@ -1,7 +1,17 @@
-# Non-Nix Linux / WSL provisioning (persisted or disposable)
+# Non-Nix provisioning (Linux / WSL / macOS)
 
-Provision a **fresh, non-Nix Linux box** — any glibc apt Linux, persisted or
-disposable — into this fleet's *portable* dev layer. It works the same whether
+> **Two entry points, and neither calls the other.**
+>
+> | | What it is | Invocation |
+> |---|---|---|
+> | `provision/linux.sh` · `provision/macos.sh` | **tier drivers** — install the toolchain. Tier bodies are shared in `provision/lib/tiers.sh`; the driver only picks the ordered list for this box's profile. | `bash provision/linux.sh` |
+> | `provision/provision.sh` | the **role front door** — reads `fleet.json`, loops `roles[]` into `role_<name>` from `provision/roles/*.sh`. | `bash provision/provision.sh --machine <m> --dry-run\|--apply` |
+>
+> Run the driver first, the front door second. `provision.sh` takes **flags**, not
+> positionals — a bare `provision.sh air` exits 2 with `unknown arg: air`.
+
+Provision a **fresh, non-Nix box** — any glibc apt Linux (persisted or
+disposable) or macOS — into this fleet's *portable* dev layer. It works the same whether
 you're provisioning a throwaway WSL2 distro (ephemeral, `wsl --unregister` to
 reset) or a long-lived daily driver: the **same git-synced Claude/Codex config**
 the NixOS laptops run (via `agents/bootstrap.sh`, which produces identical
@@ -117,6 +127,70 @@ account's "keep my email address private" setting. The identity files land at
 > Isolation rationale: `cyphy671` is a separate personal account used to keep
 > certain repos (e.g. a large corpus like `qaz-law`) off the main account, to
 > limit blast radius. Separate key + separate remote = the two never cross.
+
+## macOS (`provision/macos.sh`)
+
+`provision/macos.sh` is the Darwin sibling of `linux.sh` — same driver shape,
+**same tier library** (`provision/lib/tiers.sh`), different package manager. It
+provisions `air` (the MacBook Air M5). Both Apple Silicon and Intel work.
+
+```bash
+# prerequisite — Homebrew cannot bootstrap itself unattended
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+git clone https://github.com/<you>/machines ~/machines
+MACHINES_TIERS_DRY_RUN=1 bash ~/machines/provision/macos.sh   # inspect the plan
+bash ~/machines/provision/macos.sh                            # apply
+```
+
+Then open a new shell (or `source ~/.zshrc`) and authenticate: `claude`, `codex`.
+Idempotent — re-run any time.
+
+**What differs from the Linux path, and why:**
+
+| | Linux (`linux.sh`) | macOS (`macos.sh`) |
+|---|---|---|
+| Packages | `tier_apt_min` / `tier_apt_dev` | `tier_brew_min` / `tier_brew_dev` |
+| Root | `sudo` probe → `PRIV=0` degrades to warn | none — Homebrew refuses sudo and owns its prefix |
+| `fd` / `bat` | installed as `fdfind`/`batcat`, symlinked to friendly names | real names already; **no aliasing** |
+| Scheduling | systemd user timer, cron fallback | **launchd** LaunchAgents |
+| Shell hooks | `~/.bashrc` (+ fish) | `~/.zshrc` **and** `~/.bashrc` (+ fish) |
+| `gortex` | `gortex_linux_amd64`, x86_64 only | `gortex_darwin_arm64` / `_amd64` |
+
+Everything else — the synced agent config, git identity, the agent CLIs,
+multi-account SSH, inbound fleet SSH trust — is the *same tier body* running on
+both. Fix it once, both platforms get it.
+
+**Scheduling.** macOS has no systemd, and per-user `cron` needs the cron binary
+granted Full Disk Access in System Settings (not scriptable), so the scheduled
+tiers install LaunchAgents into `~/Library/LaunchAgents/` instead:
+
+```bash
+launchctl list | grep kz.cyphy
+#   kz.cyphy.git-autofetch     every 10 min
+#   kz.cyphy.fleet-selfpull    every 10 min
+#   kz.cyphy.hermes-serve      long-running, restart-on-failure
+```
+
+`launchctl bootout` runs before every `bootstrap`, so re-provisioning reloads a
+changed plist rather than silently keeping the old one.
+
+**Not installed**, same trade as the Linux path: the declarative
+`development.nix` toolchain and the full `me.nix` desktop shell. Docker Desktop,
+the company VPN, and `tsh` are separate manual installs.
+
+**Roles are a separate step.** `macos.sh` is the *tier driver*; it does not read
+`fleet.json` roles. After it finishes, run the role front door:
+
+```bash
+bash provision/provision.sh --machine air --apply
+```
+
+> Never run `provision.sh --apply` from inside a git worktree. The `agents` role
+> runs `agents/bootstrap.sh`, which repoints `~/.claude` and `~/.codex` at
+> *whatever checkout it is invoked from* — from a worktree that means your live
+> agent config starts pointing into a temporary directory. Run it from the main
+> clone.
 
 ## Choosing a base distro
 

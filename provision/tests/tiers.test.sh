@@ -12,10 +12,14 @@ eq()   { [ "$1" = "$2" ] && pass "$3" || die "$3: expected '$2' got '$1'"; }
 has()  { printf '%s\n' "$1" | grep -qE "$2" && pass "$3" || die "$3"; }
 hasnt(){ printf '%s\n' "$1" | grep -qE "$2" && die "$3" || pass "$3"; }
 
-plan() { MACHINES_TIERS_DRY_RUN=1 MACHINES_PROFILE="$1" bash "$DRIVER" 2>&1; }
+MACDRIVER="$HERE/../macos.sh"
+
+plan()    { MACHINES_TIERS_DRY_RUN=1 MACHINES_PROFILE="$1" bash "$DRIVER" 2>&1; }
+macplan() { MACHINES_TIERS_DRY_RUN=1 MACHINES_PROFILE="$1" bash "$MACDRIVER" 2>&1; }
 
 ws="$(plan workstation)"
 hub="$(plan hub)"
+mac="$(macplan workstation)"
 
 # Profile banner names the resolution source.
 has "$ws" 'profile: workstation \(from MACHINES_PROFILE\)' "banner reports env-var source"
@@ -68,6 +72,37 @@ eq "$out" "LOADED" "TIERS_LIB_ONLY sources without side effects"
 grep -q 'KillMode=process' "$TIERS" \
   && pass "fleet-selfpull unit sets KillMode=process" \
   || die "fleet-selfpull unit sets KillMode=process"
+
+# ── provision/macos.sh — the darwin tier driver ───────────────────────────────
+# The dry-run path is deliberately BEFORE the Darwin precondition in both
+# drivers, so the tier list is inspectable from this NixOS box. That is what
+# makes these assertions possible at all; if someone moves the precondition
+# above the dry-run exit, every case below starts failing with "targets macOS".
+eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
+   "tier_brew_min tier_brew_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
+   "macos workstation tier list and order"
+
+# The apt/brew swap is the ONLY package-manager difference: darwin must never
+# reach an apt tier, and linux must never reach a brew one.
+hasnt "$mac" '^tier_apt_'  "macos never runs an apt tier"
+hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
+
+# Beyond that swap the two lists must stay identical — that is the payoff of
+# sharing tiers.sh. Compare with the package tiers stripped out; a drift here
+# means a tier was added to one driver and forgotten in the other.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_(apt|brew)_(min|dev)$' | tr '\n' ' '; }
+eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
+   "macos and linux workstation lists match once the package tiers are removed"
+
+# macos.sh has no hub arm — the hub is a Debian VPS. Asking for it must fail
+# loudly, not silently provision a workstation.
+macplan hub >/dev/null 2>&1 && die "macos hub profile should be rejected" \
+  || pass "macos rejects the hub profile"
+
+# tiers.sh must stay sourceable without running anything, from the darwin side
+# too (the driver sources it only after its preconditions pass).
+has "$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; echo SOURCED-OK' _ "$TIERS" 2>&1)" \
+    'SOURCED-OK' "tiers.sh sources cleanly with the darwin additions"
 
 # Every fleet.json machine must already have a committed per-host memory stub:
 # agents/bootstrap.sh seeds a MISSING one inside the repo, which leaves the tree

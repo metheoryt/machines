@@ -2,13 +2,88 @@
 # Bodies moved verbatim out of provision/linux.sh; that script is now the driver
 # that resolves a profile (fleet.json "profile") and picks a tier list.
 # The profile → tier-list table that selects among these lives in the driver.
-# Consumers: provision/linux.sh. Requires the driver's helpers (info/ok/warn/die/
-# have) and globals (REPO, SUDO, PRIV, WARNINGS, APT_UPDATED) to be set BEFORE
-# sourcing.
+# Consumers: provision/linux.sh (apt) and provision/macos.sh (Homebrew).
+# Requires the driver's helpers (info/ok/warn/die/have) and globals
+# (REPO, SUDO, PRIV, WARNINGS, APT_UPDATED) to be set BEFORE sourcing.
+#
+# ── Portability contract ──────────────────────────────────────────────────────
+# Three kinds of tier live here. Know which you are editing:
+#
+#   PORTABLE  — identical on every posix platform, shared byte-for-byte:
+#               agents_config, hermes_config, git_base, agent_clis,
+#               ssh_accounts, ssh_trust. A fix here reaches every box. Do NOT
+#               fork these per platform; that is the whole point of the split.
+#   PACKAGED  — one tier per package manager, selected by the driver's tier
+#               list: apt_min/apt_dev (Debian/Ubuntu) vs brew_min/brew_dev
+#               (macOS). Same CORE/best-effort semantics, different installer.
+#   SCHEDULED — one body, an explicit Darwin branch at the top: autofetch,
+#               selfpull, hermes_dashboard. macOS has no systemd and no usable
+#               per-user cron (it needs Full Disk Access), so these install a
+#               launchd LaunchAgent instead. The Linux path below each branch is
+#               untouched — it runs live on hub and the WSL boxes, and a
+#               generic scheduler abstraction would put that at risk for no gain.
 #
 # Testable: this file only DEFINES functions, so `TIERS_LIB_ONLY=1 source` (or a
 # plain source) loads them without running any tier.
 # shellcheck shell=bash
+
+# ── Platform predicate + launchd helpers (Darwin) ─────────────────────────────
+_is_darwin() { [ "$(uname -s)" = "Darwin" ]; }
+
+# _launchd_write <label> <plist-body-fragment>: emit a LaunchAgent plist and
+# (re)load it. `bootout` before `bootstrap` because bootstrap refuses a label
+# that is already loaded, which would make every re-run a no-op after the first.
+# Returns non-zero if the load fails, so callers can warn.
+_launchd_write() {
+  local label="$1" body="$2"
+  local dir="$HOME/Library/LaunchAgents" plist
+  plist="$dir/${label}.plist"
+  mkdir -p "$dir"
+  {
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n'
+    printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    printf '<plist version="1.0">\n<dict>\n'
+    printf '  <key>Label</key><string>%s</string>\n' "$label"
+    printf '%s' "$body"
+    printf '</dict>\n</plist>\n'
+  } > "$plist"
+  launchctl bootout "gui/$(id -u)/${label}" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$plist" >/dev/null 2>&1
+}
+
+# _launchd_args <cmd…>: the <ProgramArguments> array fragment.
+_launchd_args() {
+  local a
+  printf '  <key>ProgramArguments</key>\n  <array>\n'
+  for a in "$@"; do printf '    <string>%s</string>\n' "$a"; done
+  printf '  </array>\n'
+}
+
+# _launchd_periodic <label> <interval-seconds> <cmd…> — a timer equivalent.
+# RunAtLoad is deliberately false: these fire on an interval, and running every
+# one of them the instant provisioning finishes would stack a full fetch sweep
+# on top of the install. StartInterval alone schedules the first run one
+# interval out, which matches the systemd OnBootSec=2min shape closely enough.
+_launchd_periodic() {
+  local label="$1" interval="$2"; shift 2
+  _launchd_write "$label" "$(
+    _launchd_args "$@"
+    printf '  <key>StartInterval</key><integer>%s</integer>\n' "$interval"
+    printf '  <key>ProcessType</key><string>Background</string>\n'
+  )"
+}
+
+# _launchd_service <label> <cmd…> — a long-running service equivalent
+# (systemd Type=simple + Restart=on-failure). KeepAlive/SuccessfulExit=false
+# restarts on a crash but not after a clean exit, which is what on-failure means.
+_launchd_service() {
+  local label="$1"; shift
+  _launchd_write "$label" "$(
+    _launchd_args "$@"
+    printf '  <key>RunAtLoad</key><true/>\n'
+    printf '  <key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key><false/>\n  </dict>\n'
+  )"
+}
 
 # ── CORE 1: base apt packages ─────────────────────────────────────────────────
 # Requires root. When none is reachable non-interactively (PRIV=0, e.g. a
@@ -126,6 +201,70 @@ tier_apt_dev() {
   return 0
 }
 
+# ── CORE 1 (darwin): base Homebrew packages ───────────────────────────────────
+# The macOS counterpart of tier_apt_min. No sudo anywhere: Homebrew owns its own
+# prefix (/opt/homebrew on Apple Silicon) and refuses to run under sudo, so the
+# PRIV/SUDO dance that tier_apt_min needs has no analogue here.
+#
+# `brew install` on an already-installed formula exits non-zero with "already
+# installed" on some versions, so each package is probed with `brew list` first
+# — otherwise a re-run of an idempotent script would abort the CORE tier.
+tier_brew_min() {
+  have brew || die "Homebrew not found — install it first: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+  info "Installing base packages (brew)…"
+  # git/curl ship with macOS but are old (git 2.39-era, curl without HTTP/3);
+  # brew's are the ones the rest of the fleet's tooling expects. python3 is NOT
+  # preinstalled on macOS 12.3+ (Apple removed it), and agents/bootstrap.sh
+  # needs it — so it is CORE here exactly as on Debian.
+  local p
+  for p in git curl wget xz unzip python3 jq; do
+    if brew list --formula "$p" >/dev/null 2>&1; then
+      ok "$p already installed"
+    else
+      brew install "$p" >/dev/null 2>&1 || die "brew install $p failed"
+      ok "$p"
+    fi
+  done
+  ok "base packages installed"
+}
+
+# ── BEST-EFFORT (darwin): the dev Homebrew layer + shell niceties ─────────────
+# The macOS counterpart of tier_apt_dev. Two deliberate differences from the
+# Debian body:
+#   • NO fdfind/batcat aliasing. Debian renames those binaries to dodge package
+#     conflicts; Homebrew installs `fd` and `bat` under their real names, so the
+#     ~/.local/bin symlinks tier_apt_dev creates would be redundant at best and
+#     would shadow the real binary with a stale link at worst.
+#   • starship/uv come from brew rather than their curl installers — same
+#     binaries, but brew can then upgrade them with everything else.
+tier_brew_dev() {
+  have brew || { warn "Homebrew not found — skipping the dev brew layer"; return 0; }
+  info "Installing dev packages (brew)…"
+  local p
+  for p in ripgrep fd fzf fish direnv git-delta bat starship uv gh; do
+    if brew list --formula "$p" >/dev/null 2>&1; then
+      ok "$p already installed"
+    elif brew install "$p" >/dev/null 2>&1; then
+      ok "$p"
+    else
+      warn "brew formula '$p' failed — skipping"
+    fi
+  done
+
+  # delta: wire it into git only if it actually installed. Identical to the
+  # Debian body — the formula is `git-delta`, the binary is `delta`.
+  if have delta; then
+    git config --global core.pager delta
+    git config --global interactive.diffFilter 'delta --color-only'
+    git config --global delta.navigate true
+    git config --global delta.line-numbers true
+  fi
+
+  # gh credential helper for HTTPS remotes (SSH remotes don't need it).
+  have gh && git config --global --replace-all credential."https://github.com".helper '!gh auth git-credential'
+  return 0
+}
+
 # ── CORE 2: agent config (Claude + Codex) — the crown jewels ──────────────────
 # agents/bootstrap.sh symlinks the version-controlled config into ~/.claude and
 # ~/.codex. It only needs git + python3 (both installed above) and has no
@@ -167,6 +306,20 @@ tier_hermes_dashboard() {
 AUTHMSG
   fi
 
+  # SCHEDULED tier — Darwin branch. The systemd unit is a managed copy from the
+  # repo; launchd cannot read it, so the plist is synthesised from the same
+  # ExecStart line (hermes/hermes-serve.service). Keep the two in step: if that
+  # unit's ExecStart changes, change this argv too.
+  if _is_darwin; then
+    if _launchd_service kz.cyphy.hermes-serve \
+         "$HOME/.local/bin/hermes" serve --host 0.0.0.0 --port 9119 --skip-build --no-open; then
+      ok "hermes-serve LaunchAgent installed → 0.0.0.0:9119"
+    else
+      warn "hermes-serve LaunchAgent failed to load — check: launchctl print gui/$(id -u)/kz.cyphy.hermes-serve"
+    fi
+    return
+  fi
+
   if ! systemctl --user show-environment >/dev/null 2>&1; then
     warn "systemd user manager not available — skipping hermes dashboard service"
     return
@@ -202,13 +355,29 @@ tier_git_base() {
 
 # ── BEST-EFFORT: gortex code-intelligence daemon binary ───────────────────────
 # Version is read from pkgs/gortex.nix so the disposable box stays pinned to the
-# same release as the Nix fleet.
+# same release as the Nix fleet. Note pkgs/gortex.nix declares
+# `platforms = ["x86_64-linux"]` and pins the linux_amd64 tarball's hash — that
+# derivation is for the Nix hosts. Only the VERSION is shared; the asset name is
+# resolved per platform here, because the upstream release also ships
+# darwin_arm64 and darwin_amd64 builds that the Nix expression never references.
+_gortex_asset() {
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64|Linux-amd64)   echo gortex_linux_amd64 ;;
+    Darwin-arm64|Darwin-aarch64) echo gortex_darwin_arm64 ;;
+    Darwin-x86_64)              echo gortex_darwin_amd64 ;;
+    *)                          return 1 ;;
+  esac
+}
+
 tier_gortex() {
   info "Installing gortex…"
   GVER="$(grep -oE 'version = "[0-9]+\.[0-9]+\.[0-9]+"' "$REPO/pkgs/gortex.nix" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+  local asset
   if [ -z "$GVER" ]; then
     warn "couldn't parse gortex version from pkgs/gortex.nix — skipping gortex"
-  elif curl -fsSL "https://github.com/zzet/gortex/releases/download/v${GVER}/gortex_linux_amd64.tar.gz" \
+  elif ! asset="$(_gortex_asset)"; then
+    warn "no gortex release asset for $(uname -s)/$(uname -m) — skipping gortex"
+  elif curl -fsSL "https://github.com/zzet/gortex/releases/download/v${GVER}/${asset}.tar.gz" \
          | tar -xz -C "$HOME/.local/bin" gortex 2>/dev/null; then
     chmod +x "$HOME/.local/bin/gortex"
     ok "gortex ${GVER} → ~/.local/bin/gortex"
@@ -294,6 +463,18 @@ AUTOFETCH
   ok "git-autofetch → ~/.local/bin/git-autofetch"
 
   _scheduled=""
+  # SCHEDULED tier — Darwin branch. No systemd; per-user cron on macOS needs the
+  # cron binary granted Full Disk Access in System Settings, which is not
+  # scriptable, so launchd is the only install that works unattended.
+  if _is_darwin; then
+    if _launchd_periodic kz.cyphy.git-autofetch 600 "$AF"; then
+      ok "git-autofetch scheduled — launchd LaunchAgent (every ~10 min)"
+    else
+      warn "git-autofetch installed but launchctl bootstrap failed — run ~/.local/bin/git-autofetch manually"
+    fi
+    return 0
+  fi
+
   # Preferred: a systemd *user* timer. `show-environment` fails cleanly on a WSL
   # distro without systemd ("System has not been booted with systemd"), so it
   # doubles as the availability probe.
@@ -375,7 +556,9 @@ tier_ssh_accounts() {
       if [ -e "$_key" ]; then
         ok "key ~/.ssh/id_${_user} exists"
       else
-        if ssh-keygen -t ed25519 -f "$_key" -C "${_user}@$(uname -n)-wsl" -N "" >/dev/null 2>&1; then
+        # Key comment identifies the box. Was hardcoded "-wsl"; this tier now
+        # also runs on macOS, where that label would be a lie.
+        if ssh-keygen -t ed25519 -f "$_key" -C "${_user}@$(uname -n)" -N "" >/dev/null 2>&1; then
           ok "generated ~/.ssh/id_${_user}"
           _need_register="${_need_register} ${_user}"
         else
@@ -464,6 +647,31 @@ EOF
     ok "updated ~/.bashrc"
   fi
 
+  # macOS has defaulted to zsh since Catalina, and a login shell there never
+  # reads ~/.bashrc — without this the Mac would get ~/.local/bin off PATH, no
+  # starship, and no direnv, while the tier still reported success. Seeded in
+  # ADDITION to ~/.bashrc, not instead of it: `bash -lc` still happens (agent
+  # sessions, fd_run over ssh), and both files are guarded by the same marker.
+  if _is_darwin; then
+    ZSHRC="$HOME/.zshrc"
+    if ! grep -q 'machines-bootstrap' "$ZSHRC" 2>/dev/null; then
+      cat >> "$ZSHRC" <<'EOF'
+
+# ── machines-bootstrap ──────────────────────────────────────────────
+export PATH="$HOME/.local/bin:$PATH"
+# Homebrew's prefix differs by arch (/opt/homebrew on Apple Silicon,
+# /usr/local on Intel) — let brew itself say which.
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+command -v direnv   >/dev/null 2>&1 && eval "$(direnv hook zsh)"
+alias cc='claude'
+alias ll='ls -alF'
+# ────────────────────────────────────────────────────────────────────
+EOF
+      ok "updated ~/.zshrc"
+    fi
+  fi
+
   # Minimal fish config (only if fish installed) — deliberately lean, not a copy
   # of modules/home/me.nix's full fish setup.
   if [ "$want_fish" -eq 1 ] && have fish; then
@@ -506,6 +714,22 @@ tier_selfpull() {
   FSP="$REPO/provision/fleet-selfpull.sh"
   if [ ! -f "$FSP" ]; then
     warn "provision/fleet-selfpull.sh not found — skipping fleet self-pull timer"
+  elif _is_darwin; then
+    # SCHEDULED tier — Darwin branch. FLEET_ROOTS rides in as an `env` prefix in
+    # ProgramArguments rather than an EnvironmentVariables dict, so the empty
+    # (unpinned) case needs no separate plist shape. launchd has no
+    # RandomizedDelaySec, and no KillMode problem either: it does not put the
+    # job in a cgroup, so the detached converge the post-merge hook spawns
+    # simply outlives this job — which is the behaviour KillMode=process buys
+    # on the systemd side.
+    if [ -n "$roots" ]; then
+      _launchd_periodic kz.cyphy.fleet-selfpull 600 \
+        /usr/bin/env "FLEET_ROOTS=$roots" bash "$FSP"
+    else
+      _launchd_periodic kz.cyphy.fleet-selfpull 600 /usr/bin/env bash "$FSP"
+    fi \
+      && ok "fleet-selfpull LaunchAgent installed" \
+      || warn "could not load the fleet-selfpull LaunchAgent"
   elif systemctl --user show-environment >/dev/null 2>&1; then
     _ud2="$HOME/.config/systemd/user"; mkdir -p "$_ud2"
     {
