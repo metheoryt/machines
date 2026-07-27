@@ -683,3 +683,29 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   divergence** (`exit 1`, shows in `systemctl --failed`). So after committing on
   latitude: push promptly and leave the tree clean, or the box quietly stops
   syncing with the rest of the fleet.
+- **One auto-pull mechanism fleet-wide now** (`9b8d63c`). `nix-repo-auto-pull` /
+  `modules/system/self-update.nix` is **deleted**; NixOS runs the same
+  `provision/fleet-selfpull.sh` as every other member, via
+  `modules/system/fleet-selfpull.nix` (`services.fleetSelfpull`). latitude
+  therefore keeps `~/my/vps` fresh too, which the old single-repo puller never
+  did. Converge is unaffected — `machines-converge.path` watches
+  `.git/logs/HEAD`, so it fires for whoever moved HEAD.
+- **`fleet-selfpull.sh` had the same silent-failure bug** that
+  `nix-repo-auto-pull` did, and it had to be fixed before NixOS could adopt it:
+  it **always exited 0**, and reported *every* pull failure as `SKIP diverged`,
+  filing an auth failure as a branch-topology fact. Now fetch and merge are
+  split so the two are distinguishable, a real error exits non-zero, the
+  deliberate skips (`not-main` / `dirty` / `diverged`) stay clean, and the fetch
+  retries once. Guard: `provision/fleet-selfpull.test.sh`, 18 assertions.
+- **Two timers fetch the same repos — keep their `OnCalendar` off a shared
+  boundary.** `fleet-selfpull` is `*:03/10` (:03/:13/:23) precisely so it never
+  lands on `git-autofetch`'s `*:0/10` (:00/:10/:20). Sharing that boundary made
+  concurrent fetches collide on `refs/remotes/origin/main` and the loser fail.
+  If you ever retune either interval, re-check the offset.
+- **NixOS's auto-pull script is no longer immutable, and that is a real
+  tradeoff.** The old inline script was baked into `/nix/store`, frozen in the
+  running generation until a rebuild, so a bad commit could not brick it. The
+  shared script is read from the **working tree**, so a bad commit to
+  `fleet-selfpull.sh` breaks self-updating on **every box at once**. Accepted
+  deliberately as the cost of running one implementation; treat that test file
+  as load-bearing, not decorative.
