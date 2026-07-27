@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **The G15 is the only copy of some data until Task 15 passes.** No wipe, no sale, no reformat of any drive before the restore verification in Task 15 succeeds.
-- **latitude keeps WireGuard address `10.0.0.2`.** Reusing the homeserver's tunnel IP means `vps/caddy/Caddyfile` reverse-proxy targets need no change. Only the l4 SSH upstream port changes (Task 9).
+- **latitude keeps WireGuard address `10.0.0.2`.** Reusing the homeserver's tunnel IP means `vps/caddy/Caddyfile` needs **no changes whatsoever** — every `reverse_proxy` target and the l4 block stay as they are. The l4 `:2222` block is Forgejo's git-over-SSH, not host shell access; never repoint it at port 22 (see Task 9 Step 5).
 - **Immich container-side paths must not change.** The compose file bind-mounts `${LOCATION_<year>}:/data/library/admin/<year>`. Host paths change; container paths stay identical, so the Immich DB needs no path rewrite and no re-import.
 - **Mount every external drive by UUID**, never by `/dev/sdX`. Five USB block devices across two docks have no stable enumeration order.
 - **NTFS stays NTFS for this migration.** Converting 1.35 TB of media to ext4 is a separate follow-up project (Task 19), not part of the cutover. Only PostgreSQL and Docker's own storage move to ext4 on latitude's internal NVMe.
@@ -621,7 +621,7 @@ git commit -m "feat(homeserver): port paths and hwaccel from Windows/CUDA to Lin
 - Modify: `backup/homeserver/profiles.yaml`
 - Create: `backup/homeserver/install-timers.sh` (systemd replacement for `install-tasks.bat`)
 - Delete: `backup/homeserver/install-tasks.bat` (only after the systemd path is verified in Task 15)
-- Modify: `vps/caddy/Caddyfile:6`
+- **Do not modify:** `vps/caddy/Caddyfile` — verified unchanged in Step 5
 
 **Interfaces:**
 - Consumes: the path table from Task 8 Step 1.
@@ -649,20 +649,34 @@ systemctl --user list-timers 'resticprofile*'
 
 Expected: one timer per profile, `NEXT` populated. Note `schedule-permission: user` in `base.yaml` means user timers, so `loginctl enable-linger me` is required or the timers stop when you log out.
 
-- [ ] **Step 5: Fix the Caddy SSH upstream port**
+- [ ] **Step 5: Leave the Caddyfile alone — verify, do not edit**
 
-`vps/caddy/Caddyfile:6` forwards public `:2222` to `upstream 10.0.0.2:2222`, but latitude's sshd listens on **22** (`modules/system/ssh-server.nix:34` opens port 22 on `tailscale0`, plus LAN `192.168.8.0/24`). Change the upstream:
+`vps/caddy/Caddyfile` needs **no changes at all**, because latitude keeps the `10.0.0.2` tunnel address.
 
+In particular, do **not** repoint the l4 block at port 22. Public `:2222` → `10.0.0.2:2222` is **Forgejo's git-over-SSH**, not host shell access:
+
+```yaml
+# homeserver/forgejo/compose.yml
+      - "0.0.0.0:2222:22"          # container sshd published on host 2222
+      - FORGEJO__server__SSH_PORT=2222
 ```
-                    upstream 10.0.0.2:22
+
+`vps/CLAUDE.md:90` documents it: *"`git.cyphy.kz` | 3000/2222 | Forgejo (git hosting; SSH on port 2222)"*. Repointing it would break `git clone ssh://git@git.cyphy.kz:2222/…` **and** publish latitude's host sshd to the open internet — `modules/system/ssh-server.nix:34` deliberately restricts port 22 to `tailscale0` and the `192.168.8.0/24` LAN.
+
+Confirm all seven routes still target `10.0.0.2` and move on:
+
+```bash
+grep -n "10.0.0.2" vps/caddy/Caddyfile
 ```
 
-The `reverse_proxy 10.0.0.2:<port>` lines for Immich (2283), Navidrome (4533), LibreSpeed (2282), qBittorrent (8084), Tugtainer (9412), and Forgejo (3000) all stay exactly as they are, because latitude keeps the `10.0.0.2` tunnel address.
+Expected: l4 upstream `:2222` (Forgejo SSH), plus `reverse_proxy` to 3000 (Forgejo web), 2283 (Immich), 2282 (LibreSpeed), 8084 (qBittorrent), 4533 (Navidrome), 9412 (Tugtainer).
+
+One thing to watch on latitude: Docker publishes `0.0.0.0:2222`, and Docker's port publishing inserts its own iptables rules that bypass the NixOS firewall. That is required for the tunnel to reach it, but it also means Forgejo's SSH is reachable from the LAN — same as on the G15 today, so no regression, just be aware it is not firewalled by `ssh-server.nix`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backup/ vps/caddy/Caddyfile
+git add backup/
 git commit -m "feat(backup): port homeserver profiles to Linux paths and systemd timers"
 ```
 
@@ -997,11 +1011,9 @@ ping -c2 10.0.0.1
 
 Expected: handshake present, VPS reachable.
 
-- [ ] **Step 4: Deploy the Caddyfile change from Task 9 Step 5**
+- [ ] **Step 4: No Caddy redeploy needed**
 
-```bash
-ssh hub 'cd /path/to/vps/vps && sudo bash deploy-caddy.sh'
-```
+The Caddyfile is unchanged (Task 9 Step 5). Caddy keeps proxying to `10.0.0.2`; only the machine answering at that address changed. Skip `deploy-caddy.sh` unless you edited the file for some other reason.
 
 - [ ] **Step 5: Verify every public route end-to-end**
 
@@ -1014,9 +1026,10 @@ From outside the tailnet (phone on mobile data is the honest test):
 | `https://speed.cyphy.kz` | LibreSpeed runs |
 | `https://tug.cyphy.kz` | Tugtainer |
 | `https://qb.cyphy.kz` | qBittorrent |
-| `ssh -p 2222 <user>@cyphy.kz` | lands on latitude |
+| `https://git.cyphy.kz` | Forgejo web |
+| `git ls-remote ssh://git@git.cyphy.kz:2222/<user>/<repo>.git` | refs listed |
 
-The SSH one is the check for the port fix in Task 9 Step 5.
+The last one is the real check on the l4 block — it exercises Forgejo's git-over-SSH through the tunnel. It must **not** land on a latitude shell prompt; if it does, the l4 upstream was wrongly repointed at port 22.
 
 ---
 
