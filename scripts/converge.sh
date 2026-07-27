@@ -57,8 +57,11 @@ changed_paths() {
 # renders every ~/.ssh/config host block from it). Without it, adding a fleet
 # member never reaches a NixOS host: converge finds no .nix change, writes ok,
 # and advances converged-rev — a permanent silent skip.
+# provision/fleet-authorized-keys is the same case: it is the literal path in
+# modules/system/ssh-server.nix's openssh.authorizedKeys.keyFiles, so enrolling a
+# new member's key only takes effect after a rebuild.
 touches_nix() {
-  changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$|^fleet\.json$)'
+  changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$|^fleet\.json$|^provision/fleet-authorized-keys$)'
 }
 
 # touches_linux <low> <high>: 0 if any provisioning-relevant path changed in
@@ -69,8 +72,11 @@ touches_nix() {
 # provision/lib/tiers.sh and the profile resolution in provision/lib/fleet.sh, so
 # both count too — otherwise a tiers-only pull matches nothing, converge writes
 # ok, advances converged-rev, and the change is never applied on any linux box.
+# provision/fleet-authorized-keys counts as well: tier_fleet_ssh merges it into
+# ~/.ssh/authorized_keys, so a key-only pull must reprovision or the box never
+# accepts the newly-enrolled member.
 touches_linux() {
-  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/lib/tiers\.sh$|^provision/lib/fleet\.sh$|^provision/fleet-selfpull\.sh$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
+  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/lib/tiers\.sh$|^provision/lib/fleet\.sh$|^provision/fleet-selfpull\.sh$|^provision/fleet-authorized-keys$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
 }
 
 # write_status <rev> <ok|fail> <reason>: record outcome; advance converged-rev
