@@ -78,7 +78,17 @@ in {
           echo "working tree dirty — skipping auto-pull"; exit 0
         fi
 
-        git fetch --quiet || exit 0
+        # A failed fetch is an ERROR, not a no-op. This used to `exit 0`, so an
+        # unusable credential looked identical to "already up to date": the unit
+        # logged `Permission denied (publickey)` and systemd still reported
+        # "Finished successfully". latitude sat 23 commits behind for hours that
+        # way, invisible to `systemctl status` — the only trace was journalctl.
+        # Exiting non-zero surfaces it in `systemctl --failed`; a transient
+        # network blip self-heals on the next timer fire.
+        if ! git fetch --quiet; then
+          echo "fetch failed — cannot reach the remote (credential or network)" >&2
+          exit 1
+        fi
         git rev-parse '@{u}' >/dev/null 2>&1 || { echo "no upstream for ${branch} — skipping"; exit 0; }
 
         head_rev=$(git rev-parse HEAD)
