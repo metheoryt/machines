@@ -67,7 +67,7 @@ Expected: `lsblk` shows exactly one NVMe (`nvme0n1`, 476.9G). If `dmidecode` rep
 
 - [ ] **Step 2: Decide whether to buy a 2 TB staging/off-site drive**
 
-Recommended: yes. It removes the only genuinely risky step in this plan (the free-space shuffle in Task 12's fallback) and it becomes the off-site copy that closes the gap in Task 2. Without it, both the live library and its only backups end up in one chassis on latitude.
+Recommended: yes. It removes the only genuinely risky step in this whole programme (the free-space shuffle in Task 19) and it becomes a second off-site copy on top of the one set aside in Task 2. Without it, both the live library and its only backups end up in one chassis on latitude.
 
 - [ ] **Step 3: Record both decisions**
 
@@ -116,7 +116,11 @@ Expected: `no errors were found`.
 
 Label it, note the date and the last snapshot ID, and store it somewhere that is not the same room. It does **not** travel to latitude in Task 11. Plan to rotate it back in quarterly.
 
-- [ ] **Step 4: No commit** — physical/operational step. Note the outcome in the migration log you started in Task 1.
+- [ ] **Step 4: Record the gap this does *not* close**
+
+Setting `H:` aside protects the years archive (`E:`). It does **not** protect the live upload tier on the Kingston, whose only backup repo is `G:` — and after Task 11 both the Kingston and `G:` sit in the same room on latitude. That is still strictly better than today (where all five volumes share one chassis), but it is not full closure. Full closure is the 2 TB drive from Task 1 Step 2, or the ext4/rotation work in Task 19. Write the residual gap in the migration log so it does not quietly become permanent.
+
+- [ ] **Step 5: No commit** — physical/operational step. Note the outcome in the migration log you started in Task 1.
 
 ---
 
@@ -457,8 +461,10 @@ The battery is now effectively a small UPS. Lower the charge ceiling from 85:
 
 ```nix
   # The relocated homeserver drives stay NTFS for this migration (see Task 11).
-  boot.supportedFilesystems = ["ntfs"];
+  boot.supportedFilesystems.ntfs = true;
 ```
+
+On 25.05 this option takes the attrset form. If the dry-build in Step 7 rejects it, the list form (`boot.supportedFilesystems = ["ntfs"];`) is the older spelling — use whichever the evaluator accepts.
 
 - [ ] **Step 5: Confirm Docker is on**
 
@@ -521,21 +527,24 @@ git commit -m "feat(latitude): reshape as headless always-on services host"
 
 | Old (Windows) | New (Linux) | Backing |
 |---|---|---|
-| `D:\ImmichMedia\library` | `/srv/immich/library` | Kingston NVMe (enclosure), NTFS |
-| `D:\ImmichMedia\postgres` | `/var/lib/immich/postgres` | **latitude internal NVMe, ext4** |
-| `D:\ImmichMedia\library\backups` | `/srv/immich/library/backups` | Kingston NVMe, NTFS |
+| `D:\ImmichMedia\library` | `/srv/immich/ImmichMedia/library` | Kingston NVMe (enclosure), NTFS |
+| `D:\ImmichMedia\postgres` | *(not reused — see below)* | **latitude internal NVMe, ext4** |
+| `D:\ImmichMedia\library\backups` | `/srv/immich/ImmichMedia/library/backups` | Kingston NVMe, NTFS |
+| *(new)* | `/var/lib/immich/postgres` | **latitude internal NVMe, ext4** |
 | `E:\admin\<year>` | `/srv/immich-years/admin/<year>` | WD10 dock bay, NTFS |
 | `G:\backup-homeserver\...` | `/srv/backup-1/backup-homeserver/...` | ST1000LM024 dock bay, NTFS |
 | `F:\...` (`qb`, `restic-repos`, `secrets`) | `/srv/public/...` | ST320LT020 dock bay, NTFS |
 | `H:\backup-homeserver\...` | *(off-site, not mounted)* | HGST, set aside in Task 2 |
+
+**Every mount point is a volume root, and the volume's own top-level directory is preserved.** The Kingston mounts at `/srv/immich`, so `D:\ImmichMedia\library` becomes `/srv/immich/**ImmichMedia**/library` — the `ImmichMedia` level does not disappear. Same rule for the others: `E:\admin\2019` → `/srv/immich-years/admin/2019`, `G:\backup-homeserver\…` → `/srv/backup-1/backup-homeserver/…`, `F:\qb` → `/srv/public/qb`. Getting this wrong is silent: Docker creates a missing bind-mount source as an empty directory, Immich comes up with zero assets, and it looks like a database problem.
 
 Postgres on the internal ext4 NVMe is not optional — a database on an NTFS-over-USB HDD would make Immich miserable, and it is the one dataset small enough (tens of GB) to fit latitude's 329 G free.
 
 - [ ] **Step 2: Rewrite `homeserver/immich/.env.dist`**
 
 ```ini
-UPLOAD_LOCATION=/srv/immich/library
-DB_BACKUPS_LOCATION=/srv/immich/library/backups
+UPLOAD_LOCATION=/srv/immich/ImmichMedia/library
+DB_BACKUPS_LOCATION=/srv/immich/ImmichMedia/library/backups
 DB_DATA_LOCATION=/var/lib/immich/postgres
 
 LOCATION_1970=/srv/immich-years/admin/1970
@@ -663,7 +672,30 @@ git commit -m "feat(backup): port homeserver profiles to Linux paths and systemd
 
 ### Task 10: Quiesce the G15 and take the final backup `[remote-box]`
 
-- [ ] **Step 1: Stop every service cleanly**
+- [ ] **Step 1: Record the Immich asset count — while the database is still up**
+
+Task 12 Step 5 and the sale gate in Task 16 both compare against this number. There is no way to recover it after shutdown.
+
+```powershell
+docker exec -t immich_postgres psql -U postgres -d immich -c "select count(*) from assets;"
+```
+
+Write the number in the migration log.
+
+- [ ] **Step 2: Export the Docker named volumes — while Docker is still running**
+
+`forgejo_data`, `tugtainer_data`, `pgdata` (telegrind), and `redis_data` (embedthat) live inside Docker's storage on `C:`. They do **not** travel on any of the drives you are moving. Export them now; the import happens in Task 13 Step 4.
+
+```powershell
+foreach ($v in @("forgejo_data","tugtainer_data","pgdata","redis_data")) {
+  docker run --rm -v "${v}:/from" -v "F:\volume-export:/to" alpine tar cf "/to/$v.tar" -C /from .
+}
+dir F:\volume-export
+```
+
+Expected: four non-empty `.tar` files. `F:` travels to latitude, so they come with it.
+
+- [ ] **Step 3: Stop every service cleanly**
 
 ```powershell
 docker compose -f homeserver\immich\compose.yml down
@@ -673,7 +705,7 @@ docker ps
 
 Expected: no running containers.
 
-- [ ] **Step 2: Dump the Immich database**
+- [ ] **Step 4: Dump the Immich database**
 
 Do **not** copy the PostgreSQL data directory across operating systems. Dump it — this is also what the existing `immich-postgres` restic profile does.
 
@@ -685,7 +717,7 @@ docker compose -f homeserver\immich\compose.yml down
 
 Verify the dump is non-trivial in size and ends with `-- PostgreSQL database cluster dump complete`.
 
-- [ ] **Step 3: Run a final backup of everything**
+- [ ] **Step 5: Run a final backup of everything**
 
 ```powershell
 resticprofile --name immich-media backup
@@ -694,7 +726,7 @@ resticprofile --name immich-postgres backup
 
 Expected: `snapshot <id> saved` for each. Record the snapshot IDs in the migration log.
 
-- [ ] **Step 4: Disable Windows fast startup and shut down fully**
+- [ ] **Step 6: Disable Windows fast startup and shut down fully**
 
 This matters. Fast startup leaves NTFS volumes flagged dirty, and Linux will refuse to mount them read-write.
 
@@ -785,28 +817,45 @@ Add to `hosts/latitude/nixos/configuration.nix`:
 
 `uid=1000`/`gid=100` is user `me` — confirm with `id me` and adjust if it differs.
 
-- [ ] **Step 7: Apply and verify**
+- [ ] **Step 7: Order Docker after the mounts**
+
+`nofail` is right for boot, but it means a slow dock enumeration can let `docker.service` start first. `virtualisation.docker` auto-starts, Immich bind-mounts directories that do not exist yet, Docker creates them empty, and Immich comes up with zero assets — and new uploads land on the root filesystem instead of the Kingston. Add:
+
+```nix
+  # Never let Docker start before the media volumes are mounted — an early
+  # start silently bind-mounts empty directories and writes uploads to /.
+  systemd.services.docker.unitConfig.RequiresMountsFor = [
+    "/srv/immich"
+    "/srv/immich-years"
+    "/srv/backup-1"
+    "/srv/public"
+  ];
+```
+
+- [ ] **Step 8: Apply and verify**
 
 ```bash
 sudo nixos-rebuild switch --flake .#latitude
 findmnt /srv/immich /srv/immich-years /srv/backup-1 /srv/public
-ls /srv/immich/library | head
+ls /srv/immich/ImmichMedia/library | head
 ls /srv/immich-years/admin | head -25
 ```
 
-Expected: four mounts present; the library directory and 19 year directories visible. If a mount fails with "volume is dirty", go back to Task 10 Step 4 — the G15 did not shut down fully. Recover with `sudo ntfsfix /dev/sdX` (and re-do the clean shutdown if the G15 is still available).
+Expected: four mounts present; the library directory and 19 year directories visible. If `ls /srv/immich/ImmichMedia/library` is empty or missing, stop — the mount-point arithmetic is wrong, and nothing downstream will work. If a mount fails with "volume is dirty", go back to Task 10 Step 6 — the G15 did not shut down fully. Recover with `sudo ntfsfix /dev/sdX` (and re-do the clean shutdown if the G15 is still available).
 
-- [ ] **Step 8: Reboot and confirm the mounts survive re-enumeration**
+- [ ] **Step 9: Reboot and confirm the mounts survive re-enumeration**
 
 ```bash
 sudo reboot
 # then, after it comes back:
 findmnt /srv/immich /srv/immich-years /srv/backup-1 /srv/public
+ls /srv/immich/ImmichMedia/library | head
+systemctl show docker -p After | tr ' ' '\n' | grep srv
 ```
 
-Expected: all four mounted, from the same UUIDs, regardless of `/dev/sdX` assignment.
+Expected: all four mounted from the same UUIDs regardless of `/dev/sdX` assignment, the library still visible, and Docker ordered after the four `.mount` units. Once Task 13 has run, repeat this reboot and assert **Immich still reports its full asset count** — that, not `findmnt`, is the real proof the ordering guard works.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add hosts/latitude/nixos/configuration.nix
@@ -887,9 +936,20 @@ docker compose logs immich-machine-learning | grep -i "openvino\|provider\|devic
 
 Expected: OpenVINO execution provider, not a CPU fallback. A CPU fallback works but will be very slow on Tiger Lake.
 
-- [ ] **Step 4: Migrate the named-volume services**
+- [ ] **Step 4: Import the named volumes exported in Task 10 Step 2**
 
-`forgejo` (`forgejo_data`), `tugtainer` (`tugtainer_data`), `telegrind` (`pgdata`), `embedthat` (`redis_data`) keep their data in Docker named volumes, which live inside Docker's storage and did **not** come across on the drives. For each: export from the G15 before wipe (`docker run --rm -v <vol>:/from -v $PWD:/to alpine tar cf /to/<vol>.tar -C /from .`), copy over, and import on latitude with the inverse. Do this **before** Task 16.
+The four tarballs are at `/srv/public/volume-export/` (they rode over on `F:`). Import each:
+
+```bash
+for v in forgejo_data tugtainer_data pgdata redis_data; do
+  docker volume create "$v"
+  docker run --rm -v "$v:/to" -v /srv/public/volume-export:/from alpine \
+    tar xf "/from/$v.tar" -C /to
+done
+docker volume ls
+```
+
+Expected: four volumes present and non-empty (`docker run --rm -v forgejo_data:/d alpine ls /d`). If the tarballs are missing, the G15 must still be intact to re-export — another reason Task 16 is gated.
 
 - [ ] **Step 5: Start the rest**
 
