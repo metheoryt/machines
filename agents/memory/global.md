@@ -21,8 +21,18 @@ elsewhere to sync. Do NOT put secrets here.
 
 ## GitHub accounts (two, simultaneous — no switching)
 
-- **The clone URL picks the account.** Aliases are wired by `tier_ssh_accounts`
-  (`machines/provision/lib/tiers.sh`), all with `HostName github.com` +
+- **The convention is NOT fleet-wide — there are three implementations.**
+  (1) POSIX tier boxes (`air`, the WSL distros, `hub`): `tier_ssh_accounts` wires
+  the aliases + identities described below. (2) **Windows** (`desktop`, `server`):
+  hand-typed `githubcyphy`, written by nothing and reached by no rename.
+  (3) **NixOS** (`latitude`): **no GitHub block at all** — `modules/home/ssh.nix`
+  renders only *fleet* hosts, so GitHub auth falls back to default identity-file
+  resolution (`~/.ssh/id_ed25519`) and there is no per-account alias or identity.
+  Fine while latitude has no cyphy671 repos; it would silently offer the wrong
+  key if it ever did. Don't assume an alias exists on a box without checking.
+- **The clone URL picks the account.** On tier boxes the aliases are wired by
+  `tier_ssh_accounts` (`machines/provision/lib/tiers.sh`), all with
+  `HostName github.com` +
   `IdentitiesOnly yes` so account resolution is deterministic:
   `github.com` and `metheoryt.github.com` → `~/.ssh/id_metheoryt`;
   `cyphy671.github.com` → `~/.ssh/id_cyphy671`. **`github.com` must never be
