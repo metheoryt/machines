@@ -8,12 +8,14 @@
 
 **Architecture:** Three surviving fleet members plus the VPS. `air` (MacBook, to-go dev, repos local) → `desktop` (G614JV, gaming + always-on Orca daemon + WSL Ubuntu 26 for amd64 work) → `latitude` (NixOS, always-on Docker services host, takes over `10.0.0.2` behind the VPS Caddy). `hub` (VPS) unchanged. The four 2.5" HDDs live in two externally-powered 2×2 docks that move from the G15 to latitude; the G15's internal Kingston NVMe (live Immich library) moves into a USB/TB3 enclosure.
 
-**Tech Stack:** NixOS 25.05 + flakes + Home Manager, Docker Compose, Headscale/Tailscale (`cc.cyphy.kz`, `gg.ez`), WireGuard/AmneziaWG to the VPS, Caddy (+`caddy-l4`), restic + resticprofile, Immich/Navidrome/Forgejo/qBittorrent/Tugtainer/LibreSpeed.
+**Tech Stack:** NixOS 25.05 + flakes + Home Manager, Docker Compose, Headscale/Tailscale (`cc.cyphy.kz`, `gg.ez`), WireGuard/AmneziaWG to the VPS, Caddy (+`caddy-l4`), restic + resticprofile, Immich/Navidrome/qBittorrent/Tugtainer/LibreSpeed.
 
 ## Global Constraints
 
 - **The G15 is the only copy of some data until Task 15 passes.** No wipe, no sale, no reformat of any drive before the restore verification in Task 15 succeeds.
-- **latitude keeps WireGuard address `10.0.0.2`.** Reusing the homeserver's tunnel IP means `vps/caddy/Caddyfile` needs **no changes whatsoever** — every `reverse_proxy` target and the l4 block stay as they are. The l4 `:2222` block is Forgejo's git-over-SSH, not host shell access; never repoint it at port 22 (see Task 9 Step 5).
+- **latitude keeps WireGuard address `10.0.0.2`.** Reusing the homeserver's tunnel IP means every surviving `reverse_proxy` target in `vps/caddy/Caddyfile` stays byte-identical. The only Caddyfile edits in this plan are **deletions** for the Forgejo retirement (Task 9 Step 5).
+- **Forgejo is retired, not migrated.** Verified 2026-07-27: the container is stopped and `forgejo_data` is 4.0 K with no `git/repositories` directory — it hosts nothing. Both `machines` and `vps` have GitHub (`git@github.com:metheoryt/*`) as `origin`. Nothing anywhere references `git.cyphy.kz` as a remote. Delete it; do not export it.
+- **The l4 `:2222` block is Forgejo's git-over-SSH, not host shell access.** It goes away with Forgejo. If you ever keep it, never repoint it at port 22 — `modules/system/ssh-server.nix:34` restricts host sshd to `tailscale0` + LAN `192.168.8.0/24`, and an internet-facing proxy would defeat that.
 - **Immich container-side paths must not change.** The compose file bind-mounts `${LOCATION_<year>}:/data/library/admin/<year>`. Host paths change; container paths stay identical, so the Immich DB needs no path rewrite and no re-import.
 - **Mount every external drive by UUID**, never by `/dev/sdX`. Five USB block devices across two docks have no stable enumeration order.
 - **NTFS stays NTFS for this migration.** Converting 1.35 TB of media to ext4 is a separate follow-up project (Task 19), not part of the cutover. Only PostgreSQL and Docker's own storage move to ext4 on latitude's internal NVMe.
@@ -41,7 +43,9 @@
 
 **desktop (G614JV):** 64 GB RAM, C: 1862G with 1195G free. Already runs the Orca daemon endpoint the fleet pairs against.
 
-**Services (`vps` repo, `homeserver/`):** `immich`, `navidrome`, `forgejo`, `restic-server`, `tugtainer`, `speedtest`, `beat`, `telegrind`, `embedthat`. Public routes in `vps/caddy/Caddyfile` all point at `10.0.0.2`.
+**Services (`vps` repo, `homeserver/`):** `immich`, `navidrome`, `restic-server`, `tugtainer`, `speedtest`, `beat`, `telegrind`, `embedthat`. Public routes in `vps/caddy/Caddyfile` all point at `10.0.0.2`.
+
+**Retired in this migration:** `forgejo` (empty volume, stopped container, staying on GitHub — see Task 8 Step 0 and Task 9 Step 5).
 
 ---
 
@@ -523,6 +527,19 @@ git commit -m "feat(latitude): reshape as headless always-on services host"
 - Consumes: the mount layout defined here is what Task 11 must create on disk.
 - Produces: the canonical host-path mapping every later task references.
 
+- [ ] **Step 0: Retire Forgejo**
+
+Staying on GitHub. Safe to delete outright — verified 2026-07-27 that the container is stopped, `forgejo_data` is 4.0 K with no repositories, and no config anywhere uses `git.cyphy.kz` as a remote.
+
+```bash
+cd /home/me/my/vps
+git rm -r homeserver/forgejo
+```
+
+Also drop the `git.cyphy.kz` row from the service tables in `README.md` and `CLAUDE.md:90`. The Caddyfile deletions are Task 9 Step 5; the DNS record cleanup is Task 9 Step 6.
+
+If you later change your mind, the compose file is one `git revert` away — but the data is gone either way, because there never was any.
+
 - [ ] **Step 1: Fix the mount layout now, in one place**
 
 | Old (Windows) | New (Linux) | Backing |
@@ -598,7 +615,7 @@ latitude has `intel-compute-runtime` in `hardware.graphics.extraPackages` alread
 
 - [ ] **Step 4: Update the other services' env defaults**
 
-`navidrome/compose.yml:12-13` uses `NAVIDROME_DATA_ABS_PATH` and `NAVIDROME_LIBRARY_ABS_PATH`; `restic-server/compose.yml:8` uses `RESTIC_DATA_PATH`. Point them at `/srv/...` paths consistent with Step 1. `forgejo`, `tugtainer`, `telegrind`, `embedthat` use named Docker volumes only (`forgejo_data`, `tugtainer_data`, `pgdata`, `redis_data`) — those live under `/var/lib/docker` and need no path change, but see Task 13 for migrating their contents.
+`navidrome/compose.yml:12-13` uses `NAVIDROME_DATA_ABS_PATH` and `NAVIDROME_LIBRARY_ABS_PATH`; `restic-server/compose.yml:8` uses `RESTIC_DATA_PATH`. Point them at `/srv/...` paths consistent with Step 1. `tugtainer`, `telegrind`, `embedthat` use named Docker volumes only (`tugtainer_data`, `pgdata`, `redis_data`) — those live under `/var/lib/docker` and need no path change, but see Task 13 for migrating their contents. (`forgejo_data` is not in that list — Forgejo is retired in Step 0.)
 
 - [ ] **Step 5: Update the repo docs**
 
@@ -621,7 +638,7 @@ git commit -m "feat(homeserver): port paths and hwaccel from Windows/CUDA to Lin
 - Modify: `backup/homeserver/profiles.yaml`
 - Create: `backup/homeserver/install-timers.sh` (systemd replacement for `install-tasks.bat`)
 - Delete: `backup/homeserver/install-tasks.bat` (only after the systemd path is verified in Task 15)
-- **Do not modify:** `vps/caddy/Caddyfile` — verified unchanged in Step 5
+- Modify: `vps/caddy/Caddyfile` — deletions only (Forgejo l4 + site blocks)
 
 **Interfaces:**
 - Consumes: the path table from Task 8 Step 1.
@@ -649,35 +666,59 @@ systemctl --user list-timers 'resticprofile*'
 
 Expected: one timer per profile, `NEXT` populated. Note `schedule-permission: user` in `base.yaml` means user timers, so `loginctl enable-linger me` is required or the timers stop when you log out.
 
-- [ ] **Step 5: Leave the Caddyfile alone — verify, do not edit**
+- [ ] **Step 5: Delete the two Forgejo blocks from the Caddyfile**
 
-`vps/caddy/Caddyfile` needs **no changes at all**, because latitude keeps the `10.0.0.2` tunnel address.
+These are the *only* Caddyfile edits in this plan. Every surviving `reverse_proxy` line stays byte-identical, because latitude keeps `10.0.0.2`.
 
-In particular, do **not** repoint the l4 block at port 22. Public `:2222` → `10.0.0.2:2222` is **Forgejo's git-over-SSH**, not host shell access:
+Delete the entire global l4 block at the top (`vps/caddy/Caddyfile:1-11`):
 
-```yaml
-# homeserver/forgejo/compose.yml
-      - "0.0.0.0:2222:22"          # container sshd published on host 2222
-      - FORGEJO__server__SSH_PORT=2222
+```
+{
+    layer4 {
+        :2222 {
+            route {
+                proxy {
+                    upstream 10.0.0.2:2222
+                }
+            }
+        }
+    }
+}
 ```
 
-`vps/CLAUDE.md:90` documents it: *"`git.cyphy.kz` | 3000/2222 | Forgejo (git hosting; SSH on port 2222)"*. Repointing it would break `git clone ssh://git@git.cyphy.kz:2222/…` **and** publish latitude's host sshd to the open internet — `modules/system/ssh-server.nix:34` deliberately restricts port 22 to `tailscale0` and the `192.168.8.0/24` LAN.
+And delete the `git.cyphy.kz` site block (line 13 onward):
 
-Confirm all seven routes still target `10.0.0.2` and move on:
+```
+git.cyphy.kz {
+    reverse_proxy 10.0.0.2:3000
+}
+```
+
+**Do not** repurpose the `:2222` listener for host SSH. It was Forgejo's git-over-SSH (`homeserver/forgejo/compose.yml:8` published `0.0.0.0:2222:22`); pointing it at port 22 would publish latitude's host sshd to the open internet, which `modules/system/ssh-server.nix:34` deliberately prevents by binding to `tailscale0` + LAN only. With Forgejo gone, nothing should listen on 2222 at all.
+
+- [ ] **Step 6: Verify what remains, then deploy**
 
 ```bash
-grep -n "10.0.0.2" vps/caddy/Caddyfile
+grep -n "10.0.0.2\|layer4\|:2222" vps/caddy/Caddyfile
 ```
 
-Expected: l4 upstream `:2222` (Forgejo SSH), plus `reverse_proxy` to 3000 (Forgejo web), 2283 (Immich), 2282 (LibreSpeed), 8084 (qBittorrent), 4533 (Navidrome), 9412 (Tugtainer).
+Expected: five `reverse_proxy` lines — 2283 (Immich), 2282 (LibreSpeed), 8084 (qBittorrent), 4533 (Navidrome), 9412 (Tugtainer) — and **no** `layer4` block, **no** `:2222`, **no** `git.cyphy.kz`.
 
-One thing to watch on latitude: Docker publishes `0.0.0.0:2222`, and Docker's port publishing inserts its own iptables rules that bypass the NixOS firewall. That is required for the tunnel to reach it, but it also means Forgejo's SSH is reachable from the LAN — same as on the G15 today, so no regression, just be aware it is not firewalled by `ssh-server.nix`.
+```bash
+ssh hub 'cd /path/to/vps/vps && sudo caddy validate --config caddy/Caddyfile && sudo bash deploy-caddy.sh'
+```
+
+`setup-caddy.sh` installs Caddy with the `caddy-l4` plugin. With the l4 block gone the plugin is unused, but leave it installed — it costs nothing and re-adding it later is a rebuild.
+
+- [ ] **Step 7: Remove the `git.cyphy.kz` DNS record**
+
+At your DNS provider. Do this *after* the Caddy deploy succeeds, so a stale record never points at a listener that no longer answers.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backup/
-git commit -m "feat(backup): port homeserver profiles to Linux paths and systemd timers"
+git add backup/ vps/caddy/Caddyfile
+git commit -m "feat(backup): port homeserver profiles to Linux; drop Forgejo routes"
 ```
 
 ---
@@ -698,22 +739,23 @@ Write the number in the migration log.
 
 - [ ] **Step 2: Export the Docker named volumes — while Docker is still running**
 
-`forgejo_data`, `tugtainer_data`, `pgdata` (telegrind), and `redis_data` (embedthat) live inside Docker's storage on `C:`. They do **not** travel on any of the drives you are moving. Export them now; the import happens in Task 13 Step 4.
+`tugtainer_data`, `pgdata` (telegrind), and `redis_data` (embedthat) live inside Docker's storage on `C:`. They do **not** travel on any of the drives you are moving. Export them now; the import happens in Task 13 Step 4. `forgejo_data` is deliberately absent — Forgejo is retired (Task 8 Step 0) and the volume is empty anyway.
 
 ```powershell
-foreach ($v in @("forgejo_data","tugtainer_data","pgdata","redis_data")) {
+foreach ($v in @("tugtainer_data","pgdata","redis_data")) {
   docker run --rm -v "${v}:/from" -v "F:\volume-export:/to" alpine tar cf "/to/$v.tar" -C /from .
 }
 dir F:\volume-export
 ```
 
-Expected: four non-empty `.tar` files. `F:` travels to latitude, so they come with it.
+Expected: three non-empty `.tar` files. `F:` travels to latitude, so they come with it.
 
 - [ ] **Step 3: Stop every service cleanly**
 
 ```powershell
 docker compose -f homeserver\immich\compose.yml down
-# repeat for navidrome, forgejo, restic-server, tugtainer, speedtest, beat, telegrind, embedthat
+# repeat for navidrome, restic-server, tugtainer, speedtest, beat, telegrind, embedthat
+# (forgejo is already stopped and is being retired — leave it down)
 docker ps
 ```
 
@@ -952,10 +994,10 @@ Expected: OpenVINO execution provider, not a CPU fallback. A CPU fallback works 
 
 - [ ] **Step 4: Import the named volumes exported in Task 10 Step 2**
 
-The four tarballs are at `/srv/public/volume-export/` (they rode over on `F:`). Import each:
+The three tarballs are at `/srv/public/volume-export/` (they rode over on `F:`). Import each:
 
 ```bash
-for v in forgejo_data tugtainer_data pgdata redis_data; do
+for v in tugtainer_data pgdata redis_data; do
   docker volume create "$v"
   docker run --rm -v "$v:/to" -v /srv/public/volume-export:/from alpine \
     tar xf "/from/$v.tar" -C /to
@@ -963,12 +1005,12 @@ done
 docker volume ls
 ```
 
-Expected: four volumes present and non-empty (`docker run --rm -v forgejo_data:/d alpine ls /d`). If the tarballs are missing, the G15 must still be intact to re-export — another reason Task 16 is gated.
+Expected: three volumes present and non-empty (`docker run --rm -v tugtainer_data:/d alpine ls /d`). If the tarballs are missing, the G15 must still be intact to re-export — another reason Task 16 is gated.
 
 - [ ] **Step 5: Start the rest**
 
 ```bash
-for s in navidrome forgejo restic-server tugtainer speedtest beat telegrind embedthat; do
+for s in navidrome restic-server tugtainer speedtest beat telegrind embedthat; do
   docker compose -f ~/my/vps/homeserver/$s/compose.yml up -d
 done
 docker ps --format '{{.Names}}\t{{.Status}}'
@@ -1011,9 +1053,13 @@ ping -c2 10.0.0.1
 
 Expected: handshake present, VPS reachable.
 
-- [ ] **Step 4: No Caddy redeploy needed**
+- [ ] **Step 4: Confirm the Caddy deploy from Task 9 Step 6 is live**
 
-The Caddyfile is unchanged (Task 9 Step 5). Caddy keeps proxying to `10.0.0.2`; only the machine answering at that address changed. Skip `deploy-caddy.sh` unless you edited the file for some other reason.
+The surviving routes still target `10.0.0.2` — only the machine answering at that address changed, so no further Caddy edit is needed here. Just confirm the Forgejo-removal deploy landed:
+
+```bash
+ssh hub 'sudo caddy validate --config /etc/caddy/Caddyfile && systemctl is-active caddy'
+```
 
 - [ ] **Step 5: Verify every public route end-to-end**
 
@@ -1026,10 +1072,10 @@ From outside the tailnet (phone on mobile data is the honest test):
 | `https://speed.cyphy.kz` | LibreSpeed runs |
 | `https://tug.cyphy.kz` | Tugtainer |
 | `https://qb.cyphy.kz` | qBittorrent |
-| `https://git.cyphy.kz` | Forgejo web |
-| `git ls-remote ssh://git@git.cyphy.kz:2222/<user>/<repo>.git` | refs listed |
+| `https://git.cyphy.kz` | **fails to resolve / no route** — Forgejo is retired |
+| `nc -vz cyphy.kz 2222` | **connection refused** — the l4 listener is gone |
 
-The last one is the real check on the l4 block — it exercises Forgejo's git-over-SSH through the tunnel. It must **not** land on a latitude shell prompt; if it does, the l4 upstream was wrongly repointed at port 22.
+The last two are negative checks. A shell prompt on port 2222 would mean the l4 block was repointed at host SSH instead of deleted — stop and fix that before going further.
 
 ---
 
@@ -1178,6 +1224,14 @@ cd /home/me/my/vps
 git rm backup/homeserver/install-tasks.bat backup/restic-install.bat homeserver/awg-restart-task.ps1
 git commit -m "chore(homeserver): drop Windows-only backup and task artifacts"
 ```
+
+Then confirm no Forgejo remnants survived Task 8 Step 0 and Task 9 Step 5:
+
+```bash
+grep -rn "forgejo\|git.cyphy.kz\|2222" --include='*.md' --include='*.yml' --include='Caddyfile' . | grep -v '\.git/'
+```
+
+Expected: no hits. Any that remain are docs — `README.md`'s service table and `CLAUDE.md:90` are the likely stragglers.
 
 ---
 
