@@ -79,13 +79,13 @@ printf '%s\n' "$out2" | grep -q 'ENROLLMENT NEEDED' \
 # Coexistence with tier_ssh_accounts: a pre-existing foreign block outside our
 # markers must survive. This is what lets both tiers own ~/.ssh/config.
 { printf '# >>> machines-bootstrap ssh accounts >>>\n'
-  printf 'Host github-cyphy\n    IdentityFile ~/.ssh/id_cyphy671\n'
+  printf 'Host cyphy671.github.com\n    IdentityFile ~/.ssh/id_cyphy671\n'
   printf '# <<< machines-bootstrap ssh accounts <<<\n'; } >> "$CFG"
 run_tier >/dev/null
 cfg3="$(cat "$CFG")"
-has "$cfg3" '^Host github-cyphy$' "a foreign ssh_accounts block survives a re-run"
+has "$cfg3" '^Host cyphy671\.github\.com$' "a foreign ssh_accounts block survives a re-run"
 has "$cfg3" '^Host latitude$'     "the fleet block is still present alongside it"
-[ "$(printf '%s\n' "$cfg3" | grep -c '^Host github-cyphy$')" = 1 ] \
+[ "$(printf '%s\n' "$cfg3" | grep -c '^Host cyphy671\.github\.com$')" = 1 ] \
   && pass "the foreign block is not duplicated" \
   || die "foreign block duplicated"
 

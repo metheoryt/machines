@@ -25,7 +25,7 @@ GH_ROOT="$HOME/gh"                 # legacy layout to migrate FROM
 REPO_GROUPS=(
   "my|my|metheoryt|github.com|metheoryt"
   "pure|pure|thepureapp|github.com|metheoryt"
-  "cyphy671|cyphy671|cyphy671|github-cyphy|cyphy671"
+  "cyphy671|cyphy671|cyphy671|cyphy671.github.com|cyphy671"
 )
 
 info() { printf '  %s\n' "$*"; }

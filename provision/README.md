@@ -70,17 +70,29 @@ in the `SSH_ACCOUNTS` array near the top of that section (`host-alias:github-use
 
 ```bash
 SSH_ACCOUNTS=(
-  "github.com:metheoryt"    # personal — the default host
-  "github-cyphy:cyphy671"   # isolated personal account (e.g. qaz-law)
+  "github.com:metheoryt"             # canonical — what every GitHub URL uses
+  "metheoryt.github.com:metheoryt"   # readable synonym for the default account
+  "cyphy671.github.com:cyphy671"     # isolated account — size/limit blast-radius
 )
 ```
 
-The **first** entry owns the default `github.com` host; the rest get their alias.
-Clone accordingly:
+The key path derives from the **user** (`id_<user>`), so several aliases can share
+one account's key — that is how `github.com` and `metheoryt.github.com` stay a
+single registered key rather than two.
+
+`github.com` is **not optional**: the clone button, `gh repo clone`, READMEs and
+submodule URLs all emit `git@github.com`, and without that block those clones fall
+back to default key order instead of a pinned identity. The `<user>.github.com`
+aliases are self-documenting synonyms — the account is legible in the URL. They are
+safe as names because `*.github.com` has no wildcard A record (verified 2026-07-28),
+so a missing block fails loudly rather than connecting somewhere unintended.
+
+Clone accordingly — the alias in the URL is what picks the account:
 
 ```bash
-git clone git@github.com:metheoryt/repo.git        # personal (default key)
-git clone git@github-cyphy:cyphy671/qaz-law.git    # isolated account (its own key)
+git clone git@github.com:metheoryt/repo.git              # personal (canonical)
+git clone git@metheoryt.github.com:metheoryt/repo.git    # same account, explicit
+git clone git@cyphy671.github.com:cyphy671/laws.git      # isolated account
 ```
 
 Keys land at `~/.ssh/id_<user>` and must be **registered on the matching account**
@@ -106,17 +118,22 @@ the two never drift — via the `GIT_IDENTITIES` array next to `SSH_ACCOUNTS`
 
 ```bash
 GIT_IDENTITIES=(
-  "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+  "cyphy671.github.com|cyphy671|259445360+cyphy671@users.noreply.github.com"
 )
 ```
 
 It keys off the **remote URL**, not a directory: git's
 `includeIf "hasconfig:remote.*.url:git@<alias>:*/**"` applies the identity to any
 repo whose remote uses that account's SSH alias, wherever it sits on disk. So a
-repo cloned as `git@github-cyphy:cyphy671/qaz-law.git` authors commits as
+repo cloned as `git@cyphy671.github.com:cyphy671/laws.git` authors commits as
 `cyphy671`, while everything else keeps the global `metheoryt@gmail.com`. No
 fixed clone directory, nothing to remember per repo. (Needs git ≥ 2.36; the
 default `github.com` account is the global identity, so list only the *others*.)
+
+Because the match is on the **alias string**, renaming an alias without updating
+`GIT_IDENTITIES` in the same commit silently drops the identity: already-cloned
+repos keep the old URL, stop matching, and author as the default account with no
+error. `provision/tests/ssh-accounts.test.sh` guards the pairing.
 
 Emails use GitHub's private **noreply** form
 (`<numeric-id>+<user>@users.noreply.github.com`) so a real address is never

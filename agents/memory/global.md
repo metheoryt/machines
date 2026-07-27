@@ -19,6 +19,39 @@ elsewhere to sync. Do NOT put secrets here.
   `main`↔branch divergence. Work repos (`github.com:thepureapp/*`) are excluded —
   they keep the pure-dev PR flow.
 
+## GitHub accounts (two, simultaneous — no switching)
+
+- **The clone URL picks the account.** Aliases are wired by `tier_ssh_accounts`
+  (`machines/provision/lib/tiers.sh`), all with `HostName github.com` +
+  `IdentitiesOnly yes` so account resolution is deterministic:
+  `github.com` and `metheoryt.github.com` → `~/.ssh/id_metheoryt`;
+  `cyphy671.github.com` → `~/.ssh/id_cyphy671`. **`github.com` must never be
+  dropped** — the clone button, `gh repo clone`, READMEs and submodule URLs all
+  emit it, and without the block those clones fall back to default key order.
+  Renamed from `github-cyphy` on 2026-07-28; Windows' hand-made `githubcyphy`
+  is NOT repo-managed and still carries the old name.
+- **Commit identity follows the remote URL, not a directory** — git
+  `includeIf "hasconfig:remote.*.url:git@<alias>:*/**"` →
+  `~/.config/git/identity-<alias>`. So it is keyed on the **alias string**:
+  rename an alias without updating `GIT_IDENTITIES` in the same commit and
+  already-cloned repos silently author as the default account, with no error.
+  The tier only ever *adds* the includeIf — a rename leaves the old entry behind
+  as cruft, so unset it by hand.
+- **Both failure modes here are silent.** Both aliases resolve to the same real
+  host, so GitHub picks the account purely from the offered key — a key on the
+  wrong account authenticates as the *wrong person* rather than failing. Always
+  verify by identity, never by exit code: `ssh -T git@<alias>` must greet the
+  expected user.
+- **`gh` is not part of the steady state.** Clone/push/attribution never invoke
+  it. It is needed only to upload a key (`gh ssh-key add` has no account flag —
+  it targets the *active* account, so `gh auth switch` first, or scope with
+  `GH_TOKEN`), and for `gh repo list` discovery inside `provision/repos.sh`
+  (which is why that script switches accounts and restores metheoryt at the end
+  — an interrupted run leaves the wrong account active).
+- **Account split rationale:** `cyphy671` exists to isolate size/rate-limit
+  blast radius from the main account. It holds only `laws`, deliberately never
+  cloned locally. `qaz-code` was transferred cyphy671 → metheoryt (2026-07-28).
+
 ## Fleet SSH reachability
 
 - **The fleet machines are mutually reachable over SSH via the Tailscale/Headscale

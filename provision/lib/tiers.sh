@@ -541,9 +541,22 @@ UNIT
 # One ed25519 key per account is generated as ~/.ssh/id_<user>. Edit this list to
 # add/remove accounts, or blank it to skip the whole section.
 tier_ssh_accounts() {
+  # "host-alias:github-user". The key path derives from the USER (id_<user>), so
+  # several aliases may share one account's key — that is how github.com and
+  # metheoryt.github.com stay one registered key, not two.
+  #
+  # `github.com` is not optional: the clone button, `gh repo clone`, READMEs and
+  # submodule URLs all emit git@github.com, and without a block those fall back
+  # to default key order instead of a pinned identity. The <user>.github.com
+  # aliases are self-documenting synonyms — the account is legible in the URL.
+  # Safe as names because *.github.com has no wildcard A record (verified
+  # 2026-07-28: metheoryt.github.com / cyphy671.github.com / foo.github.com all
+  # NXDOMAIN, while api.github.com resolves), so a missing block fails loudly
+  # instead of connecting somewhere unintended.
   SSH_ACCOUNTS=(
-    "github.com:metheoryt"    # personal — default host
-    "github-cyphy:cyphy671"   # isolated personal account (qaz-law etc.)
+    "github.com:metheoryt"             # canonical — what every GitHub URL uses
+    "metheoryt.github.com:metheoryt"   # readable synonym for the default account
+    "cyphy671.github.com:cyphy671"     # isolated account — size/limit blast-radius
   )
   if [ "${#SSH_ACCOUNTS[@]}" -gt 0 ]; then
     info "Wiring multi-account SSH…"
@@ -601,7 +614,7 @@ tier_ssh_accounts() {
   # (<id>+<user>@users.noreply.github.com) so a real address is never leaked and
   # pushes aren't rejected by "keep my email address private". Needs git ≥ 2.36.
   GIT_IDENTITIES=(
-    "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+    "cyphy671.github.com|cyphy671|259445360+cyphy671@users.noreply.github.com"
   )
   if [ "${#GIT_IDENTITIES[@]}" -gt 0 ]; then
     info "Wiring per-account commit identity…"
