@@ -6,8 +6,12 @@
 # working tree or local branch. It only refreshes remote-tracking refs, so the
 # ahead/behind counts shown by git are accurate within one interval. The actual
 # pull is left to you / the agent, done deliberately when the tree is safe.
-# (For the flake repo itself, services.nixRepoAutoPull additionally fast-forwards
-# it via merge --ff-only — see modules/system/self-update.nix. The two are complementary.)
+# (Pulling is a separate concern: services.fleetSelfpull fast-forwards the
+# fleet-sync repos — see modules/system/fleet-selfpull.nix. The two are
+# complementary, but they FETCH THE SAME REPOS, so keep their OnCalendar values
+# off a shared boundary: concurrent fetches collide on
+# refs/remotes/origin/main and the loser fails. fleetSelfpull defaults to *:03/10
+# for exactly that reason.)
 #
 # Safety: runs as the repo owner (not root), never blocks on a credential or host
 # prompt (BatchMode + GIT_TERMINAL_PROMPT=0), and times out per-repo so one

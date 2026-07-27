@@ -88,7 +88,7 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `system/laptop.nix` | power-profiles-daemon, thermald, touchpad (libinput), backlight (acpilight/actkbd), lid/power-button behavior, S3 deep sleep, Intel microcode |
 | `system/fleet.nix` | fleet.json data / ssh.nix source of truth |
 | `system/ssh-server.nix` | keys-only sshd over the tailnet — the fleet SSH-server role |
-| `system/self-update.nix` | self-update mechanism |
+| `system/fleet-selfpull.nix` | auto-pull backend — runs `provision/fleet-selfpull.sh` on a timer, the same script the non-Nix members use (replaced the NixOS-only `self-update.nix`) |
 | `system/git-autofetch/` | auto-fetch timer |
 | `system/machines-converge.nix` | NixOS convergence trigger — root `.path` unit watches `.git/logs/HEAD`, fires a rebuild after an ff-pull |
 | `desktop/gnome.nix` | GDM + GNOME (Wayland), PipeWire audio, XDG portals, fonts (JetBrainsMono Nerd Font, Noto, Fira Code), excluded GNOME apps |
@@ -134,7 +134,7 @@ Currently a single NixOS host:
 **`hosts/latitude/nixos/configuration.nix`** (flake attr `latitude`;
 `networking.hostName` stays `latitude5520` — only the repo label/flake attr
 changed)
-- Imports: base, laptop, self-update, git-autofetch, ssh-server, gnome, dell-latitude, development, home-manager
+- Imports: base, laptop, fleet-selfpull, machines-converge, git-autofetch, ssh-server, gnome, dell-latitude, development, home-manager
 - Hostname: `latitude5520`, timezone Asia/Almaty, locale ru_RU.UTF-8
 - Overrides intel-ocl with intel-compute-runtime; adds intel-media-driver, intel-vaapi-driver
 - Thunderbolt: bolt service enabled
