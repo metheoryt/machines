@@ -228,7 +228,7 @@ Expected: evaluates clean, `hm_.sshconfig.drv` appears in the rebuild set (proof
 
 ---
 
-### Task 4: Add a macOS provisioning path `[machines]`
+### Task 4: Add a macOS provisioning path `[machines]` — ✅ DONE (`04c0309`)
 
 `provision/` is apt-Linux/WSL only (`provision/README.md` says so explicitly). `agents/bootstrap.sh` already branches on `uname -s` and handles macOS, so only the tool-install tier needs a Darwin sibling.
 
@@ -1320,5 +1320,9 @@ NTFS-over-USB works for large read-mostly media but costs performance and gives 
 |---|---|---|
 | 2026-07-27 | `1c29ecb` | Pre-work: fixed the repo's red `tiers.test.sh` baseline (stale expectation since the hermes tiers landed); gitignored `.claude/worktrees/`. |
 | 2026-07-27 | `62babbd` | **Task 3** complete — `darwin` platform, `air` member at `100.64.0.7`, role-executor arms, `agents/hosts/air.md`, new `roles.test.sh`, dispatch pinned. All 8 test files green; latitude toplevel dry-builds; `Host air` present in the generated SSH config. |
+| 2026-07-27 | `1fc2015` | Plan corrections folded in; Task 1 Steps 2-3 recorded (Kingston pending). |
+| 2026-07-27 | `04c0309` | **Task 4** complete — `provision/macos.sh` + the darwin half of `lib/tiers.sh` (brew tiers, launchd branches, per-platform gortex asset, zsh init). Shared library, not a fork. shellcheck clean; plists validated with `plistlib`. |
+
+**Decision recorded (Task 4):** `macos.sh` shares `provision/lib/tiers.sh` rather than carrying its own tier bodies. The alternative — a self-contained `macos.sh` — was rejected because it duplicates six portable tiers (`agents_config`, `hermes_config`, `git_base`, `agent_clis`, `ssh_accounts`, `ssh_trust`) that would then need every fix applied twice. `tiers.test.sh` now asserts the two drivers' tier lists are identical once the package tiers are stripped, so the sharing is enforced rather than merely intended.
 
 Work happens on branch `worktree-fleet-migration-mac-primary` (worktree at `.claude/worktrees/fleet-migration-mac-primary`), per the Global Constraint against committing on `main`.
