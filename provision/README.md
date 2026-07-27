@@ -128,17 +128,71 @@ account's "keep my email address private" setting. The identity files land at
 > certain repos (e.g. a large corpus like `qaz-law`) off the main account, to
 > limit blast radius. Separate key + separate remote = the two never cross.
 
-## macOS (`provision/macos.sh`)
+## macOS
 
-`provision/macos.sh` is the Darwin sibling of `linux.sh` — same driver shape,
-**same tier library** (`provision/lib/tiers.sh`), different package manager. It
-provisions `air` (the MacBook Air M5). Both Apple Silicon and Intel work.
+### One command, fresh Mac (`just provision-mac`)
 
 ```bash
-# prerequisite — Homebrew cannot bootstrap itself unattended
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 git clone https://github.com/<you>/machines ~/machines
+cd ~/machines
+
+# the pre-auth key (provision/secrets/ is gitignored)
+mkdir -p provision/secrets
+printf '%s' '<hskey-…>' > provision/secrets/authkey
+
+just provision-mac air --dry-run                              # preview, touches nothing
+just provision-mac air --authkey-file provision/secrets/authkey
+```
+
+Nothing else is required first — not even Homebrew. One sudo prompt up front,
+then four stages:
+
+| # | Stage | Does |
+|---|---|---|
+| 1 | `macos-prep.sh` | `scutil` hostname · Homebrew bootstrap · Remote Login |
+| 2 | `tailscale-mac.sh` | standalone cask · join Headscale · verify IP vs `fleet.json` |
+| 3 | `macos.sh` | the tier list (toolchain, agent config, gortex, fleet SSH, launchd) |
+| 4 | `provision.sh --apply` | roles: `agents`, `dotfiles`, `repos` |
+
+The machine name is an **argument, not detected** — stage 1 is what sets the
+hostname, so detection cannot work before it runs. It is validated against
+`fleet.json` (must exist, must be `platform: darwin`) before anything mutates,
+so a typo fails fast instead of renaming your Mac.
+
+**Mint the key on hub:**
+
+```bash
+ssh hub 'sudo headscale preauthkeys create --user 1 --expiration 2h'
+```
+
+There is deliberately **no `--authkey` flag** — argv is world-readable through
+`ps`, so an inline key is scrapeable by any local process while the run lasts.
+Use the file or `HEADSCALE_AUTHKEY`. (`tailscale-wsl.sh` omits it for the same
+reason.)
+
+**Two things stay manual afterwards**, both printed by the chain when it
+finishes: `gh auth login` to register the SSH keys (`tier_ssh_accounts` writes
+`IdentitiesOnly` on fresh keys, so git-over-SSH fails until you do), and
+appending `~/.ssh/id_fleet.pub` to `provision/fleet-authorized-keys` so other
+members accept this box.
+
+Each stage is independently re-runnable when only one thing needs redoing:
+
+```bash
+bash provision/macos-prep.sh air
+bash provision/tailscale-mac.sh --hostname air --authkey-file provision/secrets/authkey
+bash provision/macos.sh
+bash provision/provision.sh --machine air --apply
+```
+
+### The tier driver alone (`provision/macos.sh`)
+
+`provision/macos.sh` is the Darwin sibling of `linux.sh` — same driver shape,
+**same tier library** (`provision/lib/tiers.sh`), different package manager.
+Both Apple Silicon and Intel work. Use it directly when the Mac is already
+enrolled and you only want the toolchain refreshed:
+
+```bash
 MACHINES_TIERS_DRY_RUN=1 bash ~/machines/provision/macos.sh   # inspect the plan
 bash ~/machines/provision/macos.sh                            # apply
 ```

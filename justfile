@@ -360,3 +360,12 @@ provision *ARGS:
 # as agent-bootstrap/provision.
 provision-wsl nickname:
     bash provision/provision-wsl.sh {{nickname}}
+
+# <machine> is a darwin member of fleet.json (e.g. `air`) — an argument rather
+# than detected, because stage 1 is what SETS the hostname. One sudo prompt up
+# front, then: hostname, Homebrew, tailnet, toolchain, roles.
+# Pre-auth key: `--authkey-file provision/secrets/authkey` (gitignored) or
+# $HEADSCALE_AUTHKEY. Preview with `--dry-run`.
+# Fully provision THIS Mac as a fleet member, end to end.
+provision-mac machine *ARGS:
+    bash provision/provision-mac.sh {{machine}} {{ARGS}}
