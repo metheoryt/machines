@@ -70,40 +70,44 @@ Two decisions gate hardware purchases. Make them before touching anything.
 **Files:**
 - Modify: `.claude/memory/project.md` (append under a new `## Fleet migration 2026-07` heading)
 
-- [ ] **Step 1: Decide how the Kingston NVMe attaches to latitude**
-
-Run on latitude:
+- [x] **Step 1: Decide how the Kingston NVMe attaches to latitude** — ✅ **Thunderbolt enclosure** (decided 2026-07-27)
 
 ```bash
-sudo dmidecode -t slot
+# dmidecode is not packaged on NixOS, and `sudo nix shell` fails (sudo resets PATH):
+nix build --no-link --print-out-paths nixpkgs#dmidecode
+sudo <that-path>/bin/dmidecode -t slot
 lsblk -o NAME,SIZE,TYPE,TRAN,MODEL
+lspci -t -v            # ← the step that actually decides it
 ```
 
-Expected: `lsblk` shows exactly one NVMe (`nvme0n1`, 476.9G). If `dmidecode` reports a free M.2 2280 slot with `Current Usage: Available`, the Kingston drops straight in. The Latitude 5520's second M.2 is usually a 2230 WWAN slot, which will **not** take a 2280 SSD — if that is what you see, buy a USB 3.2 Gen2 or Thunderbolt NVMe enclosure instead.
+`lsblk` confirmed exactly one NVMe (`nvme0n1`, 476.9G KIOXIA).
+
+**Do not read the `dmidecode` slot table on its own — on this machine it is actively misleading.** It lists three PCIe slots and *none of them is the NVMe*: the live KIOXIA sits at `00:1d.0` (bus 72) and appears in no slot entry at all. Cross-referencing each entry's `Bus Address` against `lspci -t -v`:
+
+| dmidecode entry | Bus address | What is actually there |
+|---|---|---|
+| `PCI-Express 0`, x16, **In Use** | `00:1c.0` | root port → bus 71 → Realtek **card reader**. Neither x16 nor the SSD. |
+| `PCI-Express 1`, x1, **Available** | `00:1c.5` | **empty x1 root port** — the WWAN slot |
+| `PCI-Express 2`, x1, In Use | `00:14.3` | **Wi-Fi AX201** |
+
+Because the *occupied* SSD socket is missing from the table too, absence proves nothing. The decisive evidence is **lane width**: a second NVMe needs its own root port, and the only unpopulated one is **x1** — which Dell never wires for an SSD. That x1 port is the M.2 2230/3042 key-B WWAN slot, exactly the case this step warned about. (`00:07.0`/`00:07.1`, with their large empty bus ranges, are the Thunderbolt PCIe tunnels, not M.2 sockets.)
+
+**Buy Thunderbolt, not USB.** `00:0d.0` (TB4 USB controller) + `00:0d.2` (TB4 NHI) confirm Thunderbolt 4 on this Tiger Lake board, and `bolt` is already enabled in `hardware/dell-latitude.nix`. TB3/TB4 gives ~2.5–3 GB/s against ~1 GB/s for USB 3.2 Gen2 — and this is the one disk where it shows, since the Kingston holds the live Immich upload tier that Postgres reads against.
+
+Residual check (do not delay the order for it): this is electrical evidence, not visual. If the bottom cover comes off anyway, confirm there is no second 2280 standoff.
 
 - [ ] **Step 2: Decide whether to buy a 2 TB staging/off-site drive**
 
 Recommended: yes. It removes the only genuinely risky step in this whole programme (the free-space shuffle in Task 19) and it becomes a second off-site copy on top of the one set aside in Task 2. Without it, both the live library and its only backups end up in one chassis on latitude.
 
-- [ ] **Step 3: Record both decisions**
+- [x] **Step 3: Record both decisions** — done, under `## Fleet migration 2026-07` in `.claude/memory/project.md`:
 
-Append to `.claude/memory/project.md`:
+- **Kingston NVMe attach method: Thunderbolt enclosure** — decided 2026-07-27 from `dmidecode -t slot` + `lspci -t -v` on latitude. No free 2280 socket; the one available root port is x1 (WWAN).
+- **2 TB staging drive: deferred** — the user chose not to decide yet. If ultimately skipped, Task 12 uses the G→H shuffle fallback and there is no off-site copy of the live upload tier until Task 19. Recorded so the residual gap does not become permanent by default.
 
-```markdown
-## Fleet migration 2026-07
+The memory entry also carries the reusable gotchas this step surfaced: that `dmidecode -t slot` is not a trustworthy M.2 inventory on this board (cross-check `Bus Address` against `lspci -t -v`), and that `dmidecode` is unpackaged on NixOS and needs `nix build` + an absolute path under `sudo`.
 
-- **Kingston NVMe attach method:** <free M.2 slot | USB enclosure | TB3 enclosure> —
-  decided 2026-07-XX from `dmidecode -t slot` on latitude.
-- **2 TB staging drive:** <bought | skipped> — if skipped, Task 12 uses the
-  G→H shuffle fallback and there is no off-site copy until Task 19.
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add .claude/memory/project.md
-git commit -m "docs(memory): record fleet-migration hardware decisions"
-```
+- [x] **Step 4: Commit** — `1fc2015` (deferred/pending state) and the Kingston decision on top.
 
 ---
 
@@ -891,7 +895,16 @@ A full shutdown, not a restart, not sleep.
 
 - [ ] **Step 1: Pull the Kingston NVMe from the G15**
 
-Disk 0, `KINGSTON SNV2S1000G`, holds the live library. Leave the WD SN560 (disk 1, `C:`) in the machine — that is what the buyer gets. Install the Kingston per the Task 1 decision (free M.2 slot or enclosure).
+Disk 0, `KINGSTON SNV2S1000G`, holds the live library. Leave the WD SN560 (disk 1, `C:`) in the machine — that is what the buyer gets.
+
+Per the Task 1 decision (resolved 2026-07-27): the Kingston goes into a **Thunderbolt 3/4 NVMe enclosure**, not a latitude M.2 slot — there is no free 2280 socket. Plug it into either Thunderbolt port; `bolt` is already enabled, so authorize it once:
+
+```bash
+boltctl list
+boltctl authorize <uuid>   # --once omitted: persist the authorization across reboots
+```
+
+Then it enumerates as a normal `nvme` block device. Note this makes it a **third** external device alongside the two dock cables (Step 2), all of which must be present before `docker.service` starts — see Step 7's `RequiresMountsFor` guard.
 
 - [ ] **Step 2: Move the two docks**
 
@@ -1361,6 +1374,8 @@ NTFS-over-USB works for large read-mostly media but costs performance and gives 
 - Navidrome's music library location was never inventoried on the G15 — Task 8 Step 4 assigns it a `/srv` path, but which physical drive holds the music today must be checked before that mount is declared.
 - The `qb` (qBittorrent) download path and the `telegrind`/`embedthat`/`beat` env requirements are covered generically in Tasks 8 and 13; each needs its `.env.dist` read before that task runs.
 - The macOS account name is unverified — Task 5 Step 3b checks `whoami` against the `me` default that `modules/home/ssh.nix` bakes into the generated `Host air` block.
+- ~~How the Kingston attaches to latitude (Task 1 Step 1).~~ **Resolved 2026-07-27:** Thunderbolt enclosure; no free M.2 2280 socket. Evidence and the `dmidecode`-is-misleading caveat are in Task 1 Step 1.
+- The 2 TB staging drive is still undecided (Task 1 Step 2, deferred by the user). Task 12's fallback and the off-site gap both hang on it.
 
 **Execution log:**
 

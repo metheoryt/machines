@@ -556,10 +556,29 @@ global + per-host). One bullet per fact under a topical heading.
 Plan: `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`.
 Work branch: `worktree-fleet-migration-mac-primary`.
 
-- **Kingston NVMe attach method:** *pending* — needs `sudo dmidecode -t slot` on
-  latitude (interactive password; not runnable from an agent session). Decides
-  free M.2 2280 slot vs. USB/TB3 enclosure. The Latitude 5520's second M.2 is
-  usually a 2230 WWAN slot, which will not take a 2280 SSD.
+- **Kingston NVMe attach method: THUNDERBOLT ENCLOSURE** — decided 2026-07-27
+  from `dmidecode -t slot` + `lspci -t` on latitude. No free M.2 2280 socket.
+- **`dmidecode -t slot` is NOT a reliable M.2 inventory on the Latitude 5520.**
+  It reports three PCIe slots and none of them is the NVMe: the live KIOXIA sits
+  at `00:1d.0` (bus 72) and appears in NO slot entry at all. What the three
+  entries really are: "PCI-Express 0 / x16 / In Use" = `00:1c.0` → bus 71 →
+  Realtek **card reader** (not x16, not the SSD); "PCI-Express 2 / x1 / In Use" =
+  `00:14.3` → **Wi-Fi AX201**; "PCI-Express 1 / x1 / Available" = `00:1c.5`, an
+  **empty x1 root port** = the WWAN slot. Always cross-check with
+  `lspci -t -v` — a slot's `Bus Address` maps it to the real device.
+  Corollary: absence from the slot table proves nothing, since the occupied SSD
+  socket is absent too. The decisive evidence is lane width — a second NVMe
+  needs its own root port and the only free one is x1, which Dell never wires
+  for an SSD.
+- **latitude has Thunderbolt 4** (`00:0d.0` USB controller + `00:0d.2` NHI,
+  Tiger Lake) and `bolt` is already enabled — so TB3/TB4 enclosure (~2.5-3 GB/s)
+  over USB 3.2 Gen2 (~1 GB/s) for the live Immich upload tier the DB reads
+  against. `00:07.0`/`00:07.1` with their large empty bus ranges are the TB PCIe
+  tunnels, not M.2 sockets.
+- **`dmidecode` is not installed on NixOS.** Run it as
+  `nix build --no-link --print-out-paths nixpkgs#dmidecode` then
+  `sudo <path>/bin/dmidecode …` — `sudo nix shell …` fails because sudo resets
+  PATH.
 - **2 TB staging drive:** *deferred* — decided 2026-07-27 not to decide yet. If
   ultimately skipped, Task 12 uses the G→H shuffle fallback and there is no
   off-site copy of the live upload tier until Task 19. Recorded so the residual
