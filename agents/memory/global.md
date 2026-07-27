@@ -248,6 +248,21 @@ elsewhere to sync. Do NOT put secrets here.
   Verify with `git add -A --dry-run` — it must list exactly those two paths and no
   `settings.local.json`.
   <!-- src: qaz-code 4c25471 | 2026-07-26 -->
+- **The cron job's Lane 1 writes can land where nobody reads them.** Step 6 pushes
+  the *worktree branch*; merging back into `main` is user-gated (worktree-mode
+  rules) and an unattended run has no user, so it can silently never happen. The
+  repo's own `project.md` then keeps improving on a branch while the base checkout
+  — where agents actually work — goes on loading the pre-refresh copy from `main`,
+  and the gap widens by one commit per run with nothing flagging it. Seen on
+  airdrome 2026-07-28: several consecutive `docs(kb): refresh` commits stacked on
+  `metheoryt/ubuntu26-airdrome-kb-refresh-daily` while `/home/me/my/airdrome`
+  `main` still sat at `ff21a95`. Not universal — qaz-code's refresh commit
+  (`c5ec625`) did reach its base `main` — so it is per-repo drift, not a broken
+  mechanism. Cheapest check when reading a cron-refreshed repo's memory:
+  `git log --oneline main..<refresh-branch>`. The durable fix is either a final
+  FF-merge step in Lane 1 or accepting that the branch, not `main`, is the source
+  of truth for that repo's memory.
+  <!-- src: airdrome 9fd979a | 2026-07-28 -->
 
 ## Evaluating a new dependency
 
