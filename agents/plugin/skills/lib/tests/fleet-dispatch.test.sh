@@ -62,6 +62,19 @@ case "$out" in
   *) die "fd_run windows -> '$out'" ;;
 esac
 
+# darwin is a POSIX-SSH member: it must take the SAME arm as nixos/debian, never
+# the Windows Git-Bash-through-PowerShell path. A `bash.exe` here would mean the
+# Mac was misclassified as a Windows box and every dispatch to it would fail.
+: > "$LOG"; fd_probe air darwin && pass "probe darwin ok" || die "probe darwin failed"
+grep -q $'air\tbash -c true' "$LOG" && pass "probe darwin uses bash -c true" \
+  || die "probe darwin argv: $(cat "$LOG")"
+grep -q 'bash.exe' "$LOG" && die "probe darwin must not use the Git Bash path" \
+  || pass "probe darwin avoids the Git Bash path"
+
+out="$(printf 'SCRIPT-BODY' | fd_run air darwin target-arg)"
+[ "$out" = 'bash -s -- target-arg||SCRIPT-BODY' ] && pass "fd_run darwin argv+stdin" \
+  || die "fd_run darwin -> '$out'"
+
 # --- fd_wsl_hosts: mock `wsl.exe -l -q` + per-distro marker reads. ---
 # Distro list: two distros. Ubuntu-26.04 opts in (fleet:true), Ubuntu-24.04 does not.
 mock_ssh_wsl() {
@@ -86,6 +99,8 @@ got="$(fd_wsl_hosts desktop windows)"
 # non-windows returns nothing
 got="$(fd_wsl_hosts latitude nixos)"
 [ -z "$got" ] && pass "fd_wsl_hosts skips non-windows" || die "fd_wsl_hosts non-windows -> '$got'"
+got="$(fd_wsl_hosts air darwin)"
+[ -z "$got" ] && pass "fd_wsl_hosts skips darwin" || die "fd_wsl_hosts darwin -> '$got'"
 SSH="mock_ssh"   # restore for any later cases
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"

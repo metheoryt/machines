@@ -41,7 +41,10 @@ role_dotfiles() {
             echo "  dotfiles: owned by home-manager on nixos — applied by 'just switch'; dispatcher skips."
             return 0
             ;;
-        wsl|debian)
+        wsl|debian|darwin)
+            # darwin groups here, NOT with nixos: chezmoi is the ONLY dotfiles
+            # mechanism on macOS. get.chezmoi.io serves a darwin/arm64 build, so
+            # _dotfiles_ensure_chezmoi works unchanged.
             if [ ! -d "$src" ]; then
                 echo "  dotfiles: chezmoi source not found at $src — is this repo cloned here?" >&2
                 return 1

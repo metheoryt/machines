@@ -16,9 +16,16 @@ source "$LIB"
 eq "$(fleet_profile hub)" "hub" "fleet_profile hub == hub"
 eq "$(fleet_profile latitude)" "workstation" "fleet_profile latitude defaults to workstation"
 
+# fleet_platform: the manifest is the only source — a new platform needs no
+# code change here, but `air` must resolve to darwin or every downstream
+# platform `case` (provision/roles/*.sh, fleet-dispatch.sh) misroutes it.
+eq "$(fleet_platform air)" "darwin" "fleet_platform air == darwin"
+eq "$(fleet_platform latitude)" "nixos" "fleet_platform latitude == nixos"
+
 # fleet_profile_for_host: OS hostname -> profile.
 eq "$(fleet_profile_for_host 27608)" "hub" "for_host 27608 == hub"
 eq "$(fleet_profile_for_host latitude5520)" "workstation" "for_host latitude5520 == workstation"
+eq "$(fleet_profile_for_host air)" "workstation" "for_host air == workstation"
 eq "$(fleet_profile_for_host no-such-box)" "" "for_host unknown host is empty"
 
 # jq-free path: hub has no jq, so resolution must fall back to python3. Build a

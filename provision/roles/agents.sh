@@ -21,7 +21,10 @@ role_agents() {
             echo "  agents: owned by home-manager (claude.nix, which invokes bootstrap.sh) — applied by 'just switch'; dispatcher skips."
             return 0
             ;;
-        wsl|debian)
+        wsl|debian|darwin)
+            # darwin groups here, NOT with nixos: no home-manager owns the
+            # config on macOS, and bootstrap.sh already branches on `uname -s`
+            # and handles Darwin, so the dispatcher must run it.
             if [ ! -f "$boot" ]; then
                 echo "  agents: bootstrap.sh not found at $boot — is this repo cloned here?" >&2
                 return 1
