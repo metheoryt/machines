@@ -648,3 +648,23 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   reach *into* it (consistent with its `backup-client` role, but undocumented
   until now). That is why diagnosing an unreachable latitude has to hop through
   `desktop`/`server`, never through `hub`.
+- **A dirty tree silently strands a box indefinitely.** `fleet-selfpull` gates on
+  a clean working tree, so ANY uncommitted change stops every pull with no alarm.
+  Found 2026-07-28: `desktop-ubuntu26` sat **23 commits behind** because an agent
+  had left 10 uncommitted hermes-skill items there. Nothing surfaces this — the
+  box looks healthy, `fleet-selfpull.timer` is `active`, and cron is installed.
+  When a fleet member is mysteriously stale, check `git status` FIRST, before the
+  timers or the converge predicates.
+- **`git rebase` does not fire `post-merge`, so it does not converge.** The
+  convergence trigger on non-Nix boxes is the `post-merge` hook, which only runs
+  for *merge*-shaped pulls. After bringing a diverged box up to date with
+  `fetch` + `rebase`, run `bash scripts/converge.sh` explicitly or the pulled
+  change is never applied.
+- **The `~/gh/` layout is gone on `desktop-ubuntu26`.** Repos live in the
+  `repos.sh` per-account layout: `~/my`, `~/cyphy671`, `~/machines`. So
+  `qaz-code` is at **`~/cyphy671/qaz-code`**, not `~/gh/qaz-code`.
+- **`gh` 404s on another account's private repo, which is NOT evidence it is
+  gone.** Checking whether a transfer completed, `gh api repos/cyphy671/<x>` as
+  metheoryt returns 404 for a *private* repo of that other account. Test for the
+  **destination** (`gh repo view metheoryt/<x>`) instead — that one is
+  authoritative because the token owns it.
