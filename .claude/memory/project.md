@@ -642,3 +642,9 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   `role_dotfiles` runs. Deliberately NOT applied on `air` (2026-07-28); the
   template's own header says machine-specific settings belong in
   `~/.gitconfig.local`. Unresolved — decide before running the dotfiles role.
+- **Fleet trust is not symmetric, and `fleet-authorized-keys` is the map.** As of
+  2026-07-28 it holds latitude, g513ie(server), wsl-desktop, me-g614jv(desktop)
+  and air — **no `hub` key**. So hub is reachable *from* the fleet but cannot
+  reach *into* it (consistent with its `backup-client` role, but undocumented
+  until now). That is why diagnosing an unreachable latitude has to hop through
+  `desktop`/`server`, never through `hub`.
