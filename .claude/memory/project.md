@@ -668,3 +668,18 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   metheoryt returns 404 for a *private* repo of that other account. Test for the
   **destination** (`gh repo view metheoryt/<x>`) instead — that one is
   authoritative because the token owns it.
+- **latitude's `id_ed25519` is deliberately passphrase-less AND keeps push
+  access** (decided 2026-07-28). Stripping the passphrase was the chosen fix for
+  the auto-pull failure; a read-only deploy key was offered and **declined** on
+  purpose, because latitude stays read/write for pushing directly from the box.
+  So the tradeoff is accepted, not outstanding: that one plaintext file is both
+  the GitHub push key and the fleet-inbound identity, i.e. anything that can read
+  it has full push access to every repo. Do **not** "fix" this by narrowing it
+  without asking — revisit only if latitude stops being a box you commit from.
+- **Committing directly on latitude will stall its auto-pull — visibly or
+  silently, depending on how.** `nix-repo-auto-pull` skips on a **dirty tree**
+  (`exit 0`, one log line, easy to miss — the same failure mode that stranded
+  `desktop-ubuntu26` 23 commits behind), and fails loudly on a **non-ff
+  divergence** (`exit 1`, shows in `systemctl --failed`). So after committing on
+  latitude: push promptly and leave the tree clean, or the box quietly stops
+  syncing with the rest of the fleet.
