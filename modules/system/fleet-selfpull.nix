@@ -89,8 +89,15 @@ in {
           ["HOME=/home/${cfg.user}"]
           ++ lib.optional (cfg.roots != "") "FLEET_ROOTS=${cfg.roots}";
       };
+      # Invoked THROUGH bash, never exec'd directly: provision/fleet-selfpull.sh
+      # is committed mode 644 and carries no executable bit, because the Windows
+      # members clone it onto NTFS where the mode bit does not survive. Every
+      # other scheduler (launchd / systemd-user / cron in provision/lib/tiers.sh)
+      # therefore spells it `/usr/bin/env bash <script>`. Exec'ing it directly
+      # fails with 126 "Permission denied" — observed on latitude 2026-07-28,
+      # this unit's first real run.
       script = ''
-        exec ${lib.escapeShellArg "${cfg.repo}/provision/fleet-selfpull.sh"}
+        exec ${pkgs.bash}/bin/bash ${lib.escapeShellArg "${cfg.repo}/provision/fleet-selfpull.sh"}
       '';
     };
 

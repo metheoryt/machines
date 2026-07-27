@@ -112,4 +112,19 @@ out="$(selfpull_all)"; rc=$?
 eqt "selfpull_all exits 0 when repos only skip" "$rc" "0"
 git -C "$live" checkout -q -- f
 
+# ── every scheduler must invoke the script THROUGH bash ───────────────────────
+# The script is committed mode 644 on purpose: the Windows members clone it onto
+# NTFS, where an executable bit does not survive, so no caller may rely on one.
+# modules/system/fleet-selfpull.nix originally exec'd it directly and its first
+# real run on latitude died with 126 "Permission denied".
+mode="$(git -C "$HERE/.." ls-files -s provision/fleet-selfpull.sh 2>/dev/null | cut -d' ' -f1)"
+eqt "script stays mode 644 (no exec bit to rely on)" "$mode" "100644"
+
+nixmod="$HERE/../modules/system/fleet-selfpull.nix"
+if [ -f "$nixmod" ]; then
+  grep -qE '/bin/bash .*fleet-selfpull\.sh' "$nixmod" \
+    && pass "nix module invokes the script through bash" \
+    || die "nix module must run the script via bash, not exec it (mode 644 = 126)"
+fi
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"
