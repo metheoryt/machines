@@ -20,6 +20,18 @@
 - **Mount every external drive by UUID**, never by `/dev/sdX`. Five USB block devices across two docks have no stable enumeration order.
 - **NTFS stays NTFS for this migration.** Converting 1.35 TB of media to ext4 is a separate follow-up project (Task 19), not part of the cutover. Only PostgreSQL and Docker's own storage move to ext4 on latitude's internal NVMe.
 - **`nix flake check` / `just quick` can only run on latitude.** It is the fleet's only Nix host. Any `[machines]` task that changes Nix must be validated there.
+- **Never validate Nix with `ssh latitude 'cd /home/me/machines && git pull --ff-only && nix build --dry-run …'`.** That idiom (originally written into Task 3 Step 7, Task 7 Step 7, Task 17 Step 5) is wrong twice over. The session already *runs on* latitude, so the `ssh` hop is a no-op detour; and `/home/me/machines` is the **base checkout on `main`**, while this plan's commits live on a worktree branch — the pull fetches `origin/main` and the dry-build evaluates the *pre-change* tree, passing vacuously. Run it locally from the worktree instead:
+
+  ```bash
+  nix build --dry-run '.#nixosConfigurations.latitude.config.system.build.toplevel'
+  ```
+
+  To prove a `fleet.json` change actually reached the generated SSH config (it feeds `modules/system/fleet.nix` → `modules/home/ssh.nix`), build the file and read it:
+
+  ```bash
+  nix build --no-link --print-out-paths \
+    '.#nixosConfigurations.latitude.config.home-manager.users.me.home.file.".ssh/config".source'
+  ```
 - **Timezone `Asia/Almaty`, locale `ru_RU.UTF-8`** — already set in latitude's config; do not change.
 - **Commit on the worktree branch, never on `main`.** Offer a fast-forward merge-back at phase boundaries.
 - Fleet keys stay as they are (`latitude`, `desktop`, `server`, `hub`) until Task 18. Renaming during the migration would churn SSH aliases, the flake attr, and `hosts/` paths while things are in motion.
@@ -130,92 +142,89 @@ Setting `H:` aside protects the years archive (`E:`). It does **not** protect th
 
 ## Phase B — latitude → macOS (Mac becomes primary)
 
-### Task 3: Teach the fleet libraries about the `darwin` platform `[machines]`
+### Task 3: Teach the fleet libraries about the `darwin` platform `[machines]` — ✅ DONE (`62babbd`)
 
 `fleet.json` currently only carries `nixos`, `windows`, `debian`. Dispatch code branches on platform, so add `darwin` before adding the machine.
 
-**Files:**
-- Modify: `provision/lib/fleet.sh`
-- Modify: `provision/lib/Fleet.psm1`
-- Modify: `agents/plugin/skills/lib/fleet-dispatch.sh`
-- Test: `provision/tests/fleet-profile.test.sh`, `provision/tests/tiers.test.sh`, `agents/plugin/skills/lib/tests/`
+**The file list this task originally carried was mostly wrong.** Recorded here as executed, because later tasks depend on knowing where platform dispatch actually lives:
+
+| Originally listed | Reality |
+|---|---|
+| `provision/lib/fleet.sh` | **No platform branching at all** — it only reads the manifest with `jq`. `fleet_platform air` returns `darwin` the moment the entry exists. Not modified. |
+| `provision/lib/Fleet.psm1` | Same — pure `ConvertFrom-Json` accessors. Not modified. |
+| `agents/plugin/skills/lib/fleet-dispatch.sh` | Already correct: `fd_probe`/`fd_run`/`fd_wsl_hosts` branch `windows)` vs `*)`, so `darwin` already lands in the POSIX arm. Not modified — but **pinned with a test**, because nothing otherwise proves it. |
+| *(missed entirely)* | `provision/roles/agents.sh:19`, `provision/roles/dotfiles.sh:39`, `provision/roles/repos.sh:20` — **the real platform `case`s**, and the actual edits. |
+
+**The silent-failure mode that made this matter:** each role executor ends its `case` with a `*)` arm that prints `no posix executor for platform '<p>' (skipped)` and **returns 0**. An unlisted platform therefore provisions nothing and still reports success. `provision/tests/roles.test.sh` (new) guards this for all three roles.
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
 - Produces: `fleet_platform` returns `darwin` for the new host; `fd_probe`/`fd_run` treat `darwin` like a POSIX-SSH host (same branch as `nixos`/`debian`), **not** like `windows` (which tunnels through Git Bash via PowerShell's call operator).
 
-- [ ] **Step 1: Read the current platform branching**
+- [x] **Step 1: Read the current platform branching** — see the table above.
 
-```bash
-grep -n "platform\|windows\|nixos\|debian" provision/lib/fleet.sh agents/plugin/skills/lib/fleet-dispatch.sh
-```
+- [x] **Step 2-3: Write the failing tests, confirm they fail**
 
-Note every `case`/`if` that enumerates platforms. Each one needs a `darwin` arm or must fall through to the POSIX default.
+Three assertions, because one alone does not discriminate. `eq "$(fleet_platform air)" "darwin"` in `fleet-profile.test.sh` only exercises a JSON lookup — it goes green the instant the manifest entry lands, without ever proving a `darwin` arm exists. The load-bearing ones:
 
-- [ ] **Step 2: Write the failing test**
+- `provision/tests/roles.test.sh` — asserts each role executor's output does **not** contain `no posix executor for platform`, i.e. `darwin` reached a real arm. Also regression-guards that `nixos` still *deliberately* defers `agents`/`dotfiles` to home-manager (a real arm, not the fallthrough).
+- `agents/plugin/skills/lib/tests/fleet-dispatch.test.sh` — with the file's documented `SSH` mock hook, asserts `fd_probe air darwin` emits `bash -c true` and contains **no** `bash.exe`, and that `fd_run air darwin` produces the identical `bash -s --` shape as `nixos`.
 
-Add to `provision/tests/fleet-profile.test.sh`, following the file's existing assertion style:
+Observed on first run: `fleet_platform air` → `null`, all three roles → skip arm. The dispatch test passed immediately (already-correct behaviour, now pinned).
 
-```bash
-test_darwin_platform_is_posix() {
-  local out
-  out="$(fleet_platform air)"
-  assert_equals "darwin" "$out"
-}
-```
-
-- [ ] **Step 3: Run it and confirm it fails**
-
-```bash
-bash provision/tests/fleet-profile.test.sh
-```
-
-Expected: FAIL — no `air` machine in `fleet.json` yet, or `darwin` not recognised.
-
-- [ ] **Step 4: Add the `air` entry to `fleet.json`**
+- [x] **Step 4: Add the `air` entry to `fleet.json`**
 
 ```json
     "air": {
       "platform": "darwin",
-      "tailnet": { "ip": "100.64.0.5" },
+      "tailnet": { "ip": "100.64.0.7" },
       "roles": ["base", "ssh-server", "agents", "dotfiles", "repos"],
       "detect": { "hostname": "air" }
     },
 ```
 
-Place it after `"latitude"`. `100.64.0.5` is the next free tailnet address (hub .1, latitude .2, server .3, desktop .4).
+**`100.64.0.7`, not `.5`.** The original `.5` claim assumed the fleet was hub/.1, latitude/.2, server/.3, desktop/.4. Live `headscale nodes list` (2026-07-27) shows two more nodes: **`.5` is `ipheoryt12`** (the iPhone) and **`.6` is `desktop-ubuntu26`** (the self-declared WSL host). Booking `.5` would not have failed here — it would have failed silently at Task 5 Step 3, after the Mac had already joined on a different address.
 
-- [ ] **Step 5: Add the `darwin` arms**
+No `ssh.user` is set, so `modules/home/ssh.nix:34` emits no `User` override and the block defaults to **`me`**. If the macOS account name is not `me`, add `"ssh": { "user": "<name>" }` — see Task 5.
 
-In every platform `case` found in Step 1, group `darwin` with the POSIX hosts. In `fleet-dispatch.sh` the rule is: `windows` gets the PowerShell/Git-Bash path, everything else (`nixos`, `debian`, `darwin`) gets plain `ssh`.
+- [x] **Step 5: Add the `darwin` arms** — per-role reasoning, not one mechanical arm:
 
-- [ ] **Step 6: Run the tests**
+| File | Arm | Why |
+|---|---|---|
+| `roles/agents.sh` | `wsl\|debian\|darwin)` | Groups with the POSIX hosts, **not** `nixos`. No home-manager owns the config on macOS, and `agents/bootstrap.sh:25` already branches on `uname -s` and handles Darwin — so the dispatcher must run it. |
+| `roles/dotfiles.sh` | `wsl\|debian\|darwin)` | chezmoi is the *only* dotfiles mechanism on macOS. `get.chezmoi.io` serves a darwin/arm64 build, so `_dotfiles_ensure_chezmoi` works unchanged. |
+| `roles/repos.sh` | `nixos\|wsl\|debian\|darwin)` | `provision/repos.sh` is host-agnostic plain git; cloning is imperative, so unlike agents/dotfiles this is not a nixos no-op either. |
+
+- [x] **Step 5b: Commit `agents/hosts/air.md` — in THIS task, not Task 6**
+
+`provision/tests/tiers.test.sh:75-79` iterates `.machines[].detect.hostname` and asserts a committed stub at **`agents/hosts/<hostname>.md`**. Adding `air` to `fleet.json` turns that suite red until the stub exists. It is not cosmetic: `agents/bootstrap.sh` seeds a missing stub *inside the repo*, leaving the tree dirty and permanently disabling `fleet-selfpull`'s clean-tree gate on that box.
+
+**This also resolves Task 6 Step 2's flagged unknown.** The path is `agents/hosts/air.md` — **not** `~/machines/hosts/air.md`. Top-level `hosts/` holds NixOS/Windows machine configs (`hosts/latitude/nixos/…`); per-host *memory* lives under `agents/hosts/`, symlinked to `~/.claude/host-memory.md`.
+
+- [x] **Step 6: Run the tests** — all 8 test files in the repo, not just the three listed:
 
 ```bash
-bash provision/tests/fleet-profile.test.sh
-bash provision/tests/tiers.test.sh
-bash provision/tests/fleet-local.test.sh
+for t in provision/tests/*.test.sh agents/plugin/skills/lib/tests/*.test.sh \
+         provision/fleet-selfpull.test.sh provision/ssh-wsl.test.sh provision/tailscale-wsl.test.sh; do
+  printf '%-52s ' "$t"; bash "$t" >/dev/null 2>&1 && echo PASS || echo FAIL
+done
 ```
 
 Expected: all PASS.
 
-- [ ] **Step 7: Validate the Nix side on latitude**
+> **Pre-existing red baseline, fixed in `1c29ecb` before this task.** `tiers.test.sh` had been failing since the hermes commits (`9494167`, `5a35479`) added `hermes` to the agent-CLI tier and appended `tier_hermes_config` / `tier_hermes_dashboard` to the workstation list in `provision/linux.sh:67-68` without updating the test's expected string. Any task gating on "tests pass" would have been blocked by it.
 
-`fleet.json` feeds `modules/system/fleet.nix` and `modules/home/ssh.nix`, which generate `~/.ssh/config`.
-
-```bash
-ssh latitude 'cd /home/me/machines && git pull --ff-only && nix build --dry-run ".#nixosConfigurations.latitude.config.system.build.toplevel"'
-```
-
-Expected: evaluates without error. (Remember: latitude logs into fish — avoid `$(...)` and POSIX `test` syntax in the remote command string.)
-
-- [ ] **Step 8: Commit**
+- [x] **Step 7: Validate the Nix side** — locally, from the worktree. See the Global Constraint on the broken `ssh latitude 'git pull'` idiom.
 
 ```bash
-git add fleet.json provision/lib/fleet.sh provision/lib/Fleet.psm1 \
-        agents/plugin/skills/lib/fleet-dispatch.sh provision/tests/fleet-profile.test.sh
-git commit -m "feat(fleet): add darwin platform and the air MacBook member"
+nix build --dry-run '.#nixosConfigurations.latitude.config.system.build.toplevel'
+nix build --no-link --print-out-paths \
+  '.#nixosConfigurations.latitude.config.home-manager.users.me.home.file.".ssh/config".source'
 ```
+
+Expected: evaluates clean, `hm_.sshconfig.drv` appears in the rebuild set (proof the manifest change reached `ssh.nix`), and the built file contains a `Host air` block. Confirmed 2026-07-27.
+
+- [x] **Step 8: Commit** — `62babbd`.
 
 ---
 
@@ -223,14 +232,25 @@ git commit -m "feat(fleet): add darwin platform and the air MacBook member"
 
 `provision/` is apt-Linux/WSL only (`provision/README.md` says so explicitly). `agents/bootstrap.sh` already branches on `uname -s` and handles macOS, so only the tool-install tier needs a Darwin sibling.
 
+> **Correction — `provision.sh` never calls `linux.sh`.** This task was written assuming a platform dispatcher that does not exist. There are two independent entry points:
+>
+> | Entry point | What it is | How it runs |
+> |---|---|---|
+> | `provision/linux.sh` | The **tier driver** — a standalone script whose tier list lives in `provision/lib/tiers.sh`. Installs the toolchain. | `bash provision/linux.sh` directly (per `provision/README.md:29`). Preview with `MACHINES_TIERS_DRY_RUN=1`. |
+> | `provision/provision.sh` | The **role front door** — reads `fleet.json`, loops `roles[]`, calls `role_<name>` from `provision/roles/*.sh`. Never invokes a tier driver. | `bash provision/provision.sh --machine air --dry-run` |
+>
+> So `macos.sh` is a **standalone sibling of `linux.sh`**, invoked as `bash provision/macos.sh`. There is no `darwin → macos.sh` arm to add to `provision.sh`; the role-side `darwin` work was Task 3 Step 5 and is already done.
+>
+> **The argv in the original Step 4 (`provision/provision.sh air dry-run`) is not the real interface** — `provision.sh:19-25` parses `--machine <name>` / `--dry-run` / `--apply` and exits 2 with `unknown arg: air` on a bare positional. Same error is repeated in Task 6 Step 1.
+
 **Files:**
-- Create: `provision/macos.sh`
+- Create: `provision/macos.sh` (standalone tier driver, sibling of `linux.sh`)
 - Modify: `provision/README.md` (add a macOS section)
-- Modify: `provision/provision.sh` (dispatch `darwin` → `macos.sh`)
+- Modify: `provision/lib/tiers.sh` **only if** a tier body needs a Darwin branch (see Step 2)
 
 **Interfaces:**
-- Consumes: `fleet_platform` returning `darwin` (Task 3).
-- Produces: `provision/macos.sh` accepting the same argv shape as `provision/linux.sh`, so `provision.sh`'s existing role loop works unchanged.
+- Consumes: `fleet_platform` returning `darwin` (Task 3) — used by `provision.sh`'s role loop, which already works for `air` as of Task 3.
+- Produces: `provision/macos.sh`, honouring the same `MACHINES_TIERS_DRY_RUN=1` / `MACHINES_PROFILE=<p>` env contract as `linux.sh` so `tiers.test.sh`-style assertions can drive it.
 
 - [ ] **Step 1: Read `provision/linux.sh` end to end**
 
@@ -247,17 +267,19 @@ Same CORE set as Linux (`git`, `curl`, `python3`, `ripgrep`, `fd`, `fzf`, `jq`),
 - `fd` and `bat` install under their real names via brew — the Debian `fdfind`/`batcat` aliasing in `provision/lib/tiers.sh` must not run.
 - `git-autofetch` is scheduled with a systemd user timer on Linux; on macOS use a `launchd` LaunchAgent plist in `~/Library/LaunchAgents/`.
 
-- [ ] **Step 3: Dispatch `darwin` in `provision.sh`**
+- [ ] **Step 3: (superseded)** — no `provision.sh` change. The `darwin` role arms landed in Task 3 Step 5; see the correction box above.
 
-Add the `darwin` arm next to the existing platform executors so `provision/provision.sh air` routes to `macos.sh`.
-
-- [ ] **Step 4: Dry-run it**
+- [ ] **Step 4: Dry-run both entry points**
 
 ```bash
-bash provision/provision.sh air dry-run
+# tier driver (the new file)
+MACHINES_TIERS_DRY_RUN=1 bash provision/macos.sh
+
+# role front door — note the flag syntax, not bare positionals
+bash provision/provision.sh --machine air --dry-run
 ```
 
-Expected: prints `▸ Machine: air   platform: darwin   mode: dry-run` and a plan line per role, no writes.
+Expected: the tier driver prints its planned tier list and writes nothing; the front door prints `▸ Machine: air   platform: darwin   mode: dry-run` and a plan line per role, with **no** `no posix executor for platform 'darwin'` anywhere in the output.
 
 - [ ] **Step 5: Document it**
 
@@ -301,7 +323,15 @@ Generate `<KEY>` on the hub with `headscale preauthkeys create`.
 tailscale ip -4
 ```
 
-Expected: `100.64.0.5`. If Headscale assigned something else, either reassign it there or update `fleet.json` — they must agree.
+Expected: **`100.64.0.7`** (`.5` is `ipheoryt12`, `.6` is `desktop-ubuntu26` — see Task 3 Step 4). If Headscale assigned something else, either reassign it there or update `fleet.json` — they must agree.
+
+- [ ] **Step 3b: Check the macOS account name against the SSH default**
+
+```bash
+whoami
+```
+
+`modules/home/ssh.nix:34` only emits a `User` line when `fleet.json`'s `ssh.user` differs from the default `me`, and `air` currently sets none — so the generated `Host air` block resolves to `me`. If `whoami` is anything else, add `"ssh": { "user": "<name>" }` to the `air` entry and re-run the dry-build, or every `ssh air` from another fleet member authenticates as the wrong user.
 
 - [ ] **Step 4: Verify reachability both ways**
 
@@ -334,19 +364,26 @@ chmod 600 ~/.ssh/authorized_keys
 - [ ] **Step 1: Clone `machines` and run the provisioner**
 
 ```bash
-git clone <machines-remote> ~/machines
-cd ~/machines && bash provision/provision.sh air apply
+git clone git@github.com:metheoryt/machines.git ~/machines
+cd ~/machines
+
+# 1. toolchain (standalone tier driver — preview first)
+MACHINES_TIERS_DRY_RUN=1 bash provision/macos.sh
+bash provision/macos.sh
+
+# 2. roles (front door — flag syntax, NOT `provision.sh air apply`)
+bash provision/provision.sh --machine air --apply
 ```
 
-Expected: CORE tools installed, `agents/bootstrap.sh` runs, `~/.claude` and `~/.codex` get the shared symlink set (memory stores, `CLAUDE.md`, `plugin/`, `hosts/air.md` → `host-memory.md`).
+Expected: CORE tools installed, `agents/bootstrap.sh` runs, `~/.claude` and `~/.codex` get the shared symlink set (memory stores, `CLAUDE.md`, `plugin/`, `agents/hosts/air.md` → `host-memory.md`).
 
-- [ ] **Step 2: Create the per-host memory file**
+- [x] **Step 2: Create the per-host memory file** — ✅ already done in Task 3 Step 5b.
+
+The path is **`agents/hosts/air.md`** (committed in `62babbd`), not `~/machines/hosts/air.md`. Top-level `hosts/` holds NixOS/Windows machine configs; per-host memory lives under `agents/hosts/`. It had to ship with the `fleet.json` entry because `provision/tests/tiers.test.sh:75-79` asserts a committed stub per manifest hostname — and because `bootstrap.sh` seeding a missing one would dirty the repo and disable `fleet-selfpull`'s clean-tree gate. Nothing to do here; just confirm the symlink resolves after Step 1:
 
 ```bash
-touch ~/machines/hosts/air.md   # bootstrap links this to ~/.claude/host-memory.md
+readlink ~/.claude/host-memory.md   # → …/machines/agents/hosts/air.md
 ```
-
-Note: `hosts/<hostname>.md` under `agents/` is the per-host memory path referenced by `agents/bootstrap.sh` — confirm the exact directory it reads before creating the file, and put it where bootstrap expects.
 
 - [ ] **Step 3: Clone the work repos**
 
@@ -485,16 +522,18 @@ On 25.05 this option takes the attrset form. If the dry-build in Step 7 rejects 
     },
 ```
 
-Dropped: `dev`, `desktop`, `laptop`, `repos`. Added: `backup-hub` (taken from `server`), `services`. Check whether a `services` role already has a handler in `provision/roles/` — if not, either add a stub or leave the role out rather than referencing a role nothing implements.
+Dropped: `dev`, `desktop`, `laptop`, `repos`. Added: `backup-hub` (taken from `server`), `services`.
+
+> **Resolved 2026-07-27 (was flagged unconfirmed).** `provision/roles/` contains exactly three executors — `agents`, `dotfiles`, `repos` (each with a `.sh` and a `.ps1`). There is **no `role_services`**, and none of `base`, `ssh-server`, `backup-hub`, `backup-client`, `laptop`, `desktop`, `dev` has one either. `provision.sh:72-78` handles that gracefully: on `--dry-run` it prints `• <role> — plan: would converge via the <platform> executor for '<role>'`, and on `--apply` it prints `✗ <role> — apply: not yet implemented (skipped)` and moves on. So adding `services` is declarative-only and breaks nothing — it documents intent for a future executor. Add it; do not block on writing one.
 
 - [ ] **Step 7: Validate**
 
 ```bash
 just quick
-ssh latitude 'cd /home/me/machines && git pull --ff-only && nix build --dry-run ".#nixosConfigurations.latitude.config.system.build.toplevel"'
+nix build --dry-run '.#nixosConfigurations.latitude.config.system.build.toplevel'
 ```
 
-Note `just quick` treats `nix flake check` failures as non-fatal — the `nix build --dry-run` is the real gate.
+Note `just quick` treats `nix flake check` failures as non-fatal — the `nix build --dry-run` is the real gate. Run it **locally from the worktree**, not through `ssh latitude 'git pull …'` — see the Global Constraint.
 
 - [ ] **Step 8: Apply and verify on the box**
 
@@ -714,12 +753,14 @@ ssh hub 'cd /path/to/vps/vps && sudo caddy validate --config caddy/Caddyfile && 
 
 At your DNS provider. Do this *after* the Caddy deploy succeeds, so a stale record never points at a listener that no longer answers.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add backup/ vps/caddy/Caddyfile
 git commit -m "feat(backup): port homeserver profiles to Linux; drop Forgejo routes"
 ```
+
+*(Renumbered: this task previously had two steps labelled "Step 6" — the Caddy verify/deploy and the commit. The deploy is Step 6, the DNS cleanup Step 7, this is Step 8.)*
 
 ---
 
@@ -1203,10 +1244,13 @@ Three members plus the VPS: `air` (MacBook Air M5, macOS, primary to-go dev), `d
 
 ```bash
 just quick
-bash provision/tests/fleet-profile.test.sh
-bash provision/tests/fleet-local.test.sh
-ssh latitude 'cd /home/me/machines && git pull --ff-only && nix build --dry-run ".#nixosConfigurations.latitude.config.system.build.toplevel"'
+for t in provision/tests/*.test.sh agents/plugin/skills/lib/tests/*.test.sh; do
+  printf '%-52s ' "$t"; bash "$t" >/dev/null 2>&1 && echo PASS || echo FAIL
+done
+nix build --dry-run '.#nixosConfigurations.latitude.config.system.build.toplevel'
 ```
+
+`tiers.test.sh` is the one that catches a half-done host removal: it asserts a committed `agents/hosts/<hostname>.md` per `fleet.json` entry, so dropping `server` without deleting `agents/hosts/g513ie.md` (and its `methe-server.md` symlink) leaves an orphan the suite will not flag — grep for those two by name.
 
 - [ ] **Step 6: Commit**
 
@@ -1264,7 +1308,17 @@ NTFS-over-USB works for large read-mostly media but costs performance and gives 
 **Spec coverage** — the user's five steps map as: *latitude → macOS* = Tasks 3-6; *latitude switch to server role + adjust vps* = Tasks 7-9; *g15 → latitude* = Tasks 10-14; *retire g15* = Tasks 15-16; *run latitude* = Tasks 13, 15, and the Task 17 cleanup. Tasks 1-2 are prep the user did not ask for but that gate hardware purchases and close the backup gap. Tasks 18-19 are explicitly optional/deferred.
 
 **Known gaps, stated rather than hidden:**
-- The exact per-host memory path `agents/bootstrap.sh` reads is flagged for confirmation in Task 6 Step 2 rather than asserted.
-- Whether a `services` role has an implementation in `provision/roles/` is flagged in Task 7 Step 6 rather than assumed.
+- ~~The exact per-host memory path `agents/bootstrap.sh` reads is flagged for confirmation in Task 6 Step 2.~~ **Resolved 2026-07-27:** `agents/hosts/<detect.hostname>.md`, asserted by `provision/tests/tiers.test.sh:75-79`. Stub committed in `62babbd`.
+- ~~Whether a `services` role has an implementation in `provision/roles/`.~~ **Resolved 2026-07-27:** it does not; only `agents`/`dotfiles`/`repos` exist, and `provision.sh:72-78` degrades gracefully on an unimplemented role. Declaring `services` is safe. See Task 7 Step 6.
 - Navidrome's music library location was never inventoried on the G15 — Task 8 Step 4 assigns it a `/srv` path, but which physical drive holds the music today must be checked before that mount is declared.
 - The `qb` (qBittorrent) download path and the `telegrind`/`embedthat`/`beat` env requirements are covered generically in Tasks 8 and 13; each needs its `.env.dist` read before that task runs.
+- The macOS account name is unverified — Task 5 Step 3b checks `whoami` against the `me` default that `modules/home/ssh.nix` bakes into the generated `Host air` block.
+
+**Execution log:**
+
+| Date | Commit | What |
+|---|---|---|
+| 2026-07-27 | `1c29ecb` | Pre-work: fixed the repo's red `tiers.test.sh` baseline (stale expectation since the hermes tiers landed); gitignored `.claude/worktrees/`. |
+| 2026-07-27 | `62babbd` | **Task 3** complete — `darwin` platform, `air` member at `100.64.0.7`, role-executor arms, `agents/hosts/air.md`, new `roles.test.sh`, dispatch pinned. All 8 test files green; latitude toplevel dry-builds; `Host air` present in the generated SSH config. |
+
+Work happens on branch `worktree-fleet-migration-mac-primary` (worktree at `.claude/worktrees/fleet-migration-mac-primary`), per the Global Constraint against committing on `main`.

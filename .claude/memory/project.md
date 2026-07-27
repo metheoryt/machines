@@ -550,3 +550,42 @@ global + per-host). One bullet per fact under a topical heading.
   `TypeError`), which gortex hit constantly. Added 2026-07-09. When nixpkgs
   ships pylsp with the fix, delete the overlay block + its entry in the
   `overlays` list and revert to stock. Track: https://github.com/python-lsp/python-lsp-server/pull/715
+
+## Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)
+
+Plan: `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`.
+Work branch: `worktree-fleet-migration-mac-primary`.
+
+- **Kingston NVMe attach method:** *pending* — needs `sudo dmidecode -t slot` on
+  latitude (interactive password; not runnable from an agent session). Decides
+  free M.2 2280 slot vs. USB/TB3 enclosure. The Latitude 5520's second M.2 is
+  usually a 2230 WWAN slot, which will not take a 2280 SSD.
+- **2 TB staging drive:** *deferred* — decided 2026-07-27 not to decide yet. If
+  ultimately skipped, Task 12 uses the G→H shuffle fallback and there is no
+  off-site copy of the live upload tier until Task 19. Recorded so the residual
+  gap does not quietly become permanent.
+- **`air` tailnet address is `100.64.0.7`, not `.5`.** Live `headscale nodes
+  list` (2026-07-27): hub .1, latitude .2, server .3, desktop .4, **ipheoryt12
+  .5**, **desktop-ubuntu26 .6**. The iPhone and the WSL host are real tailnet
+  nodes that never appear in `fleet.json` — always read Headscale, never infer
+  the next free address from the manifest.
+- **Per-host memory path is `agents/hosts/<detect.hostname>.md`** — NOT top-level
+  `hosts/` (that holds NixOS/Windows machine configs). `provision/tests/tiers.test.sh`
+  asserts a committed stub for every `fleet.json` hostname, because
+  `agents/bootstrap.sh` seeds a missing one *inside the repo*, dirtying the tree
+  and permanently disabling `fleet-selfpull`'s clean-tree gate on that box. Add
+  the stub in the SAME commit as the manifest entry.
+- **`provision.sh` and `linux.sh` are unrelated entry points.** `linux.sh` is a
+  standalone tier driver (`bash provision/linux.sh`); `provision.sh` is the role
+  front door (`bash provision/provision.sh --machine <m> --dry-run|--apply` —
+  flag syntax, a bare positional exits 2). `provision.sh` never invokes a tier
+  driver. `provision/macos.sh` is therefore a sibling of `linux.sh`.
+- **Platform dispatch lives in `provision/roles/*.sh`, not in `lib/fleet.sh`.**
+  `lib/fleet.sh` and `lib/Fleet.psm1` are pure manifest readers with no `case` at
+  all. Each role executor ends in a `*)` arm that prints "no posix executor" and
+  **returns 0** — an unlisted platform provisions nothing and reports success.
+  `provision/tests/roles.test.sh` guards that. `fleet-dispatch.sh` already routes
+  everything non-`windows` to plain ssh, so new POSIX platforms work there free.
+- **No `role_services` exists** (only `agents`, `dotfiles`, `repos`). Declaring an
+  unimplemented role in `fleet.json` is safe — `provision.sh:72-78` prints
+  "not yet implemented (skipped)" and continues.
