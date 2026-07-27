@@ -608,3 +608,37 @@ Work branch: `worktree-fleet-migration-mac-primary`.
 - **No `role_services` exists** (only `agents`, `dotfiles`, `repos`). Declaring an
   unimplemented role in `fleet.json` is safe — `provision.sh:72-78` prints
   "not yet implemented (skipped)" and continues.
+- **latitude's `nix-repo-auto-pull` has been failing silently** (found 2026-07-28
+  while enrolling `air`). Every 5 min it logs `git@github.com: Permission denied
+  (publickey)` and the unit still **exits 0** — `systemctl` reports "Finished
+  successfully", so nothing surfaces outside `journalctl -u nix-repo-auto-pull`.
+  Cause: `/home/me/.ssh/id_ed25519` is **passphrase-encrypted** (`aes256-ctr` /
+  `bcrypt` in the private-key header). The key is correctly registered on GitHub
+  ("me@NixOS Latitude 5520", `…IBnl…`) and *interactive* pulls work because the
+  login shell has an ssh-agent — but a systemd service has no agent and no TTY.
+  Consequence: **latitude cannot self-heal.** It sat at `369bbf4` while the rest
+  of the fleet moved on, and no converge can fire because converge is triggered
+  by the pull. Unblock it with a manual `git -C ~/machines pull --ff-only` from a
+  shell that has the agent.
+- **`provision/fleet-authorized-keys` was in neither converge predicate** (fixed
+  `de07b77`). It is a real provisioning input on both tiers — `keyFiles` in
+  `modules/system/ssh-server.nix:50` (nixos, baked at build time → needs a
+  rebuild) and `tier_fleet_ssh`'s merge into `~/.ssh/authorized_keys` (linux) —
+  yet matched neither `touches_nix` nor `touches_linux`. Enrolling a new member's
+  key therefore wrote ok, advanced converged-rev, and was **never applied** on
+  latitude or hub. Windows was unaffected (it reprovisions unconditionally).
+  Same silent-skip class the `fleet.json` arm of `touches_nix` already guards.
+- **A fleet box you cannot SSH into is still reachable by hopping** through one
+  whose key is already trusted: `ssh desktop 'ssh me@latitude "…"'`. Note the
+  explicit **`me@`** — desktop is Windows, so its default remote user is `methe`
+  and a bare `ssh latitude` authenticates as the wrong account.
+- **`~/.gitconfig` has two owners and they conflict.** `tier_git_base`
+  (`provision/lib/tiers.sh:337`, via `git config --global`) writes it at tier
+  time; `dotfiles/dot_gitconfig.tmpl` overwrites it wholesale at role time.
+  `provision-mac.sh` runs tiers (step 3) *before* roles (step 4), so **chezmoi
+  wins** and would drop the delta pager, the gh credential helper, all aliases,
+  `pull.rebase`, `push.autoSetupRemote`, and the cyphy671 identity `includeIf`
+  (→ silent commit misattribution). Also latent on wsl/debian, where
+  `role_dotfiles` runs. Deliberately NOT applied on `air` (2026-07-28); the
+  template's own header says machine-specific settings belong in
+  `~/.gitconfig.local`. Unresolved — decide before running the dotfiles role.
