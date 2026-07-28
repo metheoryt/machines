@@ -114,7 +114,55 @@ sync_push() {
     return 0
 }
 
-# sync_tick: one full pass. Task 3 extends this with fetch/preflight/merge.
+# sync_merge <branch>: fetch origin/main, preflight the merge in the object
+# store, and only then touch $HOME. ALWAYS returns 0 — a conflict is a state to
+# report, not a malfunction to alarm on.
+sync_merge() {
+    local branch="$1" marker="$DOTFILES_STATE_DIR/conflict"
+
+    # EXPLICIT REFSPEC, deliberately. `git clone --bare` configures no
+    # remote.origin.fetch, so a bare dotfiles repo has NO refs/remotes/origin/*
+    # at all and a plain `fetch origin main` lands in FETCH_HEAD only — every
+    # later mention of origin/main would then fail to resolve and the merge step
+    # would silently no-op forever. The role configures the refspec too; naming
+    # it here keeps the timer correct on a repo cloned by hand.
+    if ! df fetch -q origin '+refs/heads/main:refs/remotes/origin/main' 2>/dev/null; then
+        echo "dotfiles-sync: fetch failed (offline or auth) — retrying next tick" >&2
+        return 0
+    fi
+
+    # BELOW THE FLOOR: commit and push only. Attempting the merge without a
+    # preflight is the one thing this script must never do.
+    if ! git_has_mergetree; then
+        echo "dotfiles-sync: git $(git --version | awk '{print $3}') lacks 'merge-tree --write-tree' (needs 2.38+) — skipping merge; commit and push still ran" >&2
+        return 0
+    fi
+
+    # merge-tree --write-tree writes ONLY to the object store. On conflict it
+    # exits non-zero having changed nothing on disk. This is the whole reason
+    # the design is safe to run unattended against a live $HOME.
+    if ! df merge-tree --write-tree "$branch" origin/main >/dev/null 2>&1; then
+        mkdir -p "$DOTFILES_STATE_DIR"
+        {
+            printf 'conflict merging origin/main into %s\n' "$branch"
+            printf 'detected: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf 'resolve by hand, then the next tick clears this file:\n'
+            printf '  git --git-dir=%s --work-tree=%s merge origin/main\n' \
+                   "$DOTFILES_GIT_DIR" "$DOTFILES_WORK_TREE"
+        } > "$marker"
+        echo "dotfiles-sync: origin/main conflicts with $branch — \$HOME untouched; see $marker" >&2
+        return 0
+    fi
+
+    rm -f "$marker"
+    # Preflight was clean, so this cannot conflict. It can still refuse if a
+    # tracked file changed in the seconds since sync_commit ran — harmless, the
+    # next tick commits that change first and then merges.
+    df merge -q --no-edit --ff origin/main >/dev/null 2>&1 || true
+    return 0
+}
+
+# sync_tick: one full pass — spec §5.1 steps 1-6.
 sync_tick() {
     local branch rc
     branch="$(sync_guard)"; rc=$?
@@ -122,6 +170,7 @@ sync_tick() {
     [ "$rc" -eq 0 ] || return "$rc"
     sync_commit "$branch" || return 1
     sync_push "$branch"
+    sync_merge "$branch"
     return 0
 }
 
