@@ -38,10 +38,18 @@ JSON
 if command -v jq >/dev/null 2>&1; then
   # ── fleet_hosts: hub excluded, correct tuples ───────────────────────────────
   fh="$(fleet_hosts "$fixture_json")"
-  [ "$(printf '%s\n' "$fh" | wc -l)" = 3 ] || { echo "FAIL: fleet_hosts expected 3 rows, got: $fh"; exit 1; }
-  printf '%s\n' "$fh" | grep -qP '^latitude\tnixos\tlatitude5520\t$' || { echo "FAIL: fleet_hosts latitude tuple"; exit 1; }
-  printf '%s\n' "$fh" | grep -qP '^desktop\twindows\tg614jv\tmethe$'  || { echo "FAIL: fleet_hosts desktop tuple"; exit 1; }
-  printf '%s\n' "$fh" | grep -qP '^server\twindows\tmethe-server\tmethe$' || { echo "FAIL: fleet_hosts server tuple"; exit 1; }
+  # `| tr -d '[:space:]'` is load-bearing: BSD/macOS `wc -l` PADS its output
+  # ("       3"), so a bare string compare against 3 fails on air while passing on
+  # every Linux box. This suite ran green in CI-ish Linux use and red on macOS for
+  # exactly that reason — nothing to do with the fixture.
+  [ "$(printf '%s\n' "$fh" | wc -l | tr -d '[:space:]')" = 3 ] || { echo "FAIL: fleet_hosts expected 3 rows, got: $fh"; exit 1; }
+  # grep -F -x, not grep -P: -P is GNU-only and BSD/macOS grep prints its usage
+  # instead of matching. -Fx is an exact WHOLE-LINE match, which is what these
+  # anchored patterns meant, and printf gives us the real tabs.
+  has_row() { printf '%s\n' "$1" | grep -Fxq "$(printf "$2")"; }
+  has_row "$fh" 'latitude\tnixos\tlatitude5520\t' || { echo "FAIL: fleet_hosts latitude tuple"; exit 1; }
+  has_row "$fh" 'desktop\twindows\tg614jv\tmethe'  || { echo "FAIL: fleet_hosts desktop tuple"; exit 1; }
+  has_row "$fh" 'server\twindows\tmethe-server\tmethe' || { echo "FAIL: fleet_hosts server tuple"; exit 1; }
   printf '%s\n' "$fh" | grep -q 'hub' && { echo "FAIL: fleet_hosts must exclude hub"; exit 1; }
 
   # ── local_host_id: known hostname → canonical id; unknown → passthrough ──────
@@ -53,12 +61,18 @@ else
 fi
 
 # ── roots_for_platform ────────────────────────────────────────────────────────
+# ONE root on every platform, deliberately. This test used to assert a second
+# /mnt/c/Users/<user>/.claude/projects root for windows; that was dropped from the
+# implementation when Windows dispatch moved to Git Bash and WSL distros became
+# separate fleet hosts (harvested directly via fd_wsl_hosts). Git Bash has no
+# /mnt/c, so the extra root would fail the set -e remote distill. The test was not
+# updated with it and had been failing since.
 rw="$(roots_for_platform windows methe)"
-eq "$(printf '%s\n' "$rw" | sed -n 1p)" '/mnt/c/Users/methe/.claude/projects' 'roots windows: profile root first'
-eq "$(printf '%s\n' "$rw" | sed -n 2p)" '~/.claude/projects'                  'roots windows: WSL root second'
-[ "$(printf '%s\n' "$rw" | wc -l)" = 2 ] || { echo "FAIL: roots windows expected 2 roots"; exit 1; }
+eq "$rw" '~/.claude/projects' 'roots windows: the single profile root'
+[ "$(printf '%s\n' "$rw" | wc -l | tr -d '[:space:]')" = 1 ] || { echo "FAIL: roots windows expected exactly 1 root"; exit 1; }
 ru="$(roots_for_platform nixos '')"
-eq "$ru" '~/.claude/projects' 'roots unix: single WSL/home root'
+eq "$ru" '~/.claude/projects' 'roots unix: single home root'
+eq "$rw" "$ru" 'roots: platform makes no difference now (~ expands per box)'
 
 # ── remote_distill_script: static, argv-driven, per-root loop ─────────────────
 rds="$(remote_distill_script)"
@@ -79,7 +93,7 @@ if command -v jq >/dev/null 2>&1; then
   # desktop absent from config → excluded; hub never a workstation
   eq "$aliases" 'latitude server ' 'detect_hosts: config-present workstations only'
   # the emitted row is the full tuple, not just the alias
-  detect_hosts "$fixture_json" "$tmp/.ssh/config" | grep -qP '^server\twindows\tmethe-server\tmethe$' \
+  detect_hosts "$fixture_json" "$tmp/.ssh/config" | grep -Fxq "$(printf 'server\twindows\tmethe-server\tmethe')" \
     || fail 'detect_hosts: emits full tuple per host'
 else
   echo "SKIP: detect_hosts test (jq not installed)"

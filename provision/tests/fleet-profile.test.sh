@@ -12,9 +12,15 @@ eq()   { [ "$1" = "$2" ] && pass "$3" || die "$3: expected '$2' got '$1'"; }
 # shellcheck source=/dev/null
 source "$LIB"
 
-# fleet_profile: explicit field on hub, default elsewhere.
-eq "$(fleet_profile hub)" "hub" "fleet_profile hub == hub"
-eq "$(fleet_profile latitude)" "workstation" "fleet_profile latitude defaults to workstation"
+# fleet_profile: an explicit `profile` field wins; absent, it defaults to
+# workstation. hub and latitude carry one (latitude gained `server` in 380cb55,
+# ahead of its post-NixOS reinstall as a headless box); `air` and `desktop` carry
+# none, so they exercise the default path. Keep at least one of each here — a
+# manifest edit that gives every machine an explicit profile would otherwise leave
+# the default branch untested.
+eq "$(fleet_profile hub)" "hub" "fleet_profile hub == hub (explicit)"
+eq "$(fleet_profile latitude)" "server" "fleet_profile latitude == server (explicit, post-NixOS)"
+eq "$(fleet_profile air)" "workstation" "fleet_profile air defaults to workstation"
 
 # fleet_platform: the manifest is the only source — a new platform needs no
 # code change here, but `air` must resolve to darwin or every downstream
@@ -24,7 +30,7 @@ eq "$(fleet_platform latitude)" "nixos" "fleet_platform latitude == nixos"
 
 # fleet_profile_for_host: OS hostname -> profile.
 eq "$(fleet_profile_for_host 27608)" "hub" "for_host 27608 == hub"
-eq "$(fleet_profile_for_host latitude5520)" "workstation" "for_host latitude5520 == workstation"
+eq "$(fleet_profile_for_host latitude5520)" "server" "for_host latitude5520 == server"
 eq "$(fleet_profile_for_host air)" "workstation" "for_host air == workstation"
 
 # macOS reports the Bonjour name (`air.local`) from `hostname`/`uname -n` whenever

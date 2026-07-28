@@ -27,10 +27,18 @@ esac
 main_root=$(dirname "$common")
 gitdir=$(git rev-parse --absolute-git-dir)
 
+# Resolve a dir to its physical path; echo the input unchanged if it isn't one.
+# Needed on both sides of the comparison below: git reports physical paths, while a
+# gortex config may hold a path through a symlink (/var vs /private/var on macOS,
+# or a symlinked home), and a prefix-only difference would silently disable
+# tracking with a "not covered" message that looks like a config mistake.
+resolve_dir() { ( cd "$1" 2>/dev/null && pwd -P ) || printf '%s' "$1"; }
+
 # config path membership: exact match of a resolved dir against a repos[].path entry.
 # Parse the flat `- path: <p>` lines; tolerate optional quotes and trailing whitespace.
 config_has_path() {
-  local target="$1" line p
+  local target line p
+  target="$(resolve_dir "$1")"
   [ -f "$CONFIG" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
@@ -40,7 +48,7 @@ config_has_path() {
     p=${line#*path:}
     p=$(printf '%s' "$p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
     [ -n "$p" ] || continue
-    [ "$p" = "$target" ] && return 0
+    [ "$(resolve_dir "$p")" = "$target" ] && return 0
   done < "$CONFIG"
   return 1
 }
