@@ -533,7 +533,11 @@ UNIT
   # Starting the service is enough to free the tty right now: Conflicts= stops
   # the getty automatically. `disable` is only about what happens at the NEXT
   # boot, so it is safe to defer to the end.
-  systemctl start "$SERVICE_NAME" 2>/dev/null
+  # restart, not start: `start` is a NO-OP when the unit is already active, so a
+  # re-install after a code change left the OLD process painting the screen while
+  # reporting success (seen 2026-07-29 — tty1 kept the pre-update frame). restart
+  # also covers the not-yet-running case, so it is strictly better here.
+  systemctl restart "$SERVICE_NAME" 2>/dev/null
   sleep 1
   if ! systemctl is-active --quiet "$SERVICE_NAME"; then
     printf '%s failed to start — rolling back so the console stays usable:\n' "$SERVICE_NAME" >&2

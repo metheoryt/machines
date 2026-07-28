@@ -97,7 +97,11 @@ case "$PROFILE" in
     # retire_link()s ~/.claude/{CLAUDE.md,memory,host-memory.md,statusline-…}
     # instead of symlinking them, and only claims ~/.claude/skills/cyphy, which
     # the dotfiles branch does not track.
-    TIERS=(apt_min apt_dev agents_config git_base "agent_clis claude"
+    # sudo_nopasswd is server-only and runs FIRST: every later privileged tier —
+    # and every converge rebuild afterwards — then takes linux.sh's `sudo -n` path
+    # instead of needing a human at a TTY. Deliberately absent from workstation
+    # (a laptop someone carries) and from hub (its provider already set it up).
+    TIERS=(sudo_nopasswd apt_min apt_dev agents_config git_base "agent_clis claude"
            shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;

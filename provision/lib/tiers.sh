@@ -944,6 +944,65 @@ tier_dotfiles() {
 # only once the tracked diff has settled (dotfiles-sync.sh sync_should_commit),
 # so this timer interval is NOT the rate at which commits appear. Changing the
 # script needs no re-provision — every scheduler here points at its absolute path.
+# ── Passwordless sudo (server profile) ────────────────────────────────────────
+# An always-on headless box is administered entirely over SSH, and every root task
+# here — `--install`ing a unit, apt, setupcon, a converge rebuild — otherwise needs
+# a human at a TTY to type a password. linux.sh already treats passwordless sudo as
+# a first-class case (it picks `sudo -n` when it works and degrades to PRIV=0 when
+# no root is reachable), so this tier is what makes the good branch true.
+#
+# Be honest about the trade rather than dressing it up: this is root for anything
+# already running as this user, with no second factor. It is accepted here for the
+# same reason base.nix accepts NOPASSWD nixos-rebuild — these are personal boxes
+# whose SSH is keys-only and tailnet-bound — and it is NOT in the workstation or hub
+# tier lists. Note also what it is not: sudo cannot see the tailnet. sudoers matches
+# the local host, and a local sudo has no PAM rhost, so "passwordless only over the
+# tailnet" is not expressible. The tailnet is a property of how you got here, not of
+# the privilege check.
+tier_sudo_nopasswd() {
+  local user file tmp line
+  user="${SUDO_USER:-$(id -un)}"
+  if [ "$user" = root ]; then
+    warn "cannot tell which user to grant passwordless sudo to (running as root with no SUDO_USER) — skipping"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping passwordless sudo for '$user'"
+    return 0
+  fi
+
+  # SUDOERS_DIR exists so provision/tests/sudo-nopasswd.test.sh can exercise the
+  # validate-then-install path against a temp directory; nothing sets it in anger.
+  file="${SUDOERS_DIR:-/etc/sudoers.d}/$user"
+  line="$user ALL=(ALL) NOPASSWD: ALL"
+  if [ "$($SUDO cat "$file" 2>/dev/null)" = "$line" ]; then
+    ok "passwordless sudo already configured for '$user'"
+    return 0
+  fi
+
+  # Validate BEFORE installing. A syntactically broken file under /etc/sudoers.d
+  # makes sudo refuse to run at all, and the only way back is a root shell — which
+  # on a headless box means a trip to the physical console.
+  tmp="$(mktemp)"
+  printf '%s\n' "$line" > "$tmp"
+  if ! $SUDO visudo -c -f "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    warn "visudo rejected the drop-in for '$user' — leaving sudo untouched"
+    return 0
+  fi
+  # No -o/-g: the install runs as root, so the file is root-owned already, and
+  # naming the group explicitly would fail on any system whose root group is not
+  # called "root" (macOS calls it wheel). 0440 is the part sudo actually checks —
+  # it ignores a sudoers file that is group- or world-writable.
+  $SUDO install -m 0440 "$tmp" "$file" || {
+    rm -f "$tmp"
+    warn "could not install $file"
+    return 0
+  }
+  rm -f "$tmp"
+  ok "passwordless sudo for '$user' ($file)"
+}
+
 tier_dotfiles_sync() {
   info "Installing dotfiles sync timer…"
   DFS="$REPO/provision/dotfiles-sync.sh"

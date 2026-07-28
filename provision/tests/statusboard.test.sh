@@ -274,13 +274,17 @@ eq "$?" '0' 'unit: SupplementaryGroups=tty — an unprivileged service cannot op
 
 # Ordering: the service must be proven running BEFORE the getty is disabled.
 SB="$REPO/provision/statusboard/statusboard.sh"
-start_ln="$(grep -n 'systemctl start "\$SERVICE_NAME"' "$SB" | head -1 | cut -d: -f1)"
+start_ln="$(grep -n 'systemctl restart "\$SERVICE_NAME"' "$SB" | head -1 | cut -d: -f1)"
 disable_ln="$(grep -n 'systemctl disable "\$GETTY_UNIT"' "$SB" | head -1 | cut -d: -f1)"
 [ -n "$start_ln" ] && [ -n "$disable_ln" ] && [ "$start_ln" -lt "$disable_ln" ]
 eq "$?" '0' 'install: starts the board before disabling the getty, never the reverse'
 
 grep -q 'is-active --quiet "\$SERVICE_NAME"' "$SB"
 eq "$?" '0' 'install: verifies the service is actually active'
+# `start` on an already-active unit does nothing, so a re-install after a code
+# change would report success while the old process kept painting the screen.
+grep -q 'systemctl start "\$SERVICE_NAME"' "$SB"
+eq "$?" '1' 'install: uses restart, never a bare start (which no-ops when active)'
 rollback_ln="$(grep -n 'restored %s. Nothing else changed' "$SB" | head -1 | cut -d: -f1)"
 [ -n "$rollback_ln" ]; eq "$?" '0' 'install: rolls the getty back when the service fails to start'
 grep -q 'ProtectSystem=strict' "$REPO/provision/statusboard/statusboard.sh"

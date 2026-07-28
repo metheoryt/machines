@@ -55,8 +55,18 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
+
+# sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
+# takes linux.sh's `sudo -n` path rather than needing a human at a TTY. It stays off
+# a laptop someone carries, and off hub (whose provider already set it up).
+has "$srv" '^tier_sudo_nopasswd$'      "server runs tier_sudo_nopasswd"
+eq "$(printf '%s\n' "$srv" | grep '^tier_' | head -1)" 'tier_sudo_nopasswd' \
+   "server runs tier_sudo_nopasswd FIRST"
+hasnt "$ws"  '^tier_sudo_nopasswd$'    "workstation NEVER grants passwordless sudo"
+hasnt "$hub" '^tier_sudo_nopasswd$'    "hub NEVER grants passwordless sudo"
+hasnt "$mac" '^tier_sudo_nopasswd$'    "macOS NEVER grants passwordless sudo"
 
 hasnt "$srv" '^tier_gortex$'           "server omits tier_gortex (no indexed checkouts to serve)"
 hasnt "$srv" 'codex'                   "server omits the codex CLI"
