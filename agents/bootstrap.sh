@@ -313,8 +313,14 @@ if [ -n "${BOOTSTRAP_LIB_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
 printf 'Bootstrapping Claude config\n  repo:  %s\n  live:  %s\n\n' "$SRC_DIR" "$CLAUDE_DIR"
 
 # Shared whole-file links (every profile).
+# statusline + balance refresh are dotfiles-owned real files at ~/.claude/.
+# settings.json references them as "$HOME/.claude/statusline-command.sh", so the
+# reference is unchanged. Secondary profiles link at the primary.
 for f in statusline-command.sh balance-refresh.py; do
-  link "$SRC_DIR/$f" "$CLAUDE_DIR/$f"
+  retire_link "$CLAUDE_DIR/$f"
+  if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+    link_if_present "$PRIMARY_DIR/$f" "$CLAUDE_DIR/$f"
+  fi
 done
 # settings.json is committed per-profile, chosen by convention (see the POSTFIX
 # block above): ~/.claude -> settings.json, ~/.claude-<postfix> ->

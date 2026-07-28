@@ -124,4 +124,11 @@ out6="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -
 check "no link from agents/AGENTS.md into the primary profile" \
   '! printf "%s" "$out6" | grep -q "agents/AGENTS.md"'
 
+# Case 7: statusline + balance refresh are dotfiles-owned.
+out7="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+check "statusline is not linked from the repo" \
+  '! printf "%s" "$out7" | grep -q "agents/statusline-command.sh"'
+check "balance-refresh is not linked from the repo" \
+  '! printf "%s" "$out7" | grep -q "agents/balance-refresh.py"'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
