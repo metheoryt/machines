@@ -349,10 +349,17 @@ if (-not (Test-Path $convergeScript)) {
         $pullUser = $env:USERNAME
     }
     if (-not $pullUser) {
-        if (Get-ScheduledTask -TaskName 'fleet-selfpull' -EA SilentlyContinue) {
-            Info "fleet-selfpull already registered; headless SYSTEM run, no console user - leaving it."
+        # Both user-owned tasks live in the else-branch below, so a headless run
+        # skips BOTH. Name each one that is actually missing: reporting only
+        # fleet-selfpull here reads as "nothing to do" on a box where
+        # dotfiles-sync was never registered, and the sync timer then silently
+        # never exists.
+        $missing = @('fleet-selfpull','dotfiles-sync') |
+            Where-Object { -not (Get-ScheduledTask -TaskName $_ -EA SilentlyContinue) }
+        if ($missing) {
+            Warn "$($missing -join ', ') not registered and no interactive user to own it - run provision\windows.ps1 once from your normal login to create it."
         } else {
-            Warn "fleet-selfpull not registered and no interactive user to own it - run provision\windows.ps1 once from your normal login to create it."
+            Info "fleet-selfpull and dotfiles-sync already registered; headless SYSTEM run, no console user - leaving them."
         }
     } else {
         $selfpullPs1 = Join-Path $RepoDir 'provision\fleet-selfpull.ps1'
