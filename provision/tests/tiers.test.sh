@@ -19,6 +19,7 @@ macplan() { MACHINES_TIERS_DRY_RUN=1 MACHINES_PROFILE="$1" bash "$MACDRIVER" 2>&
 
 ws="$(plan workstation)"
 hub="$(plan hub)"
+srv="$(plan server)"
 mac="$(macplan workstation)"
 
 # Profile banner names the resolution source.
@@ -50,6 +51,32 @@ has "$hub" '^tier_selfpull %h/machines$' "hub pins FLEET_ROOTS to %h/machines"
 has "$ws"  '^tier_selfpull$'             "workstation leaves FLEET_ROOTS default"
 has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 
+# ── server: the always-on services box (latitude, post-NixOS) ─────────────────
+# It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
+# tier, which is lean only because the hub is a 960MB VPS.
+eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
+   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "server tier list and order"
+
+hasnt "$srv" '^tier_gortex$'           "server omits tier_gortex (no indexed checkouts to serve)"
+hasnt "$srv" 'codex'                   "server omits the codex CLI"
+hasnt "$srv" '^tier_hermes'            "server omits the hermes tiers"
+has   "$srv" '^tier_apt_dev$'          "server KEEPS the dev apt layer (gh, fish, starship)"
+has   "$srv" '^tier_shell_init$'       "server keeps fish (no --no-fish, unlike hub)"
+has   "$srv" '^tier_ssh_accounts$'     "server wires the GitHub account aliases"
+has   "$srv" '^tier_selfpull$'         "server leaves FLEET_ROOTS default (\$HOME + \$HOME/my)"
+
+# ORDER GUARD: the dotfiles bare-repo checkout is REFUSED when an untracked file
+# already sits at a tracked path, so tier_dotfiles must stay last — after
+# ssh_accounts, which generates the key its private-repo clone needs.
+eq "$(printf '%s\n' "$srv" | grep -c '^tier_dotfiles$')" "1" "server runs tier_dotfiles once"
+eq "$(printf '%s\n' "$srv" | grep '^tier_' | tail -1)" "tier_dotfiles" "server runs tier_dotfiles LAST"
+srv_accounts="$(printf '%s\n' "$srv" | grep -n '^tier_ssh_accounts$' | cut -d: -f1)"
+srv_dotfiles="$(printf '%s\n' "$srv" | grep -n '^tier_dotfiles$' | cut -d: -f1)"
+[ "$srv_accounts" -lt "$srv_dotfiles" ] \
+  && pass "server runs ssh_accounts BEFORE dotfiles (the clone needs a key)" \
+  || die "server must run ssh_accounts before dotfiles"
+
 # Resolution precedence 2 and 3: no env override, so the driver must read
 # fleet.json by OS hostname, and fall back to workstation for an unknown box.
 # Stub `hostname` on PATH (keep the real binaries the driver needs).
@@ -60,6 +87,10 @@ plan_host() { stub_host "$1"; MACHINES_TIERS_DRY_RUN=1 PATH="$tmp/bin:$PATH" bas
 
 has "$(plan_host 27608)" 'profile: hub \(from fleet.json\)' "hostname 27608 resolves to hub via fleet.json"
 has "$(plan_host wsl-scratch)" 'profile: workstation \(default\)' "unknown hostname defaults to workstation"
+# latitude keeps OS hostname latitude5520 across the NixOS→Debian reinstall
+# PRECISELY so this resolves; a renamed box would fall through to workstation and
+# silently install the dev layer it no longer wants.
+has "$(plan_host latitude5520)" 'profile: server \(from fleet.json\)' "hostname latitude5520 resolves to server via fleet.json"
 
 # Library sources inert.
 out="$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; declare -F tier_apt_min >/dev/null && echo LOADED' _ "$TIERS")"
@@ -139,13 +170,16 @@ macplan hub >/dev/null 2>&1 && die "macos hub profile should be rejected" \
 has "$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; echo SOURCED-OK' _ "$TIERS" 2>&1)" \
     'SOURCED-OK' "tiers.sh sources cleanly with the darwin additions"
 
-# Every fleet.json machine must already have a committed per-host memory stub:
-# agents/bootstrap.sh seeds a MISSING one inside the repo, which leaves the tree
-# dirty and permanently disables fleet-selfpull's clean-tree gate on that box.
-for h in $(jq -r '.machines[].detect.hostname' "$HERE/../../fleet.json"); do
-  [ -f "$HERE/../../agents/hosts/$h.md" ] \
-    && pass "host memory stub committed for $h" \
-    || die "host memory stub committed for $h"
-done
+# The per-host-memory-stub guard is GONE ON PURPOSE (2026-07-28). It required a
+# committed agents/hosts/<detect.hostname>.md for every fleet.json machine,
+# because agents/bootstrap.sh used to SEED a missing one inside the repo — which
+# left the tree dirty and permanently disabled fleet-selfpull's clean-tree gate on
+# that box. bootstrap no longer seeds anything: per-host memory is a real file at
+# ~/.claude/host-memory.md tracked on that machine's dotfiles branch, so there is
+# no repo path to be missing and no way for a new host to dirty this tree.
+#
+# Do NOT reinstate this loop against agents/hosts/ — that directory no longer
+# exists. The equivalent property now lives in agents/tests/bootstrap.test.sh
+# Case 1, which asserts bootstrap seeds and links nothing for that path.
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

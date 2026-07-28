@@ -2,6 +2,7 @@
   "machines": {
     "latitude": {
       "platform": "nixos",
+      "profile": "server",
       "tailnet": { "ip": "100.64.0.2" },
       "roles": ["base", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client"],
       "detect": { "hostname": "latitude5520" }

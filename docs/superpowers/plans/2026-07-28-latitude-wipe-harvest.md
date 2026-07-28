@@ -363,7 +363,77 @@ place.
 10. Update `fleet.json` (platform, IP, roles) and re-provision through the role
     front door. Re-accept the changed SSH host key on the other members.
 
-## 10. Standing holds
+## 10. What gets installed — decided 2026-07-28
+
+**Debian 13 trixie**, netinst, no desktop task. The distro family was never
+really open: `provision/linux.sh:91` dies unless `apt-get` exists, so it is
+Debian or Ubuntu. trixie over hub's bookworm for the 6.12 kernel (Tiger Lake
+VAAPI/QSV, if anything ever transcodes on the iGPU) and no snap layer; the cost
+is running two Debian releases in the fleet, which the tiers tolerate because
+they only name generic packages.
+
+**Partitioning, KIOXIA 512G only:** ESP 1G, ext4 root ~470G, 4G swap (24 GB RAM,
+no hibernation on a server), no separate `/home` on a single-purpose box, and the
+orphan `p3` deleted. ext4 rather than btrfs because the backup tooling is already
+restic — snapshots would be a second mechanism earning nothing.
+
+**The OS hostname stays `latitude5520`.** Load-bearing, not cosmetic: profile
+resolution matches `fleet.json`'s `detect.hostname`, and a renamed box falls
+through to `workstation` and silently installs the dev layer it no longer wants.
+A regression test now pins this.
+
+### The `server` profile (implemented 2026-07-28)
+
+`provision/linux.sh` gained a third profile, and `fleet.json` now carries
+`"profile": "server"` for latitude:
+
+```
+tier_apt_min tier_apt_dev tier_agents_config tier_git_base
+tier_agent_clis claude tier_shell_init tier_autofetch
+tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles
+```
+
+It is **workstation minus `gortex`, `codex`, `hermes`, `hermes_config`,
+`hermes_dashboard`** — not a copy of the `hub` tier, which is lean only because
+the hub is a 960 MB VPS. This box has 24 GB and 470 GB and a human SSHes into it,
+so it keeps `apt_dev` (gh, ripgrep/fd/fzf, fish, starship, uv) and fish.
+
+Three ordering facts that the tier list depends on, each verified rather than
+assumed:
+
+- **`ssh_accounts` is included here though `hub` forbids it.** The hub hazard is
+  that pinning `github.com` to a freshly generated, unregistered key kills that
+  box's only working GitHub auth. After a reinstall latitude has *no* key at all,
+  so there is nothing to break — and it closes the gap the NixOS config left,
+  where `modules/home/ssh.nix` rendered fleet hosts only and GitHub fell back to
+  default key order with no per-account alias.
+- **`dotfiles` stays last, and after `ssh_accounts`.** The bare-repo checkout is
+  *refused* — not silently clobbered — when an untracked file already occupies a
+  tracked path (`provision/roles/dotfiles.sh`, `_dotfiles_checkout`), and a
+  refusal means no branch recorded and no sync timer, a timer that looks
+  installed and never works. Two things make last safe: branch `latitude` tracks
+  22 paths of which only `.claude/host-memory.md` is host-local, and none of them
+  is `~/.gitconfig` or `~/.ssh/config` (unlike branch `air`); and after the
+  2026-07-28 handover `agents/bootstrap.sh` `retire_link`s
+  `~/.claude/{CLAUDE.md,memory,host-memory.md,statusline-command.sh}` rather than
+  symlinking them, claiming only `~/.claude/skills/cyphy`, which the branch does
+  not track. `ssh_accounts` must precede it because the private-repo clone needs
+  a key.
+- **`selfpull` stays unpinned.** Its default roots are `$HOME $HOME/my` — exactly
+  `~/machines` plus `~/my/vps` here — and the data disks mount outside `$HOME`,
+  so there is nothing to over-scan. `hub` pins `%h/machines` only because of its
+  own `~/vps` checkout.
+
+Not added, per the explicit decision to install the rest by hand: Docker, sshd
+config, fstab mounts, resticprofile. Those were NixOS modules or `windows.ps1`
+steps and have no tier today.
+
+**Known overstatement, not fixed today:** `provision/roles/` contains only
+`agents`, `dotfiles`, `repos`. `fleet.json`'s role list for latitude still names
+`base`, `ssh-server`, `dev`, `desktop`, `laptop`, `backup-client`, none of which
+has an executor — so the manifest promises more than provisioning delivers.
+
+## 11. Standing holds
 
 - The Kingston 1TB stays under the hold — no reformat, no repartition — until
   §5 is resolved. The ~980 MB/s SEQ1M Q8T1 enclosure benchmark demonstrates
