@@ -51,7 +51,11 @@ REPAIR=~/machines/agents/plugin/skills/orca-repair/orca-repair.py
 python3 "$REPAIR"
 
 # 2. QUIT the Orca IDE *window* (app Quit, not kill-a-child). Confirm the UI is
-#    down: test ! -e ~/.config/orca/orca-runtime.json && echo down
+#    down: no manual check needed — step 3 REFUSES with the pid and exits 1 while
+#    the UI is up, so just run it and read what it says.
+#    (Do NOT test ~/.config/orca/orca-runtime.json by hand: that path is Linux/WSL
+#     only — macOS keeps it under ~/Library/Application Support/orca, Windows under
+#     ~/AppData/Roaming/orca. The script resolves the right one itself.)
 #    A lingering background daemon is harmless — it won't block the write, so you
 #    do NOT need to kill it. (It doesn't serve the live query, so quitting the UI
 #    ended live stale-recent detection regardless — that's why step 3 uses --match.)
@@ -70,9 +74,14 @@ worktree also still exists and is abandoned, remove it separately with
 
 ## Notes
 
+- **Paths are resolved per platform** (2026-07-29): `~/.config/orca` on Linux/WSL,
+  `~/Library/Application Support/orca` on macOS, `~/AppData/Roaming/orca` on
+  Windows — whichever actually holds `profiles/local-default/orca-data.json` wins.
+  Before that only the Linux path was known, which on macOS meant every read
+  silently missed AND no Orca process was ever classified, so the `--apply` guard
+  could not see a live UI and would have written the file under it.
 - `orca-data.json` is per-machine (not synced), so run this on whichever machine
-  shows the ghosts. The default profile path is
-  `~/.config/orca/profiles/local-default/orca-data.json`; pass `--data <path>` for
-  another profile.
+  shows the ghosts. The default profile path is resolved per platform (see above);
+  pass `--data <path>` for another profile.
 - Backups are written next to the file as `orca-data.json.bak.orca-repair.<ts>`.
 - Detection/prune logic is unit-tested: `bash tests/orca-repair.test.sh`.

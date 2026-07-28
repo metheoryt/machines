@@ -99,6 +99,43 @@ check("guard: IDE UI up blocks --apply", m.apply_should_block((123, "ide")) is T
 check("guard: daemon-only does NOT block --apply", m.apply_should_block((123, "daemon")) is False)
 check("guard: nothing running does NOT block --apply", m.apply_should_block(None) is False)
 
+# ── macOS shapes. These are the reason the guard was BROKEN on macOS: no process
+# was ever classified, so orca_running() returned None with the UI up and
+# apply_should_block() then said it was safe to write orca-data.json under the live
+# Electron main process. Real cmdlines, taken from the process table on air.
+MAC_MAIN = "/applications/orca.app/contents/macos/orca"
+MAC_HELPER = ("/applications/orca.app/contents/frameworks/orca helper.app/contents/"
+              "macos/orca helper --type=renderer --user-data-dir=/users/me/library")
+check("kind: macOS app bundle main process is the ide", m._orca_kind(MAC_MAIN) == "ide")
+check("kind: macOS Electron helper is NOT classified", m._orca_kind(MAC_HELPER) is None)
+check("kind: macOS bundle running daemon-entry is the daemon",
+      m._orca_kind(MAC_MAIN + " /applications/orca.app/contents/resources/out/main/daemon-entry.js") == "daemon")
+
+# Config dir resolution must prefer whichever candidate actually holds the data
+# file — a stray empty ~/.config/orca must not win over the real macOS dir.
+import tempfile, pathlib
+with tempfile.TemporaryDirectory() as td:
+    empty = os.path.join(td, "empty-linux"); real = os.path.join(td, "real-mac")
+    os.makedirs(empty)
+    pathlib.Path(real, "profiles", "local-default").mkdir(parents=True)
+    pathlib.Path(real, "profiles", "local-default", "orca-data.json").write_text("{}")
+    saved = m._CONFIG_DIR_CANDIDATES
+    try:
+        m._CONFIG_DIR_CANDIDATES = (empty, real)
+        check("config dir: prefers the candidate holding orca-data.json",
+              m.orca_config_dir() == real)
+        m._CONFIG_DIR_CANDIDATES = (empty, os.path.join(td, "nope"))
+        check("config dir: falls back to an existing dir when none has the file",
+              m.orca_config_dir() == empty)
+    finally:
+        m._CONFIG_DIR_CANDIDATES = saved
+
+# The process table must be readable on this box whichever way it is obtained
+# (/proc on Linux, `ps` on macOS) — an empty table means the guard is blind.
+check("process table is non-empty", sum(1 for _ in m._proc_cmdlines()) > 5)
+check("_pid_alive says our own pid is alive", m._pid_alive(os.getpid()) is True)
+check("_pid_alive rejects an impossible pid", m._pid_alive(999999) is False)
+
 print()
 if fails:
     print(f"FAILED ({len(fails)}): " + ", ".join(fails)); sys.exit(1)
