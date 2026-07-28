@@ -442,6 +442,63 @@ laptop-as-server settings below have to fix before this box is trusted to stay u
 - **`~/.config/gh/hosts.yml`** — `gh auth login` mints a fresh token; see §9
   step 5.
 
+### Outcome — installed 2026-07-29
+
+Debian 13 trixie is on the KIOXIA; the Kingston was left seated and untouched.
+Verified live: OS hostname `latitude5520`, `profile: server (from fleet.json)`,
+dotfiles on branch `latitude` (26 files, clean, sync timer active),
+`host-memory.md` restored from `origin/latitude`, tmux 3.5a with the shared
+config live (`mouse on`, `history-limit 50000`, `set-clipboard on`).
+
+Five things did not go to plan, and each is worth keeping:
+
+**The tailnet IP came back as `100.64.0.8`, not `.2`.** The stale node was
+deleted *before* re-enrollment and `.2` was demonstrably free, but Headscale
+0.29 handed out the next address anyway and has no CLI to pin one. Harmless as
+it turns out: the generated SSH config emits `HostName` only for the hub, so
+every other member reaches latitude by name through MagicDNS. `fleet.json` now
+records `.8`.
+
+**`gh` blocked the dotfiles checkout.** `tier_agent_clis` ran `gh`, which wrote
+`~/.config/gh/config.yml` — a path branch `latitude` tracks. Git refuses to
+clobber an untracked file, so `_dotfiles_checkout` bailed, and per its design did
+NOT record the branch or install the timer. The guard worked exactly as
+intended; the fix was one `mv` aside (kept as `config.yml.pre-dotfiles`; the only
+difference was a comment typo a newer gh had corrected). **This will recur on
+every fresh box** — `gh` runs before `tier_dotfiles` by tier order, so the
+collision is structural, not bad luck.
+
+**The Windows members could not SSH to latitude — a pre-existing bug the
+reinstall exposed.** `ssh-wsl.sh`'s renderer emitted `User` only when
+`ssh.user != "me"`, silently assuming the *local* user is `me`. On `server` and
+`desktop` it is `methe`, so a default-user member got no `User` line and ssh fell
+back to the local name: `methe@latitude: Permission denied`. That took `fd_run`
+with it, and so `/ship`'s fleet-pull and kb-refresh's fleet-gather. Fixed in
+`45d3b45` (always render `User`). Then a second gap surfaced: `windows.ps1` step
+7 only ever configured *inbound* SSH, so those boxes had no client config at all
+— `c8839ac` adds `provision/lib/fleet-ssh-config.ps1` plus step 7g, in PowerShell
+because Git Bash there has no jq. Applied to both boxes; `server` and `desktop`
+now reach air, hub and each other as the right user.
+
+**Two apparent "it suspended" events were a weak USB-C charger.** The box went
+unreachable twice and came back hard-hung with no LEDs. It was plugged into a
+low-power USB-C port, drained to 4%, and lost power outright — the previous
+boot's journal ends on ordinary sshd lines with no suspend and no oops, which is
+the signature of abrupt power loss rather than a failed resume. With a 20 V /
+3.25 A (65 W) source it boots and charges normally. **Suspicion of s2idle was
+wrong**; §8's note that `mem_sleep` reads `s2idle` is still true and still
+untested.
+
+**The laptop-as-server settings were already applied** by the USB bootstrap
+script, not left pending: `sleep.target` and `suspend.target` masked (02:46) and
+`/etc/systemd/logind.conf.d/99-server.conf` in place (03:13) with
+`HandleLidSwitch=ignore`, `HandleLidSwitchExternalPower=ignore`,
+`HandleLidSwitchDocked=ignore`, `IdleAction=ignore` all live per
+`systemd-analyze cat-config`. And `charge_control_end_threshold` already reads
+**85** — the value survives in the EC across an OS reinstall, so the charge-limit
+task from §9 needs nothing. What remains is the BIOS auto-power-on setting, which
+no OS-side change can reach.
+
 ### Install-time facts, in one place
 
 Everything below was verified on the live box; the disk identifiers are the part
