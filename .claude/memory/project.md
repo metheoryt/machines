@@ -345,14 +345,44 @@ global + per-host). One bullet per fact under a topical heading.
 - **`$HOME/CLAUDE.md` (tracked on the dotfiles repo's `main`) is a real
   auto-loading agent-memory slot on every enrolled box** — verified with a live
   `claude -p` probe, which reports it as project instructions for any cwd under
-  `$HOME`. That is where the "offer to track this file" nudge lives. The other
-  candidate slots are unavailable: `~/.claude/CLAUDE.md` and `~/.claude/memory/`
-  are symlinks deployed by `agents/bootstrap.sh`, whose `link()` does
-  `rm -f "$dest"` on a wrong-target symlink — tracking either in dotfiles would
-  put two deployers on one path. **Cost: every line is ambient in every session
-  under `$HOME`**, including work repos, so keep it to decision rules. Anything
-  phrased around "a file you edited" misfires on ordinary source files there —
-  gate on "has no other home" instead.
+  `$HOME`. That is where the "offer to track this file" nudge lives. **Cost: every
+  line is ambient in every session under `$HOME`**, including work repos, so keep
+  it to decision rules. Anything phrased around "a file you edited" misfires on
+  ordinary source files there — gate on "has no other home" instead.
+- **Agent config content lives in dotfiles, not `machines` (2026-07-28, executed
+  end-to-end across all six boxes).** The criterion is a property of the bare
+  repo: its work-tree IS `$HOME`, so a tracked path must be a path that
+  legitimately exists in a home directory.
+  `~/.claude/{CLAUDE.md,memory/global.md,memory/personality/,host-memory.md,
+  statusline-command.sh,balance-refresh.py}` and the three untested skills
+  (`gortex-align`, `update-balance`, `worktree-agent`) are dotfiles-tracked at
+  those paths; `machines` keeps `bootstrap.sh`, the tests, and the fleet-coupled
+  plugin. **This REVERSES `d9b1be4`**, which had recorded `$HOME/CLAUDE.md` as the
+  only available agent-memory slot on the premise that bootstrap's `link()` would
+  fight dotfiles for `~/.claude/…`. bootstrap no longer touches those paths — it
+  only `retire_link()`s stale links and fans `~/.codex` / `~/.claude-<postfix>` out
+  AT the primary profile (`$PRIMARY_DIR`, always `~/.claude`). `$HOME/CLAUDE.md`
+  keeps its own distinct job, above.
+- **A skill with `tests/` stays in `machines`; a skill without moves to dotfiles.**
+  The line coincides exactly with fleet coupling — every `fleet.json` reader is
+  tested — so no skill is separated from its tests or its manifest. Post-move the
+  rule holds with no exceptions: every remaining plugin skill has a `tests/` dir.
+  Invocation for the moved three is `/<name>`, not `/cyphy:<name>`.
+- **`agents/hosts/` and `agents/memory/` are gone.** Per-host memory is
+  `~/.claude/host-memory.md`, host-local on each dotfiles branch; the shared store
+  is `~/.claude/memory/`, on `main`. The old `$HOST_ID.md` scheme keyed on
+  OS-hostname identity and had drifted to 7 files for 5 machines — and it only
+  resolved on `desktop` because Windows is case-insensitive (`COMPUTERNAME` is
+  `G614JV`, the file is `g614jv.md`).
+- **HAZARD — a `machines` worktree hijacks `~/.claude` via the post-checkout
+  hook.** `git worktree add` fires the hook, which runs THAT worktree's
+  `agents/bootstrap.sh` with `SRC_DIR=<worktree>/agents`, repointing
+  `~/.claude/skills/cyphy` (and, from a pre-2026-07-28 commit, the memory /
+  instruction / statusline paths) into the worktree. When the worktree is removed
+  the links dangle, and `retire_link` will NOT clean them because its guard matches
+  only the live `$SRC_DIR`. Recovery: `rm` the dangling links, `dotfiles checkout
+  -- .claude`, then re-run `bash ~/machines/agents/bootstrap.sh`. Hit for real
+  2026-07-28 while checking out an old commit to date a test failure.
 - **`~/.gitconfig` and `~/.ssh/config` are tracked on `air`'s branch only**
   (2026-07-28) — host-local, never on `main`: they carry absolute `/Users/me`
   paths, air's two-account `includeIf` wiring, and this box's tailnet aliases.
@@ -498,12 +528,13 @@ global + per-host). One bullet per fact under a topical heading.
   baseline; only array-valued opt-in config (e.g. `mcp__gortex__*` allow) may live
   in machine-local `settings.local.json`. gortex permission was moved there
   2026-07-25 so the baseline carries only manually-configured, portable settings.
-- Per-host agent-memory filenames use the raw OS hostname
-  (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
-  `methe-server.md` — not fleet aliases), threaded via a single
-  `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
-  computes it off-nix). A curated short name drifts from what nix/bootstrap
-  resolve and misdirects the host-memory link.
+- ~~Per-host agent-memory filenames use the raw OS hostname~~ **superseded
+  2026-07-28**: there are no per-host memory *files in this repo* any more.
+  Per-host memory is `~/.claude/host-memory.md`, one per box on its own dotfiles
+  branch, so no host id is involved. `MACHINES_HOST_ID` is still passed by
+  `modules/home/claude.nix` but is now inert; `host_id()` survives in
+  `bootstrap.sh` only as the canonical hostname-sanitization spec that
+  `provision/lib/fleet.sh` and friends cite by name.
 - `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
   guard that fails loud if the repo's expected symlink location is dangling —
   added after repo-rename events silently broke agent-config linking.
@@ -515,10 +546,11 @@ global + per-host). One bullet per fact under a topical heading.
   of that laptop's installed state; `hosts/server/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.
-- **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /
-  `agents/AGENTS.md` (the global-memory hook works for Codex too). A tool with a
-  symlink guard (won't write through a symlink) edits nowhere useful if pointed at
-  the `CLAUDE.md` path — edit the real `AGENTS.md` target.
+- **The repo-root `CLAUDE.md` is a symlink to `AGENTS.md`** (this repo's own
+  instructions). A tool with a symlink guard (won't write through a symlink) edits
+  nowhere useful if pointed at the `CLAUDE.md` path — edit the real `AGENTS.md`
+  target. `agents/AGENTS.md` and `agents/CLAUDE.md` no longer exist: that content
+  is `~/.claude/CLAUDE.md` on dotfiles `main` since 2026-07-28.
 - **Windows `just` needs `set windows-shell := ['C:/Program
   Files/Git/bin/bash.exe','-cu']`** (in the justfile) — native PowerShell has no
   POSIX `sh`, so without it `just` fails on Windows even on `just --list`. Recipes
@@ -670,11 +702,11 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   .5**, **desktop-ubuntu26 .6**. The iPhone and the WSL host are real tailnet
   nodes that never appear in `fleet.json` — always read Headscale, never infer
   the next free address from the manifest.
-- **Per-host memory path is `agents/hosts/<detect.hostname>.md`** — NOT top-level
-  `hosts/` (that holds NixOS/Windows machine configs). `provision/tests/tiers.test.sh`
-  asserts a committed stub for every `fleet.json` hostname, because
-  `agents/bootstrap.sh` seeds a missing one *inside the repo*, dirtying the tree
-  and permanently disabling `fleet-selfpull`'s clean-tree gate on that box. Add
+- ~~**Per-host memory path is `agents/hosts/<detect.hostname>.md`**~~ —
+  **removed 2026-07-28** along with the `tiers.test.sh` stub guard. bootstrap no
+  longer seeds anything into the repo, so a new host cannot dirty the tree and
+  cannot disable `fleet-selfpull`'s clean-tree gate this way. Historical note: it
+  was NOT top-level `hosts/` (that holds NixOS/Windows machine configs). Add
   the stub in the SAME commit as the manifest entry.
 - **`provision.sh` and `linux.sh` are unrelated entry points.** `linux.sh` is a
   standalone tier driver (`bash provision/linux.sh`); `provision.sh` is the role
