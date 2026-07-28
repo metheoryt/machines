@@ -16,7 +16,8 @@ shared dispatchers Orca runs on each fresh worktree (Setup hook) and on delete
 generic gitignored config set, then delegates to this repo's
 `.orca/worktree-setup.sh`; teardown runs a repo-local teardown (if any), then
 gortex-untracks + reconciles. Overlay conventions for the working agent live in
-`cyphy:worktree-agent`.
+`worktree-agent` (a user-scope skill in the dotfiles repo since 2026-07-28 — it
+has no tests and no fleet.json coupling, so it is not part of this plugin).
 
 ## Step 1 — Guard & identity
 
