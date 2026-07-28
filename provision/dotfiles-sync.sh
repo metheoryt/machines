@@ -3,8 +3,9 @@
 # Spec: docs/superpowers/specs/2026-07-28-dotfiles-private-bare-repo-design.md §5.1
 #
 # ~/.dotfiles is a BARE repo whose work-tree is $HOME. Every 10 minutes this
-# commits tracked changes to this machine's branch, pushes them, and merges
-# origin/main in.
+# pushes and merges origin/main in; it commits tracked changes to this machine's
+# branch once they have SETTLED (see sync_should_commit) so that one editing
+# burst produces one commit rather than one per tick.
 #
 # THE GOVERNING SAFETY PROPERTY: the work-tree is a live home directory. A
 # conflicted merge would write <<<<<<< markers into ~/.ssh/config, ~/.gitconfig,
@@ -24,6 +25,12 @@ set -u
 : "${DOTFILES_GIT_DIR:=$HOME/.dotfiles}"
 : "${DOTFILES_WORK_TREE:=$HOME}"
 : "${DOTFILES_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync}"
+
+# COMMIT DEBOUNCE: a tick commits only when the tracked diff is unchanged from
+# the previous tick — i.e. editing has settled — so one editing burst yields one
+# commit instead of one per tick. MAX_AGE is the valve: a tree dirty this long
+# commits as-is, so a file being touched forever still reaches origin.
+: "${DOTFILES_SYNC_MAX_AGE:=7200}"
 
 # Never block on a credential/host prompt (mirrors fleet-selfpull.sh).
 export GIT_TERMINAL_PROMPT=0
@@ -104,6 +111,64 @@ sync_commit() {
     df commit -q -m "auto($branch): $paths" || return 1
 }
 
+# sync_hash: hash stdin. Used ONLY to compare this tick's dirty diff with the
+# previous tick's, so the weak cksum fallback is acceptable — a collision commits
+# one tick early, which is the pre-debounce behavior, not a fault. Hashing rather
+# than storing the diff is deliberate: tracked files include .netrc, .npmrc and
+# .aws/credentials, and the state dir must not become a second plaintext copy of
+# a credential.
+sync_hash() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{print $1}'
+    else
+        cksum | awk '{print $1 "-" $2}'
+    fi
+}
+
+# sync_should_commit: 0 = commit on this tick, 1 = defer to a later one.
+#
+# WHY A DEBOUNCE AND NOT A DAILY GATE: sync_tick commits BEFORE it merges, and
+# `merge-tree --write-tree` preflights COMMITTED trees — it cannot see the dirty
+# work-tree. So for a locally-dirty tracked path that origin/main also touches,
+# a long gate gives: preflight clean -> the conflict marker is REMOVED -> the
+# real `df merge` refuses ("Your local changes ... would be overwritten") -> the
+# `|| true` at the end of sync_merge swallows it. Silent, for the whole window.
+# Debouncing bounds that window to a single tick.
+sync_should_commit() {
+    local pend="$DOTFILES_STATE_DIR/pending.hash"
+    local since="$DOTFILES_STATE_DIR/pending.since"
+    local cur prev now t0
+
+    [ -n "${DOTFILES_SYNC_FORCE:-}" ] && return 0
+
+    # Anything already staged is an explicit human act (`dotfiles add <path>`).
+    # Never debounce intent.
+    df diff --cached --quiet || return 0
+
+    if df diff --quiet; then
+        rm -f "$pend" "$since"      # clean tree: nothing armed for a later tick
+        return 1
+    fi
+
+    mkdir -p "$DOTFILES_STATE_DIR"
+    cur="$(df diff | sync_hash)"
+    now="$(date +%s)"
+
+    # `since` is written only on the clean -> dirty transition, so it survives a
+    # diff that keeps changing. That is what makes the valve fire on a tree being
+    # edited continuously rather than resetting with every keystroke.
+    [ -f "$since" ] || printf '%s\n' "$now" > "$since"
+    t0="$(cat "$since" 2>/dev/null || printf '%s' "$now")"
+    case "$t0" in ''|*[!0-9]*) t0="$now" ;; esac
+    [ "$((now - t0))" -ge "$DOTFILES_SYNC_MAX_AGE" ] && return 0
+
+    prev="$(cat "$pend" 2>/dev/null || true)"
+    printf '%s\n' "$cur" > "$pend"
+    [ -n "$prev" ] && [ "$cur" = "$prev" ]
+}
+
 # sync_push <branch>: ALWAYS returns 0. Offline, an expired token, a laptop on a
 # captive portal — none of those are malfunctions. The commit is already safe
 # locally and the next tick retries.
@@ -168,7 +233,13 @@ sync_tick() {
     branch="$(sync_guard)"; rc=$?
     [ "$rc" -eq 3 ] && return 0
     [ "$rc" -eq 0 ] || return "$rc"
-    sync_commit "$branch" || return 1
+    if sync_should_commit; then
+        sync_commit "$branch" || return 1
+        rm -f "$DOTFILES_STATE_DIR/pending.hash" "$DOTFILES_STATE_DIR/pending.since"
+    fi
+    # Push and merge run on EVERY tick, deferred commit or not: a commit stranded
+    # by an earlier offline tick still needs pushing, and shared content from
+    # origin/main must not wait on this box's editing settling down.
     sync_push "$branch"
     sync_merge "$branch"
     return 0

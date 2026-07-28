@@ -45,13 +45,16 @@ setup() {
 }
 
 # tick <root> [extra-env…]: run one sync tick against that root. Echoes exit code.
+# `env "$@"` and not a bare `"$@"`: bash recognises assignment prefixes at PARSE
+# time, so a quoted expansion that merely looks like VAR=val is treated as the
+# command name (exit 127), not as an assignment. env re-reads them at runtime.
 tick() {
   local T="$1"; shift
   DOTFILES_GIT_DIR="$T/home/.dotfiles" \
   DOTFILES_WORK_TREE="$T/home" \
   DOTFILES_STATE_DIR="$T/state" \
   HOME="$T/home" \
-  "$@" bash "$SCRIPT" >"$T/out" 2>"$T/err"
+  env "$@" bash "$SCRIPT" >"$T/out" 2>"$T/err"
   echo $?
 }
 
@@ -65,13 +68,20 @@ eq "clean tick: exit 0" "$rc" "0"
 eq "clean tick: no new commit" "$(dfx "$T" rev-parse air)" "$before"
 rm -rf "$T"
 
-# ── 2. Dirty tick commits the change and pushes it ───────────────────────────
+# ── 2. Dirty tick defers; the next tick commits the settled change and pushes ─
+# COMMIT CADENCE: a tick commits only once the tracked diff has stopped moving.
+# See sync_should_commit — one editing burst yields one commit, not one per tick.
 T="$(setup)"
 printf 'edited\n' > "$T/home/.tracked"
+before="$(dfx "$T" rev-parse air)"
 rc="$(tick "$T")"
 eq "dirty tick: exit 0" "$rc" "0"
-eq "dirty tick: committed" "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
-eq "dirty tick: pushed" "$(git -C "$T/remote.git" rev-parse air)" "$(dfx "$T" rev-parse air)"
+eq "dirty tick: defers the first time" "$(dfx "$T" rev-parse air)" "$before"
+rc="$(tick "$T")"
+eq "settled tick: exit 0" "$rc" "0"
+eq "settled tick: committed" "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
+eq "settled tick: pushed" "$(git -C "$T/remote.git" rev-parse air)" "$(dfx "$T" rev-parse air)"
+eq "settled tick: work-tree unchanged" "$(cat "$T/home/.tracked")" "edited"
 rm -rf "$T"
 
 # ── 3. Wrong branch: exit non-zero having committed NOTHING ──────────────────
@@ -120,11 +130,23 @@ rm -rf "$T"
 
 # ── 6. Conflicting origin/main: $HOME byte-identical, marker dropped ─────────
 # THE test. If this regresses, a timer tick writes <<<<<<< into a live dotfile.
+#
+# Tick 1 documents the ONE-TICK STALL that the debounce accepts: the commit is
+# deferred, so merge-tree compares the UNCHANGED branch tip against origin/main
+# and finds no conflict, and the real merge then refuses because .tracked is
+# dirty. Nothing is written and nothing is claimed. Tick 2 commits and the
+# conflict is detected properly. Bounding this to one tick is why the gate is a
+# debounce and not a 24h timer.
 T="$(setup)"
 printf 'theirs\n' > "$T/seed/.tracked"
 git -C "$T/seed" -c user.email=t@t -c user.name=t commit -qam "theirs"
 git -C "$T/seed" push -q "$T/remote.git" main
 printf 'ours\n' > "$T/home/.tracked"
+
+rc="$(tick "$T")"
+eq "conflict tick 1: exit 0" "$rc" "0"
+eq "conflict tick 1: \$HOME byte-identical" "$(cat "$T/home/.tracked")" "ours"
+
 rc="$(tick "$T")"
 eq "conflict: exit 0" "$rc" "0"
 eq "conflict: \$HOME byte-identical" "$(cat "$T/home/.tracked")" "ours"
@@ -143,6 +165,7 @@ printf 'theirs\n' > "$T/seed/.tracked"
 git -C "$T/seed" -c user.email=t@t -c user.name=t commit -qam "theirs"
 git -C "$T/seed" push -q "$T/remote.git" main
 printf 'ours\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
 tick "$T" >/dev/null
 [ -f "$T/state/conflict" ] || die "setup for test 7: expected a marker"
 # Resolve by taking origin/main's content, exactly as a human would.
@@ -168,10 +191,136 @@ printf 'edited\n' > "$T/home/.tracked"
 before="$(dfx "$T" rev-parse air)"
 rc="$(cd "$T/home/sub" && tick "$T")"
 eq "cwd inside work-tree: exit 0" "$rc" "0"
+rc="$(cd "$T/home/sub" && tick "$T")"
+eq "cwd inside work-tree: second tick exit 0" "$rc" "0"
 if [ "$(dfx "$T" rev-parse air)" != "$before" ]; then
   pass "cwd inside work-tree: drift outside the cwd still committed"
 else
   die "cwd inside work-tree: NOTHING COMMITTED — pathspec prefix swallowed it"
+fi
+rm -rf "$T"
+
+# ── 9. Debounce: state is cleared once the commit lands ──────────────────────
+T="$(setup)"
+printf 'edited\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
+if [ -f "$T/state/pending.hash" ]; then
+  pass "debounce: pending.hash recorded on the deferring tick"
+else
+  die "debounce: no pending.hash after a dirty tick"
+fi
+tick "$T" >/dev/null
+if [ ! -f "$T/state/pending.hash" ] && [ ! -f "$T/state/pending.since" ]; then
+  pass "debounce: state cleared after the commit"
+else
+  die "debounce: stale pending state survived the commit"
+fi
+# A clean tree must also clear it, so a reverted edit does not arm a later commit.
+tick "$T" >/dev/null
+if [ ! -f "$T/state/pending.hash" ]; then pass "debounce: clean tick leaves no state"; else die "debounce: clean tick left state"; fi
+rm -rf "$T"
+
+# ── 10. A diff that keeps moving keeps deferring ─────────────────────────────
+T="$(setup)"
+before="$(dfx "$T" rev-parse air)"
+printf 'one\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
+printf 'two\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
+eq "moving diff: still nothing committed" "$(dfx "$T" rev-parse air)" "$before"
+tick "$T" >/dev/null
+eq "moving diff: commits once settled" \
+   "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
+eq "moving diff: committed the LATEST content" \
+   "$(dfx "$T" show air:.tracked)" "two"
+rm -rf "$T"
+
+# ── 11. DOTFILES_SYNC_FORCE commits on the first dirty tick ──────────────────
+T="$(setup)"
+printf 'edited\n' > "$T/home/.tracked"
+eq "force: exit 0" "$(tick "$T" DOTFILES_SYNC_FORCE=1)" "0"
+eq "force: committed immediately" \
+   "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
+eq "force: pushed" "$(git -C "$T/remote.git" rev-parse air)" "$(dfx "$T" rev-parse air)"
+rm -rf "$T"
+
+# ── 12. FORCE bypasses the debounce ONLY — never the branch guard ─────────────
+# The manual-trigger skill sets FORCE. If it could also override sync_guard, a
+# /dotfiles-sync run on a stray `checkout main` would force host-local content
+# onto the shared branch — worse than the churn the debounce exists to prevent.
+T="$(setup)"
+dfx "$T" checkout -q main
+printf 'edited\n' > "$T/home/.tracked"
+before="$(dfx "$T" rev-parse main)"
+rc="$(tick "$T" DOTFILES_SYNC_FORCE=1)"
+if [ "$rc" != "0" ]; then pass "force+wrong branch: non-zero exit"; else die "force+wrong branch: exited 0"; fi
+eq "force+wrong branch: nothing committed" "$(dfx "$T" rev-parse main)" "$before"
+eq "force+wrong branch: work-tree untouched" "$(cat "$T/home/.tracked")" "edited"
+rm -rf "$T"
+
+# ── 13. The max-age valve commits a tree that will not settle ────────────────
+T="$(setup)"
+printf 'edited\n' > "$T/home/.tracked"
+eq "valve: exit 0" "$(tick "$T" DOTFILES_SYNC_MAX_AGE=0)" "0"
+eq "valve: committed on the first dirty tick" \
+   "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
+rm -rf "$T"
+
+# ── 14. Hand-staged content is explicit intent, never debounced ──────────────
+T="$(setup)"
+printf 'edited\n' > "$T/home/.tracked"
+dfx "$T" add "$T/home/.tracked"
+eq "staged: exit 0" "$(tick "$T")" "0"
+eq "staged: committed on the first tick" \
+   "$(dfx "$T" show -s --format=%s air | cut -d' ' -f1)" "auto(air):"
+rm -rf "$T"
+
+# ── 15. A deferred commit does not block propagation from origin/main ────────
+# The whole point of gating the COMMIT rather than the tick: incoming shared
+# content must still land in $HOME on the very tick that defers.
+#
+# VERIFIED before this plan was written, in both merge shapes: `git merge` refuses
+# only on paths the merge itself touches, so an unrelated dirty tracked file
+# blocks nothing. Fast-forward (branch has no own commits, which is this case) and
+# true merge ('ort', branch ahead — the real-box shape) both landed .shared with
+# the dirty file preserved. Contrast case 6, where the dirty path IS the incoming
+# path and the merge does refuse.
+T="$(setup)"
+printf 'edited\n' > "$T/home/.tracked"
+printf 'shared\n' > "$T/seed/.shared"
+printf '*\n!*/\n!.gitignore\n!.tracked\n!.shared\n' > "$T/seed/.gitignore"
+git -C "$T/seed" -c user.email=t@t -c user.name=t add .gitignore .shared
+git -C "$T/seed" -c user.email=t@t -c user.name=t commit -qm "add shared"
+git -C "$T/seed" push -q "$T/remote.git" main
+eq "deferred+merge: exit 0" "$(tick "$T")" "0"
+if [ -f "$T/home/.shared" ]; then
+  pass "deferred+merge: shared file landed despite the deferred commit"
+else
+  die "deferred+merge: .shared missing — the debounce blocked propagation"
+fi
+eq "deferred+merge: local edit preserved" "$(cat "$T/home/.tracked")" "edited"
+rm -rf "$T"
+
+# ── 16. The debounce hash reads the whole tree, not the cwd subtree ──────────
+# Regression twin of case 8: git computes a pathspec prefix from the cwd, which
+# once made `add -u` a silent no-op. Explicit --git-dir + --work-tree suppresses
+# that, but the hash must be proven prefix-safe the same way `add -u` was — the
+# real invocation is `bash ~/machines/provision/dotfiles-sync.sh` from anywhere.
+T="$(setup)"
+mkdir -p "$T/home/sub"
+printf 'edited\n' > "$T/home/.tracked"
+before="$(dfx "$T" rev-parse air)"
+( cd "$T/home/sub" && tick "$T" >/dev/null )
+if [ -s "$T/state/pending.hash" ]; then
+  pass "subdir hash: drift outside the cwd was seen"
+else
+  die "subdir hash: EMPTY — the hash saw only the cwd subtree"
+fi
+( cd "$T/home/sub" && tick "$T" >/dev/null )
+if [ "$(dfx "$T" rev-parse air)" != "$before" ]; then
+  pass "subdir hash: settled drift outside the cwd committed"
+else
+  die "subdir hash: nothing committed from a subdirectory"
 fi
 rm -rf "$T"
 
