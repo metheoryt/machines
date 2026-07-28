@@ -325,6 +325,26 @@ global + per-host). One bullet per fact under a topical heading.
   box" checklist, without ever storing the secret content. When adding a new
   per-machine secret (e.g. an AmneziaWG private key), add its path to that
   machine's `.dotfiles` branch `.gitignore` too, not just to this repo.
+- **`dotfiles/` hosts files that must live INSIDE another repo but can't be
+  committed there.** Pattern established 2026-07-28 for `backend-api`: work
+  repos under `github.com:thepureapp/*` use an allowlist `.gitignore` (`*` plus
+  `!/.claude/*.md`), so `<repo>/.claude/memory/project.md` — the path the
+  `project-memory-check.sh` hook auto-loads — is *ignored* there and would be
+  machine-local. Track it here instead as
+  `dotfiles/pure/backend-api/dot_claude/memory/project.md`; chezmoi materialises
+  it at `~/pure/backend-api/.claude/memory/project.md`. Works because the target
+  is HOME-relative and the clone path is consistent fleet-wide. Nothing leaks
+  into the work repo (its own gitignore hides the file). **Gap:** the `dotfiles`
+  role is a no-op on NixOS (home-manager owns it), so chezmoi-hosted files do
+  NOT reach latitude — darwin/wsl/debian only.
+- **Never run a blanket `chezmoi apply --source ./dotfiles`** (verified
+  2026-07-28). `dot_gitconfig.tmpl` has drifted from the live `~/.gitconfig` on
+  the MacBook — a full apply drops `pager = delta`, `interactive.diffFilter`,
+  the `[delta]` block, the `gh auth git-credential` helper and
+  `pull.rebase = true`, and rewrites `user.name` to `Maxim`. Scope every apply
+  to the subtree you mean (`chezmoi apply --source ./dotfiles ~/pure`). Note a
+  path-scoped apply will NOT create missing parent dirs — scope to an ancestor
+  that chezmoi manages, not the leaf file.
 - SSH keys are per-host, not shared (e.g. latitude5520's is
   `ssh-ed25519 ...  me-nixos-latitude5520`) — each fleet machine has its own
   keypair; cross-machine SSH trust needs each host's *public* key collected

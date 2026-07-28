@@ -571,12 +571,43 @@ elsewhere to sync. Do NOT put secrets here.
   annotations still help the native type-aware provider, plus gap-diagnostics.
   Before assuming lsp-pyright is live, check `semantic.providers` for an `lsp-*`
   entry and grep the daemon log for a langserver spawn.
-- Integration is reproducible ONLY if `.gortex.yaml` + a gortex server entry in
-  `.mcp.json` are committed. A local daemon merely *tracking* a repo works for you
-  but carries nothing to teammates/CI — run `gortex init` to commit the wiring.
+- Integration is reproducible ONLY if the wiring is COMMITTED — a gortex server
+  entry in `.mcp.json` (the load-bearing file) plus `.claude/settings.json`. A
+  local daemon merely *tracking* a repo works for you but carries nothing to
+  teammates/CI. Note recent builds write a **gitignored `.gortex/`** (local index
+  state), NOT a committed `.gortex.yaml` — don't look for the old file. And never
+  run a bare `gortex init`: it sprays ~32 files across every detected adapter
+  incl. ~20 generated `.claude/skills/generated/gortex-*` routing skills. Use
+  `gortex init --yes --agents claude-code --no-skills --no-hooks`, and gitignore
+  `.claude/skills/generated/` so a future bare init can't commit them.
+- **Store vs sidecar — only ONE of the two is worth preserving.**
+  `store/store.sqlite` is a *derived* index: rebuilt from source on demand (5
+  repos / ~75k nodes reindexed in ~25s warmup here), path-scoped node IDs, and
+  arch/repo-set specific. Never sync or copy it between machines — you'd import
+  another box's stale rows and mismatched paths. `sidecar.sqlite` (tables `notes`
+  from save_note, `memories` from store_memory) is the ONLY non-derived state —
+  hand-authored, unrecoverable from source. If anything ever needs to follow you
+  across machines, it's that file. Its `repo_key` is a path-derived hash, so a
+  cross-OS port needs remapping — usually cheaper to re-enter a handful of
+  memories via `store_memory` than to do sqlite surgery.
+- **The state dir differs per OS — check both before concluding "never run".**
+  macOS: `~/.gortex/{config.yaml,store/,cache/,memories/,sidecar.sqlite}`.
+  Linux (XDG): `~/.config/gortex/config.yaml`, `~/.local/share/gortex/`
+  (store/, sidecar.sqlite, memories/), `~/.cache/gortex/` (daemon.log, pid).
+- **`untrack` + `track` does NOT fully rebuild a repo's graph** (v0.61.4,
+  filed as zzet/gortex#393). Its delete keys on `repo_prefix`, so rows written by
+  an older convention with an EMPTY `repo_prefix` are unreapable by any verb —
+  they coexist with the correctly-prefixed nodes for the same symbol, splitting
+  `find_usages`/`get_callers` and inflating dead-code. Detect with
+  `sqlite3 -readonly <store> "select project_id, repo_prefix, count(*) from nodes
+  group by 1,2;"` — a `<repo>|` group with an empty prefix is the tell (`files`
+  in `daemon status` also collapses to 1 for that repo). Only fix: stop the
+  daemon, move `store/store.sqlite*` aside, restart — it reindexes every tracked
+  repo from `config.yaml`. Sidecar is untouched by this.
 - **General principle — align a repo to its static analyzer.** Gortex's
   resolution quality is bounded by what the language's underlying analyzer can
-  resolve (Python → `lsp-pyright`). The highest-leverage way to make a
+  resolve (for Python that is the NATIVE `python-types` provider on current
+  builds — see the build caveat above, not `lsp-pyright`). The highest-leverage way to make a
   gortex-backed repo align better is therefore to tighten that analyzer's view:
   type hints, installed/typed deps, framework stubs. When working in a
   gortex-backed repo, treat weak resolution as fixable — proactively offer the
