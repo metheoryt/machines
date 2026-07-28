@@ -63,23 +63,23 @@ Any installer step, script, or muscle memory that says `nvme0n1` now points at
 773G of Immich data. Address disks by `/dev/disk/by-id/nvme-KINGSTON_…` and
 `…KBG40ZNS…` throughout, never by `nvmeXn1`.
 
-**H2. The Kingston is mounted read-write.** udisks auto-mounted it at
-`/run/media/me/Immich` with `ntfs3 rw,…,prealloc`. Data still under the hold
-should not be writable on a box that is about to be reinstalled. Unmount it, or
-remount read-only, until §5 is settled.
+**H2 — closed.** udisks had auto-mounted the Kingston read-write at
+`/run/media/me/Immich` (`ntfs3 rw,…,prealloc`). It is now **unmounted**
+(`udisksctl unmount -b /dev/nvme0n1p1`), which is safer than read-only.
+Remounting read-only over SSH fails — udisks needs a polkit agent on a
+controlling terminal — so inspection needs either a console session or
+`sudo mount -o ro`.
 
-**H3. `nvme1n1p3` is still unidentified** — 25.5G `crypto_LUKS`, not mounted,
-not in the captured fstab. Probably old swap or hibernation, but that is a
-guess, and a disk with an unreadable partition on it cannot be certified safe
-to erase. Needs the sudo password:
-
-```console
-sudo cryptsetup luksDump /dev/nvme1n1p3
-grep -rn nvme1n1p3 /etc/crypttab /etc/fstab
-```
-
-Note the device name changed with the Kingston installed — this is `p3` of
-`nvme1n1` now, not `nvme0n1`.
+**H3 — resolved: `nvme1n1p3` is an orphan.** UUID
+`034fee22-2cc4-4200-bfa2-9a6c63f162e0`, 25.5G `crypto_LUKS`, and it is
+referenced by nothing: there is no `/etc/crypttab` at all, `/etc/fstab` names
+only the root mapper, `hardware-configuration.nix` declares exactly one LUKS
+device (`4f92beab-…`) and `swapDevices = []`, and the only active swap is
+`/dev/zram0`. It is never unlocked at boot, so nothing this install produced can
+be inside it — any contents predate the current NixOS install. Treat as
+disposable. If curiosity is worth one command, try `sudo cryptsetup luksOpen`
+with the usual passphrase before repartitioning; if it does not open, it is
+unrecoverable anyway.
 
 **H4. LUKS on an always-on headless server.** Root is LUKS today and a human
 types the passphrase at the console. As an always-on server, any unattended
@@ -128,26 +128,56 @@ and better practice than carrying a private key off a machine about to be
 destroyed. `hub` runs the AmneziaWG server, so the AWG peer is a hub-side
 operation.
 
-## 5. The hold on the Kingston — what it actually says
+## 5. Backup coverage — measured, and it is worse than the hold implied
 
 **Correction to an earlier reading.** The hold gates on Task 15 of
 `2026-07-27-fleet-migration-mac-primary-latitude-server.md`, which is a
-**latitude-side** restore verification (`restic check --read-data-subset 5%`
-plus a real test restore out of `/srv/backup-1/backup-homeserver`), not a
-server-side one. It also sits at the end of a chain — Tasks 12–14 migrate
-Immich onto latitude and repoint the public routes — **none of which has
-happened**. With NixOS retiring and latitude being reinstalled, Phase D and
-Phase E of that plan are stale as written and need re-planning, not execution.
+**latitude-side** restore verification, not a server-side one. It also sits at
+the end of a chain — Tasks 12–14 migrate Immich onto latitude and repoint the
+public routes — **none of which has happened**. With NixOS retiring and latitude
+being reinstalled, Phase D and Phase E of that plan are stale as written and
+need re-planning, not execution.
 
-**Whether the Kingston is the only copy is now an open question, not an
-assumption.** The server holds `E: Immich 2024` (663G, an `admin` tree) plus
-two restic locations (`H:\backup-homeserver` 650G, `G:\backup-homeserver`
-158G), and the Kingston holds a 773G `ImmichMedia` + `Media` pair. Those may
-overlap substantially. Resolve it with `restic snapshots` against each repo and
-a spot restore — not by comparing volume sizes, which proves nothing about
-content.
+The backup definition lives in the sibling `vps` repo at
+`backup/homeserver/profiles.yaml`, checked out on server at
+`C:\Users\methe\my\vps`, with `RESTIC_PASSWORD_FILE: pass.txt` relative to that
+directory. restic 0.18.1 is installed. Three scheduled tasks exist and report
+`Ready`.
 
-Until that is resolved, treat the Kingston as irreplaceable and keep it
+| Profile | Source | Repo | Latest snapshot | Snapshot size |
+|---|---|---|---|---|
+| `immich-media` | `D:\ImmichMedia\library\library` | `G:\backup-homeserver\immich-media` | **2026-07-05** | 151.1 GiB, 6 420 files |
+| `immich-media-2024` | `E:\admin` | `H:\backup-homeserver\immich-media-2024` | **2026-07-02** | 662.9 GiB, 22 613 files |
+| `immich-postgres` | `pg_dumpall` via stdin | `G:\backup-homeserver\immich-postgres` | **2026-07-07** | 534.9 MiB |
+
+Three things fall out of that table.
+
+**5a. Roughly 620 GiB on the Kingston is backed up by nothing.** The disk holds
+773 GiB. The only profile that touches it covers
+`D:\ImmichMedia\library\library` and captures **151.1 GiB**. Everything else on
+that disk — the `Media` tree, and whatever sits under `ImmichMedia` outside
+`library\library` — appears in no restic repo and in no other volume. Some of it
+may be regenerable Immich derivatives (`thumbs`, `encoded-video`); `Media` and
+any `upload` tree are not. **This is the real hold, and it is much sharper than
+"the SSD is the only copy of some data."**
+
+**5b. Backups stopped about three weeks ago.** Newest snapshots are 2026-07-05,
+07-02 and 07-07 against today's 2026-07-28, and every snapshot is recorded under
+host `methe-server` — the pre-rename hostname, retired 2026-07-20. Two plausible
+causes, both in `base.yaml`: `schedule-ignore-on-battery: true` silently skips
+when the G15 runs on battery, and the box has been off for stretches. Whatever
+the cause, the gap is real and nothing raised an alarm.
+
+**5c. `immich-media` is now broken by the disk move.** Its source is `D:\`,
+which was the Kingston — now in latitude. The scheduled task still reports
+`Ready`, so the next fire will fail on a missing source rather than tell anyone
+the data is unprotected.
+
+`E: admin` (663 G) is fully covered by the H: repo (662.946 GiB), so E: is the
+one volume with real redundancy today.
+
+Until 5a is closed, the Kingston is irreplaceable. It is currently **unmounted**
+on latitude, which is the safest state; remounting for inspection must be
 read-only.
 
 ## 6. Fleet-side consequences
@@ -212,42 +242,48 @@ the two 10 Gbps USB-A ports.
 These steps are destructive and order-dependent. Written out in full prose
 deliberately.
 
-1. Remount the Kingston read-only, or unmount it (**H2**). Do this first — it
-   costs nothing and it removes the only way the hold can be violated by
-   accident.
-2. Resolve **H3**: identify `nvme1n1p3` and, if it holds nothing, record it as
-   disposable. Do not proceed with an unidentified encrypted partition on the
-   disk you are about to repartition.
-3. Resolve §5: establish by `restic snapshots` and a spot restore whether the
-   Kingston's contents are also present in `H:\backup-homeserver` or
-   `G:\backup-homeserver`. This determines whether the hold still binds, and it
-   requires the server, which is up now.
-4. Harvest `F:\secrets` off the 320G drive to at least two places, verify it,
-   and only then consider that disk retirable (**H5**). Also take
-   `F:\restic-repos` into account when planning the new backup layout — it is a
-   third restic location.
-5. Decide **H4** (LUKS or not) and §7 (which datasets get a second copy). Both
+Steps 1 and 2 are the ones that matter. Everything else is ordinary work that
+can be redone; those two protect data that currently exists in exactly one
+place.
+
+1. **Get the unprotected ~620 GiB off the Kingston and verified, before
+   anything else happens to latitude.** Mount the disk read-only, measure the
+   subdirectory breakdown so the regenerable Immich derivatives can be excluded
+   from the copy, then copy the rest to a disk that is neither the Kingston nor
+   any disk about to be installed. The natural destination is the new 6TB, which
+   argues for seating it before the wipe rather than after. Failing that, `G:`
+   has 773 G free — poor practice, since it also holds the `immich-media` repo,
+   but far better than one copy. Verify the copy by checksum, not by file count.
+2. **Harvest `F:\secrets` off the 320G drive to at least two places and verify
+   it** (**H5**). It contains SSH private keys, exported Wi-Fi profiles, and a
+   WSL secrets tarball. Never track any of it in the dotfiles repo — the deny
+   block forbids key material at every layer. The same drive holds
+   `F:\restic-repos` (`laptop-music`, `wsl`), a third restic location that the
+   new backup layout has to account for.
+3. Decide **H4** (LUKS or not) and §7 (which datasets get a second copy). Both
    are install-time decisions; neither can be changed afterwards without
    redoing the install.
-6. Harvest the §4 short list to a destination that is **neither the Kingston
-   nor any disk about to be installed** — `air` or `desktop` over the tailnet.
-   Everything in §4 must be off-box before anything is erased.
-7. `pg_dump` the airdrome database out of the running container, verify the dump
+4. Fix or disable the `immich-media` scheduled task, whose source `D:\` no
+   longer exists (**5c**), so it stops reporting `Ready` while protecting
+   nothing. Decide separately whether the three-week backup gap (**5b**) is
+   `schedule-ignore-on-battery` or downtime, because the fix differs.
+5. Harvest the §4 short list off latitude to `air` or `desktop` over the
+   tailnet. All of it must be off-box before anything is erased.
+6. `pg_dump` the airdrome database out of the running container, verify the dump
    is non-empty and restorable, and only then treat the Docker volume as
    expendable.
-8. Re-issue rather than transport: mint a fresh AmneziaWG peer for latitude on
+7. Re-issue rather than transport: mint a fresh AmneziaWG peer for latitude on
    `hub`, remove latitude's current key from GitHub, and delete latitude's stale
    Headscale node so its name and IP free up.
-9. Run a final `nix flake check` and record the output in this document, so the
+8. Run a final `nix flake check` and record the output in this document, so the
    last known-good state of the Nix surface is on record before it stops being
    verifiable.
-10. **Physically remove the Kingston from latitude for the OS install**, unless
-    step 3 has proven the data exists elsewhere and been verified. Renumbering
-    (**H1**) means an installer aimed at `nvme0n1` erases the data disk, and
-    "not selected in the installer" is not sufficient protection when out of the
-    chassis is available. Reseat it after the install — the slot is verified
-    good.
-11. Update `fleet.json` (platform, IP, roles) and re-provision through the role
+9. **Physically remove the Kingston from latitude for the OS install**, unless
+   step 1 is complete and verified. Renumbering (**H1**) means an installer
+   aimed at `nvme0n1` erases the data disk, and "not selected in the installer"
+   is not sufficient protection when out of the chassis is available. Reseat it
+   afterwards — the slot is verified good.
+10. Update `fleet.json` (platform, IP, roles) and re-provision through the role
     front door. Re-accept the changed SSH host key on the other members.
 
 ## 10. Standing holds
