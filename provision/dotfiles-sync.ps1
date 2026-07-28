@@ -2,8 +2,9 @@
 .SYNOPSIS
   Dotfiles sync tick for Windows. Mirror of provision/dotfiles-sync.sh.
 .DESCRIPTION
-  ~/.dotfiles is a bare repo whose work-tree is $HOME. Commits tracked changes
-  to this machine's branch, pushes, then merges origin/main in -- but only after
+  ~/.dotfiles is a bare repo whose work-tree is $HOME. Pushes and merges
+  origin/main in on every tick; commits tracked changes to this machine's branch
+  once they have settled. The merge runs only after
   `git merge-tree --write-tree` proves the merge is conflict-free. The work-tree
   is a live home directory; a conflicted merge would write <<<<<<< markers into
   files the user needs to fix it. Registered as a ~10-min Scheduled Task by
@@ -57,14 +58,67 @@ try {
         Write-Error "dotfiles-sync: HEAD is '$head', expected '$expected' - committing nothing"; exit 1
     }
 
-    # 2. Commit tracked modifications and deletions ONLY. Never -A.
-    Df add -u | Out-Null
-    Df diff --cached --quiet | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        $names = @(Df diff --cached --name-only)
-        $shown = ($names | Select-Object -First 5) -join ' '
-        if ($names.Count -gt 5) { $shown = "$shown ... (+$($names.Count - 5))" }
-        Df commit -q -m "auto($expected): $shown" | Out-Null
+    # 2. Commit -- but only once the tracked diff has SETTLED. Mirror of the .sh
+    #    twin's sync_should_commit; see its comment for why this is a debounce
+    #    and not a daily gate (this script commits BEFORE it merges, and
+    #    merge-tree preflights committed trees only, so a long gate lets the
+    #    real merge at step 6 refuse silently).
+    $pend   = Join-Path $StateDir 'pending.hash'
+    $since  = Join-Path $StateDir 'pending.since'
+    $maxAge = if ($env:DOTFILES_SYNC_MAX_AGE) { [int]$env:DOTFILES_SYNC_MAX_AGE } else { 7200 }
+    $doCommit = $false
+
+    if ($env:DOTFILES_SYNC_FORCE) {
+        $doCommit = $true
+    } else {
+        Df diff --cached --quiet | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $doCommit = $true          # staged by hand: explicit intent, never debounced
+        } else {
+            Df diff --quiet | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Remove-Item -LiteralPath $pend,$since -Force -EA SilentlyContinue
+            } else {
+                # Hash, never store: tracked files include .netrc and
+                # .aws/credentials, and StateDir must not hold a second copy.
+                $sha = [System.Security.Cryptography.SHA256]::Create()
+                $txt = (Df diff | Out-String)
+                $cur = [BitConverter]::ToString(
+                           $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($txt))
+                       ).Replace('-','')
+                $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                # `since` is written only on the clean -> dirty transition, so a
+                # diff that keeps changing does not keep resetting the valve.
+                if (-not (Test-Path -LiteralPath $since)) {
+                    Set-Content -LiteralPath $since -Value $now
+                }
+                $t0 = 0
+                [void][int]::TryParse((Get-Content -LiteralPath $since -Raw).Trim(), [ref]$t0)
+                if ($t0 -le 0) { $t0 = $now }
+                if (($now - $t0) -ge $maxAge) {
+                    $doCommit = $true              # valve
+                } else {
+                    $prev = if (Test-Path -LiteralPath $pend) {
+                        (Get-Content -LiteralPath $pend -Raw).Trim()
+                    } else { '' }
+                    Set-Content -LiteralPath $pend -Value $cur
+                    if ($prev -and $prev -eq $cur) { $doCommit = $true }
+                }
+            }
+        }
+    }
+
+    if ($doCommit) {
+        # Tracked modifications and deletions ONLY. Never -A.
+        Df add -u | Out-Null
+        Df diff --cached --quiet | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $names = @(Df diff --cached --name-only)
+            $shown = ($names | Select-Object -First 5) -join ' '
+            if ($names.Count -gt 5) { $shown = "$shown ... (+$($names.Count - 5))" }
+            Df commit -q -m "auto($expected): $shown" | Out-Null
+        }
+        Remove-Item -LiteralPath $pend,$since -Force -EA SilentlyContinue
     }
 
     # 3. Push. Offline / expired token is non-fatal; next tick retries.

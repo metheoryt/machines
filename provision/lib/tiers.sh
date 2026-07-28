@@ -881,7 +881,11 @@ tier_dotfiles() {
 # mechanism. Precedent: agents/bootstrap.sh already deploys outside the nix
 # generation for the same reason. Idempotent.
 #
-# Cadence matches tier_selfpull / git-autofetch (10 min) — deliberately aligned.
+# TICK cadence matches tier_selfpull / git-autofetch (10 min) — deliberately
+# aligned. COMMIT cadence is separate and lives in the script: a tick commits
+# only once the tracked diff has settled (dotfiles-sync.sh sync_should_commit),
+# so this timer interval is NOT the rate at which commits appear. Changing the
+# script needs no re-provision — every scheduler here points at its absolute path.
 tier_dotfiles_sync() {
   info "Installing dotfiles sync timer…"
   DFS="$REPO/provision/dotfiles-sync.sh"

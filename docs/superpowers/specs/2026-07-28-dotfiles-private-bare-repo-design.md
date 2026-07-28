@@ -143,7 +143,11 @@ merge it cannot finish.
 1. guard                    # ~/.dotfiles exists; no merge/rebase in progress;
                             # HEAD is on the expected logical branch.
                             # Wrong branch => STOP loudly, commit nothing.
-2. commit  dotfiles add -u  # tracked modifications + deletions ONLY
+2. commit  # ONLY if the tracked diff is unchanged from the previous tick (the
+           # editing burst has settled), or something is already staged by hand,
+           # or the tree has been dirty past DOTFILES_SYNC_MAX_AGE (2h valve),
+           # or DOTFILES_SYNC_FORCE is set (the /dotfiles-sync skill).
+           dotfiles add -u  # tracked modifications + deletions ONLY
            dotfiles commit -m "auto(<machine>): <paths, truncated>"
 3. push    dotfiles push origin <machine>
                             # offline/auth failure is NON-fatal; retries next tick
@@ -164,9 +168,16 @@ first and only then rolls back.
 - **New files are invisible.** `add -u` never stages an untracked file and
   `showUntrackedFiles=no` hides it, so tracking stays a deliberate act. The
   offer-hook (§5.3) is what surfaces candidates instead.
-- **Half-written saves get committed.** A tick can land mid-edit; the next tick
-  commits the finished version, and promotion is manual so nothing half-baked
-  reaches `main` unreviewed.
+- **One commit per editing burst, not per tick.** A mid-edit tick defers instead
+  of committing, so a session of edits lands as one `auto(<machine>)` commit.
+  Steps 3–6 still run on a deferred tick: incoming shared content must not wait
+  on this box's editing settling down.
+- **A deferred commit stalls conflict detection for one tick.** `merge-tree`
+  preflights committed trees and cannot see a dirty work-tree, so on the
+  deferring tick a locally-dirty path that `origin/main` also touches previews as
+  clean and the real merge simply refuses. Nothing is written and no marker is
+  claimed; the next tick commits and detects it properly. Bounding this to one
+  tick is why step 2 debounces rather than batching by the day.
 
 ### 5.2 `~/.claude/skills/dotfiles-promote/SKILL.md` — promote
 
