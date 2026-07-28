@@ -2497,7 +2497,10 @@ version and merge anything worth keeping — then delete the backup. **`gh`'s
 `config.yml` is the one to actually read**: a stale tracked copy can change
 which account `gh` uses.
 
-- [x] **Step 3: Enroll `air` (this MacBook)**
+- [x] **Step 3: Enroll `air` (this MacBook)** — enrolled and verified. The
+  closing question below (track `~/.gitconfig` / `~/.ssh/config` on air's
+  branch?) was NOT decided and is still open; both remain untracked on every
+  branch.
 
 `air` has no `~/.dotfiles` today.
 
