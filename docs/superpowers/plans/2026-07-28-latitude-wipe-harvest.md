@@ -152,14 +152,33 @@ directory. restic 0.18.1 is installed. Three scheduled tasks exist and report
 
 Three things fall out of that table.
 
-**5a. Roughly 620 GiB on the Kingston is backed up by nothing.** The disk holds
-773 GiB. The only profile that touches it covers
-`D:\ImmichMedia\library\library` and captures **151.1 GiB**. Everything else on
-that disk — the `Media` tree, and whatever sits under `ImmichMedia` outside
-`library\library` — appears in no restic repo and in no other volume. Some of it
-may be regenerable Immich derivatives (`thumbs`, `encoded-video`); `Media` and
-any `upload` tree are not. **This is the real hold, and it is much sharper than
-"the SSD is the only copy of some data."**
+**5a. 622 GiB on the Kingston is backed up by nothing — but only ~13 GB of it
+is irreplaceable.** The disk holds 773 GiB and the only profile touching it
+covers `D:\ImmichMedia\library\library`, capturing 151.1 GiB. Measured
+breakdown of the rest (`du --apparent-size`, mounted read-only at
+`/mnt/kingston`):
+
+| Path | Size | Status |
+|---|---|---|
+| `ImmichMedia/library/library` | 152G | **backed up** — matches the 151.1 GiB snapshot |
+| `ImmichMedia/library/encoded-video` | 71G | regenerable — Immich transcodes |
+| `ImmichMedia/library/thumbs` | 9.4G | regenerable — Immich thumbnails |
+| `ImmichMedia/library/upload` | 9.4G | **irreplaceable, unprotected** |
+| `ImmichMedia/library/backups` | 2.9G | Immich's own DB dumps — superseded by the logical `immich-postgres` snapshot, cheap to keep |
+| `ImmichMedia/library/profile` | 185K | **irreplaceable** — user avatars |
+| `ImmichMedia/postgres` | 802M | raw PGDATA — superseded by the 534.9 MiB logical dump, and cross-version raw restore is fragile anyway |
+| `Media/config` | 500M | **irreplaceable** — servarr / qBittorrent state |
+| `Media/movies` | 249G | re-acquirable |
+| `Media/torrents` | 238G | re-acquirable |
+| `Media/qb-incomplete` | 41G | disposable — partial downloads |
+| `Media/tv` | 457M | re-acquirable |
+| `Media/xxx` | 138M | re-acquirable |
+
+So the hold collapses to **`upload` + `profile` + `Media/config` + `backups`
+≈ 13 GB**, which copies in minutes and does not require the 6TB to be seated
+first. The remaining ~487G of movies and torrents is a *convenience* decision —
+keep it to avoid re-downloading, not because it is unrecoverable — and the
+~120G of derivatives and partials is genuinely disposable.
 
 **5b. Backups stopped about three weeks ago.** Newest snapshots are 2026-07-05,
 07-02 and 07-07 against today's 2026-07-28, and every snapshot is recorded under
