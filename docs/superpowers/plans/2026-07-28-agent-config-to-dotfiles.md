@@ -153,19 +153,23 @@ pure/backend-api/.claude/memory/project.md and has been merged there."
 
 ---
 
-### Task 2: `retire_link()` — the transition helper, test-first
+### Task 2: `retire_link()` + `link_if_present()` — the transition helpers, test-first
 
 Every content task needs to remove a symlink that `bootstrap.sh` used to own. `link()` cannot do it (it only *replaces* a wrong-target link) and `copy_managed()` converts a symlink into a real copy, which is the right first beat but leaves bootstrap still owning the path. `retire_link()` is the final beat: drop a symlink that points into the repo, and leave anything else strictly alone.
 
 Safety property that matters: **it must never delete a real file.** After the handover, the real file at that path is dotfiles-tracked content — deleting it would destroy memory and then get committed by the sync timer.
 
 **Files:**
-- Modify: `agents/bootstrap.sh` (add helper beside `copy_managed`)
+- Modify: `agents/bootstrap.sh` (add both helpers beside `copy_managed`)
 - Test: `agents/tests/bootstrap.test.sh` (append Case 4)
 
 **Interfaces:**
-- Consumes: `$SRC_DIR` (absolute path to `machines/agents`), `_resolve()`, `$DRY_RUN`, the `linked` counter — all already defined in `bootstrap.sh`.
-- Produces: `retire_link <abs-dest>` — removes `<abs-dest>` if and only if it is a symlink whose resolved target is inside `$SRC_DIR`. No-op on a real file, on a dangling link, on a symlink pointing elsewhere, and on a missing path. Used by Tasks 3–7.
+- Consumes: `$SRC_DIR` (absolute path to `machines/agents`), `$DRY_RUN`, `link()` — all already defined in `bootstrap.sh`.
+- Produces two helpers used by Tasks 3–7:
+  - `retire_link <abs-dest>` — removes `<abs-dest>` if and only if it is a symlink whose **immediate** target is inside `$SRC_DIR`. No-op on a real file, on a symlink pointing elsewhere, and on a missing path.
+  - `link_if_present <abs-src> <abs-dest>` — `link()`, but only when `<abs-src>` exists. Prevents a dangling symlink when a fan-out target (`~/.codex`, `~/.claude-<postfix>`) is wired before the primary's real file is in place, which the five-beat ordering makes possible: beat 1 lands the bootstrap change fleet-wide, and a box that has not yet had its content converted has nothing at the primary path.
+
+**Portability note, verified on this box (Darwin 27) before writing:** `retire_link` deliberately uses one-hop `readlink "$dest"`, **not** `_resolve()`. `_resolve` falls back to `printf '%s' "$1"` when `readlink -f` is unavailable, which returns the path *itself* rather than its target — and a path never matches `$SRC_DIR/*`, so `retire_link` would silently no-op on exactly the boxes that need it. One hop is all this needs, is POSIX, and has no fallback to be wrong about. (`readlink -f` does work here — `readlink -f ~/.claude/memory/global.md` returns the repo path — but the helper must be correct on Git Bash and any box where it is not.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -202,6 +206,17 @@ check "retire_link is a no-op on a missing path" '[ $? -eq 0 ]'
 r_dry="$tmp/dry-link.md"; ln -s "$SRC_DIR/thing.md" "$r_dry"
 DRY_RUN=1 retire_link "$r_dry" >/dev/null
 check "retire_link removes nothing under DRY_RUN" '[ -L "$r_dry" ]'
+
+# (f) link_if_present — links when the source exists, no-ops when it does not.
+# The no-op case is the guard against a dangling fan-out link on a box whose
+# primary profile has not been converted yet.
+p_dest="$tmp/present.md"
+link_if_present "$SRC_DIR/thing.md" "$p_dest" >/dev/null
+check "link_if_present links an existing source" '[ -L "$p_dest" ]'
+
+a_dest="$tmp/absent.md"
+link_if_present "$SRC_DIR/nope.md" "$a_dest" >/dev/null
+check "link_if_present creates nothing for a missing source" '[ ! -e "$a_dest" ] && [ ! -L "$a_dest" ]'
 ```
 
 - [ ] **Step 2: Run the test and watch Case 4 fail**
@@ -212,9 +227,9 @@ cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 
 Expected: Cases 1–3 `ok`, every Case 4 line `FAIL` (`retire_link: command not found`), non-zero exit.
 
-- [ ] **Step 3: Implement `retire_link()`**
+- [ ] **Step 3: Implement both helpers**
 
-Add to `agents/bootstrap.sh` immediately after the `copy_managed()` function, before the `BOOTSTRAP_LIB_ONLY` early return (so the tests can source it):
+Add to `agents/bootstrap.sh` immediately after the `copy_managed()` function, before the `BOOTSTRAP_LIB_ONLY` early return (so the tests can source them):
 
 ```sh
 # retire_link <abs-dest>: remove dest IF AND ONLY IF it is a symlink pointing
@@ -230,7 +245,10 @@ Add to `agents/bootstrap.sh` immediately after the `copy_managed()` function, be
 retire_link() {
   dest="$1"
   [ -L "$dest" ] || return 0                     # real file, or nothing there
-  tgt="$(_resolve "$dest")"
+  # ONE HOP, not _resolve(): _resolve falls back to echoing its argument when
+  # readlink -f is unavailable, and a path never matches $SRC_DIR/*, so the guard
+  # below would silently pass and nothing would ever be retired.
+  tgt="$(readlink "$dest")"
   case "$tgt" in
     "$SRC_DIR"/*) ;;                             # ours — fall through and drop it
     *) return 0 ;;                               # someone else's link
@@ -242,7 +260,23 @@ retire_link() {
   rm -f "$dest"
   printf '  - retired stale link: %s\n' "$dest"
 }
+
+# link_if_present <abs-src> <abs-dest>: link() only if src exists. The fan-out
+# links into ~/.codex and ~/.claude-<postfix> point at the PRIMARY profile's real
+# file, which the handover ordering does not guarantee is in place yet — beat 1
+# lands this script fleet-wide, and a box whose content has not been converted
+# has nothing at the primary path. Plain link() would leave a dangling symlink
+# there; this leaves the path empty, and the next bootstrap run wires it.
+link_if_present() {
+  if [ -e "$1" ]; then
+    link "$1" "$2"
+  else
+    printf '  . skipped (source not present yet): %s\n' "$2"
+  fi
+}
 ```
+
+Both helpers must sit above the `BOOTSTRAP_LIB_ONLY` early return so the tests can source them.
 
 - [ ] **Step 4: Run the tests and verify all cases pass**
 
@@ -250,7 +284,12 @@ retire_link() {
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 ```
 
-Expected: every line `ok`, exit 0. If (c) fails, `_resolve` is following the link before the `case` — confirm `_resolve` is applied to `$dest` and compared against `$SRC_DIR`, and that `$SRC_DIR` in the test has no trailing slash.
+Expected: every line `ok`, exit 0.
+
+Troubleshooting, by symptom:
+- **(a) fails** — `readlink "$dest"` returned a *relative* target, so the `case` did not match. Every link `bootstrap.sh` creates uses an absolute `$SRC_DIR/...` src, so this can only happen against a hand-made link; confirm with `readlink <path>`.
+- **(c) fails** — `$SRC_DIR` has a trailing slash, making the pattern `//*`. Check the test's `SRC_DIR=` assignment.
+- **(b) fails** — the `[ -L "$dest" ] || return 0` guard is missing or inverted. This is the memory-loss guard; do not proceed until it passes.
 
 - [ ] **Step 5: Lint and commit**
 
@@ -356,10 +395,10 @@ In `agents/bootstrap.sh`, delete the entire per-host block (the `HOST_ID=` assig
 retire_link "$CLAUDE_DIR/host-memory.md"
 ```
 
-Then handle the fan-out. In the Codex block, replace `link "$host_src" "$CODEX_DIR/host-memory.md"` with a link at the dotfiles-owned primary:
+Then handle the fan-out. In the Codex block, replace `link "$host_src" "$CODEX_DIR/host-memory.md"` with a guarded link at the dotfiles-owned primary:
 
 ```sh
-link "$PRIMARY_DIR/host-memory.md" "$CODEX_DIR/host-memory.md"
+link_if_present "$PRIMARY_DIR/host-memory.md" "$CODEX_DIR/host-memory.md"
 ```
 
 and define `PRIMARY_DIR` once, immediately after `CLAUDE_DIR`:
@@ -387,11 +426,11 @@ DRY_RUN=1 bash agents/bootstrap.sh | grep -c "would link.*host-memory"
 # Expect: 0
 ```
 
-For a secondary profile (`POSTFIX` != `default`), add the same link, guarded so the primary never links to itself:
+For a secondary profile, add the same link, guarded so the primary never links to itself:
 
 ```sh
 if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
-  link "$PRIMARY_DIR/host-memory.md" "$CLAUDE_DIR/host-memory.md"
+  link_if_present "$PRIMARY_DIR/host-memory.md" "$CLAUDE_DIR/host-memory.md"
 fi
 ```
 
@@ -433,7 +472,7 @@ ssh <box> 'cd ~/machines && git pull --ff-only && bash agents/bootstrap.sh >/dev
 # Expected on every box: a real file (no `->`), content intact.
 ```
 
-If any box shows a symlink, `retire_link` did not fire — check that its `~/machines` actually pulled and that `_resolve` returns an absolute path there.
+If any box shows a symlink, `retire_link` did not fire — check that its `~/machines` actually pulled, and run `readlink ~/.claude/host-memory.md` there — the target must start with that box's `machines/agents` path for the guard to match.
 
 ---
 
@@ -479,24 +518,40 @@ Expected: both Case 5 lines `FAIL` — today bootstrap links `memory/global.md` 
 ```bash
 cd ~/.claude/memory
 cp -L global.md /tmp/global.real && rm global.md && mv /tmp/global.real global.md
+
 # personality is a DIRECTORY symlink — replace it with a real dir of real files.
-cp -rL personality /tmp/personality.real && rm personality && mv /tmp/personality.real personality
+# cp -rL on a symlinked directory operand was verified to produce a real dir with
+# the files inside it (Darwin 27, 2026-07-28); the count check below is the guard
+# in case a box's cp behaves differently.
+cp -rL personality /tmp/personality.real
+[ "$(ls /tmp/personality.real/*.md 2>/dev/null | wc -l)" -eq 4 ] \
+  || { echo "REFUSING: expected 4 facets, got: $(ls /tmp/personality.real)"; exit 1; }
+rm personality && mv /tmp/personality.real personality
+
 ls -l ~/.claude/memory ~/.claude/memory/personality   # expect no `->` anywhere
+ls ~/.claude/memory/personality                       # expect tone/habits/values/practices
 ```
 
-Run on every enrolled box. Skip `server`.
+Run on every enrolled box. Skip `server`. **The count check is not optional** — if `cp` produced a nested `personality/personality` or copied the symlink itself, the following `rm` would destroy the only copy on that box.
 
 - [ ] **Step 4: Reconcile the five copies into one authoritative file**
 
 This is the beat that prevents silent memory loss. Collect each box's copy and diff:
 
+Gather **every** file this task will later delete — `global.md` *and* all four facets. Diffing only `global.md` while Step 6 removes `personality/` too would leave the facets unreconciled ahead of an irreversible `rm`.
+
 ```bash
-mkdir -p /tmp/global-gather
+mkdir -p /tmp/mem-gather
 for box in air hub desktop latitude desktop-ubuntu26; do
-  scp "$box":~/.claude/memory/global.md "/tmp/global-gather/$box.md" 2>/dev/null \
+  scp -r "$box":~/.claude/memory "/tmp/mem-gather/$box" 2>/dev/null \
     || echo "SKIP $box (unreachable)"
 done
-cd /tmp/global-gather && for f in *.md; do echo "=== $f"; diff air.md "$f" | head -40; done
+cd /tmp/mem-gather
+for box in */; do
+  b="${box%/}"; [ "$b" = air ] && continue
+  echo "=== $b"
+  diff -r air "$b" | head -60
+done
 ```
 
 Any box-specific bullet that is *not* on `air` must be merged into the authoritative copy before the promote. This is the same procedure that recovered 11 and 3 disjoint bullets during enrollment — do not skip it because the files "look the same". If a bullet is genuinely host-specific, it belongs in that box's `~/.claude/host-memory.md` (Task 3), not in the shared file.
@@ -526,10 +581,15 @@ Then run `/dotfiles-promote` and select all five paths. The skill will also repo
 Per non-authoritative box, after the promote:
 
 ```bash
-diff <(ssh <box> 'cat ~/.claude/memory/global.md') /tmp/global-gather/air.md
-# Expected: empty, because Step 4 merged everything. If NOT empty, stop —
-# go back to Step 4; the incoming merge would overwrite unmerged content.
+# Re-gather this box AFTER the promote and diff the whole memory dir against the
+# authoritative copy. Both the file and the four facets must match, because the
+# rm below removes both.
+scp -r "<box>":~/.claude/memory /tmp/mem-recheck
+diff -r /tmp/mem-gather/air /tmp/mem-recheck
+# Expected: empty. If NOT empty, STOP and go back to Step 4 — the rm below is
+# irreversible and the incoming merge would not restore the unmerged content.
 ssh <box> 'rm -rf ~/.claude/memory/global.md ~/.claude/memory/personality'
+rm -rf /tmp/mem-recheck
 ```
 
 The next `dotfiles-sync` tick (≤10 min) merges `main` in and materializes them. Verify:
@@ -559,8 +619,8 @@ _mkdir "$CLAUDE_DIR/memory"
 retire_link "$CLAUDE_DIR/memory/global.md"
 retire_link "$CLAUDE_DIR/memory/personality"
 if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
-  link "$PRIMARY_DIR/memory/global.md"  "$CLAUDE_DIR/memory/global.md"
-  link "$PRIMARY_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
+  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CLAUDE_DIR/memory/global.md"
+  link_if_present "$PRIMARY_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
 fi
 ```
 
@@ -568,8 +628,8 @@ And in the Codex block, repoint both links from the repo to the primary:
 
 ```sh
 _mkdir "$CODEX_DIR/memory"
-link "$PRIMARY_DIR/memory/global.md"  "$CODEX_DIR/memory/global.md"
-link "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
+link_if_present "$PRIMARY_DIR/memory/global.md"   "$CODEX_DIR/memory/global.md"
+link_if_present "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
 ```
 
 - [ ] **Step 8: Test, verify Codex still resolves, delete the tree, commit**
@@ -674,14 +734,14 @@ with:
 # Distinct from $HOME/CLAUDE.md, which is ambient in every session under $HOME.
 retire_link "$CLAUDE_DIR/CLAUDE.md"
 if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
-  link "$PRIMARY_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 fi
 ```
 
 and in the Codex block replace `link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"` with:
 
 ```sh
-link "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
+link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
 ```
 
 - [ ] **Step 5: Clear the path on the other boxes, then delete and commit**
@@ -862,7 +922,7 @@ with:
 for f in statusline-command.sh balance-refresh.py; do
   retire_link "$CLAUDE_DIR/$f"
   if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
-    link "$PRIMARY_DIR/$f" "$CLAUDE_DIR/$f"
+    link_if_present "$PRIMARY_DIR/$f" "$CLAUDE_DIR/$f"
   fi
 done
 ```
