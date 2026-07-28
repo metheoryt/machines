@@ -156,4 +156,23 @@ else
 fi
 rm -rf "$T"
 
+
+# ── 8. A tick launched from INSIDE the work-tree still sees the whole tree ───
+# Regression: git computes a pathspec prefix from the cwd, so `add -u` run from
+# a subdirectory of $HOME stages only that subdirectory. On a real box that is
+# the common case — `bash ~/machines/provision/dotfiles-sync.sh` — and it made
+# the tick a silent no-op that committed none of the actual drift.
+T="$(setup)"
+mkdir -p "$T/home/sub"
+printf 'edited\n' > "$T/home/.tracked"
+before="$(dfx "$T" rev-parse air)"
+rc="$(cd "$T/home/sub" && tick "$T")"
+eq "cwd inside work-tree: exit 0" "$rc" "0"
+if [ "$(dfx "$T" rev-parse air)" != "$before" ]; then
+  pass "cwd inside work-tree: drift outside the cwd still committed"
+else
+  die "cwd inside work-tree: NOTHING COMMITTED — pathspec prefix swallowed it"
+fi
+rm -rf "$T"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"
