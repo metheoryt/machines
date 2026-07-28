@@ -150,7 +150,7 @@ Independent of every other task — no bootstrap change, no fleet ordering. Do i
 - Consumes: nothing.
 - Produces: nothing later tasks depend on. Task 4 assumes `agents/memory/` contains only `global.md` and `personality/` when it deletes the tree.
 
-- [ ] **Step 1: Confirm the orphan is still orphaned and still disjoint**
+- [x] **Step 1: Confirm the orphan is still orphaned and still disjoint**
 
 ```bash
 cd /Users/me/machines
@@ -163,13 +163,13 @@ diff /tmp/dotfiles-ba.md /Users/me/machines/agents/memory/projects/backend-api.m
 # Expected: a full-file diff with no shared bullets (verified 2026-07-28).
 ```
 
-- [ ] **Step 2: Append the three orphaned sections to the tracked file**
+- [x] **Step 2: Append the three orphaned sections to the tracked file**
 
 Open `$HOME/pure/backend-api/.claude/memory/project.md` and append the `## Tooling`, `## Product / domain`, `## Jira (CFT project)`, and `## Realtime / Centrifugo` sections **verbatim** from `machines/agents/memory/projects/backend-api.md`, below its existing sections. Keep the tracked file's own header and HTML comment — the orphan's header (`# Project memory — kan-kan`) and comment block are discarded, because the tracked file's comment documents the dotfiles tracking story and the orphan's does not.
 
 Do not paraphrase, reorder, or "improve" the bullets. This is a merge, not an edit.
 
-- [ ] **Step 3: Verify nothing was lost in the merge**
+- [x] **Step 3: Verify nothing was lost in the merge**
 
 ```bash
 # Every `- **` bullet from the orphan must now appear in the tracked file.
@@ -179,7 +179,7 @@ grep -c '^- \*\*' $HOME/pure/backend-api/.claude/memory/project.md
 # Expected: the second count equals (original tracked count) + N.
 ```
 
-- [ ] **Step 4: Commit the merge in dotfiles**
+- [x] **Step 4: Commit the merge in dotfiles**
 
 Already tracked and already allow-listed (`!pure/backend-api/.claude/memory/project.md`), so this is a one-liner. The 10-minute timer would commit it on its own; committing explicitly keeps the message meaningful.
 
@@ -189,11 +189,11 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME commit -m "memory(backend-api): 
 git --git-dir=$HOME/.dotfiles --work-tree=$HOME push origin air
 ```
 
-- [ ] **Step 5: Promote to `main` so every box gets it**
+- [x] **Step 5: Promote to `main` so every box gets it**
 
 The path is already on `main`, so this is a content update, not a new path. Run the `/dotfiles-promote` skill and select `pure/backend-api/.claude/memory/project.md`. Do **not** hand-edit `main` — the skill builds it in a throwaway linked worktree, which is the only safe way (a `checkout main` in `$HOME` would delete every host-local file).
 
-- [ ] **Step 6: Delete the orphan from `machines` and commit**
+- [x] **Step 6: Delete the orphan from `machines` and commit**
 
 ```bash
 cd /Users/me/machines
@@ -226,7 +226,7 @@ Safety property that matters: **it must never delete a real file.** After the ha
 
 **Portability note, verified on this box (Darwin 27) before writing:** `retire_link` deliberately uses one-hop `readlink "$dest"`, **not** `_resolve()`. `_resolve` falls back to `printf '%s' "$1"` when `readlink -f` is unavailable, which returns the path *itself* rather than its target — and a path never matches `$SRC_DIR/*`, so `retire_link` would silently no-op on exactly the boxes that need it. One hop is all this needs, is POSIX, and has no fallback to be wrong about. (`readlink -f` does work here — `readlink -f ~/.claude/memory/global.md` returns the repo path — but the helper must be correct on Git Bash and any box where it is not.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `agents/tests/bootstrap.test.sh`:
 
@@ -274,7 +274,7 @@ link_if_present "$SRC_DIR/nope.md" "$a_dest" >/dev/null
 check "link_if_present creates nothing for a missing source" '[ ! -e "$a_dest" ] && [ ! -L "$a_dest" ]'
 ```
 
-- [ ] **Step 2: Run the test and watch Case 4 fail**
+- [x] **Step 2: Run the test and watch Case 4 fail**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
@@ -282,7 +282,7 @@ cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 
 Expected: Cases 1–3 `ok`, every Case 4 line `FAIL` (`retire_link: command not found`), non-zero exit.
 
-- [ ] **Step 3: Implement both helpers**
+- [x] **Step 3: Implement both helpers**
 
 Add to `agents/bootstrap.sh` immediately after the `copy_managed()` function, before the `BOOTSTRAP_LIB_ONLY` early return (so the tests can source them):
 
@@ -333,7 +333,7 @@ link_if_present() {
 
 Both helpers must sit above the `BOOTSTRAP_LIB_ONLY` early return so the tests can source them.
 
-- [ ] **Step 4: Run the tests and verify all cases pass**
+- [x] **Step 4: Run the tests and verify all cases pass**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
@@ -346,7 +346,7 @@ Troubleshooting, by symptom:
 - **(c) fails** — `$SRC_DIR` has a trailing slash, making the pattern `//*`. Check the test's `SRC_DIR=` assignment.
 - **(b) fails** — the `[ -L "$dest" ] || return 0` guard is missing or inverted. This is the memory-loss guard; do not proceed until it passes.
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 cd /Users/me/machines
@@ -378,7 +378,7 @@ It also retires a naming problem. `agents/hosts/` holds **7 files for 5 machines
 - Consumes: `retire_link` and `copy_managed` from Task 2 / existing bootstrap.
 - Produces: `~/.claude/host-memory.md` as a real, dotfiles-tracked file on every enrolled box. `global-memory-load.sh` needs no change — it already reads `$config_dir/host-memory.md`, config-dir-relative.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Replace Case 1 in `agents/tests/bootstrap.test.sh` with its inverse — bootstrap must no longer seed or link a per-host file into the primary profile, and must no longer consult `MACHINES_HOST_ID` for one:
 
@@ -395,7 +395,7 @@ check "nothing is linked at host-memory.md" \
 
 Both assertions are negative, and that is the whole behavioral contract for the primary profile: bootstrap must produce *no* output for this path. The positive half — that a stale link actually gets retired — is Task 2's Case 4(a), which tests `retire_link` directly rather than through a bootstrap run whose output depends on whatever happens to be at the live path.
 
-- [ ] **Step 2: Run the test and watch Case 1 fail**
+- [x] **Step 2: Run the test and watch Case 1 fail**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
@@ -403,7 +403,7 @@ cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 
 Expected: `FAIL - no per-host file is seeded in the repo` and `FAIL - nothing is linked at host-memory.md`, because today's bootstrap does both.
 
-- [ ] **Step 3: Convert the live file to a real copy on every box, before changing bootstrap**
+- [x] **Step 3: Convert the live file to a real copy on every box, before changing bootstrap**
 
 This beat protects content, so it runs on **every box that has the symlink,
 enrollment irrelevant** — `air`, `hub`, `latitude`, `desktop-ubuntu26` (enrolled)
@@ -432,7 +432,7 @@ ssh <win-box> '& "C:\Program Files\Git\bin\bash.exe" -lc "<the posix command>"'
 **Do not skip `server`.** It is the box where skipping costs content rather than
 just tracking.
 
-- [ ] **Step 4: Track it on each machine's branch**
+- [x] **Step 4: Track it on each machine's branch**
 
 Per box, still individually (the content differs per box — that is the point):
 
@@ -453,7 +453,7 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME push origin "$(git --git-dir=$HO
 
 **Never promote this path to `main`.** It is host-local by definition, and `main` gaining it would hand every box one machine's memory and then flap.
 
-- [ ] **Step 5: Strip the host-memory block out of bootstrap**
+- [x] **Step 5: Strip the host-memory block out of bootstrap**
 
 In `agents/bootstrap.sh`, delete the entire per-host block (the `HOST_ID=` assignment, the stub-seeding `if`, the `DRY_RUN` branch, and the `link "$host_src" "$CLAUDE_DIR/host-memory.md"` call) and replace it with:
 
@@ -506,7 +506,7 @@ fi
 
 Note `host_id()` may now be unused. Leave the function in place — `provision/` and `modules/home/claude.nix` also reason about host identity; removing it is a separate cleanup. Confirm with `grep -rn 'host_id\|MACHINES_HOST_ID' agents/ modules/ provision/` and only delete if there is exactly one definition and no other caller.
 
-- [ ] **Step 6: Run the tests, then a real dry run**
+- [x] **Step 6: Run the tests, then a real dry run**
 
 ```bash
 cd /Users/me/machines
@@ -517,7 +517,7 @@ DRY_RUN=1 bash agents/bootstrap.sh | grep -i host
 # exists, so no retire line either.
 ```
 
-- [ ] **Step 7: Delete `agents/hosts/` and commit**
+- [x] **Step 7: Delete `agents/hosts/` and commit**
 
 ```bash
 cd /Users/me/machines
@@ -534,7 +534,7 @@ methe-server predated the g513ie rename)."
 git push
 ```
 
-- [ ] **Step 8: Converge the fleet and verify**
+- [x] **Step 8: Converge the fleet and verify**
 
 ```bash
 # Per box: pull machines, run bootstrap, confirm the real file survived.
@@ -567,7 +567,7 @@ after this task it is permanent.
 - Consumes: `retire_link`, `PRIMARY_DIR` (both from Tasks 2–3).
 - Produces: real dotfiles-tracked files at `~/.claude/memory/global.md` and `~/.claude/memory/personality/*.md`, with `~/.codex/memory/*` and any secondary profile symlinked at them. `global-memory-load.sh` is unchanged — it globs `$config_dir/memory/personality/*.md`, which resolves identically through a real dir.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append Case 5 to `agents/tests/bootstrap.test.sh`:
 
@@ -581,7 +581,7 @@ check "codex memory is sourced from the primary profile, not the repo" \
   '! printf "%s" "$out5" | grep -E "\.codex/memory" | grep -q "machines/agents/memory"'
 ```
 
-- [ ] **Step 2: Run the test and watch Case 5 fail**
+- [x] **Step 2: Run the test and watch Case 5 fail**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
@@ -589,7 +589,7 @@ cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 
 Expected: both Case 5 lines `FAIL` — today bootstrap links `memory/global.md` and `memory/personality` into `~/.claude/memory/`, and links Codex straight at `$SRC_DIR`.
 
-- [ ] **Step 3: Convert to real copies on every box**
+- [x] **Step 3: Convert to real copies on every box**
 
 ```bash
 cd ~/.claude/memory
@@ -611,7 +611,7 @@ ls ~/.claude/memory/personality                       # expect tone/habits/value
 Run on **every** box, `desktop` and `server` included (beat 2 is
 enrollment-independent — see the beat split). **The count check is not optional** — if `cp` produced a nested `personality/personality` or copied the symlink itself, the following `rm` would destroy the only copy on that box.
 
-- [ ] **Step 4: Reconcile the five copies into one authoritative file**
+- [x] **Step 4: Reconcile the five copies into one authoritative file**
 
 This is the beat that prevents silent memory loss. Collect each box's copy and diff:
 
@@ -633,7 +633,7 @@ done
 
 Any box-specific bullet that is *not* on `air` must be merged into the authoritative copy before the promote. This is the same procedure that recovered 11 and 3 disjoint bullets during enrollment — do not skip it because the files "look the same". If a bullet is genuinely host-specific, it belongs in that box's `~/.claude/host-memory.md` (Task 3), not in the shared file.
 
-- [ ] **Step 5: Track and promote to `main`**
+- [x] **Step 5: Track and promote to `main`**
 
 ```bash
 cd ~
@@ -653,7 +653,7 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME push origin air
 
 Then run `/dotfiles-promote` and select all five paths. The skill will also report the `.gitignore` drift — promote **only** the five `!.claude/memory/…` lines it names, never the whole file (`~/.gitignore` is the one deliberate shared-XOR-host exception and carries `air`'s private host-local lines).
 
-- [ ] **Step 6: Clear the path on every other box**
+- [x] **Step 6: Clear the path on every other box**
 
 Per non-authoritative **enrolled** box, after the promote — `hub`, `latitude`,
 `desktop-ubuntu26`, `desktop`. **Never on `server`**: it has no `~/.dotfiles` and no sync
@@ -678,7 +678,7 @@ The next `dotfiles-sync` tick (≤10 min) merges `main` in and materializes them
 ssh <box> 'ls -l ~/.claude/memory ~/.claude/memory/personality && head -3 ~/.claude/memory/global.md'
 ```
 
-- [ ] **Step 7: Strip the memory block out of bootstrap**
+- [x] **Step 7: Strip the memory block out of bootstrap**
 
 Replace the three lines in `agents/bootstrap.sh`:
 
@@ -712,7 +712,7 @@ link_if_present "$PRIMARY_DIR/memory/global.md"   "$CODEX_DIR/memory/global.md"
 link_if_present "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
 ```
 
-- [ ] **Step 8: Test, verify Codex still resolves, delete the tree, commit**
+- [x] **Step 8: Test, verify Codex still resolves, delete the tree, commit**
 
 ```bash
 cd /Users/me/machines
@@ -734,7 +734,7 @@ rather than diverging across N copies."
 git push
 ```
 
-- [ ] **Step 9: Converge the fleet and verify no box lost memory**
+- [x] **Step 9: Converge the fleet and verify no box lost memory**
 
 ```bash
 for box in air hub desktop latitude desktop-ubuntu26; do
@@ -765,7 +765,7 @@ Expected per box: `~/.claude/memory/global.md` a real file with the full line co
 - Consumes: `retire_link`, `PRIMARY_DIR`.
 - Produces: `~/.claude/CLAUDE.md` as a real dotfiles-tracked file; `~/.codex/AGENTS.md` symlinked at it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append Case 6:
 
@@ -776,7 +776,7 @@ check "no link from agents/AGENTS.md into the primary profile" \
   '! printf "%s" "$out6" | grep -q "agents/AGENTS.md"'
 ```
 
-- [ ] **Step 2: Run the test and watch Case 6 fail**
+- [x] **Step 2: Run the test and watch Case 6 fail**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
@@ -784,7 +784,7 @@ cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 
 Expected: `FAIL - no link from agents/AGENTS.md into the primary profile`.
 
-- [ ] **Step 3: Convert to a real file, reconcile, track, promote**
+- [x] **Step 3: Convert to a real file, reconcile, track, promote**
 
 ```bash
 # Per box, as in Task 4 Step 3:
@@ -799,7 +799,7 @@ diff <(ssh latitude 'cat ~/.claude/CLAUDE.md') ~/.claude/CLAUDE.md   # expect em
 
 Then track on `air` with a shared (unanchored) allow-line `!.claude/CLAUDE.md`, commit, and `/dotfiles-promote` it to `main` — same mechanics as Task 4 Step 5.
 
-- [ ] **Step 4: Repoint bootstrap**
+- [x] **Step 4: Repoint bootstrap**
 
 Replace:
 
@@ -824,7 +824,7 @@ and in the Codex block replace `link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
 ```
 
-- [ ] **Step 5: Clear the path on the other boxes, then delete and commit**
+- [x] **Step 5: Clear the path on the other boxes, then delete and commit**
 
 Per **enrolled** box only (`hub`, `latitude`, `desktop-ubuntu26`, `desktop`):
 `ssh <box> 'rm -f ~/.claude/CLAUDE.md'` (its content is now on `main` and
@@ -867,7 +867,7 @@ Invocation names change: `/cyphy:gortex-align` becomes `/gortex-align` (user-sco
 - Consumes: nothing from earlier tasks.
 - Produces: three user-scope skills. Nothing else references them by plugin-qualified name — verify in Step 1.
 
-- [ ] **Step 1: Verify no cross-reference and no hidden test**
+- [x] **Step 1: Verify no cross-reference and no hidden test**
 
 ```bash
 cd /Users/me/machines
@@ -880,7 +880,7 @@ done
 
 Expected: no `tests/` dir under any of the three, and no `cyphy:<name>` reference outside the skill's own directory. Any hit means something invokes the plugin-qualified name and must be updated in the same commit.
 
-- [ ] **Step 2: Copy each skill to its real `$HOME` path**
+- [x] **Step 2: Copy each skill to its real `$HOME` path**
 
 ```bash
 for s in gortex-align update-balance worktree-agent; do
@@ -890,7 +890,7 @@ done
 find $HOME/.claude/skills/gortex-align $HOME/.claude/skills/update-balance $HOME/.claude/skills/worktree-agent -type f
 ```
 
-- [ ] **Step 3: Verify the skills load from the new location before deleting the old**
+- [x] **Step 3: Verify the skills load from the new location before deleting the old**
 
 ```bash
 claude -p 'List the skills available to you whose names start with gortex-align, update-balance, or worktree-agent. Answer with names only.'
@@ -898,7 +898,7 @@ claude -p 'List the skills available to you whose names start with gortex-align,
 
 Expected: all three named, unqualified. The plugin copy is still present at this point, so a duplicate-name warning is acceptable — what matters is that the user-scope copy is discovered.
 
-- [ ] **Step 4: Track and promote**
+- [x] **Step 4: Track and promote**
 
 Add one unanchored allow-line per file to `~/.gitignore` under the shared block (one line per file, as the allow-list requires — `!.claude/skills/gortex-align/SKILL.md` and so on for every file found in Step 1), then:
 
@@ -912,7 +912,7 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME push origin air
 
 Then `/dotfiles-promote` the skill files and only the `!.claude/skills/…` allow-lines.
 
-- [ ] **Step 5: Delete from `machines` and commit**
+- [x] **Step 5: Delete from `machines` and commit**
 
 ```bash
 cd /Users/me/machines
@@ -926,7 +926,7 @@ Invocation changes from /cyphy:<name> to /<name> (user scope)."
 git push
 ```
 
-- [ ] **Step 6: Confirm on a second box after its sync tick**
+- [x] **Step 6: Confirm on a second box after its sync tick**
 
 ```bash
 ssh latitude 'ls ~/.claude/skills/ && head -4 ~/.claude/skills/gortex-align/SKILL.md'
@@ -948,7 +948,7 @@ Both are plain `link()`ed whole files with no tests, referenced from `settings.j
 - Consumes: `retire_link`, `PRIMARY_DIR`.
 - Produces: both files as real dotfiles-tracked executables at `~/.claude/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```bash
 # Case 7: statusline + balance refresh are dotfiles-owned.
@@ -959,13 +959,13 @@ check "balance-refresh is not linked from the repo" \
   '! printf "%s" "$out7" | grep -q "agents/balance-refresh.py"'
 ```
 
-- [ ] **Step 2: Run the test and watch Case 7 fail**
+- [x] **Step 2: Run the test and watch Case 7 fail**
 
 ```bash
 cd /Users/me/machines && bash agents/tests/bootstrap.test.sh
 ```
 
-- [ ] **Step 3: Convert to real files and confirm the executable bit**
+- [x] **Step 3: Convert to real files and confirm the executable bit**
 
 ```bash
 cd ~/.claude
@@ -977,7 +977,7 @@ ls -l statusline-command.sh balance-refresh.py   # expect real files, mode with 
 
 git records the executable bit as `100755`, so it survives the checkout on other boxes.
 
-- [ ] **Step 4: Verify the statusline still renders**
+- [x] **Step 4: Verify the statusline still renders**
 
 ```bash
 bash "$HOME/.claude/statusline-command.sh" </dev/null
@@ -985,7 +985,7 @@ bash "$HOME/.claude/statusline-command.sh" </dev/null
 
 Expected: the usual status line (or its no-input fallback), not `No such file or directory`.
 
-- [ ] **Step 5: Track, promote, repoint bootstrap**
+- [x] **Step 5: Track, promote, repoint bootstrap**
 
 Track on `air` with unanchored allow-lines `!.claude/statusline-command.sh` and `!.claude/balance-refresh.py`, commit, `/dotfiles-promote` both.
 
@@ -1011,7 +1011,7 @@ for f in statusline-command.sh balance-refresh.py; do
 done
 ```
 
-- [ ] **Step 6: Clear other boxes, delete, commit**
+- [x] **Step 6: Clear other boxes, delete, commit**
 
 ```bash
 # Per ENROLLED box only (hub, latitude, desktop-ubuntu26, desktop): content is
@@ -1030,7 +1030,7 @@ them via \$HOME, so no settings change is needed."
 git push
 ```
 
-- [ ] **Step 7: Verify on a second box after its sync tick**
+- [x] **Step 7: Verify on a second box after its sync tick**
 
 ```bash
 ssh latitude 'ls -l ~/.claude/statusline-command.sh && bash ~/.claude/statusline-command.sh </dev/null | head -2'
@@ -1054,7 +1054,7 @@ The ownership split now differs from what four documents describe. Every one of 
 - Consumes: the final state of Tasks 1–7.
 - Produces: documentation that matches reality. No code depends on it.
 
-- [ ] **Step 1: Establish the ground truth to document**
+- [x] **Step 1: Establish the ground truth to document**
 
 ```bash
 cd /Users/me/machines
@@ -1063,7 +1063,7 @@ grep -n "retire_link\|^link \|link \"\$PRIMARY_DIR\|copy_managed \|link_entries_
 
 Write the resulting list down — it is the authoritative "what bootstrap still deploys" inventory, and every doc edit below must agree with it.
 
-- [ ] **Step 2: Rewrite the ownership story in `agents/README.md`**
+- [x] **Step 2: Rewrite the ownership story in `agents/README.md`**
 
 State the criterion and the split explicitly, so the next agent does not re-derive it:
 
@@ -1075,11 +1075,11 @@ State the criterion and the split explicitly, so the next agent does not re-deri
 
 Also correct the SHARED-set list — it currently names the moved files.
 
-- [ ] **Step 3: Correct `machines/CLAUDE.md`**
+- [x] **Step 3: Correct `machines/CLAUDE.md`**
 
 The repo-overview file describes `hermes/` as carrying `memories/` and implies `agents/` carries the memory stores. Update the `agents/` description to the deployer-and-tests role, and note that `hermes/memories/` is empty (Task 8 does not fill it; flag it as an unfilled slot or delete it in a follow-up).
 
-- [ ] **Step 4: Rewrite the dotfiles bullets in `.claude/memory/project.md` and record the reversal**
+- [x] **Step 4: Rewrite the dotfiles bullets in `.claude/memory/project.md` and record the reversal**
 
 Replace the bullet that says `~/.claude/CLAUDE.md` and `~/.claude/memory/` are unavailable-because-two-deployers, and add:
 
@@ -1105,13 +1105,13 @@ Replace the bullet that says `~/.claude/CLAUDE.md` and `~/.claude/memory/` are u
   OS-hostname identity and had drifted to 7 files for 5 machines.
 ```
 
-- [ ] **Step 5: Update the two dotfiles-tracked memory documents**
+- [x] **Step 5: Update the two dotfiles-tracked memory documents**
 
 In `$HOME/CLAUDE.md` and `~/.claude/memory/global.md`, the "Recording a memory — pick the scope" section still routes global memory to `~/.claude/memory/global.md` *as a symlink into `machines`* and says an edit "is a plain write to the git-tracked repo file". Both statements are now wrong in their mechanism and right in their conclusion: the file is still directly writable and still needs no `just switch`, but it is tracked in **dotfiles**, and propagation is `git pull` in dotfiles (or just waiting for the 10-minute timer), not in `machines`. Correct the mechanism, keep the conclusion.
 
 These are dotfiles-tracked files on `main` — edit them in place and promote, do not edit them in `machines`.
 
-- [ ] **Step 6: Commit both repos**
+- [x] **Step 6: Commit both repos**
 
 ```bash
 cd /Users/me/machines
@@ -1130,7 +1130,7 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME push origin air
 
 Then `/dotfiles-promote` both paths (`CLAUDE.md` is already on `main`; `.claude/memory/global.md` landed there in Task 4).
 
-- [ ] **Step 7: Final fleet verification**
+- [x] **Step 7: Final fleet verification**
 
 ```bash
 for box in air hub desktop latitude desktop-ubuntu26; do
@@ -1145,6 +1145,92 @@ done
 Expected per box: four real files (no `->`), a clean dotfiles status, no conflict marker. A conflict marker means a box still had an untracked path when `main` arrived — clear the path and let the next tick retry.
 
 ---
+
+## Execution record — completed 2026-07-28
+
+All 8 tasks executed inline and verified on all six boxes (`air`, `hub`,
+`latitude`, `desktop-ubuntu26`, `desktop`, `server`). Final state everywhere:
+every moved path a REAL file, statusline rendering, no dangling links (except
+`server`'s pre-existing ones, below), clean dotfiles status on the five enrolled
+boxes. `machines` commits `8af2deb`..`5470573`.
+
+**Deviations from the plan, and why:**
+
+1. **Task 1 was already done.** `origin/main` already carried the merged 136-line
+   `pure/backend-api/.claude/memory/project.md`. The plan's Step 1 check reads
+   `main:<path>` — the *local* `main` ref, stale at `d298774` — which made the
+   merged content look absent. Only the orphan delete remained. **Use
+   `origin/main` in that check.**
+2. **The source tree was kept one commit longer than the plan said, every time.**
+   The plan bundles "strip bootstrap" and "delete `agents/<thing>`" into one
+   commit. Splitting them is what made recovery possible three separate times —
+   see the hazard below.
+3. **`agents/CLAUDE.md` was not in the plan.** It was a symlink to
+   `agents/AGENTS.md` and would have dangled; deleted with it.
+4. **No blanket `chmod +x`.** The plan chmod'd both statusline files;
+   `balance-refresh.py` was 644 and is invoked as `"$PY" …`, so it stayed 644.
+5. **`tiers.test.sh`'s host-stub guard had to be deleted, not fixed.** It required
+   a committed `agents/hosts/<hostname>.md` per fleet machine. It broke the moment
+   `agents/hosts/` was deleted and the plan never mentioned it. **Run
+   `provision/tests/tiers.test.sh` after every content deletion, not just at the
+   start.**
+6. **The plan's Step 5 target for the wiring text was wrong.** It named
+   `$HOME/CLAUDE.md` and `~/.claude/memory/global.md`; the "Recording a memory /
+   Wiring" section actually lives in `~/.claude/CLAUDE.md` (the former
+   `agents/AGENTS.md`). `$HOME/CLAUDE.md` needed no change.
+
+**THE hazard, hit three times — the old bootstrap running mid-transition.**
+`link()` replaces a real file at its dest with a symlink into the repo, backing the
+original up to `~/.claude/.bootstrap-bak/`. So on a box still running the OLD
+bootstrap *after* dotfiles began tracking the path:
+
+`tracked real file` → old `link()` → `symlink + backup` → new `retire_link` →
+**path empty**. On an enrolled box the next sync tick's `add -u` then *commits the
+deletion*.
+
+- `desktop` (Task 3): converted, then its converge re-linked; caught before the
+  `agents/hosts/` delete.
+- `server` (Task 5): `~/.claude/CLAUDE.md` ended up empty; restored from
+  `.bootstrap-bak/CLAUDE.md`.
+- `hub` (Task 7): `auto(hub): …` **committed the deletion** of both statusline
+  files (991 deletions); restored from `origin/main`, and every enrolled box was
+  swept for the same pattern — hub was the only one.
+
+Nothing was lost in any of the three (git history plus `.bootstrap-bak`). The
+window closes once the new bootstrap is fleet-wide, which it now is. **If this
+pattern is repeated: land the bootstrap change and converge every box BEFORE
+promoting the content to `main`.**
+
+**Also hit: a `machines` worktree hijacks `~/.claude`.** `git worktree add` fires
+the post-checkout hook, which runs THAT worktree's `bootstrap.sh` with
+`SRC_DIR=<worktree>/agents`. Checking out a pre-handover commit to date a test
+failure replaced five dotfiles-tracked files on `air` with links into a temp dir,
+and `retire_link` cannot clean them because its guard only matches the live
+`$SRC_DIR`. Recovery: `rm` the dangling links, `dotfiles checkout -- .claude`,
+re-run bootstrap. Recorded in `.claude/memory/project.md`.
+
+**Windows probe traps** (cost one wrong "measured" table): PowerShell owns `$HOME`
+and expands it before bash sees the string; it reserves `<`, so `wc -l < f` is a
+parse error; replies are UTF-16 with NULs. Base64-wrap the script — the working
+form is in the enrollment section above. And macOS `tar` adds AppleDouble `._*`
+files; use `COPYFILE_DISABLE=1` when shipping a tarball to another box.
+
+**Fixed as a side effect:** `desktop` and `server` could not read ANY personality
+facet. `~/.claude/memory/personality` was a symlink whose directory `ls` listed but
+whose files `cat` could not open. Real files are readable — verified.
+
+**Pre-existing, NOT touched:**
+
+- `server` has 4 dangling links into `~/GitHub/nix/claude/` from a config layout
+  that predates `machines` — including `hooks/global-memory-load.sh`, which means
+  **memory injection is broken on `server` regardless of this work**. Worth its own
+  fix; enrolling `server` is the natural vehicle.
+- `agents/tests/worktree-dispatcher.test.sh` (2 failures) and
+  `kb-refresh/tests/test_fleet_gather.sh` (fixture still says `methe-server`) both
+  fail at `8af2deb^`, i.e. before any change here.
+- `just quick` reports a false "Syntax error" for every `.nix` file on a non-Nix
+  box: `scripts/quick-check.sh:39` sends `nix-instantiate`'s stderr to
+  `/dev/null`, so a missing binary is indistinguishable from a parse error.
 
 ## Follow-ups deliberately not in this plan
 
