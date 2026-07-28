@@ -115,7 +115,7 @@ branch plus one `/dotfiles-promote` run.
   `DOTFILES_SYNC_FORCE` (non-empty = bypass the gate),
   state files `$DOTFILES_STATE_DIR/pending.hash` and `pending.since`.
 
-- [ ] **Step 1: Rewrite the four existing cases that assume commit-on-first-tick**
+- [x] **Step 1: Rewrite the four existing cases that assume commit-on-first-tick**
 
 Four current cases assert a commit after a single tick and will fail under the
 new cadence. This is expected — they encode the *old* cadence. Rewrite them
@@ -210,7 +210,7 @@ rc="$(cd "$T/home/sub" && tick "$T")"
 eq "cwd inside work-tree: second tick exit 0" "$rc" "0"
 ```
 
-- [ ] **Step 2: Write the new failing cases**
+- [x] **Step 2: Write the new failing cases**
 
 Append these before the final tally line (`[ "$fail" -eq 0 ] && …`) in
 `provision/dotfiles-sync.test.sh`.
@@ -345,7 +345,7 @@ fi
 rm -rf "$T"
 ```
 
-- [ ] **Step 3: Run the suite to verify it fails**
+- [x] **Step 3: Run the suite to verify it fails**
 
 Run: `bash provision/dotfiles-sync.test.sh`
 
@@ -356,7 +356,7 @@ the script still commits on the first tick — e.g.
 `FAIL debounce: no pending.hash after a dirty tick`. Cases 11, 13, and 14 may
 already pass, since committing on the first tick is what they assert.
 
-- [ ] **Step 4: Add the tunable and the two helpers**
+- [x] **Step 4: Add the tunable and the two helpers**
 
 In `provision/dotfiles-sync.sh`, after the `DOTFILES_STATE_DIR` default (line
 26), add:
@@ -432,7 +432,7 @@ sync_should_commit() {
 }
 ```
 
-- [ ] **Step 5: Gate the commit in `sync_tick`**
+- [x] **Step 5: Gate the commit in `sync_tick`**
 
 Replace the body of `sync_tick` (lines 166–175) with:
 
@@ -455,7 +455,7 @@ sync_tick() {
 }
 ```
 
-- [ ] **Step 6: Update the file header**
+- [x] **Step 6: Update the file header**
 
 Replace lines 5–7 of `provision/dotfiles-sync.sh`:
 
@@ -474,13 +474,13 @@ with:
 # burst produces one commit rather than one per tick.
 ```
 
-- [ ] **Step 7: Run the suite to verify it passes**
+- [x] **Step 7: Run the suite to verify it passes**
 
 Run: `bash provision/dotfiles-sync.test.sh`
 
 Expected: `ALL PASS`, 16 cases.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add provision/dotfiles-sync.sh provision/dotfiles-sync.test.sh
@@ -509,7 +509,7 @@ is therefore verified by inspection against Task 1, which is the existing
 practice for this file. State that in the commit message rather than implying it
 was run.
 
-- [ ] **Step 1: Replace the commit block in the twin**
+- [x] **Step 1: Replace the commit block in the twin**
 
 Replace `provision/dotfiles-sync.ps1` lines 60–68 (the `# 2. Commit …` block)
 with:
@@ -594,7 +594,7 @@ becomes:
   once they have settled. The merge runs only after
 ```
 
-- [ ] **Step 2: Correct the tier comment**
+- [x] **Step 2: Correct the tier comment**
 
 In `provision/lib/tiers.sh`, replace line 884:
 
@@ -612,7 +612,7 @@ with:
 # script needs no re-provision — every scheduler here points at its absolute path.
 ```
 
-- [ ] **Step 3: Reconcile §5.1 of the spec**
+- [x] **Step 3: Reconcile §5.1 of the spec**
 
 In `docs/superpowers/specs/2026-07-28-dotfiles-private-bare-repo-design.md`,
 replace step 2 of the pseudocode block (line 146–147):
@@ -656,7 +656,7 @@ with:
   tick is why step 2 debounces rather than batching by the day.
 ```
 
-- [ ] **Step 4: Verify nothing else asserts the old cadence**
+- [x] **Step 4: Verify nothing else asserts the old cadence**
 
 Run:
 
@@ -668,7 +668,7 @@ Expected: every remaining hit describes the **tick** interval (the timer/task
 registration, `D7` at spec line 55), not the commit interval. Leave those. Any
 hit that claims a commit per tick is a miss from steps 2–3 — fix it.
 
-- [ ] **Step 5: Re-run the POSIX suite and commit**
+- [x] **Step 5: Re-run the POSIX suite and commit**
 
 The `.ps1` change cannot break the `.sh` suite, but the tier comment shares a
 file with tested functions.
@@ -716,7 +716,7 @@ profile's dir, so secondary profiles (`~/.claude-<postfix>`) and `~/.codex` do
 not see it. `/dotfiles-promote` already has that property; fixing it is a fan-out
 question for the agent-config plan, not this one.
 
-- [ ] **Step 1: Write the skill**
+- [x] **Step 1: Write the skill**
 
 Create `~/.claude/skills/dotfiles-sync/SKILL.md`:
 
@@ -787,7 +787,7 @@ next tick clears the marker once the merge is done.
 Promoting content from this branch to `main` is a different job: `/dotfiles-promote`.
 ```
 
-- [ ] **Step 2: Track it on this machine's branch**
+- [x] **Step 2: Track it on this machine's branch**
 
 Add the allow-line next to the existing promote-skill line in `~/.gitignore`.
 **Unanchored, deliberately** — this is shared content bound for `main`, and the
@@ -808,7 +808,7 @@ cd ~ && git --git-dir=$HOME/.dotfiles --work-tree=$HOME add --dry-run .claude/sk
 Expected: `add '.claude/skills/dotfiles-sync/SKILL.md'`. A refusal means the
 allow-line is wrong.
 
-- [ ] **Step 3: Update the sync-timer section of `~/CLAUDE.md`**
+- [x] **Step 3: Update the sync-timer section of `~/CLAUDE.md`**
 
 Replace this bullet:
 
@@ -828,7 +828,7 @@ with:
   without a manual promote. To commit and push right now, use `/dotfiles-sync`.
 ```
 
-- [ ] **Step 4: Commit both on this machine's branch**
+- [x] **Step 4: Commit both on this machine's branch**
 
 ```console
 cd ~ && git --git-dir=$HOME/.dotfiles --work-tree=$HOME add .gitignore .claude/skills/dotfiles-sync/SKILL.md CLAUDE.md
@@ -840,7 +840,7 @@ cd ~ && git --git-dir=$HOME/.dotfiles --work-tree=$HOME push
 relative paths, so running this from a subdirectory of `$HOME` stages the wrong
 set — or nothing.
 
-- [ ] **Step 5: Promote to `main`**
+- [x] **Step 5: Promote to `main`**
 
 Both files are shared content, so run the `/dotfiles-promote` skill for
 `.claude/skills/dotfiles-sync/SKILL.md`, `CLAUDE.md`, and the `.gitignore`
@@ -848,7 +848,7 @@ allow-line. Do not hand-roll the promote — the skill exists because the
 shared/host-local invariant (a path is on `main` **or** on a branch, never both)
 is easy to break by hand.
 
-- [ ] **Step 6: Verify the skill end-to-end on this box**
+- [x] **Step 6: Verify the skill end-to-end on this box**
 
 ```console
 DOTFILES_SYNC_FORCE=1 bash "$HOME/machines/provision/dotfiles-sync.sh"; echo "rc=$?"
@@ -879,6 +879,37 @@ commits. Clean up by letting the timer take it.
 | A filesystem watcher | Explicitly rejected as D7 in the design spec |
 | Fanning the skill out to `~/.claude-<postfix>` and `~/.codex` | `/dotfiles-promote` has the same gap; it belongs to the agent-config plan's fan-out work |
 | Enrolling `server` in dotfiles | Pre-existing follow-up, unchanged by this plan |
+
+## Execution record — completed 2026-07-28
+
+All three tasks landed. `~/machines`: `4024a21` (debounce + 16-case suite,
+`ALL PASS`), `902c783` (Windows mirror + docs). Dotfiles: `6de05d4` on `air`,
+promoted as `0634961` on `main`, merged back as `8506812`.
+
+**Two deviations from the written plan:**
+
+1. **The test harness needed `env`.** Task 1 Step 2 claimed `tick`'s existing
+   `[extra-env…]` contract carried the new variables as-is because `"$@"` expands
+   inside the assignment prefix. It does not: bash recognises assignment prefixes
+   at **parse** time, so a quoted expansion that merely looks like `VAR=val` is
+   treated as the command name — cases 11 and 13 failed with exit 127, not with
+   the assertion they were written for. Fixed by `env "$@" bash "$SCRIPT"`, with
+   the reason recorded in the helper's comment so it is not "simplified" back.
+2. **`tiers.sh:877` left alone.** Step 4's sweep flagged it ("~10-min tick …:
+   commit tracked `$HOME` changes …"), but the corrected comment now sits
+   directly beneath it and says the commit cadence is separate. Rewording both
+   would have been redundant.
+
+**Live verification on `air`, not just in the harness:** a forced tick exited 0;
+an unforced tick on a dirty tracked file left HEAD unmoved and armed
+`pending.hash` + `pending.since`; reverting the probe and ticking again cleared
+both. No probe content was ever committed.
+
+**Found in passing, not fixed here — the `dotfiles-offer` hook has a false
+positive.** It fired on `~/.gitignore` and `~/CLAUDE.md` claiming each "is not
+tracked anywhere", while `ls-files --error-unmatch` returns both. It was correct
+about the new `SKILL.md`. Worth a look before the offer text trains anyone to
+ignore it.
 
 ## Self-review notes
 
