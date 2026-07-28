@@ -14,9 +14,11 @@
 # Usage:
 #   bash statusboard.sh                 # run in the foreground (any terminal)
 #   bash statusboard.sh --once          # paint one frame and exit (for testing)
-#   bash statusboard.sh --interval 5    # seconds between frames (default 3)
+#   bash statusboard.sh --interval 1    # seconds between REPAINTS (default 1)
+#   bash statusboard.sh --probe 10      # seconds between network probes (default 10)
 #   sudo bash statusboard.sh --install  # install + enable the tty1 service
 #   sudo bash statusboard.sh --uninstall
+#   sudo bash statusboard.sh --bigfont  # double the console font (16x32) on every VT
 #
 # --install takes over tty1 and leaves gettys on tty2..tty6, so a console login
 # is still one Alt-F2 away. That trade is deliberate: a dashboard you have to
@@ -29,7 +31,17 @@
 # instead of needing a battery.
 set -u
 
-INTERVAL=3
+# Two cadences, deliberately. INTERVAL is how often the frame is REPAINTED — it
+# wants to be 1s so the clock reads like a clock. PROBE is how often the network is
+# actually measured, and it must not be 1s: every probe costs two pings plus a
+# `tailscale status` fork, and doing that every second on a box whose job is to be
+# quiet is a waste with no readable benefit (a gateway RTT does not need a 1s
+# sample rate). Cheap readings — /sys battery, /proc load — refresh on every paint.
+#
+# The charts advance at the PROBE rate, which is also what makes them span
+# something useful: 240 cells at 10s is 40 minutes, at 1s it would be 4.
+INTERVAL=1
+PROBE=10
 ONCE=0
 MODE=run
 SERVICE_NAME=statusboard.service
@@ -40,8 +52,10 @@ GETTY_UNIT="getty@tty1.service"
 while [ $# -gt 0 ]; do
   case "$1" in
     --once) ONCE=1; shift ;;
-    --interval) INTERVAL="${2:-3}"; shift 2 ;;
+    --interval) INTERVAL="${2:-1}"; shift 2 ;;
+    --probe) PROBE="${2:-10}"; shift 2 ;;
     --install) MODE=install; shift ;;
+    --bigfont) MODE=bigfont; shift ;;
     --uninstall) MODE=uninstall; shift ;;
     -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
@@ -156,9 +170,305 @@ sb_battery_line() {
   printf 'battery   %s%s %3s%%%s  %s%s%s' "$col" "$bar" "$cap" "$C_RST" "$st" "$draw" "$est"
 }
 
+# ── Time charts ───────────────────────────────────────────────────────────────
+# Every measured row gets a second column: a one-line sparkline of that metric's
+# recent history, sized to whatever horizontal space the frame has left. The
+# numbers answer "what is it now"; the chart answers "has it been like that", and
+# on an unattended box the second question is usually the interesting one.
+#
+# History is in-memory only. The unit runs ProtectSystem=strict + ProtectHome=
+# read-only, and loosening either so a chart can survive a restart is a bad
+# trade — a restart clearing the history is the cost, and it is small.
+
+SB_HIST_CAP=400   # samples kept per series; more than any console is wide
+
+# Two ramps, and the default is chosen by the OUTPUT DEVICE rather than by TERM.
+#
+# The 8-level block ramp ▁▂▃▄▅▆▇█ is what the user's statusline uses, so a terminal
+# gets that. A Linux VT cannot: a psf console font holds 256/512 glyphs, and the
+# ones on this box simply do not contain the partial blocks. Measured on latitude
+# 2026-07-29 — the default Lat15/Fixed table is Latin-1 only, and even
+# Uni3-TerminusBold32x16 carries just U+2588, U+2591 and U+2592 (and no U+00D7).
+# So on a VT the pretty ramp would paint as replacement boxes.
+#
+# The test is the device behind stdout, not $TERM: /dev/ttyN is a VT and /dev/pts/N
+# is not, which is a fact rather than an inference. STATUSBOARD_RAMP overrides.
+sb_is_vt() {
+  local dev
+  dev="$(readlink /proc/self/fd/1 2>/dev/null)"
+  [ -n "$dev" ] || dev="$(tty 2>/dev/null)"
+  case "$dev" in /dev/tty[0-9]*) return 0 ;; esac
+  return 1
+}
+
+sb_ramp_name() {
+  if [ -n "${STATUSBOARD_RAMP:-}" ]; then printf '%s' "$STATUSBOARD_RAMP"; return; fi
+  if sb_is_vt; then printf 'ascii'; else printf 'height'; fi
+}
+
+sb_ramp() {
+  case "$(sb_ramp_name)" in
+    ascii) printf '%s' '.,:-=+*#' ;;
+    *) printf '%s' '▁▂▃▄▅▆▇█' ;;
+  esac
+}
+
+# The "sample taken, target unreachable" glyph — distinct from a missing sample,
+# which is a gap. Plain x on a VT: U+00D7 is absent from the console fonts here.
+sb_down_glyph() {
+  case "$(sb_ramp_name)" in
+    ascii) printf 'x' ;;
+    *) printf '×' ;;
+  esac
+}
+
+# sb_push <csv> <sample> <cap>: append, trimming the oldest. Pure — takes the old
+# series and returns the new one, so the render loop holds the state and the
+# function stays testable.
+#
+# A missing reading becomes '-' rather than an empty field: bash's read -a drops a
+# trailing empty field, so an empty sample would silently shorten the series and
+# shift every later frame one cell to the right.
+sb_push() {
+  local csv="${1:-}" v="${2:-}" cap="${3:-$SB_HIST_CAP}" i out="" first=1
+  case "$cap" in '' | *[!0-9]*) cap="$SB_HIST_CAP" ;; esac
+  [ -n "$v" ] || v='-'
+  if [ -z "$csv" ]; then csv="$v"; else csv="$csv,$v"; fi
+  local -a a=()
+  IFS=',' read -r -a a <<< "$csv"
+  local n=${#a[@]} start=0
+  [ "$n" -gt "$cap" ] && start=$((n - cap))
+  for ((i = start; i < n; i++)); do
+    if [ "$first" = 1 ]; then out="${a[i]}"; first=0; else out="$out,${a[i]}"; fi
+  done
+  printf '%s' "$out"
+}
+
+# sb_chart <width> <max> <csv>: the sparkline. Newest sample at the RIGHT edge, so
+# the chart scrolls the way a chart should; a series shorter than the width is
+# left-padded with blanks rather than stretched.
+#
+# <max> is a FIXED ceiling per metric, deliberately not the window maximum:
+# auto-scaling makes a 0.5ms→0.6ms gateway fill the chart and look alarming. With
+# a fixed ceiling, flat-and-low is the healthy shape and stays visually boring.
+sb_chart() {
+  local width="${1:-0}" max="${2:-100}" csv="${3:-}" ramp levels out="" i v idx
+  case "$width" in '' | *[!0-9]*) printf ''; return ;; esac
+  [ "$width" -gt 0 ] || { printf ''; return; }
+  case "$max" in '' | *[!0-9]*) max=100 ;; esac
+  [ "$max" -gt 0 ] || max=1
+  ramp="$(sb_ramp)"
+  levels="${#ramp}"
+
+  local -a a=()
+  IFS=',' read -r -a a <<< "$csv"
+  local n=${#a[@]} start=0
+  [ "$n" -gt "$width" ] && start=$((n - width))
+  for ((i = 0; i < width - (n - start); i++)); do out="$out "; done
+
+  for ((i = start; i < n; i++)); do
+    v="${a[i]}"
+    case "$v" in
+      x | X) out="$out$(sb_down_glyph)"; continue ;;
+      '' | *[!0-9]*) out="$out "; continue ;;
+    esac
+    [ "$v" -gt "$max" ] && v="$max"
+    idx=$((v * levels / max))
+    [ "$idx" -ge "$levels" ] && idx=$((levels - 1))
+    out="$out${ramp:idx:1}"
+  done
+  printf '%s' "$out"
+}
+
+# sb_vislen <string>: length in printable cells — ANSI escapes stripped. Padding
+# the text column with ${#s} instead would make every coloured row short by the
+# width of its escape sequences, which is most of them.
+sb_vislen() {
+  local plain
+  plain="$(printf '%s' "${1:-}" | sed $'s/\033\\[[0-9;?]*[a-zA-Z]//g')"
+  printf '%s' "${#plain}"
+}
+
+# sb_pad <string> <width>: right-pad to a visible width, escapes and all.
+sb_pad() {
+  local s="${1:-}" w="${2:-0}" vis pad=""
+  vis="$(sb_vislen "$s")"
+  case "$w" in '' | *[!0-9]*) w=0 ;; esac
+  while [ "$vis" -lt "$w" ]; do pad="$pad "; vis=$((vis + 1)); done
+  printf '%s%s' "$s" "$pad"
+}
+
+# sb_span <cells> <interval>: how much time a full chart covers. Without this the
+# same picture means 20 minutes on tty1 (3s) and 67 minutes in tmux (10s), and
+# there is no axis to tell them apart.
+sb_span() {
+  local cells="${1:-0}" iv="${2:-0}" s
+  case "$cells" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
+  case "$iv" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
+  s=$((cells * iv))
+  if [ "$s" -lt 3600 ]; then printf '%dm' $((s / 60))
+  else printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60)); fi
+}
+
+# sb_rtt_tenths <"0.516ms">: a ping time as tenths of a millisecond, which is the
+# integer unit the charts scale against (bash has no floats).
+sb_rtt_tenths() {
+  local v="${1:-}"
+  v="${v%ms}"
+  case "$v" in '' | *[!0-9.]*) printf ''; return ;; esac
+  awk -v v="$v" 'BEGIN { printf "%d", v * 10 }'
+}
+
+# ── Disks ─────────────────────────────────────────────────────────────────────
+# This box is a media server with four USB disks in two docks plus a spare NVMe, so
+# "is the array still there and is it filling up" is a first-class question — as
+# much as battery and network.
+
+# sb_kb_to_gib <kilobytes>: 1K blocks → whole GiB. df -h would be shorter but its
+# unit suffix is not stable across implementations, and parsing it back to compare
+# two filesystems is worse than doing the arithmetic once.
+sb_kb_to_gib() {
+  local kb="${1:-}"
+  case "$kb" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
+  awk -v k="$kb" 'BEGIN { printf "%.0f", k / 1048576 }'
+}
+
+# sb_disk_row <dev> <mount> <used_kb> <total_kb> <pct>: one filesystem.
+# The bar is coloured by FREE space, so it greens down as the disk fills — the
+# inverse of the battery row, where a high number is the healthy one.
+sb_disk_row() {
+  local dev="${1:-}" mnt="${2:-}" used="${3:-}" total="${4:-}" pct="${5:-}" col free=100
+  case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
+  # Long mount points are shown tail-first behind a <: every row pads to the widest
+  # one, so a single deep path would push the chart column off the screen for all of
+  # them. The tail is the part that identifies the disk.
+  [ "${#mnt}" -gt 16 ] && mnt="<${mnt: -15}"
+  free=$((100 - pct))
+  col="$(sb_pct_colour "$free" 20 10)"
+  printf '%-16s %s%s %3s%%%s  %5sG / %5sG  %s%s%s' \
+    "${mnt:-?}" "$col" "$(sb_bar "$pct" 12)" "$pct" "$C_RST" \
+    "$(sb_kb_to_gib "$used")" "$(sb_kb_to_gib "$total")" "$C_DIM" "${dev:-?}" "$C_RST"
+}
+
+# Per-disk history cannot use an associative array keyed by mount point: mounts come
+# and go when a dock is unplugged, and `declare -A` would still be carrying the
+# stale key. A flat "key=csv" store is trivially prunable and, being a string, is
+# testable the same way every other helper here is.
+sb_series_get() {
+  printf '%s\n' "${1:-}" | awk -F= -v k="${2:-}" '$1 == k { sub(/^[^=]*=/, ""); print; exit }'
+}
+
+sb_series_set() {
+  printf '%s\n' "${1:-}" | awk -F= -v k="${2:-}" -v v="${3:-}" '
+    NF == 0 { next }
+    $1 == k { print k "=" v; done = 1; next }
+    { print }
+    END { if (!done) print k "=" v }'
+}
+
+# sb_series_keep <store> <keys...>: drop every series whose key is gone. Without
+# this, unplugging a dock leaves its history in memory forever and a remount shows
+# a chart spliced onto readings from hours ago.
+sb_series_keep() {
+  local store="${1:-}" keep=" ${*:2} " line key out="" first=1
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    key="${line%%=*}"
+    case "$keep" in *" $key "*) ;; *) continue ;; esac
+    if [ "$first" = 1 ]; then out="$line"; first=0; else out="$out
+$line"; fi
+  done <<< "$store"
+  printf '%s' "$out"
+}
+
+# sb_console_font_file <codeset> <face> <WxH>: the psf path console-setup would
+# use. Its own naming is REVERSED relative to FONTSIZE — FONTSIZE="16x32" (width x
+# height) is the file Uni3-TerminusBold32x16.psf.gz (height x width) — and getting
+# that backwards is a silent no-op that leaves the console at the old size.
+sb_console_font_file() {
+  local codeset="${1:-Uni3}" face="${2:-TerminusBold}" size="${3:-16x32}" w h
+  w="${size%x*}"; h="${size#*x}"
+  case "$w$h" in '' | *[!0-9]*) printf ''; return ;; esac
+  printf '/usr/share/consolefonts/%s-%s%sx%s.psf.gz' "$codeset" "$face" "$h" "$w"
+}
+
+# sb_cols: the frame width. Charts are OFF (0) when stdout is not a terminal, so
+# --once stays diffable and the existing assertions hold; STATUSBOARD_COLS forces a
+# width either way, which is how the chart and padding maths get tested.
+sb_cols() {
+  local c="${STATUSBOARD_COLS:-}"
+  if [ -z "$c" ]; then
+    [ -t 1 ] || { printf '0'; return; }
+    c="$(stty size 2>/dev/null | awk '{ print $2 }')"
+    [ -n "$c" ] || c="$(tput cols 2>/dev/null)"
+    [ -n "$c" ] || c=80
+  fi
+  case "$c" in '' | *[!0-9]*) c=0 ;; esac
+  printf '%s' "$c"
+}
+
+# sb_chart_width <cols> <textwidth>: cells left for the chart column, or 0 when
+# there is not enough room to be worth it. A chart under 8 cells wide is noise.
+sb_chart_width() {
+  local cols="${1:-0}" textw="${2:-0}" w
+  case "$cols" in '' | *[!0-9]*) printf '0'; return ;; esac
+  case "$textw" in '' | *[!0-9]*) printf '0'; return ;; esac
+  w=$((cols - textw - 3))
+  [ "$w" -ge 8 ] || w=0
+  [ "$w" -gt "$SB_HIST_CAP" ] && w="$SB_HIST_CAP"
+  printf '%s' "$w"
+}
+
 [ "${STATUSBOARD_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
 # ── Install / uninstall ───────────────────────────────────────────────────────
+# ── Bigger console font ───────────────────────────────────────────────────────
+# Its own mode, NOT part of --install: --install already earned a reputation for
+# breaking the console, and a font change is an unrelated risk to fold into it.
+# Persistent rather than a bare `setfont`, because a font that reverts on reboot is
+# worse than no font change on a box whose whole point is being unattended.
+if [ "$MODE" = bigfont ]; then
+  [ "$(id -u)" = 0 ] || { printf 'need root for --bigfont\n' >&2; exit 1; }
+  CONF=/etc/default/console-setup
+  FACE="${STATUSBOARD_FONTFACE:-TerminusBold}"
+  SIZE="${STATUSBOARD_FONTSIZE:-16x32}"
+  CODESET="${STATUSBOARD_CODESET:-Uni3}"
+  FONT_FILE="$(sb_console_font_file "$CODESET" "$FACE" "$SIZE")"
+
+  [ -f "$CONF" ] || { printf 'no %s — this box does not use console-setup.\n' "$CONF" >&2; exit 1; }
+  [ -f "$FONT_FILE" ] || {
+    printf 'font not installed: %s\n' "$FONT_FILE" >&2
+    printf 'try: apt install xfonts-terminus console-setup\n' >&2
+    exit 1
+  }
+
+  printf 'current: %s\n' "$(grep -E '^(CODESET|FONTFACE|FONTSIZE)=' "$CONF" | tr '\n' ' ')"
+  [ -f "$CONF.pre-statusboard" ] || cp "$CONF" "$CONF.pre-statusboard"
+
+  for kv in "CODESET=\"$CODESET\"" "FONTFACE=\"$FACE\"" "FONTSIZE=\"$SIZE\""; do
+    key="${kv%%=*}"
+    if grep -qE "^$key=" "$CONF"; then
+      sed -i "s|^$key=.*|$kv|" "$CONF"
+    else
+      printf '%s\n' "$kv" >> "$CONF"
+    fi
+  done
+
+  # setupcon applies the config to every VT now and console-setup replays it at
+  # boot. setfont is the fallback for a box without setupcon: same font, this
+  # session only.
+  if command -v setupcon >/dev/null 2>&1; then
+    setupcon --force 2>/dev/null || setfont "$FONT_FILE" 2>/dev/null
+  else
+    setfont "$FONT_FILE" 2>/dev/null
+  fi
+
+  printf 'console font is now %s %s (%s)\n' "$FACE" "$SIZE" "$FONT_FILE"
+  printf 'the board re-reads the terminal width every frame, so the charts resize themselves.\n'
+  printf 'to undo: cp %s.pre-statusboard %s && setupcon --force\n' "$CONF" "$CONF"
+  exit 0
+fi
+
 if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
   [ "$(id -u)" = 0 ] || { printf 'need root for --%s\n' "$MODE" >&2; exit 1; }
   SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -192,7 +502,7 @@ User=$RUN_USER
 # cannot open it. The unit failed to start, the getty was already disabled, and
 # tty1 was left with nothing painting it — a blinking cursor and no way in.
 SupplementaryGroups=tty
-ExecStart=/bin/bash $SELF --interval $INTERVAL
+ExecStart=/bin/bash $SELF --interval $INTERVAL --probe $PROBE
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
@@ -308,79 +618,236 @@ sb_tailnet() {
   printf 'up|%s|%s|%s' "$ip" "${peers:-0}" "${total:-0}"
 }
 
-# ── Frame ─────────────────────────────────────────────────────────────────────
-render_frame() {
-  local host now up_s load
-  host="$(hostname)"
-  now="$(date '+%Y-%m-%d %H:%M:%S')"
-  up_s="$(awk '{ printf "%d", $1 }' /proc/uptime 2>/dev/null)"
-  load="$(awk '{ print $1, $2, $3 }' /proc/loadavg 2>/dev/null)"
+# sb_mounts: one line per real filesystem — "dev|mount|used_kb|total_kb|pct".
+# df -P -k rather than -h: POSIX output, one line per filesystem however long the
+# device name, and 1K blocks instead of a suffix that varies by implementation.
+# Only /dev/* sources, so tmpfs, devtmpfs, efivarfs and the rest of the virtual
+# tree stay out; loop devices are excluded too — a snap mount is not a disk.
+sb_mounts() {
+  df -P -k 2>/dev/null | awk 'NR > 1 && $1 ~ /^\/dev\// && $1 !~ /^\/dev\/(loop|ram)/ {
+    dev = $1; sub(/^\/dev\//, "", dev)
+    mnt = $6
+    for (i = 7; i <= NF; i++) mnt = mnt " " $i      # mount points may contain spaces
+    pct = $5; sub(/%$/, "", pct)
+    printf "%s|%s|%s|%s|%s\n", dev, mnt, $3, $2, pct
+  }'
+}
 
-  printf '%s%s%s   %s%s%s\n' "$C_B$C_INFO" "$host" "$C_RST" "$C_DIM" "$now" "$C_RST"
-  printf '%s%s%s\n\n' "$C_DIM" "------------------------------------------------------------" "$C_RST"
+# sb_unmounted: connected disks with nothing mounted off them — the whole point of
+# listing them is that a headless box gives no other sign a dock came back empty.
+# A disk counts as mounted if ANY of its partitions has a mount point; [SWAP] and
+# the EFI partition count, so the root disk never shows up here.
+sb_unmounted() {
+  command -v lsblk >/dev/null 2>&1 || return 0
+  lsblk -rno NAME,TYPE,SIZE,MOUNTPOINT 2>/dev/null | awk '
+    $2 == "disk" { disks[++n] = $1; size[$1] = $3; next }
+    { if (NF >= 4 && $4 != "") { for (d in size) if (index($1, d) == 1) used[d] = 1 } }
+    END {
+      out = ""
+      for (i = 1; i <= n; i++) {
+        d = disks[i]
+        if (!(d in used)) out = out (out == "" ? "" : "  ") d " " size[d]
+      }
+      print out
+    }'
+}
 
-  # Power. Prefer the energy-reporting attributes; fall back to charge × voltage
-  # for the ECs (this box included) that only expose charge_*.
-  local b_volt b_pw b_en b_ef
+# ── Sampling ──────────────────────────────────────────────────────────────────
+# The readers run HERE, in the main shell, and not inside render_frame — because
+# the loop paints with frame="$(render_frame)", a SUBSHELL. A series appended to
+# from in there is discarded the instant the subshell exits, so every chart would
+# show one sample forever. Sample in the shell, format in the subshell.
+SER_BAT=""; SER_PW=""; SER_LAN=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
+SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem
+SB_MOUNTS=""; SB_UNMOUNTED=""
+# Declared up front because the frame reads them under `set -u`: the loop always
+# probes before its first paint, but --once and any future caller ordering should
+# not be able to turn a missing reading into a crash.
+SB_CAP=""; SB_ST=""; SB_PW=""; SB_EN=""; SB_EF=""; SB_LIM=""; SB_SRC=""
+SB_UP=""; SB_LOAD=""; SB_FAILED=""
+SB_LAN_ST=""; SB_LAN_DEV=""; SB_LAN_IP=""; SB_LAN_GW=""
+SB_GW_ST=""; SB_GW_RTT=""; SB_NET_ST=""; SB_NET_RTT=""
+SB_TS_ST=""; SB_TS_IP=""; SB_TS_PEERS=""; SB_TS_TOTAL=""
+SB_NCPU="$(nproc 2>/dev/null || printf 1)"
+
+# Fixed chart ceilings. 65W is this box's brick, so the 15W port that browned it
+# out on 2026-07-29 draws a visibly short bar instead of a full one — which is the
+# entire reason the power series is charted.
+SB_MAX_PW=65
+SB_MAX_GW=500    # tenths of a ms: 50ms
+SB_MAX_NET=2000  # tenths of a ms: 200ms
+
+# sb_sample_fast: everything that is a file read. Runs on EVERY paint, so the
+# numbers on screen are never staler than the clock beside them.
+sb_sample_fast() {
+  local b_volt
   b_volt="$(_read "$BAT_DIR/voltage_now")"
-  b_pw="$(_read "$BAT_DIR/power_now")"
-  [ -n "$b_pw" ] || b_pw="$(sb_uwatts "$(_read "$BAT_DIR/current_now")" "$b_volt")"
-  b_en="$(_read "$BAT_DIR/energy_now")"
-  [ -n "$b_en" ] || b_en="$(sb_uwatthours "$(_read "$BAT_DIR/charge_now")" "$b_volt")"
-  b_ef="$(_read "$BAT_DIR/energy_full")"
-  [ -n "$b_ef" ] || b_ef="$(sb_uwatthours "$(_read "$BAT_DIR/charge_full")" "$b_volt")"
+  SB_CAP="$(_read "$BAT_DIR/capacity")"
+  SB_ST="$(_read "$BAT_DIR/status")"
+  SB_PW="$(_read "$BAT_DIR/power_now")"
+  [ -n "$SB_PW" ] || SB_PW="$(sb_uwatts "$(_read "$BAT_DIR/current_now")" "$b_volt")"
+  SB_EN="$(_read "$BAT_DIR/energy_now")"
+  [ -n "$SB_EN" ] || SB_EN="$(sb_uwatthours "$(_read "$BAT_DIR/charge_now")" "$b_volt")"
+  SB_EF="$(_read "$BAT_DIR/energy_full")"
+  [ -n "$SB_EF" ] || SB_EF="$(sb_uwatthours "$(_read "$BAT_DIR/charge_full")" "$b_volt")"
+  SB_LIM="$(_read "$BAT_DIR/charge_control_end_threshold")"
+  SB_SRC="$(sb_power_source)"
+  SB_UP="$(awk '{ printf "%d", $1 }' /proc/uptime 2>/dev/null)"
+  SB_LOAD="$(awk '{ print $1, $2, $3 }' /proc/loadavg 2>/dev/null)"
+}
 
-  printf '%s\n' "$(sb_battery_line \
-    "$(_read "$BAT_DIR/capacity")" \
-    "$(_read "$BAT_DIR/status")" \
-    "$b_pw" "$b_en" "$b_ef")"
-  printf 'source    %s\n' "$(sb_power_source)"
-  local lim; lim="$(_read "$BAT_DIR/charge_control_end_threshold")"
-  [ -n "$lim" ] && printf 'limit     %s%s%%%s\n' "$C_DIM" "$lim" "$C_RST"
-  printf '\n'
-
-  # Network
+# sb_sample_slow: the measurements that fork — two pings, `tailscale status`, df,
+# and `systemctl --failed`. Runs at the PROBE cadence and also drives the charts,
+# so one probe is one chart cell.
+sb_sample_slow() {
+  local w
   local IFS='|'
-  read -r lan_st lan_dev lan_ip lan_gw <<< "$(sb_lan)"
-  printf 'lan      %s  %s%s %s%s\n' "$(sb_status_glyph "$lan_st")" \
-    "$C_DIM" "${lan_dev:-—}" "${lan_ip:-—}" "$C_RST"
-
-  local gw_st gw_rtt
-  if [ -n "${lan_gw:-}" ] && [ "$lan_gw" != '?' ]; then
-    read -r gw_st gw_rtt <<< "$(sb_reach "$lan_gw")"
-    printf 'gateway  %s  %s%s %s%s\n' "$(sb_status_glyph "$gw_st")" "$C_DIM" "$lan_gw" "${gw_rtt:-}" "$C_RST"
+  read -r SB_LAN_ST SB_LAN_DEV SB_LAN_IP SB_LAN_GW <<< "$(sb_lan)"
+  SB_GW_ST=""; SB_GW_RTT=""
+  if [ -n "${SB_LAN_GW:-}" ] && [ "$SB_LAN_GW" != '?' ]; then
+    read -r SB_GW_ST SB_GW_RTT <<< "$(sb_reach "$SB_LAN_GW")"
   fi
-
-  local net_st net_rtt
-  read -r net_st net_rtt <<< "$(sb_reach 1.1.1.1)"
-  printf 'internet %s  %s%s%s\n' "$(sb_status_glyph "$net_st")" "$C_DIM" "${net_rtt:-—}" "$C_RST"
-
-  local ts_st ts_ip ts_peers ts_total
-  read -r ts_st ts_ip ts_peers ts_total <<< "$(sb_tailnet)"
-  if [ "$ts_st" = up ]; then
-    printf 'tailnet  %s  %s%s  %s/%s peers online%s\n' "$(sb_status_glyph up)" \
-      "$C_DIM" "$ts_ip" "$ts_peers" "$ts_total" "$C_RST"
-  else
-    printf 'tailnet  %s\n' "$(sb_status_glyph "$ts_st")"
-  fi
+  read -r SB_NET_ST SB_NET_RTT <<< "$(sb_reach 1.1.1.1)"
+  read -r SB_TS_ST SB_TS_IP SB_TS_PEERS SB_TS_TOTAL <<< "$(sb_tailnet)"
   unset IFS
-  printf '\n'
 
-  # Host
-  printf 'uptime    %s%s%s   load %s%s%s\n' "$C_DIM" "$(sb_secs_to_hm "$up_s")" "$C_RST" "$C_DIM" "$load" "$C_RST"
-  printf 'disk /    %s%s%s\n' "$C_DIM" "$(df -h / 2>/dev/null | awk 'NR==2 { printf "%s used of %s (%s)", $3, $2, $5 }')" "$C_RST"
-  if command -v systemctl >/dev/null 2>&1; then
-    local failed
-    failed="$(systemctl --failed --no-legend --plain 2>/dev/null | wc -l | tr -d ' ')"
-    if [ "${failed:-0}" -gt 0 ]; then
-      printf 'units     %s%s failed%s\n' "$C_BAD" "$failed" "$C_RST"
+  SB_MOUNTS="$(sb_mounts)"
+  SB_UNMOUNTED="$(sb_unmounted)"
+  SB_FAILED=""
+  command -v systemctl >/dev/null 2>&1 &&
+    SB_FAILED="$(systemctl --failed --no-legend --plain 2>/dev/null | wc -l | tr -d ' ')"
+
+  # Series. Whole watts and hundredths of load: a glyph is the resolution here, so
+  # decimals would be carried around for nothing.
+  SER_BAT="$(sb_push "$SER_BAT" "$SB_CAP")"
+  w=""
+  [ -n "$SB_PW" ] && w="$(awk -v p="$SB_PW" 'BEGIN { printf "%d", p / 1000000 }')"
+  SER_PW="$(sb_push "$SER_PW" "$w")"
+  SER_LAN="$(sb_push "$SER_LAN" "$([ "$SB_LAN_ST" = up ] && printf 1 || printf x)")"
+  if [ "${SB_GW_ST:-}" = up ]; then
+    SER_GW="$(sb_push "$SER_GW" "$(sb_rtt_tenths "$SB_GW_RTT")")"
+  elif [ -n "${SB_GW_ST:-}" ]; then
+    SER_GW="$(sb_push "$SER_GW" x)"
+  else
+    SER_GW="$(sb_push "$SER_GW" '')"
+  fi
+  if [ "${SB_NET_ST:-}" = up ]; then
+    SER_NET="$(sb_push "$SER_NET" "$(sb_rtt_tenths "$SB_NET_RTT")")"
+  else
+    SER_NET="$(sb_push "$SER_NET" x)"
+  fi
+  case "${SB_TS_ST:-}" in
+    up) SER_TS="$(sb_push "$SER_TS" "$SB_TS_PEERS")" ;;
+    down) SER_TS="$(sb_push "$SER_TS" x)" ;;
+    *) SER_TS="$(sb_push "$SER_TS" '')" ;;
+  esac
+  SER_LOAD="$(sb_push "$SER_LOAD" "$(awk '{ printf "%d", $1 * 100 }' /proc/loadavg 2>/dev/null)")"
+
+  # One series per mounted filesystem, keyed by mount point, pruned to what is
+  # mounted right now so an unplugged dock cannot leave a stale chart behind.
+  local dev mnt used total pct keys=""
+  while IFS='|' read -r dev mnt used total pct; do
+    [ -n "$mnt" ] || continue
+    keys="$keys $mnt"
+    SER_DISKS="$(sb_series_set "$SER_DISKS" "$mnt" \
+      "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$pct")")"
+  done <<< "$SB_MOUNTS"
+  # shellcheck disable=SC2086
+  SER_DISKS="$(sb_series_keep "$SER_DISKS" $keys)"
+}
+
+# ── Frame ─────────────────────────────────────────────────────────────────────
+# Rows are collected first and painted second. The text column is padded to the
+# widest row in the frame, and that width is not knowable until every row exists —
+# which is also what keeps the chart column aligned as values change width
+# ("41.4W ~0h26m to full" one frame, "5.2W" the next).
+SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=()
+
+# sb_row <text> [series-csv] [chart-max]: queue one row. No series means no chart
+# (headings, blank separators, and the flat rows where a chart would say nothing).
+sb_row() {
+  SB_ROW_TEXT+=("$1"); SB_ROW_SERIES+=("${2:-}"); SB_ROW_MAX+=("${3:-100}")
+}
+
+render_frame() {
+  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=()
+
+  sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100
+  sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW"
+  [ -n "${SB_LIM:-}" ] && sb_row "$(printf 'limit     %s%s%%%s' "$C_DIM" "$SB_LIM" "$C_RST")"
+  sb_row ""
+
+  sb_row "$(printf 'lan      %s  %s%s %s%s' "$(sb_status_glyph "$SB_LAN_ST")" \
+    "$C_DIM" "${SB_LAN_DEV:--}" "${SB_LAN_IP:--}" "$C_RST")" "$SER_LAN" 1
+  [ -n "${SB_GW_ST:-}" ] && sb_row "$(printf 'gateway  %s  %s%s %s%s' "$(sb_status_glyph "$SB_GW_ST")" \
+    "$C_DIM" "$SB_LAN_GW" "${SB_GW_RTT:-}" "$C_RST")" "$SER_GW" "$SB_MAX_GW"
+  sb_row "$(printf 'internet %s  %s%s%s' "$(sb_status_glyph "$SB_NET_ST")" \
+    "$C_DIM" "${SB_NET_RTT:--}" "$C_RST")" "$SER_NET" "$SB_MAX_NET"
+  if [ "${SB_TS_ST:-}" = up ]; then
+    # Scaled against the peer TOTAL, so a full chart means "the whole fleet was
+    # up" and a dip means peers dropped — not just "some number of peers".
+    sb_row "$(printf 'tailnet  %s  %s%s  %s/%s peers online%s' "$(sb_status_glyph up)" \
+      "$C_DIM" "$SB_TS_IP" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
+      "$SER_TS" "${SB_TS_TOTAL:-1}"
+  else
+    sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1
+  fi
+  sb_row ""
+
+  sb_row "$(printf 'uptime    %s%s%s   load %s%s%s' "$C_DIM" "$(sb_secs_to_hm "$SB_UP")" "$C_RST" \
+    "$C_DIM" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100))
+  sb_row ""
+
+  local d_dev d_mnt d_used d_total d_pct
+  while IFS='|' read -r d_dev d_mnt d_used d_total d_pct; do
+    [ -n "$d_mnt" ] || continue
+    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_used" "$d_total" "$d_pct")" \
+      "$(sb_series_get "$SER_DISKS" "$d_mnt")" 100
+  done <<< "$SB_MOUNTS"
+  # A dock that came back with nothing mounted is otherwise invisible on a headless
+  # box, so it gets a row of its own rather than silently missing from the list.
+  [ -n "${SB_UNMOUNTED:-}" ] && sb_row "$(printf 'not mounted      %s%s%s' "$C_WARN" "$SB_UNMOUNTED" "$C_RST")"
+  if [ -n "${SB_FAILED:-}" ]; then
+    if [ "${SB_FAILED:-0}" -gt 0 ]; then
+      sb_row "$(printf 'units     %s%s failed%s' "$C_BAD" "$SB_FAILED" "$C_RST")"
     else
-      printf 'units     %sall ok%s\n' "$C_DIM" "$C_RST"
+      sb_row "$(printf 'units     %sall ok%s' "$C_DIM" "$C_RST")"
     fi
   fi
+
+  # Layout: widest row wins the text column, the charts take everything left.
+  local i vis textw=0 chartw cols
+  for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
+    vis="$(sb_vislen "${SB_ROW_TEXT[i]}")"
+    [ "$vis" -gt "$textw" ] && textw="$vis"
+  done
+  cols="$(sb_cols)"
+  chartw="$(sb_chart_width "$cols" "$textw")"
+
+  # Header. The span marker is not decoration: the same picture is 20 minutes at
+  # the tty1 interval and over an hour in the tmux window.
+  local span=""
+  [ "$chartw" -gt 0 ] && span="$(printf '   %scharts: last %s (%ss/cell)%s' "$C_DIM" "$(sb_span "$chartw" "$PROBE")" "$PROBE" "$C_RST")"
+  printf '%s%s%s   %s%s%s%s\n' "$C_B$C_INFO" "$(hostname)" "$C_RST" \
+    "$C_DIM" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_RST" "$span"
+  local rule=60 dashes=""
+  [ "$chartw" -gt 0 ] && rule=$((textw + 3 + chartw))
+  for ((i = 0; i < rule; i++)); do dashes="$dashes-"; done
+  printf '%s%s%s\n\n' "$C_DIM" "$dashes" "$C_RST"
+
+  for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
+    if [ "$chartw" = 0 ] || [ -z "${SB_ROW_SERIES[i]}" ]; then
+      printf '%s\n' "${SB_ROW_TEXT[i]}"
+    else
+      printf '%s   %s%s%s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
+        "$C_DIM" "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "${SB_ROW_SERIES[i]}")" "$C_RST"
+    fi
+  done
 }
 
 if [ "$ONCE" = 1 ]; then
+  sb_sample_fast
+  sb_sample_slow
   render_frame
   exit 0
 fi
@@ -391,9 +858,19 @@ fi
 cleanup() { [ -t 1 ] && printf '\033[?25h\033[?7h'; }
 trap cleanup EXIT INT TERM
 
+# The probe clock is $SECONDS (shell uptime), not date arithmetic: it needs no fork
+# and cannot drift against the loop, since it IS the loop's own elapsed time.
+next_probe=0
 while :; do
-  # Build the frame into a variable, then paint in one write: rendering directly
-  # to the tty makes the display visibly tear on a slow VT.
+  # Sample in this shell — the chart series must outlive the frame, and
+  # frame="$(render_frame)" is a subshell.
+  sb_sample_fast
+  if [ "$SECONDS" -ge "$next_probe" ]; then
+    sb_sample_slow
+    next_probe=$((SECONDS + PROBE))
+  fi
+  # Build the frame into a variable, then paint in one write: rendering straight to
+  # the tty makes the display visibly tear on a slow VT.
   frame="$(render_frame)"
   [ -t 1 ] && printf '\033[H\033[2J'
   printf '%s\n' "$frame"

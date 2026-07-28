@@ -11,6 +11,7 @@ pass() { printf '  PASS %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 eq() { if [ "$1" = "$2" ]; then pass "$3"; else fail "$3 (want '$2', got '$1')"; fi; }
 has() { case "$1" in *"$2"*) pass "$3" ;; *) fail "$3 (missing '$2' in '$1')" ;; esac; }
+hasnt() { case "$1" in *"$2"*) fail "$3 (unexpected '$2')" ;; *) pass "$3" ;; esac; }
 
 export STATUSBOARD_LIB_ONLY=1
 # shellcheck source=provision/statusboard/statusboard.sh
@@ -104,6 +105,151 @@ OUT="$(sb_battery_line 85 Full 0 47000000 47000000)"
 has "$OUT" '85%' 'battery: zero power_now still renders'
 eq "$(printf '%s' "$OUT" | grep -c 'left')" '0' 'battery: zero rate gives no bogus estimate'
 
+# ── Time charts ───────────────────────────────────────────────────────────────
+# The chart column is the reason the frame is now laid out in two passes, so the
+# padding maths is asserted as hard as the glyph maths: a one-cell error in either
+# makes every row after it ragged.
+export STATUSBOARD_RAMP=height   # pin the ramp; the default depends on the device
+
+# sb_push: pure, oldest-out.
+eq "$(sb_push '' 5)"            '5'       'push: first sample'
+eq "$(sb_push '1,2,3' 4)"       '1,2,3,4' 'push: appends'
+eq "$(sb_push '1,2,3' 4 3)"     '2,3,4'   'push: drops the oldest past the cap'
+eq "$(sb_push '1,2,3' 4 1)"     '4'       'push: a cap of 1 keeps only the newest'
+# A missing reading MUST become a placeholder, not an empty field: bash's read -a
+# discards a trailing empty field, which would silently shorten the series and
+# shift every later frame one cell sideways.
+eq "$(sb_push '1,2' '')"        '1,2,-'   'push: a missing sample becomes -'
+eq "$(sb_push "$(sb_push '1' '')" 3)" '1,-,3' 'push: a gap keeps its slot'
+
+# sb_chart: newest at the right edge, fixed ceiling, stable width.
+eq "$(sb_chart 8 100 '0,0,0,0,0,0,0,0')"           '▁▁▁▁▁▁▁▁' 'chart: zeroes are the lowest glyph, not blanks'
+eq "$(sb_chart 8 100 '100,100,100,100,100,100,100,100')" '████████' 'chart: the ceiling is the top glyph'
+eq "$(sb_chart 4 100 '1,2,3,4,97,98,99,100')"      '████'     'chart: only the newest cells are shown'
+eq "$(sb_chart 4 100 '50,90')"                     '  ▅█'     'chart: a short series is right-aligned'
+eq "$(sb_chart 4 100 '200,300,400,500')"           '████'     'chart: over-ceiling clamps, never overflows'
+eq "$(sb_chart 4 100 '-,-,-,-')"                   '    '     'chart: missing samples are blanks'
+eq "$(sb_chart 4 100 'x,x,x,x')"                   '××××'     'chart: an unreachable target is ×, not a gap'
+eq "$(sb_chart 0 100 '1,2,3')"                     ''         'chart: zero width renders nothing'
+eq "$(sb_chart junk 100 '1,2')"                    ''         'chart: non-numeric width renders nothing, not an error'
+eq "$(sb_chart 4 0 '1,2,3,4')"                     '████'     'chart: a zero ceiling does not divide by zero'
+# Width is the contract the layout depends on.
+for series in '1' '1,2,3' '5,5,5,5,5,5,5,5,5,5,5,5'; do
+  eq "$(printf '%s' "$(sb_chart 10 100 "$series")" | wc -m | tr -d ' ')" '10' \
+    "chart: width is exactly 10 for series '$series'"
+done
+# The ASCII ramp is not a placeholder — it is what tty1 actually gets, because the
+# console fonts on this box carry no partial blocks (measured 2026-07-29).
+eq "$(STATUSBOARD_RAMP=ascii sb_chart 4 100 '0,33,66,100')" '.:+#' 'chart: ascii ramp spans the same range'
+eq "$(STATUSBOARD_RAMP=ascii sb_chart 2 100 'x,x')"         'xx'   'chart: ascii ramp uses x for down'
+
+# sb_vislen / sb_pad: the two-column layout is only aligned if colour is invisible
+# to the width maths. Measuring with ${#s} instead leaves every coloured row short
+# by the length of its escapes.
+eq "$(sb_vislen 'abc')" '3' 'vislen: plain text'
+eq "$(sb_vislen "$(printf '\033[32mabc\033[0m')")" '3' 'vislen: ANSI escapes do not count'
+eq "$(sb_vislen '')" '0' 'vislen: empty'
+eq "$(printf '%s' "$(sb_pad 'abc' 6)" | wc -c | tr -d ' ')" '6' 'pad: pads to the requested width'
+eq "$(printf '%s' "$(sb_pad 'abcdefgh' 3)" | wc -c | tr -d ' ')" '8' 'pad: never truncates a row'
+eq "$(sb_vislen "$(sb_pad "$(printf '\033[32mabc\033[0m')" 6)")" '6' 'pad: a coloured row pads to the same visible width'
+
+# sb_chart_width: leaves the text column alone and gives up rather than drawing a
+# chart too narrow to read.
+eq "$(sb_chart_width 120 60)" '57' 'chart_width: cols minus text minus the gutter'
+eq "$(sb_chart_width 80 70)"  '0'  'chart_width: no chart when under 8 cells would be left'
+eq "$(sb_chart_width 0 60)"   '0'  'chart_width: no terminal width means no charts'
+eq "$(sb_chart_width 4000 60)" "$SB_HIST_CAP" 'chart_width: capped at the history depth'
+
+# sb_span: the same picture means different things at different probe rates, so the
+# header has to say which.
+eq "$(sb_span 240 10)" '40m'    'span: 240 cells at 10s is 40m'
+eq "$(sb_span 240 1)"  '4m'     'span: 240 cells at 1s is 4m'
+eq "$(sb_span 600 10)" '1h40m'  'span: rolls into hours'
+eq "$(sb_span junk 10)" 'n/a'   'span: non-numeric is n/a'
+
+# sb_rtt_tenths: ping output → the integer unit the charts scale against.
+eq "$(sb_rtt_tenths '0.516ms')" '5'   'rtt: 0.516ms -> 5 tenths'
+eq "$(sb_rtt_tenths '3.12ms')"  '31'  'rtt: 3.12ms -> 31 tenths'
+eq "$(sb_rtt_tenths '')"        ''    'rtt: empty stays empty (a gap, not a zero)'
+eq "$(sb_rtt_tenths 'down')"    ''    'rtt: garbage stays empty'
+
+# sb_cols: charts off when stdout is not a terminal (which keeps --once diffable),
+# and forceable so the layout is testable at all.
+eq "$(sb_cols)" '0' 'cols: not a tty means no charts'
+eq "$(STATUSBOARD_COLS=133 sb_cols)" '133' 'cols: STATUSBOARD_COLS forces a width'
+eq "$(STATUSBOARD_COLS=junk sb_cols)" '0'  'cols: a junk override disables charts rather than erroring'
+
+# sb_console_font_file: console-setup names files height-x-width while FONTSIZE is
+# width-x-height. Reversing them is a silent no-op that leaves the font unchanged.
+eq "$(sb_console_font_file Uni3 TerminusBold 16x32)" '/usr/share/consolefonts/Uni3-TerminusBold32x16.psf.gz' \
+  'font: FONTSIZE 16x32 maps to the 32x16 file'
+eq "$(sb_console_font_file Lat15 Fixed 8x16)" '/usr/share/consolefonts/Lat15-Fixed16x8.psf.gz' \
+  'font: the mapping is mechanical, not special-cased'
+eq "$(sb_console_font_file Uni3 TerminusBold junk)" '' 'font: a malformed size yields nothing'
+
+# ── Disks ─────────────────────────────────────────────────────────────────────
+# latitude carries four USB disks across two docks plus a spare NVMe, and a dock
+# that comes back empty is invisible on a headless box — hence rows per filesystem
+# and a row for connected-but-unmounted disks.
+eq "$(sb_kb_to_gib 1048576)"   '1'   'gib: 1048576 KiB is 1 GiB'
+eq "$(sb_kb_to_gib 474794016)" '453' 'gib: latitude root, 474794016 KiB -> 453G'
+eq "$(sb_kb_to_gib '')"        'n/a' 'gib: empty -> n/a'
+eq "$(sb_kb_to_gib junk)"      'n/a' 'gib: non-numeric -> n/a'
+
+OUT="$(sb_disk_row nvme1n1p3 / 2524584 474794016 1)"
+has "$OUT" '/'          'disk row: shows the mount point'
+has "$OUT" 'nvme1n1p3'  'disk row: shows the device'
+has "$OUT" '1%'         'disk row: shows the percentage'
+has "$OUT" '453G'       'disk row: shows the total in GB'
+has "$OUT" '[.'         'disk row: has a horizontal bar'
+# A deep mount point must not widen the text column for every other row.
+OUT="$(sb_disk_row sdc2 /mnt/media/library/photos 100 200 50)"
+has "$OUT" '<'          'disk row: an over-long mount point is truncated tail-first'
+eq "$(sb_vislen "$(sb_disk_row sdc2 /mnt/media/library/photos 100 200 50)")" \
+   "$(sb_vislen "$(sb_disk_row sdc2 /srv 100 200 50)")" \
+   'disk row: width does not depend on the mount point length'
+# A full disk still renders; the bar is coloured by FREE space, so this is the
+# inverse of the battery row and a 99% disk must not read as healthy.
+OUT="$(sb_disk_row sda1 /mnt/x 900 1000 99)"
+has "$OUT" '99%' 'disk row: a nearly-full disk renders'
+OUT="$(sb_disk_row sda1 /mnt/x '' '' '')"
+has "$OUT" 'n/a' 'disk row: missing sizes degrade to n/a rather than breaking the row'
+
+# The per-mount series store. An associative array would keep stale keys after an
+# unplug; a flat string is prunable and testable.
+S="$(sb_series_set '' /mnt/a '1,2,3')"
+eq "$(sb_series_get "$S" /mnt/a)" '1,2,3' 'series: set then get'
+S="$(sb_series_set "$S" /mnt/b '4,5')"
+eq "$(sb_series_get "$S" /mnt/b)" '4,5'   'series: a second key coexists'
+eq "$(sb_series_get "$S" /mnt/a)" '1,2,3' 'series: the first key survives'
+S="$(sb_series_set "$S" /mnt/a '9')"
+eq "$(sb_series_get "$S" /mnt/a)" '9'     'series: set overwrites in place'
+eq "$(sb_series_get "$S" /mnt/b)" '4,5'   'series: overwriting one key leaves the other'
+eq "$(sb_series_get "$S" /mnt/zz)" ''     'series: an unknown key is empty, not an error'
+S="$(sb_series_keep "$S" /mnt/b)"
+eq "$(sb_series_get "$S" /mnt/b)" '4,5'   'series: keep retains a live mount'
+eq "$(sb_series_get "$S" /mnt/a)" ''      'series: keep drops an unmounted one'
+eq "$(sb_series_keep "$S")" ''            'series: keeping nothing empties the store'
+# The mount point / is a substring of every other mount point — the store must
+# match keys whole, or unplugging a dock would drop the root filesystem's history.
+S="$(sb_series_set "$(sb_series_set '' / '1')" /mnt/a '2')"
+eq "$(sb_series_get "$(sb_series_keep "$S" /)" /)" '1' 'series: / is matched whole, not as a prefix'
+eq "$(sb_series_get "$(sb_series_keep "$S" /)" /mnt/a)" '' 'series: pruning / does not keep /mnt/a'
+
+# sb_mounts must report real filesystems only: the virtual tree (tmpfs, devtmpfs,
+# efivarfs) and loop devices are not disks and would crowd out the ones that are.
+if [ -r /proc/mounts ] || command -v df >/dev/null 2>&1; then
+  OUT="$(sb_mounts)"
+  eq "$(printf '%s\n' "$OUT" | awk -F'|' 'NF && NF != 5 { c++ } END { printf "%d", c+0 }')" '0' \
+    'mounts: every line has five fields'
+  eq "$(printf '%s\n' "$OUT" | grep -c 'tmpfs')" '0' 'mounts: no tmpfs'
+  eq "$(printf '%s\n' "$OUT" | grep -c '^loop')" '0' 'mounts: no loop devices'
+  eq "$(printf '%s\n' "$OUT" | awk -F'|' 'NF && $2 !~ /^\// { c++ } END { printf "%d", c+0 }')" '0' \
+    'mounts: every mount point is an absolute path'
+fi
+
+unset STATUSBOARD_RAMP
+
 # ── The script itself ─────────────────────────────────────────────────────────
 bash -n "$REPO/provision/statusboard/statusboard.sh"; eq "$?" '0' 'script: syntax is valid'
 # The unit text is only materialised under --install (root), so assert on the
@@ -149,6 +295,54 @@ has "$OUT" 'internet' 'run: --once frame has an internet row'
 has "$OUT" 'uptime'   'run: --once frame has an uptime row'
 # No ANSI escapes when stdout is a pipe, or the frame is unreadable in a log.
 eq "$(printf '%s' "$OUT" | grep -c $'\033')" '0' 'run: no colour escapes when not a tty'
+# Charts must be absent by default in a pipe — every assertion above depends on it.
+hasnt "$OUT" 'charts: last' 'run: no chart column when stdout is not a tty'
+
+# ── The frame, laid out with charts ────────────────────────────────────────────
+# STATUSBOARD_COLS is the only way to exercise the real two-pass layout off a tty.
+# The ASCII ramp, deliberately: this measures ROW WIDTH, and awk's length() counts
+# bytes, so a multi-byte glyph would read as an over-wide row that is in fact
+# correct. It is also the ramp tty1 actually runs.
+OUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$REPO/provision/statusboard/statusboard.sh" --once 2>&1)"; rc=$?
+eq "$rc" '0' 'layout: --once with a forced width exits 0'
+has "$OUT" 'charts: last' 'layout: the header names the span the charts cover'
+has "$OUT" 's/cell'       'layout: the header names the probe cadence'
+# Nothing may exceed the width — a frame one cell too wide wraps and the whole
+# display walks up the screen on every repaint.
+eq "$(printf '%s\n' "$OUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
+  'layout: no row is wider than the terminal'
+# Every charted row must end at the SAME column, or the column is not a column.
+eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|lan|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
+  'layout: all charted rows end at the same column (disk rows included)'
+has "$OUT" 'G / ' 'layout: the frame lists filesystems with their sizes'
+
+# ── Paint cadence vs probe cadence ─────────────────────────────────────────────
+# The clock is repainted every second; the pings are NOT run every second. Both
+# halves matter: a 3s clock reads as a frozen box, and a 1s ping loop is a busy
+# box doing nothing useful.
+grep -qE '^INTERVAL=1$' "$SB";  eq "$?" '0' 'cadence: repaints default to 1s so the clock ticks'
+grep -qE '^PROBE=10$' "$SB";    eq "$?" '0' 'cadence: network probes default to 10s'
+grep -q 'ExecStart=/bin/bash $SELF --interval $INTERVAL --probe $PROBE' "$SB"
+eq "$?" '0' 'cadence: the unit passes both cadences through'
+# The series MUST be appended to outside the frame subshell, or every chart shows
+# exactly one sample forever.
+# grep -E, not \| in a BRE: BSD grep does not take \| and the alternation would
+# silently match nothing, passing this assertion for the wrong reason.
+sample_ln="$(grep -nE '^  sb_sample_fast$' "$SB" | tail -1 | cut -d: -f1)"
+frame_ln="$(grep -nE '^  frame="\$\(render_frame\)"$' "$SB" | head -1 | cut -d: -f1)"
+[ -n "$sample_ln" ] && [ -n "$frame_ln" ] && [ "$sample_ln" -lt "$frame_ln" ]
+eq "$?" '0' 'cadence: sampling happens in the main shell, before the frame subshell'
+
+# --bigfont must stay out of --install: that path has already broken the console
+# once, and a font change is an unrelated risk to fold into it.
+grep -q 'MODE=bigfont' "$SB"; eq "$?" '0' 'font: --bigfont is its own mode'
+grep -q 'setfont' "$SB"; eq "$?" '0' 'font: --bigfont can apply the font without a reboot'
+grep -q 'pre-statusboard' "$SB"; eq "$?" '0' 'font: the previous console-setup config is backed up'
+# The install path must NOT touch the font.
+inst_ln="$(grep -n 'if \[ "\$MODE" = install \] || \[ "\$MODE" = uninstall \]' "$SB" | cut -d: -f1)"
+font_ln="$(grep -n 'if \[ "\$MODE" = bigfont \]' "$SB" | cut -d: -f1)"
+[ -n "$inst_ln" ] && [ -n "$font_ln" ] && [ "$font_ln" -lt "$inst_ln" ]
+eq "$?" '0' 'font: the bigfont mode exits before the install path is reached'
 
 if [ "$FAIL" -gt 0 ]; then printf 'FAILURES: %d\n' "$FAIL" >&2; exit 1; fi
 printf 'PASS: %s\n' "$(basename "${BASH_SOURCE[0]}")"
