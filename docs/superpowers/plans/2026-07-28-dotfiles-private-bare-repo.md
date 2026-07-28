@@ -1705,7 +1705,7 @@ In `.claude/memory/project.md`, delete the two bullets added 2026-07-28 (the `do
 
 - [ ] **Step 5: Run the full posix test sweep**
 
-Run: `for t in provision/tests/*.test.sh provision/*.test.sh agents/plugin/hooks/tests/*.test.sh scripts/*.test.sh; do echo "== $t"; bash "$t" | tail -1; done`
+Run: `for t in provision/tests/*.test.sh provision/*.test.sh agents/tests/*.test.sh agents/git-hooks/*.test.sh agents/plugin/hooks/tests/*.test.sh scripts/*.test.sh; do echo "== $t"; bash "$t" | tail -1; done`
 Expected: `ALL PASS` from each. Any `FAILURES` line is a regression to fix before committing.
 
 - [ ] **Step 6: Commit**
@@ -1722,8 +1722,8 @@ git commit -m "refactor(dotfiles): retire chezmoi source and the husk-retirement
 Everything in Track B lands **before any box is enrolled**. Work from a normal (non-bare) clone so the `$HOME` work-tree is never involved:
 
 ```bash
-git clone git@github.com:metheoryt/dotfiles.git /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/dotfiles-work
-cd /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/dotfiles-work
+git clone git@github.com:metheoryt/dotfiles.git /Users/me/dotfiles-work
+cd /Users/me/dotfiles-work
 ```
 
 All Track B paths below are relative to that clone.
@@ -1927,7 +1927,7 @@ Expected: `gone`
 Then return to the dotfiles clone for the remaining Track B tasks:
 
 ```bash
-cd /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/dotfiles-work
+cd /Users/me/dotfiles-work
 ```
 
 ---
