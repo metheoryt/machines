@@ -1,14 +1,16 @@
 # Fleet memory reflection prompt
 
-Prompt for the weekly reflection cron job. Runs **once for the whole fleet**,
-from the `machines` repo, on Hermes.
+Prompt for the weekly reflection cron job. Runs **once for the whole fleet**, on
+Hermes, against the private dotfiles bare repo — the corpus moved out of
+`machines` on 2026-07-28 (`87bf673`, `6364b31`).
 
 Counterpart to `kb-cron-prompt.md`: the per-repo harvest jobs (Claude Code,
 daily) only ever append. This job is the only one allowed to generalize, merge,
 rewrite and delete. Schedule it after the last daily harvest of the week.
 
 Scope boundary: this job owns **shared fleet memory only** —
-`agents/memory/**` and `agents/hosts/*`. It does **not** touch per-repo docs
+`~/.claude/memory/**` and `~/.claude/host-memory.md`. It does **not** touch
+per-repo docs
 (`AGENTS.md`, `.claude/memory/project.md`, `docs/`): those are reconciled daily
 by each repo's own harvest job, which has that repo's gortex graph in view.
 Editing them from here would be stale work with worse context.
@@ -19,8 +21,11 @@ Editing them from here would be stale work with worse context.
 
 ---
 
-You are the weekly reflection pass over the fleet's shared agent memory. Repo:
-`C:\Users\methe\machines`. You run unattended.
+You are the weekly reflection pass over the fleet's shared agent memory. It lives
+in the **private dotfiles bare repo**, whose work-tree is `$HOME`: every git call
+needs `git --git-dir=$HOME/.dotfiles --work-tree=$HOME`, and pathspecs resolve
+against the CWD, so prefix them with `:(top)` unless you are sitting in `$HOME`.
+You run unattended.
 
 Per-repo harvest jobs append observations here every day. Your job is to turn
 accumulated observations into fewer, better, still-true statements — and to
@@ -34,16 +39,32 @@ it, but deleted specifics do not come back.
 
 ## Step 1 — Preflight
 
-- `cd C:\Users\methe\machines`. Tracked files must be clean:
-  `git status --short --untracked-files=no` prints nothing. If not, stop and
-  report.
-- `git pull --ff-only` — you must reason over the current state, not a stale
-  checkout.
-- Note `git rev-parse HEAD` for provenance.
+- `cd $HOME`. Tracked files must be clean:
+  `git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --short --untracked-files=no`
+  prints nothing. If not, stop and report.
+- `… fetch --all --prune` — you must reason over the current state, not a stale
+  checkout. **Do not `checkout main`**: host-local files are tracked on the
+  machine branch and absent from `main`, so the checkout deletes them from
+  `$HOME`, `~/.ssh/config` included.
+- Note `… rev-parse HEAD` and the branch name for provenance.
 - Read every shared memory file **in full**. They are small (~1100 lines total):
-  `agents/memory/global.md`, `agents/memory/personality/*.md`,
-  `agents/memory/projects/*.md`, `agents/hosts/*.md`.
-  Whole-corpus view is the entire reason this job exists — do not sample.
+  `~/.claude/memory/global.md` and `~/.claude/memory/personality/*.md` — the
+  shared tier, on dotfiles `main` — plus **every** box's per-host file, one per
+  branch:
+
+      for b in $(… for-each-ref --format='%(refname:short)' refs/remotes/origin \
+                 | grep -v '/HEAD$\|/main$'); do
+        … show "$b:.claude/host-memory.md"
+      done
+
+  There is no per-project tier any more; the old `agents/memory/projects/*`
+  did not move, it is gone. Whole-corpus view is the entire reason this job
+  exists — do not sample.
+- **Know which copy you are reading.** The working copy at `~/.claude/memory/`
+  is *this* box's branch, which may carry harvest-job appends not yet promoted
+  to `main`. Diff them (`… diff origin/main -- ':(top).claude/memory/'`) and
+  reflect over the union — un-promoted appends are exactly the backlog you exist
+  to curate.
 
 ## Step 2 — Build the inventory
 
@@ -73,11 +94,10 @@ Five kinds, in this order. Gather candidates before changing anything.
    the command. A doc claim and reality disagreeing means one of them is wrong,
    and it is not automatically the doc.
 5. **Dead weight.** Entries about things that no longer exist (a retired host, a
-   removed module, a tool no longer used). Note the empty host files
-   `agents/hosts/methe-server.md` and `agents/hosts/ME-G614JV.md`: leftovers from
-   the `methe-server`→`g513ie` and `g614jv`/`ME-G614JV` naming, where the live
-   content lives in the other file. Confirm against `fleet.json` before removing
-   anything host-shaped.
+   removed module, a tool no longer used). The `$HOST_ID.md` duplicates that
+   used to need pruning here are gone with the store move — branch-per-machine
+   needs no host id, so there is exactly one host file per box. Confirm against
+   `fleet.json` before removing anything host-shaped.
 
 ## Step 4 — Safety rules for compression and deletion
 
@@ -136,19 +156,30 @@ this person" — it should be coherent prose-ish bullets, not a log.
 
 ## Step 6 — Commit and push
 
-Stage only `agents/memory/**` and `agents/hosts/*`. If anything else shows as
-modified, you did something out of scope — revert it.
+Stage only the memory paths. If anything else shows as modified, you did
+something out of scope — revert it.
 
-    git add agents/memory agents/hosts
-    git commit -m "docs(memory): weekly reflection — merged N, generalized M, pruned K"
+    D="git --git-dir=$HOME/.dotfiles --work-tree=$HOME"
+    $D add ':(top).claude/memory' ':(top).claude/host-memory.md'
+    $D commit -m "docs(memory): weekly reflection — merged N, generalized M, pruned K"
+    $D push origin HEAD
 
-Push via the fleet path: load `skill_view(name='ship')` and follow it so the
-change fast-forwards onto every fleet member. Fall back to `git push` if `ship`
-refuses.
+That lands on **this box's branch**, not on shared `main` — dotfiles is
+branch-per-machine and getting a path onto `main` is a manual
+`/dotfiles-promote`, which is user-gated. An unattended run therefore ends with
+the curated corpus staged for promotion, not published: **report the pending
+`/dotfiles-promote` by name and list the paths it needs to carry.** Do not try
+to route around it; `ship` is for `machines`-shaped repos and does not apply to
+the bare repo.
 
-If push is rejected, **do not force**: `pull --rebase`, re-verify your edits
-survived the rebase intact, push again. Still failing → leave it committed
-locally and report loudly.
+**Another box's host memory is read-only from here.** Its file is on that box's
+branch. If a per-host bullet genuinely needs editing, do it in a linked worktree
+(`$D worktree add /tmp/x origin/<branch>`) and say so in the report — never by
+checking that branch out over `$HOME`.
+
+If push is rejected, **do not force**: merge `origin/<branch>` (never rebase —
+fleet repos), re-verify your edits survived intact, push again. Still failing →
+leave it committed locally and report loudly.
 
 **If you found nothing worth changing, commit nothing.** An empty run is a
 healthy outcome, not a failure — say so and exit. Never manufacture edits to
