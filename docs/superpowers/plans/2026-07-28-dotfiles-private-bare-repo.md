@@ -1914,11 +1914,18 @@ The content now has a home, so the last chezmoi artifact can go. This is spec
 §9.4's remaining half — Task 9 removed `dot_gitconfig.tmpl`, this removes the
 directory.
 
+**Do NOT push `machines` here.** `scripts/converge.sh`'s `touches_linux` gate
+matches `provision/linux.sh`, `provision/lib/tiers.sh` and `provision/lib/fleet.sh`
+— all three are in the Track A diff — and converge then runs
+`provision/linux.sh` in APPLYING mode. Since Track A adds `dotfiles` to the
+workstation tier list, the first `machines` push enrolls every linux-class box
+unattended, before the branches exist (Task 14) and before checkout collisions
+are cleared (Task 15 Step 2). Commit locally; Task 15 Step 1 owns the single push.
+
 ```bash
 cd /Users/me/machines
 git rm -qr dotfiles/
 git commit -m "refactor(dotfiles): drop the chezmoi source dir — content moved to the dotfiles repo"
-git push origin main
 ```
 
 Verify: `test -d /Users/me/machines/dotfiles && echo "STILL THERE" || echo "gone"`
@@ -1969,7 +1976,11 @@ Build `main` in a throwaway **linked worktree** instead. `$HOME` is never touche
 ```bash
 dotfiles() { git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"; }
 branch="$(dotfiles rev-parse --abbrev-ref HEAD)"
-dotfiles fetch origin main
+# Explicit refspec: `git clone --bare` sets no remote.origin.fetch, so on a
+# repo cloned by hand there is no refs/remotes/origin/* and every origin/main
+# below fails to resolve. The provision role configures the refspec; this
+# skill is what a human runs when something is already wrong, so it names it.
+dotfiles fetch origin '+refs/heads/main:refs/remotes/origin/main'
 ```
 
 If `$branch` is `main`, stop and tell the user: this box is misconfigured, the
@@ -2052,7 +2063,7 @@ If the push is rejected because `main` moved, re-run from Step 1 — do not forc
 ## Step 4: bring `main` back down
 
 ```bash
-dotfiles fetch origin main
+dotfiles fetch origin '+refs/heads/main:refs/remotes/origin/main'
 dotfiles merge --no-edit --ff origin/main
 ```
 
@@ -2213,8 +2224,15 @@ By hand, if you need to:
 $ git clone --bare git@github.com:metheoryt/dotfiles.git $HOME/.dotfiles
 $ dotfiles() { git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"; }
 $ dotfiles config status.showUntrackedFiles no
+$ dotfiles config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+$ dotfiles fetch origin
 $ dotfiles checkout <logical-fleet-name>    # latitude | air | desktop | server | hub
 ```
+
+The `remote.origin.fetch` line is not optional. `git clone --bare` configures no
+refspec, so without it the clone has no `refs/remotes/origin/*` at all and every
+`origin/main` reference — including the sync timer's merge step — silently fails
+to resolve.
 
 If `checkout` complains that existing files in `$HOME` would be overwritten,
 back them up (or delete them) and retry.
@@ -2428,6 +2446,28 @@ path, and on a box in daily use that is the **normal** case — `air` already ha
 `~/.config/gh/config.yml`, and `main` tracks it. The role now fails loudly rather
 than half-enrolling (Task 6), but clearing the collisions up front turns each
 enrollment into one clean pass.
+
+**First, on each box, check `core.excludesFile`.** The dotfiles `.gitignore`
+lands at `$HOME/.gitignore` on checkout and its first line is `*`. Git's default
+excludes file is `~/.config/git/ignore`, but `~/.gitignore` is a common manual
+setting — and on a box where it is set, enrolling makes `*` the global ignore
+pattern for every repo on that machine.
+
+```bash
+git config --global core.excludesFile     # empty or ~/.config/git/ignore => safe
+```
+
+Anything resolving to `~/.gitignore` must be repointed before the checkout.
+
+**Then check `gh`'s config before moving it aside.** Two GitHub accounts are live
+simultaneously and account selection runs through config; a stale tracked
+`config.yml` can silently change which account `gh` authenticates as. Diff first,
+and do not proceed past a difference without reading it:
+
+```bash
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME show main:.config/gh/config.yml \
+  | diff - ~/.config/gh/config.yml && echo "identical — safe to replace"
+```
 
 Per box, before provisioning it:
 
