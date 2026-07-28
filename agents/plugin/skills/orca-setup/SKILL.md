@@ -89,7 +89,11 @@ bash "$HOME/machines/agents/worktree-teardown.sh"
 STATUS=~/machines/agents/plugin/skills/orca-setup/orca-status.sh
 # The /mnt/c glob is unquoted on purpose: the Windows user name differs from the
 # WSL one ($USER is `me`, the Windows profile is `methe`).
+# macOS keeps it under Library/Application Support (note the space) — that path was
+# missing here, so /orca-setup on air reported ABSENT for both slots and silently
+# read no config at all while the real file sat next door.
 for DATA in "$HOME/.config/orca/profiles/local-default/orca-data.json" \
+            "$HOME/Library/Application Support/orca/profiles/local-default/orca-data.json" \
             "$HOME/AppData/Roaming/orca/profiles/local-default/orca-data.json" \
             /mnt/c/Users/*/AppData/Roaming/orca/profiles/local-default/orca-data.json; do
   [ -f "$DATA" ] || continue
