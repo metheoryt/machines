@@ -341,9 +341,17 @@ copy_managed "$settings_src" "$CLAUDE_DIR/settings.json"
 # longer one of them — it is dotfiles-owned; see the block below.
 # Instruction file: AGENTS.md is canonical; link ~/.claude/CLAUDE.md to it directly.
 link "$SRC_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
+# The shared memory store is dotfiles-owned: real files at
+# ~/.claude/memory/{global.md,personality/*.md}, tracked on the dotfiles repo's
+# main branch. bootstrap only clears links from the era when agents/memory/ was
+# the source. Secondary profiles and ~/.codex are linked AT the primary below.
 _mkdir "$CLAUDE_DIR/memory"
-link "$SRC_DIR/memory/global.md" "$CLAUDE_DIR/memory/global.md"
-link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
+retire_link "$CLAUDE_DIR/memory/global.md"
+retire_link "$CLAUDE_DIR/memory/personality"
+if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CLAUDE_DIR/memory/global.md"
+  link_if_present "$PRIMARY_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
+fi
 
 # Per-host memory is dotfiles-owned: a real file at ~/.claude/host-memory.md,
 # tracked on this machine's dotfiles branch (host-local — it must never reach
@@ -375,8 +383,9 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
   link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"
 
   _mkdir "$CODEX_DIR/memory"
-  link "$SRC_DIR/memory/global.md"    "$CODEX_DIR/memory/global.md"
-  link "$SRC_DIR/memory/personality" "$CODEX_DIR/memory/personality"
+  # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
+  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CODEX_DIR/memory/global.md"
+  link_if_present "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
   # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
   link_if_present "$PRIMARY_DIR/host-memory.md" "$CODEX_DIR/host-memory.md"
 

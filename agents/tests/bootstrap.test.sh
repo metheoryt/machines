@@ -111,4 +111,12 @@ a_dest="$tmp/absent.md"
 link_if_present "$SRC_DIR/nope.md" "$a_dest" >/dev/null
 check "link_if_present creates nothing for a missing source" '[ ! -e "$a_dest" ] && [ ! -L "$a_dest" ]'
 
+# Case 5: the shared memory store is dotfiles-owned. bootstrap links nothing
+# from agents/memory into the primary profile, and points Codex at the primary.
+out5="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+check "nothing links agents/memory into the primary profile" \
+  '! printf "%s" "$out5" | grep -qE "would (link|back up \+ link): '"$HOME"'/\.claude/memory/(global\.md|personality)"'
+check "codex memory is sourced from the primary profile, not the repo" \
+  '! printf "%s" "$out5" | grep -E "\.codex/memory" | grep -q "machines/agents/memory"'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
