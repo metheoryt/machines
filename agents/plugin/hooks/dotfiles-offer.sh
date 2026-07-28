@@ -58,7 +58,10 @@ case "$(basename "$rel")" in
 esac
 
 # ── 3. Already tracked? ──────────────────────────────────────────────────────
-df ls-files --error-unmatch "$rel" >/dev/null 2>&1 && exit 0
+# `:(top)` because git resolves a pathspec against the CWD, not the work-tree,
+# and the hook runs in the session's cwd — usually some project checkout, where
+# a $HOME-relative path matches nothing and every tracked file reads as untracked.
+df ls-files --error-unmatch ":(top)$rel" >/dev/null 2>&1 && exit 0
 
 # ── 2b. Obvious non-config noise — silent. ───────────────────────────────────
 # Step 4 below treats "gitignored inside a repo" as the homeless signal, which is

@@ -65,6 +65,15 @@ assert_silent s2 "$HOME/server.pem" "banned path (*.pem) is silent"
 # 3. Already tracked -> silent.
 assert_silent s3 "$HOME/.tracked" "already-tracked path is silent"
 
+# 3b. Same file, but the hook runs from a cwd INSIDE the work-tree — the real
+#     case, since a session's cwd is some checkout under $HOME. git resolves a
+#     pathspec against the CWD, not the work-tree, so a $HOME-relative path
+#     matches nothing from there and every tracked file reads as untracked.
+_cwd="$PWD"
+cd "$HOME/pure/backend-api" || exit 1
+assert_silent s3b "$HOME/.tracked" "already-tracked path is silent from a cwd inside \$HOME"
+cd "$_cwd" || exit 1
+
 # 4a. Inside another repo and trackable there -> silent, it belongs there.
 assert_silent s4 "$HOME/pure/backend-api/main.py" "normal file in a repo is silent"
 
