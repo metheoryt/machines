@@ -2420,6 +2420,12 @@ Expected: `main`
 
 ## Task 15: Enrollment — `air`, `desktop`, `server`, `hub`, then `latitude`
 
+> **Executed 2026-07-28.** Enrolled: `air`, `hub`, `desktop`, `latitude`, and
+> the WSL host `desktop-ubuntu26` (branch auto-created from `main`).
+> **`server` is still pending — it was offline.** Enroll it by hand when it is
+> back: converge on a Windows box runs `windows.ps1` only and never the role.
+> Deviations from the steps below are recorded in `.claude/memory/project.md`.
+
 **Order is load-bearing.** `latitude` is last because it is the only box running an active deleter (`modules/home/ssh.nix`). Everything else is safe to enroll in any order.
 
 This task is inherently interactive — it touches real machines. Run one box per step and verify before moving on.
@@ -2429,7 +2435,7 @@ This task is inherently interactive — it touches real machines. Run one box pe
 **Interfaces:**
 - Consumes: everything from Tasks 1–14. Requires the `machines` Track A commits to be pushed and pulled on each box first.
 
-- [ ] **Step 1: Push Track A and let the fleet pull**
+- [x] **Step 1: Push Track A and let the fleet pull**
 
 ```bash
 cd /Users/me/machines
@@ -2442,7 +2448,7 @@ Wait for the 10-minute `fleet-selfpull` tick, or force it per box. Verify each b
 ssh <box> 'bash -lc "cd ~/machines && git log --oneline -1 && test -f provision/dotfiles-sync.sh && echo sync-script-present"'
 ```
 
-- [ ] **Step 2: Clear checkout collisions on every box first**
+- [x] **Step 2: Clear checkout collisions on every box first**
 
 The bare checkout is refused when an untracked file already occupies a tracked
 path, and on a box in daily use that is the **normal** case — `air` already has
@@ -2491,7 +2497,7 @@ version and merge anything worth keeping — then delete the backup. **`gh`'s
 `config.yml` is the one to actually read**: a stale tracked copy can change
 which account `gh` uses.
 
-- [ ] **Step 3: Enroll `air` (this MacBook)**
+- [x] **Step 3: Enroll `air` (this MacBook)**
 
 `air` has no `~/.dotfiles` today.
 
@@ -2515,7 +2521,7 @@ Then decide the open question for this box: does `air` want `~/.gitconfig` and
 `~/.ssh/config` tracked on its branch? If yes, that is the documented two-step
 (`!path` line in `~/.gitignore`, then `dotfiles add`), and it lands host-local.
 
-- [ ] **Step 4: Enroll `hub`**
+- [x] **Step 4: Enroll `hub`**
 
 ```bash
 ssh hub 'bash -lc "cd ~/machines && git pull --ff-only && bash provision/provision.sh --machine hub --apply"'
@@ -2537,7 +2543,7 @@ rather than a merge being attempted:
 ssh hub 'bash -lc "bash ~/machines/provision/dotfiles-sync.sh 2>&1 | grep merge-tree || echo no-floor-warning"'
 ```
 
-- [ ] **Step 5: Enroll `desktop` and `server`**
+- [x] **Step 5: Enroll `desktop` and `server`**
 
 Both are Windows-native. Run from a normal login on each box (not headless
 SYSTEM — the scheduled task needs an interactive-user principal):
@@ -2563,7 +2569,7 @@ Expected: the logical name (`desktop` / `server`), the task in `Ready`, exit `0`
 This is also where Task 4, 5 and 7's deferred `pwsh` parse checks get resolved,
 if they could not run on the Mac.
 
-- [ ] **Step 6: Enroll `latitude` — last, and with the `.ssh/config` check**
+- [x] **Step 6: Enroll `latitude` — last, and with the `.ssh/config` check**
 
 Before provisioning, confirm `main` no longer carries `.ssh/config` — if it does,
 the flap described in Task 10 starts the moment the timer runs:
@@ -2593,7 +2599,7 @@ ssh latitude 'bash -lc "git --git-dir=\$HOME/.dotfiles --work-tree=\$HOME rev-pa
 
 Expected: branch `latitude`, timer active, **no** `conflict` file.
 
-- [ ] **Step 7: Let one full cycle run, then check every box for a conflict marker**
+- [x] **Step 7: Let one full cycle run, then check every box for a conflict marker**
 
 Wait ~15 minutes, then:
 
@@ -2607,7 +2613,7 @@ conflict marker anywhere means Track B left `main` and some branch genuinely
 divergent; read the marker, resolve by hand on that box, and confirm the next
 tick clears it.
 
-- [ ] **Step 8: Record the outcome**
+- [x] **Step 8: Record the outcome**
 
 Append to `machines/.claude/memory/project.md` under the dotfiles heading:
 
