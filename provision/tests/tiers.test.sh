@@ -33,7 +33,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
+   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles tier_hermes_config tier_hermes_dashboard " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex, no codex.
@@ -117,7 +117,15 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # sharing tiers.sh. Compare with the package tiers stripped out; a drift here
 # means a tier was added to one driver and forgotten in the other.
 # tier_fleet_ssh is excluded too — darwin-only by design, justified above.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|fleet_ssh)$' | tr '\n' ' '; }
+#
+# tier_dotfiles is the second sanctioned exception (spec 2026-07-28): linux-only
+# ON PURPOSE. It exists solely for SELF-DECLARED WSL hosts, which carry a
+# fleet.local.json instead of a fleet.json entry and therefore never reach a role
+# executor at all — the tier list is their only path in. Every macOS fleet member
+# IS in fleet.json and reaches role_dotfiles through the dispatcher, behind its
+# `Apply dotfiles? [y/N]` gate. Adding it to macos.sh would enroll the box at
+# tier time, which provision-mac.sh runs BEFORE roles — pre-empting that gate.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|fleet_ssh|dotfiles)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

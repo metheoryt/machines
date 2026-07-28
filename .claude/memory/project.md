@@ -302,9 +302,9 @@ global + per-host). One bullet per fact under a topical heading.
   machine-layer only (services stay the `vps` repo), driven by the `fleet.json`
   manifest; front door `just provision` (`provision.{sh,ps1}`, per-role
   `Apply <role>? [y/N]` gate). REAL role executors under `provision/roles/`: `agents`
-  + `dotfiles` + `repos` (dotfiles = chezmoi over in-repo `dotfiles/`, machine-
-  specifics deferred to untracked `~/.gitconfig.local` via `[include]`; on NixOS
-  `agents`/`dotfiles` are home-manager no-ops but `repos` still runs `repos.sh`).
+  + `dotfiles` + `repos` (dotfiles = the private bare repo, see the dotfiles
+  bullets below; on NixOS `agents` is a home-manager no-op but `dotfiles` and
+  `repos` both run).
   `base`/`ssh-server`/`backup-client` remain UNIMPLEMENTED stubs (see Pending).
   Secrets (age/agenix) designed, not built.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
@@ -316,35 +316,32 @@ global + per-host). One bullet per fact under a topical heading.
   in-repo via chezmoi (non-Nix boxes) + agenix (NixOS), one age identity for the
   fleet. Designed, NOT yet implemented — agenix would be the repo's first
   secrets framework.
-- User keeps a separate bare-repo dotfiles tracker at `~/.dotfiles`
-  (`git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME`, alias `dotfiles`,
-  github.com/metheoryt/dotfiles, private), one branch per machine. Plain
-  files, no encryption. Secret files (SSH keys, VPN keys, etc.) are never
-  committed but ARE listed in that machine's branch `.gitignore` — the
-  ignore entry itself is the "you need to restore/regenerate this on a fresh
-  box" checklist, without ever storing the secret content. When adding a new
-  per-machine secret (e.g. an AmneziaWG private key), add its path to that
-  machine's `.dotfiles` branch `.gitignore` too, not just to this repo.
-- **`dotfiles/` hosts files that must live INSIDE another repo but can't be
-  committed there.** Pattern established 2026-07-28 for `backend-api`: work
-  repos under `github.com:thepureapp/*` use an allowlist `.gitignore` (`*` plus
-  `!/.claude/*.md`), so `<repo>/.claude/memory/project.md` — the path the
-  `project-memory-check.sh` hook auto-loads — is *ignored* there and would be
-  machine-local. Track it here instead as
-  `dotfiles/pure/backend-api/dot_claude/memory/project.md`; chezmoi materialises
-  it at `~/pure/backend-api/.claude/memory/project.md`. Works because the target
-  is HOME-relative and the clone path is consistent fleet-wide. Nothing leaks
-  into the work repo (its own gitignore hides the file). **Gap:** the `dotfiles`
-  role is a no-op on NixOS (home-manager owns it), so chezmoi-hosted files do
-  NOT reach latitude — darwin/wsl/debian only.
-- **Never run a blanket `chezmoi apply --source ./dotfiles`** (verified
-  2026-07-28). `dot_gitconfig.tmpl` has drifted from the live `~/.gitconfig` on
-  the MacBook — a full apply drops `pager = delta`, `interactive.diffFilter`,
-  the `[delta]` block, the `gh auth git-credential` helper and
-  `pull.rebase = true`, and rewrites `user.name` to `Maxim`. Scope every apply
-  to the subtree you mean (`chezmoi apply --source ./dotfiles ~/pure`). Note a
-  path-scoped apply will NOT create missing parent dirs — scope to an ancestor
-  that chezmoi manages, not the leaf file.
+- **`$HOME` config is the private `metheoryt/dotfiles` bare repo, not chezmoi**
+  (spec `docs/superpowers/specs/2026-07-28-dotfiles-private-bare-repo-design.md`).
+  `~/.dotfiles` is a bare repo whose work-tree is `$HOME`; each box checks out a
+  branch named by its **logical** fleet name (`latitude`, `air`, `desktop`,
+  `server`, `hub`). `provision/dotfiles-sync.sh` commits + pushes tracked changes
+  every 10 min and merges `origin/main` in behind a `merge-tree --write-tree`
+  preflight. `machines/dotfiles/` and the chezmoi role were deleted 2026-07-28.
+- **A path is shared XOR host-local.** On `main` ⇒ shared and byte-identical
+  everywhere; absent from `main` ⇒ host-local. Never both. That is why
+  home-manager-owned paths (`~/.ssh/config`, `~/.gitconfig`) are not on `main`:
+  no exclusion mechanism is needed, they simply live on non-Nix host branches.
+  Moving a path branch → `main` is the manual `/dotfiles-promote` skill.
+- **Never `add -A` in the dotfiles repo**, and never `dotfiles checkout main` on
+  a live box — the first can leak an unlisted file, the second deletes every
+  host-local file from `$HOME` for the duration.
+- **`git clone --bare` sets no `remote.origin.fetch`**, so a bare dotfiles clone
+  has no `refs/remotes/origin/*` and every `origin/main` reference fails to
+  resolve. The role configures the refspec and the sync script fetches with an
+  explicit one; a repo cloned by hand needs
+  `git --git-dir=$HOME/.dotfiles config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`.
+- Secret files (SSH keys, VPN keys) are never committed but ARE listed in that
+  machine's branch `.gitignore` — the ignore entry itself is the "you need to
+  restore/regenerate this on a fresh box" checklist, without storing the secret.
+  Rotatable credentials (`.netrc`, `.npmrc`, `.pypirc`, `.aws/credentials`,
+  `.config/gh/hosts.yml`) ARE tracked: the repo is private and the recovery
+  story is "rotate the token", not "re-key the fleet".
 - SSH keys are per-host, not shared (e.g. latitude5520's is
   `ssh-ed25519 ...  me-nixos-latitude5520`) — each fleet machine has its own
   keypair; cross-machine SSH trust needs each host's *public* key collected
@@ -652,16 +649,15 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   whose key is already trusted: `ssh desktop 'ssh me@latitude "…"'`. Note the
   explicit **`me@`** — desktop is Windows, so its default remote user is `methe`
   and a bare `ssh latitude` authenticates as the wrong account.
-- **`~/.gitconfig` has two owners and they conflict.** `tier_git_base`
-  (`provision/lib/tiers.sh:337`, via `git config --global`) writes it at tier
-  time; `dotfiles/dot_gitconfig.tmpl` overwrites it wholesale at role time.
-  `provision-mac.sh` runs tiers (step 3) *before* roles (step 4), so **chezmoi
-  wins** and would drop the delta pager, the gh credential helper, all aliases,
+- **`~/.gitconfig` had two owners; the second one is gone.** `tier_git_base`
+  (`provision/lib/tiers.sh`, via `git config --global`) writes it at tier time.
+  The chezmoi template that used to overwrite it wholesale at role time
+  (`dotfiles/dot_gitconfig.tmpl`) was **deleted 2026-07-28** — it had drifted far
+  enough to drop the delta pager, the gh credential helper, all aliases,
   `pull.rebase`, `push.autoSetupRemote`, and the cyphy671 identity `includeIf`
-  (→ silent commit misattribution). Also latent on wsl/debian, where
-  `role_dotfiles` runs. Deliberately NOT applied on `air` (2026-07-28); the
-  template's own header says machine-specific settings belong in
-  `~/.gitconfig.local`. Unresolved — decide before running the dotfiles role.
+  (→ silent commit misattribution). `~/.gitconfig` is currently on **no** dotfiles
+  branch; if it is ever tracked, it is host-local (`tier_git_base` still writes
+  it, so a shared copy would flap).
 - **Fleet trust is not symmetric, and `fleet-authorized-keys` is the map.** As of
   2026-07-28 it holds latitude, g513ie(server), wsl-desktop, me-g614jv(desktop)
   and air — **no `hub` key**. So hub is reachable *from* the fleet but cannot
