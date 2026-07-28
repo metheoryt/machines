@@ -88,8 +88,8 @@ Every task's requirements implicitly include this section.
 
 | Path | Why |
 |---|---|
-| `dotfiles/dot_gitconfig.tmpl` | chezmoi source; drifted hard from live `~/.gitconfig` (spec §9.4). |
-| `dotfiles/pure/backend-api/dot_claude/memory/project.md` | Moves into the dotfiles repo (Task 11). |
+| `dotfiles/dot_gitconfig.tmpl` | chezmoi source; drifted hard from live `~/.gitconfig` (spec §9.4). Deleted in Task 9. |
+| `dotfiles/pure/backend-api/dot_claude/memory/project.md` | Moves into the dotfiles repo. Deleted in **Task 11**, not Task 9 — it is the source Task 11 copies from, and the two tasks will not run in the same session. |
 | `scripts/retire-dotfiles-husk.sh` | Deletes the very `~/.dotfiles` this plan reinstates. Loaded footgun. |
 | `agents/tests/retire-dotfiles-husk.test.sh` | Its test. |
 
@@ -1078,16 +1078,39 @@ role_dotfiles() {
     "${df[@]}" config status.showUntrackedFiles no
 
     # 2. Check out this host's branch, creating it from main if it does not exist.
+    #
+    # THE CHECKOUT MUST BE GUARDED. git refuses it when an untracked file already
+    # sits at a tracked path, and on a real box that is the NORMAL case, not an
+    # edge case: air already has ~/.config/gh/config.yml, latitude has a
+    # home-manager-generated ~/.ssh/config. Unguarded, the checkout is refused,
+    # HEAD stays on the clone's default (main), the role writes the wrong branch
+    # into the state file, and every sync tick from then on hits the wrong-branch
+    # arm and exits 1 — a timer that looks installed and never works.
     "${df[@]}" fetch --quiet origin || true
+    _dotfiles_checkout() {
+        if "${df[@]}" "$@"; then return 0; fi
+        echo "  dotfiles: checkout refused — untracked files in \$HOME already occupy tracked paths." >&2
+        echo "  dotfiles: git named them above. Back each one up, delete it, and re-run:" >&2
+        echo "    mv ~/<path> ~/<path>.pre-dotfiles" >&2
+        echo "  dotfiles: NOT recording the branch or installing the timer — a timer" >&2
+        echo "  dotfiles: on the wrong branch would refuse every tick silently." >&2
+        return 1
+    }
     if "${df[@]}" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
-        "${df[@]}" checkout --quiet "$branch"
+        _dotfiles_checkout checkout --quiet "$branch" || return 1
     elif "${df[@]}" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
-        "${df[@]}" checkout --quiet -b "$branch" --track "origin/$branch"
+        _dotfiles_checkout checkout --quiet -b "$branch" --track "origin/$branch" || return 1
     else
         echo "  dotfiles: branch '$branch' does not exist — creating it from origin/main."
-        "${df[@]}" checkout --quiet -b "$branch" origin/main
+        _dotfiles_checkout checkout --quiet -b "$branch" origin/main || return 1
         "${df[@]}" push --quiet -u origin "$branch" || \
             echo "  dotfiles: could not push the new branch — it stays local until the next sync tick." >&2
+    fi
+
+    # Belt-and-suspenders: never record a branch HEAD is not actually on.
+    if [ "$("${df[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$branch" ]; then
+        echo "  dotfiles: HEAD is not on '$branch' after checkout — refusing to continue." >&2
+        return 1
     fi
 
     # 3. Record the branch for the timer. The timer must NOT resolve fleet
@@ -1217,7 +1240,11 @@ function Invoke-RoleDotfiles {
     $remote = if ($env:DOTFILES_REMOTE) { $env:DOTFILES_REMOTE } else { 'git@github.com:metheoryt/dotfiles.git' }
     $gitDir = Join-Path $HOME '.dotfiles'
     $state  = Join-Path $HOME '.local\state\dotfiles-sync'
-    $branch = $Machine        # the logical fleet name provision.ps1 resolved
+    # $Machine IS the logical fleet name: provision.ps1 either takes it as an
+    # argument or resolves it via Get-FleetDetected, which returns the
+    # fleet.json KEY ($p.Name), not the OS hostname it matched on.
+    # Verified against provision/lib/Fleet.psm1:16-23.
+    $branch = $Machine
 
     if ($Mode -eq 'dry-run') {
         Write-Host "  ~ would clone $remote (bare) -> $gitDir"
@@ -1239,6 +1266,11 @@ function Invoke-RoleDotfiles {
     Df config status.showUntrackedFiles no | Out-Null
 
     # 2. Check out this host's branch, creating it from main if it does not exist.
+    #
+    # THE CHECKOUT MUST BE GUARDED, same as the posix side: git refuses it when
+    # an untracked file already occupies a tracked path, which is the normal
+    # case on a box that has been in use. Unguarded, HEAD stays on the clone's
+    # default and the sync task then refuses every tick silently.
     Df fetch --quiet origin 2>$null | Out-Null
     Df rev-parse --verify --quiet "refs/heads/$branch" 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
@@ -1250,11 +1282,20 @@ function Invoke-RoleDotfiles {
         } else {
             Write-Host "  dotfiles: branch '$branch' does not exist - creating it from origin/main."
             Df checkout --quiet -b $branch origin/main | Out-Null
-            Df push --quiet -u origin $branch | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warning "  dotfiles: could not push the new branch - it stays local until the next sync tick."
+            if ($LASTEXITCODE -eq 0) {
+                Df push --quiet -u origin $branch | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "  dotfiles: could not push the new branch - it stays local until the next sync tick."
+                }
             }
         }
+    }
+    $head = (Df rev-parse --abbrev-ref HEAD 2>$null | Select-Object -First 1)
+    if ($head -ne $branch) {
+        throw ("dotfiles: HEAD is '$head', not '$branch'. The checkout was refused - untracked " +
+               "files in `$HOME already occupy tracked paths (git named them above). Back each " +
+               "one up, delete it, and re-run. Not recording the branch: a sync task on the " +
+               "wrong branch refuses every tick silently.")
     }
 
     # 3. Record the branch for the sync task. The task must not resolve fleet
@@ -1385,6 +1426,14 @@ assert_silent s4 "$HOME/pure/backend-api/.claude/memory/project.md" \
 assert_offer s5 "$HOME/pure/backend-api/.claude/memory/project.md" \
   "a new session re-offers the same path"
 
+# 5c. Build noise inside a repo is gitignored there too, but must NOT be offered
+#     — otherwise the hook fires on every artifact the agent touches.
+mkdir -p "$HOME/pure/backend-api/.venv/lib"
+printf 'x\n' > "$HOME/pure/backend-api/.venv/lib/thing.py"
+assert_silent s5b "$HOME/pure/backend-api/.venv/lib/thing.py" "build noise (.venv) is silent"
+printf 'x\n' > "$HOME/pure/backend-api/debug.log"
+assert_silent s5b "$HOME/pure/backend-api/debug.log" "build noise (*.log) is silent"
+
 # 6. Plain untracked $HOME file, no repo -> OFFER.
 printf 'cfg\n' > "$HOME/.someconfig"
 assert_offer s6 "$HOME/.someconfig" "plain untracked \$HOME file is offered"
@@ -1469,6 +1518,21 @@ esac
 
 # ── 3. Already tracked? ──────────────────────────────────────────────────────
 df ls-files --error-unmatch "$rel" >/dev/null 2>&1 && exit 0
+
+# ── 2b. Obvious non-config noise — silent. ───────────────────────────────────
+# Step 4 below treats "gitignored inside a repo" as the homeless signal, which is
+# spec-faithful but also matches every build artifact, virtualenv and cache the
+# agent ever touches. Without this filter the hook fires constantly and the user
+# turns it off, which costs more than the false negatives it prevents.
+case "/$rel/" in
+    */.venv/*|*/venv/*|*/node_modules/*|*/__pycache__/*|*/.pytest_cache/*|\
+    */.mypy_cache/*|*/.ruff_cache/*|*/target/*|*/dist/*|*/build/*|*/.next/*|\
+    */.direnv/*|*/.cache/*|*/coverage/*|*/.tox/*|*/site-packages/*)
+        exit 0 ;;
+esac
+case "$rel" in
+    *.pyc|*.pyo|*.o|*.so|*.class|*.log|*.lock|*.tmp|*.swp) exit 0 ;;
+esac
 
 # ── 4. Inside another git repo? ──────────────────────────────────────────────
 # Walk up from the file's directory looking for a .git. If one is found, the
@@ -1578,37 +1642,34 @@ Two dead mechanisms to remove. `scripts/retire-dotfiles-husk.sh` deletes the ver
 
 **Files:**
 - Delete: `scripts/retire-dotfiles-husk.sh`, `agents/tests/retire-dotfiles-husk.test.sh`
-- Delete: `dotfiles/dot_gitconfig.tmpl`, `dotfiles/pure/backend-api/dot_claude/memory/project.md` (the whole `dotfiles/` directory)
+- Delete: `dotfiles/dot_gitconfig.tmpl`
 - Modify: `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase3-dotfiles-chezmoi-design.md` (superseded marker)
 - Modify: `.claude/memory/project.md`
 
 **Interfaces:**
-- Consumes: nothing. Task 11 must have copied `dotfiles/pure/backend-api/dot_claude/memory/project.md` into the dotfiles repo **before** this deletion — but Track B is ordered after Track A, so instead: copy the file to the scratchpad in Step 1 below, and Task 11 reads it from there.
+- Consumes: nothing.
+- Produces: `dotfiles/pure/backend-api/dot_claude/memory/project.md` is deliberately **left in place** for Task 11 to move. Deleting it here and stashing a copy in the session scratchpad would break the handoff — a 15-task plan will not run in one session, and the scratchpad does not survive. Task 11 deletes the directory once the content has a new home.
 
-- [ ] **Step 1: Stash the memory file Task 11 needs**
-
-```bash
-mkdir -p /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad
-cp dotfiles/pure/backend-api/dot_claude/memory/project.md \
-   /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/backend-api-project-memory.md
-```
-
-Verify: `test -s /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/backend-api-project-memory.md && echo stashed`
-Expected: `stashed`
-
-- [ ] **Step 2: Confirm nothing references the husk script**
+- [ ] **Step 1: Confirm nothing references the husk script**
 
 Run: `grep -rn "retire-dotfiles-husk" --exclude-dir=.git . | grep -v 'docs/superpowers/plans/'`
 Expected: only `agents/tests/retire-dotfiles-husk.test.sh` (its own test). If anything else appears — a justfile recipe, a tier, converge.sh — **stop** and resolve that reference first.
 
-- [ ] **Step 3: Delete**
+- [ ] **Step 2: Delete**
 
 ```bash
 git rm -q scripts/retire-dotfiles-husk.sh agents/tests/retire-dotfiles-husk.test.sh
-git rm -qr dotfiles/
+git rm -q dotfiles/dot_gitconfig.tmpl
 ```
 
-- [ ] **Step 4: Mark the superseded spec**
+`dot_gitconfig.tmpl` is **not** migrated (spec §9.4): it has drifted hard from
+the live `~/.gitconfig` — applying it would drop `pager = delta`, the `[delta]`
+block, the `gh auth git-credential` helper and `pull.rebase = true`, and rewrite
+`user.name`. Track the live file instead, per box, during Task 15.
+
+`dotfiles/pure/backend-api/` stays until Task 11 moves it.
+
+- [ ] **Step 3: Mark the superseded spec**
 
 In `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase3-dotfiles-chezmoi-design.md`, insert immediately after the title line:
 
@@ -1620,7 +1681,7 @@ In `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase3-dotfiles-chezmoi-
 > `metheoryt/dotfiles` bare repo. Kept for the reasoning, not as guidance.
 ```
 
-- [ ] **Step 5: Update project memory**
+- [ ] **Step 4: Update project memory**
 
 In `.claude/memory/project.md`, delete the two bullets added 2026-07-28 (the `dotfiles/`-hosts-foreign-repo-files convention and the blanket-`chezmoi apply` warning) and replace them with:
 
@@ -1642,12 +1703,12 @@ In `.claude/memory/project.md`, delete the two bullets added 2026-07-28 (the `do
   host-local file from `$HOME` for the duration.
 ```
 
-- [ ] **Step 6: Run the full posix test sweep**
+- [ ] **Step 5: Run the full posix test sweep**
 
 Run: `for t in provision/tests/*.test.sh provision/*.test.sh agents/plugin/hooks/tests/*.test.sh scripts/*.test.sh; do echo "== $t"; bash "$t" | tail -1; done`
 Expected: `ALL PASS` from each. Any `FAILURES` line is a regression to fix before committing.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1693,8 +1754,13 @@ Replace sections 4 and 5 of `.gitignore` with:
 #    exit 0 => the path is on main => shared and byte-identical everywhere.
 #    non-zero => host-local. A path is one or the other, never both.
 #
-#    This file is itself branch-scoped, so a host-local path's `!` line lives on
-#    that host's branch only.
+#    THIS FILE IS THE ONE DELIBERATE EXCEPTION to shared-XOR-host (D5). It is on
+#    main AND it necessarily differs per branch, because a host-local path's `!`
+#    line can only live on that host's branch. Nothing else may be both.
+#    Consequence: /dotfiles-promote must NEVER auto-apply .gitignore drift — it
+#    would push one box's private allow-lines (`!.netrc`, `!.aws/credentials`,
+#    `!.ssh/config`) onto main for every other box to inherit. The skill reports
+#    it for manual review instead; see .claude/skills/dotfiles-promote/SKILL.md.
 !.config/gh/config.yml
 !.config/zed/settings.json
 
@@ -1771,7 +1837,7 @@ It lands **host-local first** — on the branch of whichever box works on backen
 - Modify: `.gitignore`
 
 **Interfaces:**
-- Consumes: the stashed copy from Task 9 Step 1.
+- Consumes: `dotfiles/pure/backend-api/dot_claude/memory/project.md`, still present in the `machines` working tree (Task 9 deliberately left it). This task deletes it once the content has landed here.
 
 **Placement note:** the *content* is shared (it describes a repo, not a machine), so it goes on `main` under D5 — a host that lacks `~/pure/backend-api` simply gets a directory it does not use, which is harmless. The alternative (host-local per box) would mean maintaining N copies of the same facts, which D5 exists to prevent.
 
@@ -1779,8 +1845,16 @@ It lands **host-local first** — on the branch of whichever box works on backen
 
 ```bash
 mkdir -p pure/backend-api/.claude/memory
-cp /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/backend-api-project-memory.md \
+cp /Users/me/machines/dotfiles/pure/backend-api/dot_claude/memory/project.md \
    pure/backend-api/.claude/memory/project.md
+```
+
+If that source path is missing, recover it from git history in `machines`
+(Task 9 leaves it in place, so this should not be needed):
+
+```bash
+git -C /Users/me/machines log --oneline --all -- dotfiles/pure/backend-api/dot_claude/memory/project.md
+git -C /Users/me/machines show <that-ref>:dotfiles/pure/backend-api/dot_claude/memory/project.md
 ```
 
 Then replace the HTML comment block at the top of `pure/backend-api/.claude/memory/project.md` (everything between `<!--` and `-->`, inclusive) with:
@@ -1832,6 +1906,28 @@ backend-api's .gitignore is allowlist-style and ignores .claude/memory/, so a
 copy written there never syncs. dotfiles is its only home. Provenance header
 rewritten — it previously documented the retired chezmoi mechanism."
 git push origin main
+```
+
+- [ ] **Step 5: Delete the chezmoi source directory in `machines`**
+
+The content now has a home, so the last chezmoi artifact can go. This is spec
+§9.4's remaining half — Task 9 removed `dot_gitconfig.tmpl`, this removes the
+directory.
+
+```bash
+cd /Users/me/machines
+git rm -qr dotfiles/
+git commit -m "refactor(dotfiles): drop the chezmoi source dir — content moved to the dotfiles repo"
+git push origin main
+```
+
+Verify: `test -d /Users/me/machines/dotfiles && echo "STILL THERE" || echo "gone"`
+Expected: `gone`
+
+Then return to the dotfiles clone for the remaining Track B tasks:
+
+```bash
+cd /private/tmp/claude-501/-Users-me-machines/19982766-3d8d-4e61-a97e-535539b26ae8/scratchpad/dotfiles-work
 ```
 
 ---
@@ -1895,6 +1991,7 @@ Shared-vs-host is **derived from git**, never stored:
 
 ```bash
 dotfiles ls-files | while read -r p; do
+  [ "$p" = ".gitignore" ] && { echo "MANUAL $p"; continue; }
   if dotfiles cat-file -e "origin/main:$p" 2>/dev/null; then
     dotfiles diff --quiet "origin/main" -- "$p" || echo "DRIFT $p"
   else
@@ -1907,6 +2004,23 @@ done
 |---|---|---|
 | `DRIFT` | on `main` but this branch differs | **No question.** By the shared-XOR-host invariant it belongs on `main`. List it and include it. |
 | `HOSTONLY` | tracked here, absent from `main` | **Ask per path**: promote to shared, or keep host-local? |
+| `MANUAL` | `.gitignore` only | **Never auto-apply.** Show the diff, promote only the lines the user names. |
+
+### Why `.gitignore` is special-cased
+
+It is the single deliberate exception to shared-XOR-host: it lives on `main`
+*and* differs per branch, because a host-local path's `!` line can only exist on
+that host's branch. So it drifts on every box, permanently, by design.
+
+Auto-applying that drift would push this box's private allow-lines — `!.netrc`,
+`!.aws/credentials`, `!.ssh/config` — onto `main`, where every other branch
+inherits them on the next sync tick. Show `dotfiles diff origin/main -- .gitignore`
+and ask which lines are genuinely fleet-wide. Usually: none.
+
+If you do promote `.gitignore` lines, expect the next sync tick on *other* boxes
+to merge cleanly only if their own `.gitignore` did not move in the same region.
+A conflict there is normal and safe — `$HOME` is untouched and the marker
+explains it.
 
 Present `HOSTONLY` paths one at a time with a one-line description of what each
 file is. Do not batch them into a single yes/no.
@@ -2307,7 +2421,34 @@ Wait for the 10-minute `fleet-selfpull` tick, or force it per box. Verify each b
 ssh <box> 'bash -lc "cd ~/machines && git log --oneline -1 && test -f provision/dotfiles-sync.sh && echo sync-script-present"'
 ```
 
-- [ ] **Step 2: Enroll `air` (this MacBook)**
+- [ ] **Step 2: Clear checkout collisions on every box first**
+
+The bare checkout is refused when an untracked file already occupies a tracked
+path, and on a box in daily use that is the **normal** case — `air` already has
+`~/.config/gh/config.yml`, and `main` tracks it. The role now fails loudly rather
+than half-enrolling (Task 6), but clearing the collisions up front turns each
+enrollment into one clean pass.
+
+Per box, before provisioning it:
+
+```bash
+for p in .config/gh/config.yml .config/zed/settings.json; do
+  [ -e "$HOME/$p" ] && mv -v "$HOME/$p" "$HOME/$p.pre-dotfiles"
+done
+```
+
+Also move any file listed in `main`'s tree that exists locally:
+
+```bash
+gh api "repos/metheoryt/dotfiles/git/trees/main?recursive=1" --jq '.tree[]|select(.type=="blob").path'
+```
+
+After enrollment, diff each `.pre-dotfiles` backup against the checked-out
+version and merge anything worth keeping — then delete the backup. **`gh`'s
+`config.yml` is the one to actually read**: a stale tracked copy can change
+which account `gh` uses.
+
+- [ ] **Step 3: Enroll `air` (this MacBook)**
 
 `air` has no `~/.dotfiles` today.
 
@@ -2331,7 +2472,7 @@ Then decide the open question for this box: does `air` want `~/.gitconfig` and
 `~/.ssh/config` tracked on its branch? If yes, that is the documented two-step
 (`!path` line in `~/.gitignore`, then `dotfiles add`), and it lands host-local.
 
-- [ ] **Step 3: Enroll `hub`**
+- [ ] **Step 4: Enroll `hub`**
 
 ```bash
 ssh hub 'bash -lc "cd ~/machines && git pull --ff-only && bash provision/provision.sh --machine hub --apply"'
@@ -2353,7 +2494,7 @@ rather than a merge being attempted:
 ssh hub 'bash -lc "bash ~/machines/provision/dotfiles-sync.sh 2>&1 | grep merge-tree || echo no-floor-warning"'
 ```
 
-- [ ] **Step 4: Enroll `desktop` and `server`**
+- [ ] **Step 5: Enroll `desktop` and `server`**
 
 Both are Windows-native. Run from a normal login on each box (not headless
 SYSTEM — the scheduled task needs an interactive-user principal):
@@ -2376,10 +2517,10 @@ powershell -File $HOME\machines\provision\dotfiles-sync.ps1; $LASTEXITCODE
 
 Expected: the logical name (`desktop` / `server`), the task in `Ready`, exit `0`.
 
-This is also where Task 4 and Task 5's deferred `pwsh` parse checks get resolved,
+This is also where Task 4, 5 and 7's deferred `pwsh` parse checks get resolved,
 if they could not run on the Mac.
 
-- [ ] **Step 5: Enroll `latitude` — last, and with the `.ssh/config` check**
+- [ ] **Step 6: Enroll `latitude` — last, and with the `.ssh/config` check**
 
 Before provisioning, confirm `main` no longer carries `.ssh/config` — if it does,
 the flap described in Task 10 starts the moment the timer runs:
@@ -2409,7 +2550,7 @@ ssh latitude 'bash -lc "git --git-dir=\$HOME/.dotfiles --work-tree=\$HOME rev-pa
 
 Expected: branch `latitude`, timer active, **no** `conflict` file.
 
-- [ ] **Step 6: Let one full cycle run, then check every box for a conflict marker**
+- [ ] **Step 7: Let one full cycle run, then check every box for a conflict marker**
 
 Wait ~15 minutes, then:
 
@@ -2423,7 +2564,7 @@ conflict marker anywhere means Track B left `main` and some branch genuinely
 divergent; read the marker, resolve by hand on that box, and confirm the next
 tick clears it.
 
-- [ ] **Step 7: Record the outcome**
+- [ ] **Step 8: Record the outcome**
 
 Append to `machines/.claude/memory/project.md` under the dotfiles heading:
 
