@@ -384,6 +384,23 @@ global + per-host). One bullet per fact under a topical heading.
   resolve. The role configures the refspec and the sync script fetches with an
   explicit one; a repo cloned by hand needs
   `git --git-dir=$HOME/.dotfiles config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`.
+- **The dotfiles engine is verified live end-to-end on `air`** (2026-07-28):
+  `~/.dotfiles` on branch `air`, upstream `metheoryt/dotfiles`, tree clean and
+  0/0 vs `origin/air`, and `launchctl list` shows `kz.cyphy.dotfiles-sync`
+  loaded with last exit 0 alongside `git-autofetch` / `fleet-selfpull` /
+  `hermes-serve`. All seven branches exist on the remote (`main` + one per
+  machine incl. `desktop-ubuntu26`). Branch `air` has **no upstream configured**,
+  which is normal — `dotfiles-sync.sh` pushes `origin <branch>` explicitly and
+  never consults `@{u}`, so `rev-list …HEAD...@{u}` fails while sync works fine;
+  compare against `origin/<branch>` instead.
+- **`dotfiles` reaches macOS by a different route than Linux.** `linux.sh`'s
+  workstation `TIERS` includes `dotfiles`; `macos.sh`'s does **not** (pinned by
+  `provision/tests/tiers.test.sh:82`). macOS gets it from the role front door
+  (`provision/provision.sh --machine air --apply` → `provision/roles/dotfiles.sh`),
+  which is what wired air. `tier_dotfiles_sync` is in neither array — it is called
+  by `role_dotfiles` itself (`provision/roles/dotfiles.sh:144`), so the sync timer
+  always follows the role, never the tier. Corollary: running only the driver
+  (`just provision-mac air`) leaves a Mac with no dotfiles and no sync timer.
 - Secret files (SSH keys, VPN keys) are never committed but ARE listed in that
   machine's branch `.gitignore` — the ignore entry itself is the "you need to
   restore/regenerate this on a fresh box" checklist, without storing the secret.
@@ -703,9 +720,21 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   (`dotfiles/dot_gitconfig.tmpl`) was **deleted 2026-07-28** — it had drifted far
   enough to drop the delta pager, the gh credential helper, all aliases,
   `pull.rebase`, `push.autoSetupRemote`, and the cyphy671 identity `includeIf`
-  (→ silent commit misattribution). `~/.gitconfig` is currently on **no** dotfiles
-  branch; if it is ever tracked, it is host-local (`tier_git_base` still writes
-  it, so a shared copy would flap).
+  (→ silent commit misattribution).
+- **`~/.gitconfig` and `~/.ssh/config` are host-local, and promoting them to
+  `main` would break sync — settled 2026-07-28.** Both are tracked on dotfiles
+  branch `air` only (`b8c4f56`); every other branch, `main` included, carries
+  neither. Three independent reasons they must never reach `main`: (1) air's copy
+  holds absolute `/Users/me/…` paths (the cyphy671 identity `includeIf`,
+  `safe.directory`) that read `/home/me/…` on the Linux boxes — the rule is
+  *anything carrying an absolute path is host-local no matter how generic it
+  looks*; (2) `tier_git_base` still writes `~/.gitconfig` via `git config
+  --global` on **every** tier box, so a shared copy has a writer outside the
+  dotfiles engine; (3) mechanically, `dotfiles-sync.sh` stages with `add -u`, so
+  a shared `.gitconfig` would have each box commit its own variant to its machine
+  branch every 10 min and then re-conflict against `origin/main` on the merge
+  step — forever. That is the failure D5 (shared XOR host-local) exists to
+  forbid.
 - **Fleet trust is not symmetric, and `fleet-authorized-keys` is the map.** As of
   2026-07-28 it holds latitude, g513ie(server), wsl-desktop, me-g614jv(desktop)
   and air — **no `hub` key**. So hub is reachable *from* the fleet but cannot

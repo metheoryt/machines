@@ -2499,8 +2499,15 @@ which account `gh` uses.
 
 - [x] **Step 3: Enroll `air` (this MacBook)** — enrolled and verified. The
   closing question below (track `~/.gitconfig` / `~/.ssh/config` on air's
-  branch?) was NOT decided and is still open; both remain untracked on every
-  branch.
+  branch?) was **decided 2026-07-28: yes, host-local.** Both are tracked on
+  branch `air` (`b8c4f56`) and on no other branch, `main` included. They must
+  never be promoted: air's `~/.gitconfig` carries absolute `/Users/me/…` paths
+  (the cyphy671 identity `includeIf`, `safe.directory`) that read `/home/me/…`
+  on the Linux boxes; `tier_git_base` still writes `~/.gitconfig` via `git
+  config --global` on every tier box, so a shared copy would have a writer
+  outside this engine; and because `dotfiles-sync.sh` stages with `add -u`,
+  a shared copy would make every box commit its own variant each tick and then
+  re-conflict against `origin/main` forever. This is exactly what D5 forbids.
 
 `air` has no `~/.dotfiles` today.
 
