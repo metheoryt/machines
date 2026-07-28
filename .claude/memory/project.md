@@ -383,6 +383,20 @@ global + per-host). One bullet per fact under a topical heading.
   only the live `$SRC_DIR`. Recovery: `rm` the dangling links, `dotfiles checkout
   -- .claude`, then re-run `bash ~/machines/agents/bootstrap.sh`. Hit for real
   2026-07-28 while checking out an old commit to date a test failure.
+- **`bootstrap.sh` now REFUSES to run from a copy of the repo** (2026-07-28) —
+  the guard for the hazard above, plus the second shape it took the same day: an
+  agent session snapshotted `agents/` into its own scratchpad, ran bootstrap
+  there, and left five `~/.claude` paths *and* the `memory/personality`
+  DIRECTORY dangling at `/private/tmp/…/scratchpad/pre/agents/`. Symptom is
+  nothing like the cause — Claude Code fails a statusline command **silently**,
+  so the statusline just vanishes, and the memory files read as deleted. It
+  refuses two shapes: a linked git worktree (`--git-dir` != `--git-common-dir`,
+  probed first because it is the more actionable reason) and a path under a temp
+  root. Escape hatch: `MACHINES_BOOTSTRAP_ALLOW_COPY=1`. What saved the memory
+  files that day was the commit debounce from `902c783` — `pending.since` was
+  stamped 23:30, so four personality-facet deletions were still inside the
+  window when `dotfiles-sync`'s `add -u` would otherwise have committed and
+  pushed them.
 - **`~/.gitconfig` and `~/.ssh/config` are tracked on `air`'s branch only**
   (2026-07-28) — host-local, never on `main`: they carry absolute `/Users/me`
   paths, air's two-account `includeIf` wiring, and this box's tailnet aliases.
