@@ -23,6 +23,10 @@ reads; NOT in-session chat replies to me. Keep curated. No secrets.
   convey a view and let the reader decide. When something is plainly right or
   broken, say it directly. Directness tracks stakes: soft/optional on
   low-stakes, unambiguous on important. Courteous throughout.
+- **Peer PR/review replies: colleague register, not formal.** Teammates you
+  know don't want a formal rebuttal with citations stacked up. Short,
+  conversational, get to the question. Confirmed 2026-07-28 (CFT-1018 PR
+  #4286: "we don't talk like that to each other on github").
 
 ## Design & spec documents — write for an engineer, not a code generator
 
