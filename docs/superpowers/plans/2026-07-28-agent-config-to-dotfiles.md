@@ -88,8 +88,30 @@ earlier text here conflated the two and got both ends wrong.
 | `hub` | `ssh hub` — user `debian`, `$HOME=/home/debian` | **yes** |
 | `latitude` | `ssh latitude` | **yes** |
 | `desktop-ubuntu26` | `ssh desktop-ubuntu26.gg.ez` — the **FQDN only**; the bare alias fails `Permission denied (publickey)` | **yes** |
-| `desktop` | `ssh desktop` lands in PowerShell; needs the Git Bash call operator | **NO** |
-| `server` | same Git Bash dispatch | **NO** |
+| `desktop` | `ssh desktop` lands in PowerShell; needs the Git Bash call operator | **yes** (branch `desktop`) |
+| `server` | same Git Bash dispatch | **NO** — no `~/.dotfiles`, no sync state |
+
+**How the Windows probe lies, and how to make it tell the truth.** A first pass
+had `desktop` down as not-enrolled. It is enrolled. The cause:
+
+```console
+ssh desktop '& "C:\Program Files\Git\bin\bash.exe" -lc "[ -d \$HOME/.dotfiles ] && echo yes"'
+```
+
+PowerShell has its own `$HOME` and **expands it before bash ever sees the
+string** — `\` is not an escape character there — so bash tested a Windows-style
+path and always answered no. Two further traps in the same line: PowerShell
+reserves `<`, so any `wc -l < file` is a `RedirectionNotSupported` parse error;
+and the reply comes back UTF-16 with NULs, which makes `tr` fail with *illegal
+byte sequence* unless you pass `LC_ALL=C` and strip `\0`.
+
+Encode the script instead of fighting the quoting — this is the form that works:
+
+```bash
+B="$(printf '%s' "$SCRIPT" | base64 | tr -d '\n')"
+LC_ALL=C ssh <win-box> "& \"C:\\Program Files\\Git\\bin\\bash.exe\" -lc \"echo $B | base64 -d | bash\"" \
+  | LC_ALL=C tr -d '\0\r'
+```
 
 Each beat is gated differently, and the destructive one is the most restricted:
 
@@ -100,18 +122,17 @@ Each beat is gated differently, and the destructive one is the most restricted:
   the point of its `[ -L ]` guard is that it removes links, not that it restores
   content.
 - **Track + promote (beats 3–4) — enrolled boxes only.** There is no
-  `~/.dotfiles` on `desktop` / `server` to track into.
+  `~/.dotfiles` on `server` to track into.
 - **Clear (beat 5) — enrolled boxes ONLY. This is the hard rule.** Every `rm` in
   this plan assumes a sync tick restores the path from `main` within 10 minutes.
   On a non-enrolled box there is no repo and no tick, so the identical command is
   **unrecoverable content deletion**. It appears in Task 4 Step 6, Task 5 Step 5,
   and Task 7 Step 6 — all three are enrolled-only.
 
-**Consequence, stated plainly:** after this plan `desktop` and `server` hold
-*untracked* agent memory at real `$HOME` paths — precisely the failure the
-dotfiles repo exists to prevent, on the two boxes it does not cover. Not a reason
-to stop; it is the reason the "enroll `server`" follow-up now covers **`desktop`
-too**, and it says so.
+**Consequence, stated plainly:** after this plan `server` holds *untracked* agent
+memory at a real `$HOME` path — precisely the failure the dotfiles repo exists to
+prevent, on the one box it does not cover. Not a reason to stop; it is what makes
+the "enroll `server`" follow-up load-bearing rather than cosmetic.
 
 ---
 
@@ -386,8 +407,8 @@ Expected: `FAIL - no per-host file is seeded in the repo` and `FAIL - nothing is
 
 This beat protects content, so it runs on **every box that has the symlink,
 enrollment irrelevant** — `air`, `hub`, `latitude`, `desktop-ubuntu26` (enrolled)
-**and `desktop`, `server`** (not enrolled, and therefore the two that would be
-left with a dangling link and no host memory if this is skipped). See the beat
+**and `server`** (not enrolled, and therefore the one that would be left with a
+dangling link and no host memory if this is skipped). See the beat
 split above:
 
 ```bash
@@ -408,8 +429,8 @@ ssh <win-box> '& "C:\Program Files\Git\bin\bash.exe" -lc "<the posix command>"'
 # Output comes back UTF-16 with NULs; pipe through `tr -d "\0\r"` to read it.
 ```
 
-**Do not skip `server`, and do not skip `desktop`.** They are the two boxes where
-skipping costs content rather than just tracking.
+**Do not skip `server`.** It is the box where skipping costs content rather than
+just tracking.
 
 - [ ] **Step 4: Track it on each machine's branch**
 
@@ -635,9 +656,9 @@ Then run `/dotfiles-promote` and select all five paths. The skill will also repo
 - [ ] **Step 6: Clear the path on every other box**
 
 Per non-authoritative **enrolled** box, after the promote — `hub`, `latitude`,
-`desktop-ubuntu26`. **Never on `desktop` or `server`**: they have no `~/.dotfiles`
-and no sync tick, so the `rm` below would delete the only copy of their memory
-with nothing to restore it.
+`desktop-ubuntu26`, `desktop`. **Never on `server`**: it has no `~/.dotfiles` and no sync
+tick, so the `rm` below would delete the only copy of its memory with nothing to
+restore it. `desktop` IS enrolled and takes the normal path.
 
 ```bash
 # Re-gather this box AFTER the promote and diff the whole memory dir against the
@@ -805,11 +826,11 @@ link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
 
 - [ ] **Step 5: Clear the path on the other boxes, then delete and commit**
 
-Per **enrolled** box only (`hub`, `latitude`, `desktop-ubuntu26`):
+Per **enrolled** box only (`hub`, `latitude`, `desktop-ubuntu26`, `desktop`):
 `ssh <box> 'rm -f ~/.claude/CLAUDE.md'` (its content is now on `main` and
 byte-identical), then wait for the sync tick and confirm the file reappears as
-tracked content. **Not on `desktop` / `server`** — no repo, no tick, nothing to
-restore it; their converted real copy stays as-is.
+tracked content. **Not on `server`** — no repo, no tick, nothing to restore
+it; its converted real copy stays as-is.
 
 ```bash
 cd /Users/me/machines
@@ -993,9 +1014,9 @@ done
 - [ ] **Step 6: Clear other boxes, delete, commit**
 
 ```bash
-# Per ENROLLED box only (hub, latitude, desktop-ubuntu26): content is identical
-# and now on main, so clearing the path lets the sync tick materialize it.
-# NEVER on desktop / server — no ~/.dotfiles, no tick, so this rm is permanent.
+# Per ENROLLED box only (hub, latitude, desktop-ubuntu26, desktop): content is
+# identical and now on main, so clearing the path lets the sync tick materialize
+# it. NEVER on server — no ~/.dotfiles, no tick, so this rm is permanent.
 ssh <box> 'rm -f ~/.claude/statusline-command.sh ~/.claude/balance-refresh.py'
 
 cd /Users/me/machines
@@ -1127,7 +1148,7 @@ Expected per box: four real files (no `->`), a clean dotfiles status, no conflic
 
 ## Follow-ups deliberately not in this plan
 
-- **`desktop` and `server` are not enrolled in dotfiles** (measured 2026-07-28 — the earlier draft named only `server`). Both need manual enrollment before they can receive any of this; converge on a Windows box runs `windows.ps1` only, never the dotfiles role. Until then both hold **untracked** agent memory at real `$HOME` paths, which is the failure mode this repo exists to prevent — the follow-up is now load-bearing, not cosmetic.
+- **`server` is not enrolled in dotfiles** (re-measured 2026-07-28: `desktop` IS enrolled on branch `desktop` — an earlier probe said otherwise because PowerShell pre-expanded `$HOME`; see the probe note above). It needs manual enrollment before it can receive any of this; converge on a Windows box runs `windows.ps1` only, never the dotfiles role. Until then it holds **untracked** agent memory at a real `$HOME` path, which is the failure mode this repo exists to prevent — the follow-up is load-bearing, not cosmetic.
 - **`hermes/`** (`config.yaml`, `SOUL.md`, `skills/`, `profile`) is the same shape as `agents/` with its own `bootstrap.sh` and an **empty** `memories/`. Same decision, deferred so this plan stays one subsystem.
 - **`agents/settings*.json`** — the `copy_managed` question. Needs its own decision about who owns a file that Orca, Claude, and a git timer all write.
 - **The generator collapse** — `modules/home/*.nix` (me.nix 41 commits, ssh.nix 13, claude.nix 20, zed-bin 11, codex.nix 9) and `tier_git_base` / `tier_ssh_accounts` / `tier_shell_init` exist to *render* `$HOME` content (`~/.gitconfig`, `~/.ssh/config`, `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, ghostty, starship, zed). Under this plan's criterion the artifact is dotfiles and the renderer collapses to "install the tool, mint the keys" — key generation (`~/.ssh/id_<user>`, `~/.ssh/id_fleet`) is irreducible because keys are never tracked. Gated on the latitude wipe, which removes `modules/home/*`'s only consumer. See `2026-07-28-home-config-generator-collapse.md`.
