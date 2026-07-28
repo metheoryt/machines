@@ -128,10 +128,15 @@ tier_apt_dev() {
     APT_UPDATED=1
   fi
   info "Installing dev packages (apt)…"
+  # ncurses-term rides along with tmux: it carries the tmux-256color terminfo
+  # entry, without which `default-terminal "tmux-256color"` makes tmux refuse to
+  # start ("missing or unsuitable terminal"). ~/.tmux.conf probes for it and
+  # falls back, so this is about getting the better entry, not about booting.
   $SUDO apt-get install -y --no-install-recommends \
     build-essential pkg-config \
     python3-venv python3-pip \
     ripgrep fd-find fzf \
+    tmux ncurses-term \
     || warn "apt dev install failed"
 
   # fd-find installs the binary as `fdfind` on Debian/Ubuntu — add the friendly name.
@@ -241,7 +246,7 @@ tier_brew_dev() {
   have brew || { warn "Homebrew not found — skipping the dev brew layer"; return 0; }
   info "Installing dev packages (brew)…"
   local p
-  for p in ripgrep fd fzf fish direnv git-delta bat starship uv gh; do
+  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh; do
     if brew list --formula "$p" >/dev/null 2>&1; then
       ok "$p already installed"
     elif brew install "$p" >/dev/null 2>&1; then

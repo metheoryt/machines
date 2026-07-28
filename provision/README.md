@@ -26,7 +26,7 @@ minutes, or keep running indefinitely.
 ## What it installs
 
 - **CORE** (script aborts if these fail): apt base (`git`, `curl`, `python3`,
-  `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`); the synced agent config via
+  `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`, `tmux`); the synced agent config via
   `agents/bootstrap.sh`; `git config --global` identity + aliases.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
   `pkgs/gortex.nix`), `claude` + `codex` (native installers, no Node.js),
