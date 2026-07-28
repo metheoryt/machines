@@ -28,8 +28,8 @@ has "$out" "not in fleet.json" "unknown machine names the problem"
 has "$out" "air" "unknown machine lists the known members"
 
 out="$(bash "$PROV/provision-mac.sh" latitude --dry-run 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] && pass "a non-darwin machine is rejected" || die "latitude (nixos) should be refused"
-has "$out" "platform 'nixos', not darwin" "non-darwin refusal names the platform"
+[ "$rc" -ne 0 ] && pass "a non-darwin machine is rejected" || die "latitude (debian) should be refused"
+has "$out" "platform 'debian', not darwin" "non-darwin refusal names the platform"
 
 out="$(bash "$PROV/provision-mac.sh" 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && pass "missing machine argument is rejected" || die "no-arg should fail"

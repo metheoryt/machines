@@ -26,7 +26,8 @@ eq "$(fleet_profile air)" "workstation" "fleet_profile air defaults to workstati
 # code change here, but `air` must resolve to darwin or every downstream
 # platform `case` (provision/roles/*.sh, fleet-dispatch.sh) misroutes it.
 eq "$(fleet_platform air)" "darwin" "fleet_platform air == darwin"
-eq "$(fleet_platform latitude)" "nixos" "fleet_platform latitude == nixos"
+# latitude is Debian since the 2026-07-29 reinstall — NixOS is gone from the fleet.
+eq "$(fleet_platform latitude)" "debian" "fleet_platform latitude == debian"
 
 # fleet_profile_for_host: OS hostname -> profile.
 eq "$(fleet_profile_for_host 27608)" "hub" "for_host 27608 == hub"
