@@ -440,24 +440,77 @@ tier_autofetch() {
 # git-autofetch — fetch-only refresh of every git repo under $GIT_AUTOFETCH_ROOTS
 # (default $HOME) so ahead/behind counts are accurate without fetching first.
 # NEVER pulls/merges/rebases; never touches a working tree. Installed by
-# provision/linux.sh; mirrors modules/system/git-autofetch on the Nix fleet.
+# tier_autofetch in provision/lib/tiers.sh (provision/linux.sh + provision/macos.sh);
+# mirrors modules/system/git-autofetch on the Nix fleet.
+#
+# It DELIBERATELY diverges from that Nix module in one place — the af_timeout
+# shim below. The module runs with pkgs.coreutils on its PATH, so plain
+# `timeout` always resolves there. This script has to survive a bare macOS.
+# Do not "resync" the two by deleting the shim.
 set -u
 : "${GIT_AUTOFETCH_ROOTS:=$HOME}"
+: "${GIT_AUTOFETCH_TIMEOUT:=60}"                              # per-repo wall clock
 export GIT_TERMINAL_PROMPT=0                                  # never block on auth
-export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+# ServerAlive* bounds a stall AFTER the handshake, which ConnectTimeout does not
+# cover: a wedged session is torn down in ~30s at the transport layer. It does
+# NOT replace the wall clock below — it does nothing for an https:// remote.
+export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+
+# af_timeout SECS CMD… — bound one fetch's wall clock, portably.
+#
+# macOS has NO timeout(1). It is GNU coreutils, not BSD, and coreutils is not
+# installed by default — so the plain `timeout 60 git …` this script used to run
+# failed with "command not found" on EVERY repo. That failure was invisible three
+# times over: 2>/dev/null ate the message, `|| echo` turned it into an
+# indistinguishable "fetch failed/skipped", and the script still exited 0. launchd
+# reported a healthy job for a box that had never fetched anything. Hence both the
+# shim and the all-failed exit at the bottom.
+if command -v timeout >/dev/null 2>&1; then
+  af_timeout() { timeout "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then                # coreutils via Homebrew
+  af_timeout() { gtimeout "$@"; }
+else
+  af_timeout() {
+    _secs="$1"; shift
+    "$@" & _cmd=$!
+    ( sleep "$_secs"; kill -TERM "$_cmd" 2>/dev/null ) & _watch=$!
+    wait "$_cmd" 2>/dev/null; _rc=$?      # 143 when the watchdog fired
+    kill -TERM "$_watch" 2>/dev/null      # TERM hits the subshell, not its
+    wait "$_watch" 2>/dev/null || :       # `sleep` child — that one lingers
+    return "$_rc"                         # until it expires. Harmless.
+  }
+fi
+
+# Collect the repo list into a FILE, then read from it. `while read` on the right
+# of a pipe runs in a subshell, so the counters below would be discarded and the
+# all-failed exit could never fire.
+_list="$(mktemp)" || exit 1
+trap 'rm -f "$_list"' EXIT HUP INT TERM
 for root in $GIT_AUTOFETCH_ROOTS; do
   [ -d "$root" ] || continue
   # -prune stops find descending into a repo's own .git; skip heavy vendored
   # trees. Match .git as dir (normal repo) or file (submodule/linked worktree).
   find "$root" -maxdepth 4 \
     \( -path '*/node_modules' -o -path '*/.cache' -o -name '.direnv' \) -prune -o \
-    -name .git -prune -print 2>/dev/null \
-  | while IFS= read -r gitentry; do
-      repo=$(dirname "$gitentry")
-      timeout 60 git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
-        || echo "fetch failed/skipped: $repo" >&2
-    done
+    -name .git -prune -print 2>/dev/null >> "$_list"
 done
+
+_total=0
+_failed=0
+while IFS= read -r gitentry; do
+  repo=$(dirname "$gitentry")
+  _total=$((_total + 1))
+  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
+    || { _failed=$((_failed + 1)); echo "fetch failed/skipped: $repo" >&2; }
+done < "$_list"
+
+# One unreachable remote stays a warning. EVERY repo failing is a broken install
+# — missing binary, no credentials, no network — and must exit non-zero so the
+# systemd unit / launchd job surfaces it instead of looking healthy.
+if [ "$_total" -gt 0 ] && [ "$_failed" -eq "$_total" ]; then
+  echo "git-autofetch: all $_total fetches failed" >&2
+  exit 1
+fi
 AUTOFETCH
   chmod +x "$AF"
   ok "git-autofetch → ~/.local/bin/git-autofetch"
