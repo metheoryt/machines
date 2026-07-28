@@ -342,6 +342,19 @@ global + per-host). One bullet per fact under a topical heading.
   for the same repo. Whenever a collision file has real content, merge it onto
   `main` BEFORE the checkout: the checkout overwrites, and the local content was
   never tracked anywhere, so it is simply gone.
+- **`~/.gitconfig` and `~/.ssh/config` are tracked on `air`'s branch only**
+  (2026-07-28) — host-local, never on `main`: they carry absolute `/Users/me`
+  paths, air's two-account `includeIf` wiring, and this box's tailnet aliases.
+  Both generators (`tier_git_base`, `tier_ssh_accounts`) were verified
+  byte-stable, so the 10-min timer does not churn. git records mode `100644`,
+  so `.ssh/config` restores as 644, not its live 600.
+- **Anchor host-local allow-lines with a leading slash** (`!/.gitconfig`), unlike
+  the shared allow-lines, which have none. Unanchored patterns match at ANY
+  depth, so `!.gitconfig` would make a stray `.gitconfig` or `.ssh/config` inside
+  any project checkout under `$HOME` eligible for tracking.
+- **`git check-ignore -v` exits 0 on a NEGATED match too**, so `check-ignore -v
+  path && echo ignored` reports the opposite of the truth for allow-listed
+  paths. Use `check-ignore -q`, or `dotfiles add --dry-run` (refusal = ignored).
 - **`gh` recreates `~/.config/gh/config.yml` within seconds** (as a `version: "1"`
   stub), so "move it aside, then enroll" is racy — it re-collided on two of four
   boxes and refused the checkout both times. Move it aside for the diff, then
