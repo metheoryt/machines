@@ -86,11 +86,13 @@ What you know about how Maxim works lives in your own memory and skills, on this
 machine only. It never reaches the fleet or the other agents unless you write it
 out here. Do that now.
 
-Targets in the `machines` repo:
+Targets in the private dotfiles bare repo, at their real `$HOME` paths — the
+store moved out of `machines` on 2026-07-28, and `agents/memory/` /
+`agents/hosts/` no longer exist there:
 
-- `agents/memory/global.md` § `## User` — who Maxim is, how he works.
+- `~/.claude/memory/global.md` § `## User` — who Maxim is, how he works.
   **Currently empty: heading only.**
-- `agents/memory/personality/` — `habits.md`, `tone.md`, `values.md`,
+- `~/.claude/memory/personality/` — `habits.md`, `tone.md`, `values.md`,
   `practices.md`. How he deals with agents; his style and standing corrections.
   Note `practices.md` is coding-guidelines-shaped and says its Deltas are
   opinions, not laws — match each file's existing voice.
@@ -117,8 +119,17 @@ in a repo you already touched.
 
 ### Lane 2 — shared fleet memory (append-only)
 
-Targets: `machines/agents/memory/**` (`global.md`, `personality/*`,
-`projects/*`) and `machines/agents/hosts/*.md`.
+Targets, all in the private dotfiles bare repo at their real `$HOME` paths:
+`~/.claude/memory/global.md`, `~/.claude/memory/personality/*`, and this box's
+`~/.claude/host-memory.md`. There is no per-project tier any more — the old
+`agents/memory/projects/*` did not move, it is gone; repo-specific facts belong
+to Lane 1.
+
+**You can only write THIS box's host memory.** Per-host files are branch-scoped,
+one per machine, so another box's is readable but not writable from here:
+`git --git-dir=$HOME/.dotfiles --work-tree=$HOME show origin/<branch>:.claude/host-memory.md`.
+A `host:<name>` fact about a box you are not sitting on has to be reported, not
+written.
 
 Write freely. Compaction, generalization and de-duplication are the reflection
 job's work, not yours — do not pre-filter for them. Your job is to get real
@@ -157,16 +168,28 @@ invisible to it.
 
 Apply the Lane 1 and Lane 2 writes.
 
-**Cross-repo writes.** Lane 2 targets live in `machines`, a different repo from
-`<REPO_PATH>` (unless this run's target *is* `machines`). Handle it as a separate
-unit of work:
-- `machines` must have a clean tree too — check with
-  `git -C C:\Users\methe\machines status --short --untracked-files=no` before
-  writing; if a tracked file is modified, defer all Lane 2 and say so.
-- Pull first (`git -C C:\Users\methe\machines pull --ff-only`) so you append to
-  current memory, not a stale copy.
-- Commit and push `machines` **separately** from `<REPO_PATH>`, with its own
-  message. Never one commit spanning both.
+**Cross-repo writes.** Lane 2 targets live in the dotfiles bare repo, whose
+work-tree is `$HOME` — a different repo from `<REPO_PATH>`, with its own rules.
+Handle it as a separate unit of work:
+- Every git call needs both flags:
+  `git --git-dir=$HOME/.dotfiles --work-tree=$HOME <cmd>`. Pathspecs resolve
+  against the CWD, so from a project checkout prefix them with `:(top)` —
+  otherwise a tracked file reads as untracked.
+- Its tracked tree must be clean before you write —
+  `… status --short --untracked-files=no`. If a tracked file is modified, defer
+  all Lane 2 and say so.
+- **Never `checkout main`** to "get at" the shared copy. Host-local files are
+  tracked on the machine branch and absent from `main`, so the checkout deletes
+  them from `$HOME`, `~/.ssh/config` included.
+- **An unattended run cannot land Lane 2 on shared `main`.** The 10-minute
+  `dotfiles-sync` timer commits your write to *this machine's* branch and pushes
+  it (`/dotfiles-sync` forces that now); promoting it to `main`, where the other
+  boxes and the reflection job read it, is a manual `/dotfiles-promote`. So:
+  write, get it committed on the branch, and **report the pending promote by
+  name**. That report is the only thing between an appended fact and a reflection
+  job that never sees it.
+- Commit the dotfiles side **separately** from `<REPO_PATH>`. Never one commit
+  spanning both.
 
 Update `<REPO_PATH>/.claude/kb-harvest-state.json` → `last_refresh` =
 `{commit, date, tiers_touched, sessions_processed}`. **Merge-preserving**: read
@@ -181,8 +204,9 @@ Commit the tier files you changed plus the state file — never scratch digests:
     git add <changed tier files> .claude/kb-harvest-state.json
     git commit -m "docs(kb): refresh knowledge base against <short-sha>"
 
-For `machines`, mark provenance in the message so the reflection job can trace
-which run introduced a bullet:
+If you commit the dotfiles side by hand rather than leaving it to the timer,
+mark provenance in the message so the reflection job can trace which run
+introduced a bullet:
 
     git commit -m "docs(memory): admit N facts from <repo> kb-refresh <short-sha>"
 

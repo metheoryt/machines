@@ -117,8 +117,8 @@ Step 1.
   because of a code/config change — never unrelated rewriting or polish.
 
 ## Step 4 — Reduce / dedup
-- Read the CURRENT tier files in full — `agents/memory/global.md`,
-  `agents/hosts/<host>.md`, `$repo/.claude/memory/project.md`,
+- Read the CURRENT tier files in full — `~/.claude/memory/global.md`,
+  `~/.claude/host-memory.md`, `$repo/.claude/memory/project.md`,
   `$repo/CLAUDE.md`, and any relevant `$repo/docs/*.md` — they are both the
   dedup baseline ("what's already known") and the write target. They're small;
   re-read them whole every run.
@@ -141,7 +141,9 @@ MUST NOT proceed past it without explicit user approval.
 
 ## Step 6 — Write + stamp + commit
 - Apply only the approved rows to their target tier files:
-  - universal → `agents/memory/global.md`, `agents/hosts/<host>.md`
+  - universal → `~/.claude/memory/global.md`, `~/.claude/host-memory.md` (this
+    box only — per-host files are branch-scoped in the dotfiles bare repo, so
+    another machine's is readable but not writable from here)
   - per-repo → `$repo/.claude/memory/project.md`, `$repo/CLAUDE.md`,
     `$repo/docs/*.md`
   - If `$repo/.claude/memory/project.md` doesn't exist yet and an approved row
@@ -158,14 +160,18 @@ MUST NOT proceed past it without explicit user approval.
   Keep exactly one such stamp line in the file (replace the previous one if
   present) rather than adding a new line each refresh.
 - `git add` the changed tier files + the state file, and commit them (do not
-  commit scratch digests — they never lived under version control).
+  commit scratch digests — they never lived under version control). The
+  universal tiers live in a **different** repo (the dotfiles bare repo,
+  work-tree `$HOME`) — commit that side separately, never one commit spanning
+  both, and remember its shared `main` is reached only by a manual
+  `/dotfiles-promote`.
 
 ## Tier reference
 
 | Tier | Target file | What belongs here |
 |---|---|---|
-| Universal — global | `agents/memory/global.md` | Cross-project, cross-machine truths and preferences: facts true regardless of which repo or box you're in (e.g. a confirmed user preference, a tool the user always wants used a certain way). |
-| Universal — per-host | `agents/hosts/<host>.md` (symlinked in as `host-memory.md`) | Machine-specific quirks: installed tooling, local paths, hardware peculiarities, anything that's true on that one box and would be wrong if applied elsewhere. |
+| Universal — global | `~/.claude/memory/global.md` (dotfiles bare repo, shared on `main`) | Cross-project, cross-machine truths and preferences: facts true regardless of which repo or box you're in (e.g. a confirmed user preference, a tool the user always wants used a certain way). |
+| Universal — per-host | `~/.claude/host-memory.md` (dotfiles bare repo, on this machine's branch) | Machine-specific quirks: installed tooling, local paths, hardware peculiarities, anything that's true on that one box and would be wrong if applied elsewhere. Writable for THIS box only. |
 | Per-repo — project memory | `<target-repo>/.claude/memory/project.md` | Repo workflow/architecture facts too specific (or too fresh) for the root doc: how this repo's build/test/deploy actually works day to day, non-obvious repo conventions, in-flight state. Offer to create it if the repo doesn't have one yet. |
 | Per-repo — root doc | `<target-repo>/CLAUDE.md` | Stable architecture/vision: the things that change rarely — module boundaries, host roles, the shape of the system — not day-to-day workflow churn. |
 | Per-repo — deep dives | `<target-repo>/docs/*.md` | Facts too large for a single bullet: a whole subsystem's design, a multi-step process worth its own page (e.g. this repo's `agents/docs/claude-code-subagents.md`, `agents/docs/git-workflow.md`). Link to these from `project.md`/`CLAUDE.md` rather than inlining them. |
