@@ -342,6 +342,17 @@ global + per-host). One bullet per fact under a topical heading.
   for the same repo. Whenever a collision file has real content, merge it onto
   `main` BEFORE the checkout: the checkout overwrites, and the local content was
   never tracked anywhere, so it is simply gone.
+- **`$HOME/CLAUDE.md` (tracked on the dotfiles repo's `main`) is a real
+  auto-loading agent-memory slot on every enrolled box** — verified with a live
+  `claude -p` probe, which reports it as project instructions for any cwd under
+  `$HOME`. That is where the "offer to track this file" nudge lives. The other
+  candidate slots are unavailable: `~/.claude/CLAUDE.md` and `~/.claude/memory/`
+  are symlinks deployed by `agents/bootstrap.sh`, whose `link()` does
+  `rm -f "$dest"` on a wrong-target symlink — tracking either in dotfiles would
+  put two deployers on one path. **Cost: every line is ambient in every session
+  under `$HOME`**, including work repos, so keep it to decision rules. Anything
+  phrased around "a file you edited" misfires on ordinary source files there —
+  gate on "has no other home" instead.
 - **`~/.gitconfig` and `~/.ssh/config` are tracked on `air`'s branch only**
   (2026-07-28) — host-local, never on `main`: they carry absolute `/Users/me`
   paths, air's two-account `includeIf` wiring, and this box's tailnet aliases.
