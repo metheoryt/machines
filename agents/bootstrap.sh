@@ -31,6 +31,52 @@ esac
 
 # Repo agents/ dir = the directory this script lives in (absolute).
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Refuse to link the live profile at a throwaway copy of this repo ──────────
+# Every link below points straight at $SRC_DIR, so bootstrapping from a COPY of
+# the repo gives the live config dir a set of symlinks whose targets vanish when
+# that copy does. Claude Code then fails the statusline command silently and the
+# dotfiles-owned memory files read as deleted — the symptom looks nothing like
+# the cause. Observed on air 2026-07-28: an agent session snapshotted agents/
+# into its own scratchpad, ran this script from there, and five ~/.claude paths
+# (statusline-command.sh, balance-refresh.py, CLAUDE.md, host-memory.md,
+# memory/global.md) plus the memory/personality DIRECTORY were left dangling at
+# /private/tmp/…/scratchpad/pre/agents/. Only the dotfiles-sync commit debounce
+# kept four personality-facet deletions from being committed and pushed.
+#
+# Two shapes are refused: a temp-dir copy, and a linked git worktree (where a
+# worktree agent would otherwise repoint the live profile at a tree that gets
+# removed on merge-back). Set MACHINES_BOOTSTRAP_ALLOW_COPY=1 to override.
+if [ -z "${MACHINES_BOOTSTRAP_ALLOW_COPY:-}" ]; then
+  _src_real="$(readlink -f "$SRC_DIR" 2>/dev/null || printf '%s' "$SRC_DIR")"
+  _why=""
+  # Worktree check FIRST: a worktree agent's tree usually also sits under a temp
+  # root, and "linked git worktree" is the more actionable of the two reasons.
+  # A linked worktree has --git-dir (…/.git/worktrees/<name>) != --git-common-dir.
+  if command -v git >/dev/null 2>&1; then
+    _gd="$(git -C "$_src_real" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    _gc="$(git -C "$_src_real" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    if [ -n "$_gd" ] && [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+      _why="it is a linked git worktree"
+    fi
+  fi
+  if [ -z "$_why" ]; then
+    case "$_src_real" in
+      /tmp/* | /private/tmp/* | /var/folders/* | /private/var/folders/*)
+        _why="it is under a temp directory" ;;
+      "${TMPDIR:-/nonexistent-tmpdir}"/*)
+        _why="it is under \$TMPDIR" ;;
+    esac
+  fi
+  if [ -n "$_why" ]; then
+    printf '  ✗ refusing to bootstrap from %s\n' "$_src_real" >&2
+    printf '    %s, so every symlink this would create in the live profile\n' "$_why" >&2
+    printf '    dies with that copy. Run it from the canonical checkout instead:\n' >&2
+    printf '        bash ~/machines/agents/bootstrap.sh\n' >&2
+    printf '    Override (you almost never want this): MACHINES_BOOTSTRAP_ALLOW_COPY=1\n' >&2
+    exit 1
+  fi
+fi
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # The PRIMARY profile's live dir — always ~/.claude, independent of which profile
 # this run is bootstrapping. Dotfiles owns the content inside it; secondary

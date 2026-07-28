@@ -131,4 +131,62 @@ check "statusline is not linked from the repo" \
 check "balance-refresh is not linked from the repo" \
   '! printf "%s" "$out7" | grep -q "agents/balance-refresh.py"'
 
+# Case 8: refuse to bootstrap from a throwaway copy of the repo.
+#
+# Every link points straight at $SRC_DIR, so running this from a copy hands the
+# live profile symlinks that die with the copy — and Claude Code then fails the
+# statusline command SILENTLY while the dotfiles-owned memory files read as
+# deleted. That happened on air 2026-07-28: an agent snapshotted agents/ into its
+# scratchpad, ran bootstrap there, and five ~/.claude paths plus the
+# memory/personality directory were left dangling.
+wt_tmp="$(mktemp -d)"
+cleanup_case8() {
+  [ -d "$wt_tmp/wt" ] && git -C "$repo" worktree remove --force "$wt_tmp/wt" >/dev/null 2>&1
+  git -C "$repo" worktree prune >/dev/null 2>&1
+  rm -rf "$wt_tmp"
+}
+trap cleanup_case8 EXIT
+
+# (a) a plain copy under a temp dir. `cp -R agents` carries no .git, so the
+#     worktree probe finds nothing and the temp-path arm is what fires.
+cp -R "$repo" "$wt_tmp/agents-copy"
+out8a="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" \
+         bash "$wt_tmp/agents-copy/bootstrap.sh" 2>&1)"; rc8a=$?
+check "a temp-dir copy is refused (non-zero exit)" '[ "$rc8a" -ne 0 ]'
+check "the refusal names the temp-dir reason" \
+  'printf "%s" "$out8a" | grep -q "under a temp directory"'
+check "the refusal points at the canonical checkout" \
+  'printf "%s" "$out8a" | grep -q "machines/agents/bootstrap.sh"'
+
+# (b) a linked git worktree — the worktree-agent case. It also sits under a temp
+#     root here, so this doubles as the guard that the worktree probe is checked
+#     FIRST and wins the reason string.
+if git -C "$repo" worktree add -q --detach "$wt_tmp/wt" HEAD >/dev/null 2>&1; then
+  # The worktree checks out HEAD, so drop the WORKING-TREE script in — otherwise
+  # this asserts against whatever was last committed and fails while iterating.
+  # It stays a genuine linked worktree; only the script under test is refreshed.
+  cp "$boot" "$wt_tmp/wt/agents/bootstrap.sh"
+  out8b="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" \
+           bash "$wt_tmp/wt/agents/bootstrap.sh" 2>&1)"; rc8b=$?
+  check "a linked worktree is refused (non-zero exit)" '[ "$rc8b" -ne 0 ]'
+  check "the worktree reason wins over the temp-dir reason" \
+    'printf "%s" "$out8b" | grep -q "linked git worktree"'
+  # (c) the override still works — an escape hatch, not a locked door.
+  MACHINES_BOOTSTRAP_ALLOW_COPY=1 DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" \
+    CODEX_CONFIG_DIR="$(mktemp -d)" bash "$wt_tmp/wt/agents/bootstrap.sh" >/dev/null 2>&1
+  rc8c=$?
+  check "MACHINES_BOOTSTRAP_ALLOW_COPY overrides the refusal" '[ "$rc8c" -eq 0 ]'
+else
+  echo "skip - worktree cases (git worktree add failed)"
+fi
+
+# Two assertions the cases above don't make. The first pins that a refusal is a
+# refusal: an early `exit 1` that still emitted link output would mean the guard
+# fired after doing damage. The second is the over-fire guard — if the probe ever
+# misclassifies the canonical checkout, every box silently stops being bootstrapped.
+check "a refused run links nothing" '! printf "%s" "$out8a" | grep -q "would link"'
+out8d="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+check "the canonical checkout is NOT refused" \
+  '! printf "%s" "$out8d" | grep -q "refusing to bootstrap from"'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
