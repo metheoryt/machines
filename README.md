@@ -178,8 +178,15 @@ for the git-worktree lifecycle. Run with CWD = the worktree, no arguments.
   and only the *invocation* needed shortening — you run these from inside whatever
   worktree you are in, never from `~/machines`, which is also why a `just` recipe
   would be the wrong shape.
-- **Keep Orca on the absolute paths above, not the wrappers.** A GUI app does not
-  necessarily inherit the login shell's `PATH`, so `wt-setup` may not resolve there.
+- **Orca takes the wrappers too** — `wt-setup` / `wt-teardown` in its *Setup
+  script* / *Archive script* fields, which is what `/orca-setup` now prints. Orca
+  shell-interprets that field, and its own `PATH` includes `~/.local/bin` (measured
+  on air by reading the running process's environment), so a bare command name
+  resolves. If a hook ever fails with *command not found* on some box, use
+  `"$HOME/.local/bin/wt-setup"` — same wrapper, no `PATH` dependency. The long
+  `bash "$HOME/machines/agents/worktree-setup.sh"` form still works and
+  `/orca-setup` reports it as `LEGACY`, not as a conflict, so nothing needs
+  re-pasting.
 
 **What they do.** Setup: gortex-`track`s the worktree (`--as-worktree`) *first*, then
 runs the repo's own setup script. Teardown: runs the repo's own teardown script

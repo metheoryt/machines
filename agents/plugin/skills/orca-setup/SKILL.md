@@ -68,8 +68,20 @@ at its Linux/WSL path**, so the hook always runs under bash. A `C:/…` registra
 is broken; see "Register the WSL path, not the Windows one" below.
 
 ```bash
-SETUP='bash "$HOME/machines/agents/worktree-setup.sh"'
-TEARDOWN='bash "$HOME/machines/agents/worktree-teardown.sh"'
+# PREFERRED value first, then older forms that still work. orca-status.sh reports
+# a non-first match as LEGACY rather than CONFLICT, so an already-wired repo does
+# not read as broken just because the short wrapper exists now.
+#
+# `wt-setup` / `wt-teardown` are ~/.local/bin wrappers tracked in dotfiles on main
+# (present and on PATH on all six boxes). Orca shell-interprets this field, so a
+# bare command name resolves — verified on air by reading the running Orca's own
+# PATH, which contains ~/.local/bin.
+SETUP='wt-setup
+bash "$HOME/machines/agents/worktree-setup.sh"
+"$HOME/.local/bin/wt-setup"'
+TEARDOWN='wt-teardown
+bash "$HOME/machines/agents/worktree-teardown.sh"
+"$HOME/.local/bin/wt-teardown"'
 
 # One machine can host more than one Orca install — g614jv has a Windows Orca AND a
 # WSL-native one, each with its own orca-data.json. Report every candidate; assumes
@@ -102,8 +114,8 @@ jq -r '.projectHostSetups[] | [.projectId, .path, (.hookSettings.scripts.setup /
 The helper prints two lines, one per Orca hook slot:
 
 ```
-setup<TAB><WIRED|UNWIRED|ABSENT|CONFLICT<TAB><value>>
-archive<TAB><WIRED|UNWIRED|ABSENT|CONFLICT<TAB><value>>
+setup<TAB><WIRED|LEGACY<TAB><value>|UNWIRED|ABSENT|CONFLICT<TAB><value>>
+archive<TAB><WIRED|LEGACY<TAB><value>|UNWIRED|ABSENT|CONFLICT<TAB><value>>
 ```
 
 Turn each slot's token into guidance. Orca's **Setup script** field takes the
@@ -111,17 +123,28 @@ Turn each slot's token into guidance. Orca's **Setup script** field takes the
 `teardown` one-liner:
 
 - **`WIRED`** → "This slot already points at the dispatcher — nothing to paste."
+- **`LEGACY\t<value>`** → it points at an OLDER accepted form (the long
+  `bash "$HOME/machines/agents/worktree-…"` one-liner). **It works — say so first.**
+  Then offer the shorter value, and make clear re-pasting is optional:
+
+  > Wired, using the long form. Same behaviour. If you want the short one:
+  > `wt-setup` / `wt-teardown`.
+
 - **`UNWIRED`** / **`ABSENT`** → print the matching one-liner and where it goes:
 
   > Paste into Orca → the repo's settings:
   >
   > **Setup script** field:
   >
-  >     bash "$HOME/machines/agents/worktree-setup.sh"
+  >     wt-setup
   >
   > **Archive script** field (runs on worktree delete):
   >
-  >     bash "$HOME/machines/agents/worktree-teardown.sh"
+  >     wt-teardown
+  >
+  > If a hook ever fails with *command not found*, that box's Orca has a thin
+  > `PATH`. Use the absolute form instead — same wrapper, no `PATH` dependency:
+  > `"$HOME/.local/bin/wt-setup"` / `"$HOME/.local/bin/wt-teardown"`.
   >
   > (If `ABSENT`: the repo isn't listed in Orca yet — open it once so it appears,
   > then paste. Orca applies it on the next worktree it creates.)

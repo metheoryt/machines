@@ -6,7 +6,14 @@
 # Prints TWO lines, one per Orca hook slot:
 #   setup<TAB><TOKEN>
 #   archive<TAB><TOKEN>
-# where TOKEN is WIRED | UNWIRED | ABSENT | CONFLICT<TAB><current-value>. Exit 0.
+# where TOKEN is WIRED | LEGACY<TAB><current-value> | UNWIRED | ABSENT |
+# CONFLICT<TAB><current-value>. Exit 0.
+#
+# <expected-setup> / <expected-teardown> may list SEVERAL acceptable values, one per
+# line: the first is PREFERRED, the rest are older forms that still work. Anything
+# matching a non-first entry reports LEGACY rather than CONFLICT — the wrapper
+# rename (wt-setup) would otherwise make every already-wired repo look broken, and
+# a status check that cries wolf gets ignored.
 #
 # Orca hook keys: Setup = hookSettings.scripts.setup; Delete = hookSettings.scripts.archive.
 #
@@ -58,13 +65,26 @@ read_slot() {
 }
 
 classify() {
-  local slot="$1" current="$2" expect="$3"
+  local slot="$1" current="$2" expect="$3" first="" line=""
   case "$current" in
-    __ABSENT__) printf '%s\tABSENT\n' "$slot" ;;
-    "")         printf '%s\tUNWIRED\n' "$slot" ;;
-    "$expect")  printf '%s\tWIRED\n' "$slot" ;;
-    *)          printf '%s\tCONFLICT\t%s\n' "$slot" "$current" ;;
+    __ABSENT__) printf '%s\tABSENT\n' "$slot"; return ;;
+    "")         printf '%s\tUNWIRED\n' "$slot"; return ;;
   esac
+  first="${expect%%
+*}"
+  [ "$current" = "$first" ] && { printf '%s\tWIRED\n' "$slot"; return; }
+  # Accepted-but-older forms: exact match against any remaining line.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [ "$line" = "$first" ] && continue
+    if [ "$current" = "$line" ]; then
+      printf '%s\tLEGACY\t%s\n' "$slot" "$current"
+      return
+    fi
+  done <<EOF
+$expect
+EOF
+  printf '%s\tCONFLICT\t%s\n' "$slot" "$current"
 }
 
 classify setup   "$(read_slot setup)"   "$EXPECT_SETUP"
