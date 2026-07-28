@@ -123,6 +123,23 @@ Genuinely irreplaceable, total well under 100 MB:
 | `~/Documents`, `~/Pictures` | 3 MB combined | Just take them |
 | `~/.ssh/config.backup` | Dated 2026-05-10, predates the Nix-generated `~/.ssh/config` | Glance, then drop |
 
+**Found 2026-07-29, missed by the first survey: `~/Downloads` holds the only copy
+of legal and financial documents.** The first sweep sized the home directory by
+its big consumers and moved on; it never listed `~/Downloads` (145 M) because
+nothing about the size was interesting. The contents worth taking:
+
+| Item | Count | Why it matters |
+|---|---|---|
+| `Consulting Agreement_ANBUBO_Maxim Romanyuk (signed).pdf` + RU translation | 2 | Signed contract |
+| `Maxim_Romanyuk_INV-9y8643n-2026-{1,2}…pdf` + RU translations | 4 | Issued invoices |
+| `Complete_with_Docusign_Durer_AI_Ltd_-_Non-Em*.pdf` | 2 | Signed NDA |
+| `M.Romanyuk Invitation Letter Greece.docx.pdf` | 2 | Travel document |
+| `Telegram Desktop/` (13 M) | ~20 | Includes `Билет.pdf`, `Билет (2).pdf`, an orders report `.xlsx`, a CV |
+
+The rest of `~/Downloads` — `.mp4` files, `.torrent` files, `autounattend.xml`,
+a meme `.png` — is disposable. **Take the documents; this is the one open
+harvest item.** Everything else in this section is done.
+
 Also present and safely ignorable: nine `~/.claude.json.tmp.*` leftovers,
 `~/.config/orca` and `~/.config/JetBrains` (regenerable), `~/.zoom`.
 `~/my/airdrome/compose.yml` is committed; only the volume's contents are not.
@@ -362,6 +379,58 @@ place.
    afterwards — the slot is verified good.
 10. Update `fleet.json` (platform, IP, roles) and re-provision through the role
     front door. Re-accept the changed SSH host key on the other members.
+
+### Readiness re-verified 2026-07-29
+
+Surveyed again immediately before the install, because §1's "every checkout is
+clean" was measured against `~/machines` and the `~/my` / `~/pure` checkouts
+only — it had not looked at the orca worktrees or at `~/Downloads`.
+
+| Check | Result |
+|---|---|
+| `~/machines`, `~/my/*`, `~/pure/*`, `~/gh/*` | clean, nothing ahead, no stashes |
+| dotfiles branch `latitude` | **was 3 commits ahead — pushed, now `a364c8b`, 0 ahead** |
+| Host-local dotfiles paths | exactly one, `.claude/host-memory.md`, and it is on `origin/latitude` |
+| **12 orca worktrees** under `~/orca/workspaces/machines` | every branch has **0 commits not already on `origin/main`** — nothing unique in history |
+| Worktree dirty files | only `.superpowers/sdd/progress.md` in 4 of them, plus one generated `.pre-commit-config.yaml` full of `/nix/store` paths |
+| `~/kingston-rescue` on `air` | 13 G, **2 819 files** — matches the verified count exactly |
+| `~/latitude-harvest` on `air` | 3.0 M — `Documents`, `Pictures`, `gh/airdrome/initdb`, `.ssh/config.backup`, `airdrome-pgdumpall.sql` |
+| `~/CLAUDE.md`, `~/README.md` | dotfiles-tracked |
+| `~/Desktop`, `~/Music`, `~/Projects`, `~/Public`, `~/Templates`, `~/Videos` | empty |
+| `~/orca/workspaces` (373 M) | worktrees of `machines` only — regenerable |
+| `~/Downloads` (145 M) | **NOT clean — see §4. The one open item.** |
+
+Two caveats on that table. The four `progress.md` diffs were **not read** — the
+box suspended mid-survey — so they are written off on the strength of their
+branches being merged, not on their content. If the box comes back before the
+install, `git -C <worktree> diff .superpowers/sdd/progress.md` on those four
+settles it in seconds. And latitude sleeps: it went unreachable at 00:40 local
+with uptime 2:56, which means **the remaining harvest needs the box deliberately
+woken**, not merely powered.
+
+### Install-time facts, in one place
+
+Everything below was verified on the live box; the disk identifiers are the part
+that must not be retyped from memory (**H1**).
+
+- **Target the KIOXIA, by-id:** `/dev/disk/by-id/nvme-KBG40ZNS512G_NVMe_KIOXIA_512GB_718PHEWEQXD3`.
+  With the Kingston seated it is `nvme1n1`, **not** `nvme0n1`. Best answer is
+  still §9 step 9 — take the Kingston out of the chassis.
+- **Hostname:** `latitude5520`, exactly. A different name silently resolves to
+  the `workstation` profile.
+- **User:** `me`.
+- **Layout:** ESP 1 G, ext4 `/` ~470 G, 4 G swap, no separate `/home`, no LUKS,
+  orphan `p3` deleted.
+- **Task selection:** standard system utilities + SSH server. No desktop.
+- **First command after first boot:** clone `machines`, then
+  `bash provision/linux.sh` — profile resolves to `server` from `fleet.json`.
+- **Laptop-as-server, none of which the Debian default gets right:**
+  `HandleLidSwitch=ignore` and `HandleLidSwitchExternalPower=ignore` in
+  `/etc/systemd/logind.conf`; mask `sleep.target suspend.target hibernate.target
+  hybrid-sleep.target`; BIOS auto-power-on after AC loss; battery charge
+  threshold ~90 % (health is 63 %). **The box suspending on 2026-07-29 at 00:40
+  is exactly this failure mode, observed on the machine that is about to become
+  always-on.**
 
 ## 10. What gets installed — decided 2026-07-28
 
