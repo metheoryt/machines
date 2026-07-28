@@ -113,10 +113,30 @@ grep -q 'Conflicts=\$GETTY_UNIT' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'unit: template carries Conflicts= for the getty'
 grep -qE 'GETTY_UNIT="?getty@tty1\.service' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'unit: the conflicting unit is the tty1 getty'
-grep -q 'systemctl disable --now "\$GETTY_UNIT"' "$REPO/provision/statusboard/statusboard.sh"
-eq "$?" '0' 'install: disables the tty1 getty as well as declaring the conflict'
+# `disable`, not `disable --now`: Conflicts= already stops the getty when the
+# board starts, and --now here would race that stop against the service start.
+# disable is purely about the next boot.
+grep -qE 'systemctl disable "\$GETTY_UNIT"' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'install: disables the tty1 getty for the next boot'
 grep -q 'systemctl enable --now "\$GETTY_UNIT"' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'uninstall: restores the tty1 getty (a one-way install would be a trap)'
+
+# The console-killing regression, 2026-07-29. Two independent guards, because the
+# failure is unrecoverable from the screen itself: tty1 owned by nobody.
+grep -q 'SupplementaryGroups=tty' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'unit: SupplementaryGroups=tty — an unprivileged service cannot open root:tty 620 /dev/tty1'
+
+# Ordering: the service must be proven running BEFORE the getty is disabled.
+SB="$REPO/provision/statusboard/statusboard.sh"
+start_ln="$(grep -n 'systemctl start "\$SERVICE_NAME"' "$SB" | head -1 | cut -d: -f1)"
+disable_ln="$(grep -n 'systemctl disable "\$GETTY_UNIT"' "$SB" | head -1 | cut -d: -f1)"
+[ -n "$start_ln" ] && [ -n "$disable_ln" ] && [ "$start_ln" -lt "$disable_ln" ]
+eq "$?" '0' 'install: starts the board before disabling the getty, never the reverse'
+
+grep -q 'is-active --quiet "\$SERVICE_NAME"' "$SB"
+eq "$?" '0' 'install: verifies the service is actually active'
+rollback_ln="$(grep -n 'restored %s. Nothing else changed' "$SB" | head -1 | cut -d: -f1)"
+[ -n "$rollback_ln" ]; eq "$?" '0' 'install: rolls the getty back when the service fails to start'
 grep -q 'ProtectSystem=strict' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'unit: read-only filesystem — the board only reads /sys and /proc'
 

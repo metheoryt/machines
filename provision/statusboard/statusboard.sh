@@ -186,6 +186,12 @@ Conflicts=$GETTY_UNIT
 [Service]
 Type=simple
 User=$RUN_USER
+# SupplementaryGroups=tty is REQUIRED and its absence is why the first install
+# left a dead console: /dev/tty1 is root:tty mode 620, a getty normally chowns it
+# to whoever logs in, and with the getty stopped an unprivileged service simply
+# cannot open it. The unit failed to start, the getty was already disabled, and
+# tty1 was left with nothing painting it — a blinking cursor and no way in.
+SupplementaryGroups=tty
 ExecStart=/bin/bash $SELF --interval $INTERVAL
 StandardInput=tty
 StandardOutput=tty
@@ -207,10 +213,34 @@ WantedBy=multi-user.target
 UNIT
 
   systemctl daemon-reload
-  systemctl disable --now "$GETTY_UNIT" 2>/dev/null
-  systemctl enable --now "$SERVICE_NAME" || { printf 'failed to start %s\n' "$SERVICE_NAME" >&2; exit 1; }
+
+  # ORDER MATTERS, and getting it wrong once cost a working console. Prove the
+  # service starts BEFORE taking the getty away, and roll the getty back if it
+  # does not. The original order — disable the getty, then enable the service —
+  # leaves tty1 owned by nobody the moment the service fails to start, which is
+  # unrecoverable from the screen itself.
+  #
+  # Starting the service is enough to free the tty right now: Conflicts= stops
+  # the getty automatically. `disable` is only about what happens at the NEXT
+  # boot, so it is safe to defer to the end.
+  systemctl start "$SERVICE_NAME" 2>/dev/null
+  sleep 1
+  if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+    printf '%s failed to start — rolling back so the console stays usable:\n' "$SERVICE_NAME" >&2
+    journalctl -u "$SERVICE_NAME" -n 15 --no-pager 2>/dev/null | sed 's/^/  /' >&2
+    systemctl stop "$SERVICE_NAME" 2>/dev/null
+    rm -f "$UNIT_PATH"
+    systemctl daemon-reload
+    systemctl enable --now "$GETTY_UNIT" 2>/dev/null
+    printf '\nrestored %s. Nothing else changed.\n' "$GETTY_UNIT" >&2
+    exit 1
+  fi
+
+  systemctl enable "$SERVICE_NAME" >/dev/null 2>&1
+  systemctl disable "$GETTY_UNIT" >/dev/null 2>&1
   printf 'installed %s on %s as %s\n' "$SERVICE_NAME" "$TTY_TARGET" "$RUN_USER"
   printf 'gettys remain on tty2..tty6 — Alt-F2 for a console login.\n'
+  printf 'to undo: sudo bash %s --uninstall\n' "$SELF"
   exit 0
 fi
 
