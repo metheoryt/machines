@@ -11,6 +11,13 @@
 # shared-XOR-host invariant a home-manager-owned path is simply host-local —
 # allow-listed on non-Nix branches, absent from main and from latitude's branch —
 # so there is nothing for the two mechanisms to fight over.
+#
+# One consequence of the 2026-07-29 auto-backup: on nixos, a home-manager-owned
+# path present in $HOME would be moved aside rather than reported. Under the same
+# invariant such a path is host-local and absent from a Nix box's branch, so it is
+# not in the tree being checked out and never becomes a collision — but if that
+# invariant is ever broken, the role now RENAMES the generated file instead of
+# stopping. Keep home-manager-owned paths off that box's branch.
 # shellcheck shell=bash
 
 DOTFILES_REMOTE="${DOTFILES_REMOTE:-git@github.com:metheoryt/dotfiles.git}"
@@ -26,6 +33,74 @@ _dotfiles_branch() {
     fi
     [ -n "$b" ] || b="$1"
     printf '%s' "$b"
+}
+
+# _dotfiles_key_material <path>: does this path look like a private key?
+#
+# The repo's .gitignore re-ignores key material LAST, so such a path should never
+# be in the tree to begin with. This is the backstop for the day one is: moving
+# ~/.ssh/id_ed25519 aside mid-provision would break fleet SSH for the rest of the
+# run, and the fix (put it back) is not obvious from the failure. Refuse instead.
+_dotfiles_key_material() {
+    case "${1##*/}" in
+        id_rsa* | id_ed25519* | id_ecdsa* | id_dsa* | *.pem | *.key | *.gpg) return 0 ;;
+    esac
+    case "$1" in
+        .ssh/id_* | .gnupg/* | .secrets/*) return 0 ;;
+    esac
+    return 1
+}
+
+# _dotfiles_collisions <gitdir> <ref>: paths tracked in <ref> that already exist
+# in $HOME but are absent from the index — exactly the set git refuses to
+# overwrite. On a fresh bare clone the index is empty, so that is every tracked
+# path present in $HOME; on a re-run the index matches and the set is empty.
+#
+# -C "$HOME" is not cosmetic: `ls-files` is cwd-scoped, and this role runs with
+# the cwd inside ~/machines, so without it the index listing would cover only
+# paths under machines/ and every other collision would be missed.
+_dotfiles_collisions() {
+    local gitdir="$1" ref="$2" p idx
+    idx="$(git --git-dir="$gitdir" --work-tree="$HOME" -C "$HOME" ls-files 2>/dev/null)"
+    git --git-dir="$gitdir" --work-tree="$HOME" ls-tree -r --name-only "$ref" 2>/dev/null |
+        while IFS= read -r p; do
+            [ -e "$HOME/$p" ] || continue
+            printf '%s\n' "$idx" | grep -qxF -- "$p" && continue
+            printf '%s\n' "$p"
+        done
+}
+
+# _dotfiles_backup_collisions <gitdir> <ref>: move every colliding path aside to
+# <path>.pre-dotfiles so the checkout can proceed. Never deletes and never
+# overwrites an existing backup — a second run that clobbered the first run's
+# backup is the one real data-loss path here, so a taken backup name refuses the
+# whole checkout rather than silently winning.
+_dotfiles_backup_collisions() {
+    local gitdir="$1" ref="$2" p n=0 refused=0
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        if _dotfiles_key_material "$p"; then
+            echo "  dotfiles: $p is key material and already exists in \$HOME — refusing to touch it." >&2
+            echo "  dotfiles: keys are never tracked; resolve this by hand before re-running." >&2
+            refused=1; continue
+        fi
+        if [ -e "$HOME/$p.pre-dotfiles" ]; then
+            echo "  dotfiles: ~/$p collides and ~/$p.pre-dotfiles already exists — refusing to overwrite it." >&2
+            echo "  dotfiles: move or delete the old backup, then re-run." >&2
+            refused=1; continue
+        fi
+        mkdir -p "$(dirname "$HOME/$p")" 2>/dev/null
+        if mv "$HOME/$p" "$HOME/$p.pre-dotfiles"; then
+            echo "  dotfiles: ~/$p -> ~/$p.pre-dotfiles (untracked file at a tracked path)."
+            n=$((n + 1))
+        else
+            echo "  dotfiles: could not back up ~/$p." >&2
+            refused=1
+        fi
+    done <<< "$(_dotfiles_collisions "$gitdir" "$ref")"
+    [ "$refused" = 0 ] || return 1
+    [ "$n" = 0 ] || echo "  dotfiles: backed up $n pre-existing file(s); their content is intact at *.pre-dotfiles."
+    return 0
 }
 
 # role_dotfiles <mode> <platform> <machine>
@@ -53,6 +128,7 @@ role_dotfiles() {
     if [ "$mode" = dry-run ]; then
         echo "  ~ would clone $DOTFILES_REMOTE (bare) -> $gitdir"
         echo "  ~ would check out branch '$branch' (creating it from main if absent)"
+        echo "  ~ would move any untracked \$HOME file at a tracked path to <path>.pre-dotfiles"
         echo "  ~ would record the branch at $state/branch"
         echo "  ~ would install the 10-min dotfiles-sync timer"
         return 0
@@ -85,7 +161,27 @@ role_dotfiles() {
     # HEAD stays on the clone's default (main), the role writes the wrong branch
     # into the state file, and every sync tick from then on hits the wrong-branch
     # arm and exits 1 — a timer that looks installed and never works.
+    #
+    # As of 2026-07-29 the guard does more than report: _dotfiles_backup_collisions
+    # below moves the colliding paths aside itself. Doing that by hand was the last
+    # manual step of a fresh install, and it is not an edge case — `gh` runs in
+    # tier_apt_dev, BEFORE this role, and writes ~/.config/gh/config.yml every
+    # time. The collision is structural: every new box hits it.
     "${df[@]}" fetch --quiet origin || true
+
+    # Resolve the ref about to be checked out ONCE, before the arms — the backup
+    # pass must enumerate the tree it will actually be compared against, and
+    # deriving that separately inside each arm is where a "moved files for nothing,
+    # checkout still refused" bug would live.
+    local target arm
+    if "${df[@]}" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+        target="refs/heads/$branch"; arm=local
+    elif "${df[@]}" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+        target="refs/remotes/origin/$branch"; arm=track
+    else
+        target="refs/remotes/origin/main"; arm=from-main
+    fi
+
     _dotfiles_checkout() {
         if "${df[@]}" "$@"; then return 0; fi
         echo "  dotfiles: checkout refused — untracked files in \$HOME already occupy tracked paths." >&2
@@ -95,21 +191,33 @@ role_dotfiles() {
         echo "  dotfiles: on the wrong branch would refuse every tick silently." >&2
         return 1
     }
-    if "${df[@]}" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
-        _dotfiles_checkout checkout --quiet "$branch" || return 1
-    elif "${df[@]}" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
-        _dotfiles_checkout checkout --quiet -b "$branch" --track "origin/$branch" || return 1
-    else
-        echo "  dotfiles: branch '$branch' does not exist — creating it from origin/main."
-        _dotfiles_checkout checkout --quiet -b "$branch" origin/main || return 1
-        "${df[@]}" push --quiet -u origin "$branch" || \
-            echo "  dotfiles: could not push the new branch — it stays local until the next sync tick." >&2
-    fi
+    _dotfiles_backup_collisions "$gitdir" "$target" || return 1
+
+    case "$arm" in
+        local) _dotfiles_checkout checkout --quiet "$branch" || return 1 ;;
+        track) _dotfiles_checkout checkout --quiet -b "$branch" --track "origin/$branch" || return 1 ;;
+        from-main)
+            echo "  dotfiles: branch '$branch' does not exist — creating it from origin/main."
+            _dotfiles_checkout checkout --quiet -b "$branch" origin/main || return 1
+            "${df[@]}" push --quiet -u origin "$branch" || \
+                echo "  dotfiles: could not push the new branch — it stays local until the next sync tick." >&2
+            ;;
+    esac
 
     # Belt-and-suspenders: never record a branch HEAD is not actually on.
     if [ "$("${df[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$branch" ]; then
         echo "  dotfiles: HEAD is not on '$branch' after checkout — refusing to continue." >&2
         return 1
+    fi
+
+    # `git clone --bare` copies every remote head into refs/heads/*, so this box's
+    # branch already exists locally the moment the clone finishes, the `local` arm
+    # runs, and `checkout <branch>` sets NO upstream. The branch then tracks
+    # nothing: a plain `git pull` fails with "no upstream configured" (hit live on
+    # latitude, 2026-07-29) while the sync timer keeps working, because it names
+    # refs explicitly. So the breakage stays invisible until a human pulls by hand.
+    if "${df[@]}" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+        "${df[@]}" branch --quiet --set-upstream-to="origin/$branch" "$branch" >/dev/null 2>&1 || true
     fi
 
     # 3. Record the branch for the timer. The timer must NOT resolve fleet
