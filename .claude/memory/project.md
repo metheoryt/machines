@@ -65,11 +65,35 @@ global + per-host). One bullet per fact under a topical heading.
   distro, Ubuntu-24.04, has a stale `~/machines` (on `main`, clean, at `2815efb`)
   with `fleet-selfpull.timer` **inactive** — it was never enrolled in Trigger B, so
   it needs a `provision/linux.sh` run, not just a pull.
-- **git-autofetch has three implementations** — NixOS (systemd timer), Windows
-  (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback) — all sharing one
-  root-scan model (`find` under `$HOME` depth 4, skipping node_modules/.cache/.direnv)
-  doing refs-only `git fetch --all --prune`, never pulling (keeps the prompt's
-  "behind by N" accurate).
+- **git-autofetch has FOUR implementations** — NixOS (systemd timer), Windows
+  (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback), macOS (launchd
+  LaunchAgent) — all sharing one root-scan model (`find` under `$HOME` depth 4,
+  skipping node_modules/.cache/.direnv) doing refs-only `git fetch --all --prune`,
+  never pulling (keeps the prompt's "behind by N" accurate).
+- **`timeout(1)` DOES NOT EXIST on macOS** — it is GNU coreutils, not BSD, and
+  coreutils is not installed by default. This silently disabled git-autofetch on
+  `air` from provisioning until 2026-07-29 (`ed65e7c`): every fetch died "command
+  not found", `2>/dev/null` ate the message, and the script still exited 0, so
+  launchd reported a healthy job that had never fetched. `tier_autofetch` now emits
+  an `af_timeout` shim (timeout → gtimeout → POSIX sh watchdog). That shim is a
+  SANCTIONED divergence from `modules/system/git-autofetch/default.nix`, which
+  resolves `timeout` from `pkgs.coreutils` on its PATH — the rest of the two must
+  stay in sync.
+- **A best-effort loop that swallows errors must exit non-zero when EVERYTHING
+  failed.** The timeout bug above hid for a day purely because "all 7 repos failed"
+  and "all 7 succeeded" produced the same exit 0. One unreachable remote is a
+  warning; nothing working is a broken install. Applies to every scan-and-retry
+  script here (`git-autofetch`, `fleet-selfpull`, `dotfiles-sync`).
+- **GNU-only tooling is the recurring macOS trap in this repo**, and it always fails
+  quietly: `timeout` absent, `wc -l` padding its output, `grep -P` unsupported, `/proc`
+  absent (bit `orca-repair`, `a34b2c7`). When touching a script that runs on `air`,
+  check the BSD behaviour rather than assuming GNU.
+- **Don't infer a leak from killed-fetch debris.** A TERM'd `git fetch` leaves
+  `.git/objects/pack/tmp_pack_*` behind, so probing with a short budget manufactures
+  exactly the evidence of a recurring leak. `~/.hermes/hermes-agent` (380MiB, 1417
+  remote branches) needed >60s for its FIRST fetch only — because the bug meant it
+  had never been fetched at all. Caught up, a tick is ~21s and leaves nothing.
+  Measure at the real budget before changing the scan's prune list.
 
 ## Fleet network
 
