@@ -291,12 +291,15 @@ Steps 1 and 2 are the ones that matter. Everything else is ordinary work that
 can be redone; those two protect data that currently exists in exactly one
 place.
 
-1. **Copy the ~13 GB irreplaceable set off the Kingston and verify it by
-   checksum.** In flight as of 2026-07-28 — `upload`, `profile`, `backups` and
-   `Media/config` to `~/kingston-rescue` on `air`, against a 2 819-file sha256
-   manifest. Since the Kingston is no longer being wiped, this is insurance
-   against an installer mistake rather than a migration, but it is cheap and it
-   is the only thing standing between **H1** and real loss.
+1. **Done and verified 2026-07-28.** `upload`, `profile`, `backups` and
+   `Media/config` copied to `~/kingston-rescue` on `air` — 13 GB, and
+   **2 819 of 2 819 files verified `OK` against the source sha256 manifest**,
+   zero mismatches. One benign `tar` warning: `Media/config/qbittorrent/
+   qBittorrent/ipc-socket` was skipped because it is a socket, not a file, which
+   is why the remote `tar` exited non-zero while the extraction succeeded. Since
+   the Kingston is no longer being wiped this is insurance against an installer
+   mistake rather than a migration, but it is the only thing standing between
+   **H1** and real loss.
 2. **`F:\secrets` — leave it alone.** Decided 2026-07-28: it is itself an old
    backup, so it needs no rescue. It still must never be tracked in the dotfiles
    repo; the deny block forbids key material at every layer. What *does* still
@@ -310,8 +313,17 @@ place.
    longer exists (**5c**), so it stops reporting `Ready` while protecting
    nothing. Decide separately whether the three-week backup gap (**5b**) is
    `schedule-ignore-on-battery` or downtime, because the fix differs.
-5. Harvest the §4 short list off latitude to `air` or `desktop` over the
-   tailnet. All of it must be off-box before anything is erased.
+5. **Done 2026-07-28** — `~/latitude-harvest` on `air` now holds `Documents`
+   (1.1M), `Pictures` (1.8M), `gh/airdrome/initdb`, `.ssh/config.backup`, the
+   airdrome dump, and `amnezia.cyphy.kz.conf`.
+
+   Two deliberate deviations from §4. `~/.config/gh/hosts.yml` was **not**
+   copied — spreading a live OAuth token to a second machine buys nothing when
+   `gh auth login` regenerates it. And `amnezia.cyphy.kz.conf` **was** copied
+   even though §4 says re-issue rather than transport; that keeps VPN access
+   working without a hub-side operation, at the cost of the AWG private key now
+   existing on two machines. Re-issuing on `hub` and deleting the copy is still
+   the cleaner end state. Neither file may ever be tracked in the dotfiles repo.
 
    **`~/machines` on latitude has an uncommitted change** — four lines added to
    `agents/memory/personality/tone.md` recording the peer-review register
