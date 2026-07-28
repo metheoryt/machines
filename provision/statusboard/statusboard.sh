@@ -109,6 +109,31 @@ sb_status_glyph() {
   esac
 }
 
+# The charge-vs-energy split. Half the world's batteries report energy
+# (energy_now/energy_full in µWh, power_now in µW); the rest report charge
+# (charge_now/charge_full in µAh, current_now in µA) and expose no power_now at
+# all. latitude's Dell EC is the latter — verified 2026-07-29: power_now,
+# energy_now and energy_full are all absent, so without these two converters the
+# board showed "Charging" with no wattage and no time estimate, which is the
+# useful half of the row. µA × µV = 1e-12 W, so scale by 1e-6 to land in µ-units
+# and keep one code path downstream.
+
+# sb_uwatts <current_uA> <voltage_uV>: instantaneous power in µW.
+sb_uwatts() {
+  local i="${1:-}" v="${2:-}"
+  case "$i" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$v" in '' | *[!0-9]*) printf ''; return ;; esac
+  awk -v i="$i" -v v="$v" 'BEGIN { printf "%d", i * v / 1000000 }'
+}
+
+# sb_uwatthours <charge_uAh> <voltage_uV>: charge expressed as energy in µWh.
+sb_uwatthours() {
+  local c="${1:-}" v="${2:-}"
+  case "$c" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$v" in '' | *[!0-9]*) printf ''; return ;; esac
+  awk -v c="$c" -v v="$v" 'BEGIN { printf "%d", c * v / 1000000 }'
+}
+
 # sb_battery_line <capacity> <status> <power_now_uW> <energy_now> <energy_full>:
 # the battery row, assembled from already-read values so tests need no hardware.
 # "Discharging" while an AC adapter is present is the exact condition that killed
@@ -264,13 +289,21 @@ render_frame() {
   printf '%s%s%s   %s%s%s\n' "$C_B$C_INFO" "$host" "$C_RST" "$C_DIM" "$now" "$C_RST"
   printf '%s%s%s\n\n' "$C_DIM" "------------------------------------------------------------" "$C_RST"
 
-  # Power
+  # Power. Prefer the energy-reporting attributes; fall back to charge × voltage
+  # for the ECs (this box included) that only expose charge_*.
+  local b_volt b_pw b_en b_ef
+  b_volt="$(_read "$BAT_DIR/voltage_now")"
+  b_pw="$(_read "$BAT_DIR/power_now")"
+  [ -n "$b_pw" ] || b_pw="$(sb_uwatts "$(_read "$BAT_DIR/current_now")" "$b_volt")"
+  b_en="$(_read "$BAT_DIR/energy_now")"
+  [ -n "$b_en" ] || b_en="$(sb_uwatthours "$(_read "$BAT_DIR/charge_now")" "$b_volt")"
+  b_ef="$(_read "$BAT_DIR/energy_full")"
+  [ -n "$b_ef" ] || b_ef="$(sb_uwatthours "$(_read "$BAT_DIR/charge_full")" "$b_volt")"
+
   printf '%s\n' "$(sb_battery_line \
     "$(_read "$BAT_DIR/capacity")" \
     "$(_read "$BAT_DIR/status")" \
-    "$(_read "$BAT_DIR/power_now")" \
-    "$(_read "$BAT_DIR/energy_now")" \
-    "$(_read "$BAT_DIR/energy_full")")"
+    "$b_pw" "$b_en" "$b_ef")"
   printf 'source    %s\n' "$(sb_power_source)"
   local lim; lim="$(_read "$BAT_DIR/charge_control_end_threshold")"
   [ -n "$lim" ] && printf 'limit     %s%s%%%s\n' "$C_DIM" "$lim" "$C_RST"

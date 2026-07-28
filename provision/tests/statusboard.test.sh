@@ -38,6 +38,24 @@ eq "$(sb_micro_to_unit 3300000 A)"  '3.3A'  'micro: rounds to one decimal'
 eq "$(sb_micro_to_unit "" W)"       'n/a'   'micro: empty -> n/a'
 eq "$(sb_micro_to_unit junk W)"     'n/a'   'micro: non-numeric -> n/a'
 
+# ── charge-reporting ECs (sb_uwatts / sb_uwatthours) ──────────────────────────
+# latitude's Dell EC exposes no power_now/energy_* at all, only charge_* plus
+# current_now/voltage_now — so without these the battery row showed "Charging"
+# with no wattage and no estimate. Fixtures are that box's real readings.
+eq "$(sb_uwatts 2851000 16001000)" '45618851' 'uwatts: 2.851A x 16.001V -> ~45.6W in uW'
+eq "$(sb_micro_to_unit "$(sb_uwatts 2851000 16001000)" W)" '45.6W' 'uwatts: composes into a readable W figure'
+eq "$(sb_uwatts "" 16001000)"   '' 'uwatts: missing current -> empty, not 0'
+eq "$(sb_uwatts 2851000 "")"    '' 'uwatts: missing voltage -> empty, not 0'
+eq "$(sb_uwatthours 2594000 16001000)" '41506594' 'uwatthours: 2594mAh x 16.001V -> ~41.5Wh in uWh'
+eq "$(sb_micro_to_unit "$(sb_uwatthours 2594000 16001000)" Wh)" '41.5Wh' 'uwatthours: matches the 39-42Wh design capacity'
+eq "$(sb_uwatthours junk 16001000)" '' 'uwatthours: non-numeric -> empty'
+
+# End to end: a charge-only EC must produce both a wattage and an estimate.
+OUT="$(sb_battery_line 14 Charging "$(sb_uwatts 2851000 16001000)" \
+  "$(sb_uwatthours 381000 16001000)" "$(sb_uwatthours 2594000 16001000)")"
+has "$OUT" '45.6W'   'charge-only EC: battery row shows watts'
+has "$OUT" 'to full' 'charge-only EC: battery row shows time-to-full'
+
 # ── sb_secs_to_hm ─────────────────────────────────────────────────────────────
 eq "$(sb_secs_to_hm 5400)"  '1h30m' 'secs: 5400 -> 1h30m'
 eq "$(sb_secs_to_hm 59)"    '0h00m' 'secs: under a minute -> 0h00m'
