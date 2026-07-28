@@ -195,11 +195,16 @@ anything that writes a database is not.
 
 There is no in-place conversion, so making the Kingston Linux-native means
 copying 773 GiB off and back — which *does* need the 6TB seated, just not before
-the OS install. Three ways out, in increasing order of work: keep the Kingston
-NTFS and mount it read-mostly for media only, putting every database on the
-KIOXIA or the 6TB; move Immich wholesale to the 6TB and leave the Kingston as a
-media shelf; or stage 773 GiB onto the 6TB, reformat the Kingston to ext4, and
-copy back. Decide this before wiring services back up, not during.
+the OS install.
+
+**Decided 2026-07-28, two stages.** For the install and first bring-up, the
+Kingston stays NTFS and is mounted read-mostly as a **media shelf only**;
+`Media/config`, the Immich library and Postgres all live on a Linux filesystem
+(KIOXIA now, 6TB later) — never on `ntfs3`. Then **tomorrow, once the 6TB is in
+hand**: stage the Kingston's 773 GiB onto the 6TB, reformat the Kingston to
+ext4, and copy back. That reaches the clean end state without a second
+reinstall, which is exactly why the interim stage is acceptable rather than
+permanent.
 
 **5b. Backups stopped about three weeks ago.** Newest snapshots are 2026-07-05,
 07-02 and 07-07 against today's 2026-07-28, and every snapshot is recorded under
@@ -307,15 +312,30 @@ place.
    `schedule-ignore-on-battery` or downtime, because the fix differs.
 5. Harvest the §4 short list off latitude to `air` or `desktop` over the
    tailnet. All of it must be off-box before anything is erased.
-6. `pg_dump` the airdrome database out of the running container, verify the dump
-   is non-empty and restorable, and only then treat the Docker volume as
-   expendable.
+
+   **`~/machines` on latitude has an uncommitted change** — four lines added to
+   `agents/memory/personality/tone.md` recording the peer-review register
+   confirmed on CFT-1018. It is a synced memory file whose entire purpose is to
+   reach the other machines, and nothing in the auto-pull path ever commits, so
+   it dies with the home directory unless it is committed deliberately.
+6. **Done 2026-07-28: airdrome dumped.** `docker exec airdrome-db-1 pg_dumpall
+   -U postgres` → `~/latitude-harvest/airdrome-pgdumpall.sql` on `air`, 45 760
+   bytes, 15 `CREATE DATABASE`/`CREATE TABLE` statements. Postgres 18, trivial
+   dev credentials from `compose.yml`. The `db_data` volume is now expendable.
 7. Re-issue rather than transport: mint a fresh AmneziaWG peer for latitude on
    `hub`, remove latitude's current key from GitHub, and delete latitude's stale
    Headscale node so its name and IP free up.
-8. Run a final `nix flake check` and record the output in this document, so the
-   last known-good state of the Nix surface is on record before it stops being
-   verifiable.
+8. **Done 2026-07-28: `nix flake check` → `all checks passed!`** 17 flake
+   checks, `checks.x86_64-linux.nixos-latitude` evaluating to
+   `nixos-system-latitude5520-26.11.20260726.624af66`, plus
+   `checks.x86_64-linux.home-latitude`. Recorded here because after the wipe
+   there is no fleet member left that can run it.
+
+   Caveat on the revision: the pull ahead of the check failed (`У вас есть
+   непроиндексированные изменения`), so it evaluated the tree at `d8bccd7`, not
+   at HEAD. Every commit since is documentation-only, so the Nix surface is
+   byte-identical and the result stands for it — but the check did not run at
+   HEAD, and that distinction should not be papered over.
 9. **Physically remove the Kingston from latitude for the OS install**, unless
    step 1 is complete and verified. Renumbering (**H1**) means an installer
    aimed at `nvme0n1` erases the data disk, and "not selected in the installer"
