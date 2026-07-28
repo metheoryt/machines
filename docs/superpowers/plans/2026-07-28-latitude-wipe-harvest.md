@@ -81,11 +81,18 @@ disposable. If curiosity is worth one command, try `sudo cryptsetup luksOpen`
 with the usual passphrase before repartitioning; if it does not open, it is
 unrecoverable anyway.
 
-**H4. LUKS on an always-on headless server.** Root is LUKS today and a human
-types the passphrase at the console. As an always-on server, any unattended
-reboot hangs at that prompt. Decide at install time — plain root, or LUKS plus
-remote unlock (dropbear-initramfs, or clevis with the TPM). Not revisitable
-without a second reinstall.
+**H4 — decided 2026-07-28: no LUKS.** Root is LUKS today and a human types the
+passphrase at the console, which would hang every unattended reboot. The new
+install uses a plain root. Remote-unlock alternatives (dropbear-initramfs,
+clevis + TPM) were considered and declined as not worth the complexity for a
+box on a home network.
+
+**Also decided:** the SSH host keys are **not** preserved — re-accept the
+changed key on the other members after the install. And the AmneziaWG material
+needs no rescue at all: AWG was retired in favour of the tailnet and now lives
+only on the VPS, so latitude's `amnezia.cyphy.kz.conf` and
+`~/.ssh/vps_awg_private.key` die with the disk by design. The copy that had been
+taken to `air` was deleted.
 
 **H5. `F:` is the 320GB drive slated for retirement, and it holds `secrets`.**
 Its top level is `qb`, `restic-repos`, **`secrets`**, a GoPro folder, and
