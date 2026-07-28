@@ -135,8 +135,9 @@ rm -rf "$T"
 # deferred, so merge-tree compares the UNCHANGED branch tip against origin/main
 # and finds no conflict, and the real merge then refuses because .tracked is
 # dirty. Nothing is written and nothing is claimed. Tick 2 commits and the
-# conflict is detected properly. Bounding this to one tick is why the gate is a
-# debounce and not a 24h timer.
+# conflict is detected properly. This is the SETTLING shape; case 17 is the same
+# stall when the diff never settles, where the bound is MAX_AGE rather than a
+# tick. Both are why the gate is a debounce and not a 24h timer.
 T="$(setup)"
 printf 'theirs\n' > "$T/seed/.tracked"
 git -C "$T/seed" -c user.email=t@t -c user.name=t commit -qam "theirs"
@@ -322,6 +323,41 @@ if [ "$(dfx "$T" rev-parse air)" != "$before" ]; then
 else
   die "subdir hash: nothing committed from a subdirectory"
 fi
+rm -rf "$T"
+
+# ── 17. The silent window is MAX_AGE, not one tick, when the diff never settles ─
+# Case 6 bounds the stall to one tick for a diff that SETTLES. This is the other
+# shape, and it is the memory-file profile that motivated the debounce: a path
+# appended to every few minutes that origin/main also touches.
+#
+# Every tick sees a new hash and defers, so the branch tip never gains a commit
+# touching .tracked. merge-tree then compares a ONE-SIDED change and previews
+# CLEAN, the marker is removed, and the real merge refuses on the dirty path into
+# sync_merge's `|| true`. Nothing is written and nothing is claimed — but nothing
+# propagates either, and that lasts until the valve fires at MAX_AGE.
+T="$(setup)"
+printf 'theirs\n' > "$T/seed/.tracked"
+git -C "$T/seed" -c user.email=t@t -c user.name=t commit -qam "theirs"
+git -C "$T/seed" push -q "$T/remote.git" main
+printf 'ours-1\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
+printf 'ours-2\n' > "$T/home/.tracked"
+tick "$T" >/dev/null
+eq "moving conflict: \$HOME byte-identical" "$(cat "$T/home/.tracked")" "ours-2"
+if [ ! -f "$T/state/conflict" ]; then
+  pass "moving conflict: no marker while the diff keeps moving (the silent window)"
+else
+  die "moving conflict: marker appeared — preflight saw a conflict it cannot see"
+fi
+# The valve is what ENDS the window: the tick commits, so the preflight finally
+# sees both sides and reports the conflict properly.
+tick "$T" DOTFILES_SYNC_MAX_AGE=0 >/dev/null
+if [ -f "$T/state/conflict" ]; then
+  pass "moving conflict: the valve ends the window and the marker lands"
+else
+  die "moving conflict: valve tick left no marker"
+fi
+eq "moving conflict: \$HOME still byte-identical" "$(cat "$T/home/.tracked")" "ours-2"
 rm -rf "$T"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

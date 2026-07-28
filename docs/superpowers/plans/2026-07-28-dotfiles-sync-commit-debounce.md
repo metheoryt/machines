@@ -44,9 +44,17 @@ No marker, no log line, no commit, no propagation — for the whole gate window.
 And the overlapping paths are exactly the memory files, which are both locally
 dirty and promoted to `main` from other boxes.
 
-Debouncing bounds that window to **one tick**. A 24h gate would extend it to 24h,
-and the only way to close it would be to stash around the merge — writing to a
-live `$HOME`, which breaks the script's governing safety property.
+Debouncing bounds that window to **one tick when the edits settle**, and to
+`DOTFILES_SYNC_MAX_AGE` when the same path keeps changing faster than the tick
+interval — every tick defers, so the branch tip never gains a commit the
+preflight could see, and only the valve ends it. `MAX_AGE` is the real bound.
+A 24h gate would make the window 24h *unconditionally*, and the only way to close
+it would be to stash around the merge — writing to a live `$HOME`, which breaks
+the script's governing safety property.
+
+**Corrected 2026-07-28 during execution**, after the advisor flagged the
+one-tick claim: it holds only for a settling diff, which is not the memory-file
+profile that motivated this plan. Case 17 pins the moving-diff shape.
 
 The user chose debounce-per-burst over literal-daily on 2026-07-28 with this
 tradeoff on the table.

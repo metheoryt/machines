@@ -135,7 +135,13 @@ sync_hash() {
 # a long gate gives: preflight clean -> the conflict marker is REMOVED -> the
 # real `df merge` refuses ("Your local changes ... would be overwritten") -> the
 # `|| true` at the end of sync_merge swallows it. Silent, for the whole window.
-# Debouncing bounds that window to a single tick.
+#
+# HOW LONG THAT WINDOW IS: one tick if the diff settles (the common case), but up
+# to DOTFILES_SYNC_MAX_AGE if the same path keeps changing faster than the tick
+# interval — every tick defers, so the branch tip never gains a commit the
+# preflight could see, and only the valve ends it. That is the bound MAX_AGE
+# really sets; a 24h gate would make it 24h unconditionally. Pinned by cases 6
+# and 17 in dotfiles-sync.test.sh.
 sync_should_commit() {
     local pend="$DOTFILES_STATE_DIR/pending.hash"
     local since="$DOTFILES_STATE_DIR/pending.since"
