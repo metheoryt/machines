@@ -180,6 +180,27 @@ first. The remaining ~487G of movies and torrents is a *convenience* decision �
 keep it to avoid re-downloading, not because it is unrecoverable — and the
 ~120G of derivatives and partials is genuinely disposable.
 
+**Scope decision, 2026-07-28: the Kingston is not being wiped.** Only the KIOXIA
+512G — NixOS root plus home — gets reinstalled. The Kingston keeps its data,
+media included. That demotes the 13 GB copy from a migration step to insurance
+against an installer mistake, which is still worth having, and it makes **H1 the
+single remaining data risk in the whole operation.**
+
+**5d. The Kingston is NTFS, and that becomes a problem the moment latitude is
+Linux.** `Media/config` is servarr and qBittorrent state, which is SQLite —
+SQLite over `ntfs3` has no dependable locking and will corrupt. Immich's library
+wants POSIX ownership, and Postgres on NTFS is not a supported configuration at
+all. Bulk media reads (Jellyfin, the *arr* scanners) are fine over `ntfs3`;
+anything that writes a database is not.
+
+There is no in-place conversion, so making the Kingston Linux-native means
+copying 773 GiB off and back — which *does* need the 6TB seated, just not before
+the OS install. Three ways out, in increasing order of work: keep the Kingston
+NTFS and mount it read-mostly for media only, putting every database on the
+KIOXIA or the 6TB; move Immich wholesale to the 6TB and leave the Kingston as a
+media shelf; or stage 773 GiB onto the 6TB, reformat the Kingston to ext4, and
+copy back. Decide this before wiring services back up, not during.
+
 **5b. Backups stopped about three weeks ago.** Newest snapshots are 2026-07-05,
 07-02 and 07-07 against today's 2026-07-28, and every snapshot is recorded under
 host `methe-server` — the pre-rename hostname, retired 2026-07-20. Two plausible
@@ -265,20 +286,18 @@ Steps 1 and 2 are the ones that matter. Everything else is ordinary work that
 can be redone; those two protect data that currently exists in exactly one
 place.
 
-1. **Get the unprotected ~620 GiB off the Kingston and verified, before
-   anything else happens to latitude.** Mount the disk read-only, measure the
-   subdirectory breakdown so the regenerable Immich derivatives can be excluded
-   from the copy, then copy the rest to a disk that is neither the Kingston nor
-   any disk about to be installed. The natural destination is the new 6TB, which
-   argues for seating it before the wipe rather than after. Failing that, `G:`
-   has 773 G free — poor practice, since it also holds the `immich-media` repo,
-   but far better than one copy. Verify the copy by checksum, not by file count.
-2. **Harvest `F:\secrets` off the 320G drive to at least two places and verify
-   it** (**H5**). It contains SSH private keys, exported Wi-Fi profiles, and a
-   WSL secrets tarball. Never track any of it in the dotfiles repo — the deny
-   block forbids key material at every layer. The same drive holds
-   `F:\restic-repos` (`laptop-music`, `wsl`), a third restic location that the
-   new backup layout has to account for.
+1. **Copy the ~13 GB irreplaceable set off the Kingston and verify it by
+   checksum.** In flight as of 2026-07-28 — `upload`, `profile`, `backups` and
+   `Media/config` to `~/kingston-rescue` on `air`, against a 2 819-file sha256
+   manifest. Since the Kingston is no longer being wiped, this is insurance
+   against an installer mistake rather than a migration, but it is cheap and it
+   is the only thing standing between **H1** and real loss.
+2. **`F:\secrets` — leave it alone.** Decided 2026-07-28: it is itself an old
+   backup, so it needs no rescue. It still must never be tracked in the dotfiles
+   repo; the deny block forbids key material at every layer. What *does* still
+   need a decision before the 320G drive retires is the rest of `F:` —
+   `F:\restic-repos` holds the `laptop-music` and `wsl` repos, which die with the
+   disk, plus `qb`, a GoPro folder and `G614JV-Ubuntu-24.04.tar`.
 3. Decide **H4** (LUKS or not) and §7 (which datasets get a second copy). Both
    are install-time decisions; neither can be changed afterwards without
    redoing the install.
