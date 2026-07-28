@@ -81,3 +81,36 @@ for name, m in machines.items():
 PY
     fi
 }
+
+# fleet_logical_name [repo]: this box's LOGICAL fleet name — the dotfiles branch
+# it checks out (spec 2026-07-28 §4.1). Resolution chain, in order:
+#   1. <repo>/fleet.local.json .self.nickname — self-declared WSL hosts, which
+#      are first-class fleet members but never appear in fleet.json. The
+#      nickname IS their identity (tailnet node name and branch name alike).
+#   2. fleet_detect — the fleet.json lookup by OS hostname.
+# Echoes nothing and returns 1 when neither resolves; callers must treat that as
+# "do not check out a branch", never as an empty branch name.
+#
+# jq-optional, like fleet_profile_for_host: hub ships python3 but no jq. The sed
+# fallback is last-resort and only has to survive the one-line shape this repo's
+# own fleet-local.sh writes.
+fleet_logical_name() {
+    local repo="${1:-}" f n
+    [ -n "$repo" ] || repo="$(_fleet_lib_dir)/../.."
+    f="$repo/fleet.local.json"
+    if [ -f "$f" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            n="$(jq -r '.self.nickname // empty' "$f" 2>/dev/null)"
+        elif command -v python3 >/dev/null 2>&1; then
+            n="$(python3 -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("self", {}).get("nickname", ""))
+except Exception:
+    pass' "$f" 2>/dev/null)"
+        else
+            n="$(sed -n 's/.*"nickname"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -1)"
+        fi
+        if [ -n "$n" ]; then printf '%s\n' "$n"; return 0; fi
+    fi
+    fleet_detect
+}
