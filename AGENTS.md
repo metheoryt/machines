@@ -99,7 +99,7 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `home/me.nix` | Home Manager for user `me`: packages, git config, Fish aliases/functions, Starship prompt, Ghostty config, GNOME dconf settings, fastfetch |
 | `home/ssh.nix` | SSH client config generated from fleet.json |
 || `home/claude.nix` | Claude Code profile bootstrap wiring |
-|| `hermes/` | Hermes Agent version-controlled config — `config.yaml`, `skills/`, `memories/`; `bootstrap.sh` links into `~/.hermes/` |
+|| `hermes/` | Hermes Agent version-controlled config — `config.yaml`, `skills/`; `bootstrap.sh` links into `~/.hermes/`. Its `memories/` is an **empty, unfilled slot** — the agent-config handover did not fill it |
 | `home/orca-bin.nix` | Orca IDE AppImage wrapper |
 | `home/rustdesk-bin.nix` | RustDesk client wrapper |
 | `home/rustdesk-config.nix` | RustDesk server key + known-peer IDs |
