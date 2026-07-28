@@ -339,8 +339,12 @@ copy_managed "$settings_src" "$CLAUDE_DIR/settings.json"
 # Memory & knowledge base. Global instructions + global memory store are shared
 # across all machines and still deployed from this repo. The PER-HOST file is no
 # longer one of them — it is dotfiles-owned; see the block below.
-# Instruction file: AGENTS.md is canonical; link ~/.claude/CLAUDE.md to it directly.
-link "$SRC_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
+# Agent instructions are dotfiles-owned (~/.claude/CLAUDE.md, tracked on main).
+# Distinct from $HOME/CLAUDE.md, which is ambient in every session under $HOME.
+retire_link "$CLAUDE_DIR/CLAUDE.md"
+if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+fi
 # The shared memory store is dotfiles-owned: real files at
 # ~/.claude/memory/{global.md,personality/*.md}, tracked on the dotfiles repo's
 # main branch. bootstrap only clears links from the era when agents/memory/ was
@@ -380,7 +384,7 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
   _mkdir "$CODEX_DIR"
   printf '\nBootstrapping Codex config\n  live:  %s\n\n' "$CODEX_DIR"
 
-  link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"
+  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
 
   _mkdir "$CODEX_DIR/memory"
   # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
