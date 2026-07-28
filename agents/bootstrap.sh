@@ -213,6 +213,49 @@ copy_managed() {
   fi
 }
 
+# retire_link <abs-dest>: remove dest IF AND ONLY IF it is a symlink pointing
+# into $SRC_DIR — i.e. a link this script used to own and no longer does. Used
+# during the handover of a path from bootstrap to the dotfiles repo: the content
+# is already a real file on converged boxes (copy_managed did that), and this
+# clears the stale symlink on a box that lagged, so the incoming dotfiles merge
+# is not blocked by an untracked path.
+#
+# NEVER deletes a real file. After the handover the real file at dest IS the
+# dotfiles-tracked content; removing it would destroy memory and the 10-minute
+# sync timer would then commit the deletion.
+retire_link() {
+  local dest="$1" tgt
+  [ -L "$dest" ] || return 0                     # real file, or nothing there
+  # ONE HOP, not _resolve(): _resolve falls back to echoing its argument when
+  # readlink -f is unavailable, and a path never matches $SRC_DIR/*, so the guard
+  # below would silently pass and nothing would ever be retired.
+  tgt="$(readlink "$dest")"
+  case "$tgt" in
+    "$SRC_DIR"/*) ;;                             # ours — fall through and drop it
+    *) return 0 ;;                               # someone else's link
+  esac
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would retire stale link: %s\n' "$dest"
+    return 0
+  fi
+  rm -f "$dest"
+  printf '  - retired stale link: %s\n' "$dest"
+}
+
+# link_if_present <abs-src> <abs-dest>: link() only if src exists. The fan-out
+# links into ~/.codex and ~/.claude-<postfix> point at the PRIMARY profile's real
+# file, which the handover ordering does not guarantee is in place yet — beat 1
+# lands this script fleet-wide, and a box whose content has not been converted
+# has nothing at the primary path. Plain link() would leave a dangling symlink
+# there; this leaves the path empty, and the next bootstrap run wires it.
+link_if_present() {
+  if [ -e "$1" ]; then
+    link "$1" "$2"
+  else
+    printf '  . skipped (source not present yet): %s\n' "$2"
+  fi
+}
+
 # host_id: this machine's hostname, sanitized to a filename. Prefers Windows
 # COMPUTERNAME (ME-G614JV), else `hostname` (g16 / latitude5520 on the nix
 # laptops). This is only the off-nix fallback: on NixOS, claude.nix passes the

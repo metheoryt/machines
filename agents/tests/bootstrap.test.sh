@@ -59,4 +59,48 @@ copy_managed "$src" "$lnk" >/dev/null
 check "copy_managed migrates a symlink to a real copy"  '[ -f "$lnk" ] && [ ! -L "$lnk" ]'
 check "copy_managed migration writes baseline content"  '[ "$(cat "$lnk")" = "BASE-V2" ]'
 
+# Case 4: retire_link — drops a symlink INTO the repo, never anything else.
+# Reuses the lib-only sourcing from Case 3 ($tmp and helpers are already live).
+SRC_DIR="$tmp/src"; mkdir -p "$SRC_DIR"
+printf 'REPO-CONTENT\n' > "$SRC_DIR/thing.md"
+
+# (a) a symlink into $SRC_DIR is removed.
+r_link="$tmp/retire-me.md"; ln -s "$SRC_DIR/thing.md" "$r_link"
+retire_link "$r_link" >/dev/null
+check "retire_link removes a symlink into the repo" '[ ! -e "$r_link" ] && [ ! -L "$r_link" ]'
+
+# (b) a REAL file is never touched — this is the memory-loss guard.
+r_real="$tmp/keep-me.md"; printf 'DOTFILES-OWNED\n' > "$r_real"
+retire_link "$r_real" >/dev/null
+check "retire_link leaves a real file alone"    '[ -f "$r_real" ]'
+check "retire_link preserves real file content" '[ "$(cat "$r_real")" = "DOTFILES-OWNED" ]'
+
+# (c) a symlink pointing OUTSIDE the repo is not ours — leave it.
+r_other="$tmp/other-target.md"; printf 'SOMEONE-ELSE\n' > "$r_other"
+r_foreign="$tmp/foreign-link.md"; ln -s "$r_other" "$r_foreign"
+retire_link "$r_foreign" >/dev/null
+check "retire_link leaves a foreign symlink alone" '[ -L "$r_foreign" ]'
+
+# (d) missing path is a silent no-op, not an error. Capture the status in a
+# variable: `$?` inside check's eval would read the eval's own predecessor, which
+# makes the assertion tautological rather than a test of retire_link.
+retire_link "$tmp/does-not-exist.md" >/dev/null; r_rc=$?
+check "retire_link is a no-op on a missing path" '[ "$r_rc" -eq 0 ]'
+
+# (e) DRY_RUN removes nothing.
+r_dry="$tmp/dry-link.md"; ln -s "$SRC_DIR/thing.md" "$r_dry"
+DRY_RUN=1 retire_link "$r_dry" >/dev/null
+check "retire_link removes nothing under DRY_RUN" '[ -L "$r_dry" ]'
+
+# (f) link_if_present — links when the source exists, no-ops when it does not.
+# The no-op case is the guard against a dangling fan-out link on a box whose
+# primary profile has not been converted yet.
+p_dest="$tmp/present.md"
+link_if_present "$SRC_DIR/thing.md" "$p_dest" >/dev/null
+check "link_if_present links an existing source" '[ -L "$p_dest" ]'
+
+a_dest="$tmp/absent.md"
+link_if_present "$SRC_DIR/nope.md" "$a_dest" >/dev/null
+check "link_if_present creates nothing for a missing source" '[ ! -e "$a_dest" ] && [ ! -L "$a_dest" ]'
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
