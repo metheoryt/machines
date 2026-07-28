@@ -310,6 +310,50 @@ if (Test-Path $sshdConfig) {
 
 Warn "Reachable over the tailnet only while this box has joined the Headscale tailnet (tailscale0 up, address in 100.64.0.0/10) - verify separately."
 
+# 7g. CLIENT config - the fleet block in ~\.ssh\config (OUTBOUND). Everything
+#     above this point configures inbound SSH only, which is why these boxes had
+#     no fleet block at all and `ssh latitude` resolved to methe@latitude and was
+#     refused - taking fd_run, /ship's fleet-pull and kb-refresh's fleet-gather
+#     with it. Needs no elevation: it writes one file in the calling user's HOME.
+$fleetJsonPath = Join-Path $RepoDir 'fleet.json'
+$sshCfgModule  = Join-Path $RepoDir 'provision\lib\fleet-ssh-config.ps1'
+if (-not (Test-Path $fleetJsonPath)) {
+    Warn "fleet.json not found at $fleetJsonPath - skipped the client config."
+} elseif (-not (Test-Path $sshCfgModule)) {
+    Warn "$sshCfgModule not found - skipped the client config."
+} else {
+    try {
+        . $sshCfgModule
+        $sshDir = Join-Path $env:USERPROFILE '.ssh'
+        if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
+        $cfgPath = Join-Path $sshDir 'config'
+
+        # This box's fleet key. id_ed25519 is what the other members trust in
+        # their authorized_keys; ssh-wsl.sh's id_fleet name is WSL-side only.
+        $idFile  = '~/.ssh/id_ed25519'
+        $stanzas = Render-FleetSshConfig -FleetJson (Get-Content $fleetJsonPath -Raw) -IdentityFile $idFile
+        $block   = New-FleetSshBlock -Stanzas $stanzas
+
+        $existing = ''
+        if (Test-Path $cfgPath) { $existing = Get-Content $cfgPath -Raw }
+        $merged = Merge-FleetSshConfig -Existing $existing -Block $block
+
+        if ($existing.TrimEnd() -eq $merged.TrimEnd()) {
+            Info "~\.ssh\config already carries the current fleet block."
+        } else {
+            # LF, no BOM: OpenSSH on Windows reads this file, and a BOM makes it
+            # treat the first directive as garbage.
+            [System.IO.File]::WriteAllText($cfgPath, ($merged.TrimEnd() + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+            Info "merged the fleet block into ~\.ssh\config (block replaced; the rest untouched)."
+        }
+        if (-not (Test-Path (Join-Path $sshDir 'id_ed25519'))) {
+            Warn "no ~\.ssh\id_ed25519 on this box - the rendered IdentityFile does not exist yet, so outbound fleet SSH will fall back to default key order."
+        }
+    } catch {
+        Warn "client config generation failed: $($_.Exception.Message)"
+    }
+}
+
 # ---- 8. Fleet convergence tasks (spec 2026-07-21) ----------------------------
 # Two idempotent (-Force) Scheduled Tasks:
 #   1. machines-converge - SYSTEM task, on-demand only (fired by the post-merge
