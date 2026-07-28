@@ -298,6 +298,13 @@ rm -rf "$T"
 # ── 15. A deferred commit does not block propagation from origin/main ────────
 # The whole point of gating the COMMIT rather than the tick: incoming shared
 # content must still land in $HOME on the very tick that defers.
+#
+# VERIFIED before this plan was written, in both merge shapes: `git merge` refuses
+# only on paths the merge itself touches, so an unrelated dirty tracked file
+# blocks nothing. Fast-forward (branch has no own commits, which is this case) and
+# true merge ('ort', branch ahead — the real-box shape) both landed .shared with
+# the dirty file preserved. Contrast case 6, where the dirty path IS the incoming
+# path and the merge does refuse.
 T="$(setup)"
 printf 'edited\n' > "$T/home/.tracked"
 printf 'shared\n' > "$T/seed/.shared"
@@ -753,6 +760,16 @@ Say which of these it was:
   the file is almost certainly **untracked**: the tick uses `add -u`, which never
   stages an untracked path. Point them at *Adding a tracked file* in
   `~/CLAUDE.md` — it is a deliberate two-step, not something to work around.
+- **No new commit, and this box was never enrolled** — check this *before*
+  blaming an untracked file. A missing `~/.dotfiles` or a missing
+  `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync/branch` makes the tick
+  exit 0 in silence, which looks identical to "nothing changed":
+
+  ```console
+  ls -d "$HOME/.dotfiles" "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync/branch"
+  ```
+
+  If either is absent, the box needs the dotfiles role — not a tracked file.
 - **Non-zero exit** — a hard stop needing a human. Quote the script's stderr
   verbatim. It is either HEAD on the wrong branch or a merge/rebase in progress.
   Do not "fix" it with a checkout.
@@ -878,3 +895,8 @@ commits. Clean up by letting the timer take it.
 - **Type consistency:** `pending.hash` / `pending.since` / `DOTFILES_SYNC_FORCE`
   / `DOTFILES_SYNC_MAX_AGE` are spelled identically in Task 1, Task 2's mirror,
   Task 3's skill, and the tests.
+- **Known and accepted, do not add code for it:** `sync_should_commit` *writes*
+  state where the old commit step only read, so two ticks racing past a swept
+  stale lock (`sync_lock`'s 30-minute mkdir fallback) could both write
+  `pending.hash`. The worst outcome is one premature commit — i.e. exactly the
+  pre-debounce behavior. Recorded so it is not rediscovered as a mystery.
