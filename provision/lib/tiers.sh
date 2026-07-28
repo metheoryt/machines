@@ -855,6 +855,83 @@ UNIT
   return 0
 }
 
+# ── BEST-EFFORT: dotfiles bootstrap for boxes that never reach the role ──────
+# provision.sh's role dispatcher covers every fleet.json member. Self-declared
+# WSL hosts run linux.sh directly and never see a role, so the tier list is
+# their only path in. Same code, one call.
+tier_dotfiles() {
+  info "Bootstrapping dotfiles (bare repo)…"
+  local name
+  name="$(fleet_logical_name 2>/dev/null || true)"
+  if [ -z "$name" ]; then
+    warn "no logical fleet name (no fleet.local.json nickname, no fleet.json match) — skipping dotfiles"
+    return 0
+  fi
+  # shellcheck source=provision/roles/dotfiles.sh
+  source "$REPO/provision/roles/dotfiles.sh"
+  role_dotfiles apply wsl "$name" || warn "dotfiles bootstrap reported an error"
+  return 0
+}
+
+# ── BEST-EFFORT: dotfiles sync timer — spec 2026-07-28 §5.4 ──────────────────
+# ~10-min tick of provision/dotfiles-sync.sh: commit tracked $HOME changes to
+# this machine's branch, push, merge origin/main in (preflighted). Deliberately
+# a plain systemd USER unit rather than a Nix module even on NixOS, so the same
+# code path serves every POSIX box and NixOS retirement removes a case, not a
+# mechanism. Precedent: agents/bootstrap.sh already deploys outside the nix
+# generation for the same reason. Idempotent.
+#
+# Cadence matches tier_selfpull / git-autofetch (10 min) — deliberately aligned.
+tier_dotfiles_sync() {
+  info "Installing dotfiles sync timer…"
+  DFS="$REPO/provision/dotfiles-sync.sh"
+  if [ ! -f "$DFS" ]; then
+    warn "provision/dotfiles-sync.sh not found — skipping dotfiles sync timer"
+  elif _is_darwin; then
+    _launchd_periodic kz.cyphy.dotfiles-sync 600 /usr/bin/env bash "$DFS" \
+      && ok "dotfiles-sync LaunchAgent installed" \
+      || warn "could not load the dotfiles-sync LaunchAgent"
+  elif systemctl --user show-environment >/dev/null 2>&1; then
+    _ud3="$HOME/.config/systemd/user"; mkdir -p "$_ud3"
+    {
+      printf '[Unit]\nDescription=Sync $HOME dotfiles to this machine'\''s branch\n\n'
+      printf '[Service]\nType=oneshot\nTimeoutStartSec=5min\n'
+      printf 'ExecStart=/usr/bin/env bash %s\n' "$DFS"
+    } > "$_ud3/dotfiles-sync.service"
+    cat > "$_ud3/dotfiles-sync.timer" <<'UNIT'
+[Unit]
+Description=Periodic dotfiles sync
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+    if systemctl --user daemon-reload >/dev/null 2>&1 \
+       && systemctl --user enable --now dotfiles-sync.timer >/dev/null 2>&1; then
+      ok "dotfiles-sync.timer (systemd-user) installed"
+    else
+      warn "could not enable dotfiles-sync.timer"
+    fi
+  elif have crontab; then
+    if crontab -l 2>/dev/null | grep -qF "$DFS"; then
+      ok "dotfiles-sync cron already present"
+    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); /usr/bin/env bash %s >/dev/null 2>&1\n' "$DFS"; } \
+           | crontab - >/dev/null 2>&1; then
+      ok "dotfiles-sync cron installed"
+    else
+      warn "could not install dotfiles-sync cron"
+    fi
+  else
+    warn "dotfiles-sync installed but not scheduled (no systemd user manager or cron)"
+  fi
+  return 0
+}
+
 # ── BEST-EFFORT: inbound fleet SSH trust (ssh-server role) ────────────────────
 # Merge provision/fleet-authorized-keys into ~/.ssh/authorized_keys so this box
 # accepts inbound fleet logins (mirrors ssh-server.nix keyFiles / windows.ps1

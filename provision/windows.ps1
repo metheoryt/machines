@@ -377,6 +377,28 @@ if (-not (Test-Path $convergeScript)) {
         } catch {
             Warn "fleet-selfpull registration failed for '$pullUser': $($_.Exception.Message) - leaving any existing task."
         }
+
+        # (3) dotfiles-sync - every 10 min, as the interactive user, jittered.
+        # Same principal and settings shape as fleet-selfpull above: it touches
+        # $HOME, so it must run as the human, not SYSTEM.
+        $dfsPs1 = Join-Path $RepoDir 'provision\dotfiles-sync.ps1'
+        $dfsAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$dfsPs1`""
+        $dfsTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 10)
+        $dfsTrigger.Repetition.Duration = ''      # empty = repeat indefinitely
+        $dfsTrigger.RandomDelay = 'PT2M'
+        $dfsSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+            -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+        $dfsPrincipal = New-ScheduledTaskPrincipal -UserId $pullUser -LogonType S4U -RunLevel Limited
+        try {
+            Register-ScheduledTask -TaskName 'dotfiles-sync' -Action $dfsAction -Trigger $dfsTrigger `
+                -Settings $dfsSettings -Principal $dfsPrincipal -Force | Out-Null
+            Info "registered 'dotfiles-sync' (every 10 min, jittered) as $pullUser."
+        } catch {
+            Warn "dotfiles-sync registration failed for '$pullUser': $($_.Exception.Message) - leaving any existing task."
+        }
     }
 }
 
