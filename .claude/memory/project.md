@@ -331,6 +331,30 @@ global + per-host). One bullet per fact under a topical heading.
 - **Never `add -A` in the dotfiles repo**, and never `dotfiles checkout main` on
   a live box — the first can leak an unlisted file, the second deletes every
   host-local file from `$HOME` for the duration.
+- **Enrolled 2026-07-28** — `air`, `hub`, `desktop`, `latitude`, and the WSL host
+  `desktop-ubuntu26` (branch auto-created from `main` by the role). **`server` is
+  NOT enrolled** — it was offline; enroll it by hand when it is back, since
+  converge on a Windows box runs `windows.ps1` only and never the role.
+  `.ssh/config` was dropped from every branch during migration (home-manager
+  deletes it on latitude); it is untracked everywhere and stays that way.
+  Enrolling `latitude` first required merging its `~/pure/backend-api` project
+  memory into `main`'s — the two boxes had accumulated 11 and 3 disjoint bullets
+  for the same repo. Whenever a collision file has real content, merge it onto
+  `main` BEFORE the checkout: the checkout overwrites, and the local content was
+  never tracked anywhere, so it is simply gone.
+- **`gh` recreates `~/.config/gh/config.yml` within seconds** (as a `version: "1"`
+  stub), so "move it aside, then enroll" is racy — it re-collided on two of four
+  boxes and refused the checkout both times. Move it aside for the diff, then
+  `rm` the regenerated stub immediately before running the role.
+- **On Windows, a headless converge registers no user-owned scheduled task.**
+  `windows.ps1` resolves the console user via `Win32_ComputerSystem.UserName`;
+  with nobody logged on it is null and both `fleet-selfpull` and `dotfiles-sync`
+  are skipped. Run `provision\windows.ps1` from a normal login to register them.
+- **`git --git-dir=~/.dotfiles --work-tree=$HOME ls-files` run from inside a
+  subdirectory of `$HOME`** (e.g. `~/machines`) lists nothing — git derives a
+  pathspec prefix from the cwd. `status` too. It looks exactly like an empty
+  checkout; `cd ~` first. `add -u` / `diff --cached` are NOT prefix-limited, so
+  the sync path is unaffected.
 - **`git clone --bare` sets no `remote.origin.fetch`**, so a bare dotfiles clone
   has no `refs/remotes/origin/*` and every `origin/main` reference fails to
   resolve. The role configures the refspec and the sync script fetches with an
