@@ -480,6 +480,12 @@ If any box shows a symlink, `retire_link` did not fire — check that its `~/mac
 
 The highest-churn content in `machines` (48 commits on `global.md`) and the one with the real divergence risk, because agents write to it at runtime on five boxes.
 
+**Prerequisite:** land `2026-07-28-dotfiles-sync-commit-debounce.md` first. That
+churn is exactly what turns the 10-minute sync timer into one `auto(<branch>)`
+commit per agent session; the debounce collapses each editing burst into one. No
+`auto(` commit exists in the dotfiles history yet, so today the cost is zero and
+after this task it is permanent.
+
 **Files:**
 - Modify: `agents/bootstrap.sh` (memory block, ~line 284-287, plus the Codex block)
 - Modify: `agents/tests/bootstrap.test.sh` (add Case 5)
