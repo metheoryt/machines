@@ -1722,8 +1722,11 @@ git commit -m "refactor(dotfiles): retire chezmoi source and the husk-retirement
 Everything in Track B lands **before any box is enrolled**. Work from a normal (non-bare) clone so the `$HOME` work-tree is never involved:
 
 ```bash
-git clone git@github.com:metheoryt/dotfiles.git /Users/me/dotfiles-work
-cd /Users/me/dotfiles-work
+# NOT under $HOME: $HOME is the bare repo's work-tree, and main's allow-lines
+# (!.gitignore, !README.md, !CLAUDE.md) carry no leading slash, so they match
+# at any depth — a clone under $HOME becomes eligible for tracking.
+git clone git@github.com:metheoryt/dotfiles.git /private/tmp/dotfiles-work
+cd /private/tmp/dotfiles-work
 ```
 
 All Track B paths below are relative to that clone.
@@ -1934,7 +1937,7 @@ Expected: `gone`
 Then return to the dotfiles clone for the remaining Track B tasks:
 
 ```bash
-cd /Users/me/dotfiles-work
+cd /private/tmp/dotfiles-work
 ```
 
 ---
