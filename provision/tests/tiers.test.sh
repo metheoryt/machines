@@ -107,6 +107,9 @@ has "$bbody" 'charge_types'  "tier_battery_limit writes charge_types, not just t
 has "$bbody" 'Custom'        "tier_battery_limit selects the EC's Custom charge mode"
 has "$bbody" 'charge_control_end_threshold' "tier_battery_limit writes the ceiling"
 has "$bbody" 'charge_control_start_threshold' "tier_battery_limit makes room below the ceiling"
+# The EC clamps inside a successful write, so a silent difference between what was
+# asked and what landed is the failure mode worth naming.
+has "$bbody" 'the EC applied' "tier_battery_limit reports a ceiling the EC clamped"
 has "$bbody" 'PRIV'          "tier_battery_limit honours the no-root warn-and-skip contract"
 # The no-battery path must report and return 0, never fail a provision run on a
 # desktop or a VPS.

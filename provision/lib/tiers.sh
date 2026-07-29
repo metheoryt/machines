@@ -319,19 +319,32 @@ for b in /sys/class/power_supply/BAT*; do
   [ -f "$b/charge_control_end_threshold" ] || continue
   found=1
 
-  # The EC rejects an end at or below the start, so make room before writing the
-  # ceiling. Otherwise `charge-upto 40` against a start of 50 fails with EINVAL
-  # and leaves the old limit in place while appearing to have done something.
+  # An EC that wants the end above the start needs room made first. Best-effort:
+  # Dell's ignores a start it does not like, so this may be a no-op — see the
+  # clamp note below.
   if [ -f "$b/charge_control_start_threshold" ]; then
     start="$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo 0)"
     case "$start" in '' | *[!0-9]*) start=0 ;; esac
     if [ "$start" -ge "$PCT" ]; then
       if [ "$PCT" -gt 5 ]; then room=$((PCT - 5)); else room=1; fi
-      printf '%s\n' "$room" > "$b/charge_control_start_threshold"
+      printf '%s\n' "$room" > "$b/charge_control_start_threshold" 2>/dev/null || true
     fi
   fi
 
   printf '%s\n' "$PCT" > "$b/charge_control_end_threshold"
+
+  # The EC has its own range and clamps INSIDE a successful write. Measured on
+  # latitude 2026-07-29: the start threshold refuses to go below 50 and the end
+  # refuses to go below 55 — `echo 35 > start` and `echo 40 > end` both returned
+  # success, the first changing nothing and the second landing at 55. So the
+  # readback is the truth and the requested value never is, and a difference gets
+  # said out loud rather than swallowed: `charge-upto 40` reporting `limit 55%` is
+  # easy to read as success at a glance.
+  got="$(cat "$b/charge_control_end_threshold" 2>/dev/null || echo '')"
+  if [ "$got" != "$PCT" ]; then
+    printf 'charge-upto: %s asked for %s%%, the EC applied %s%% — its range wins\n' \
+      "$(basename "$b")" "$PCT" "$got" >&2
+  fi
 
   # Only where the EC offers Custom. A battery whose charge_types lists no such
   # mode honours the threshold directly, and writing an unsupported mode would
