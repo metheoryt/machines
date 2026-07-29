@@ -374,6 +374,34 @@ has "$SRC" 'why the strip is or is not there' 'install: says where that record l
 # has-session before new-session: an existing session means FOOT restarted, and the
 # board's chart history lives in that running process and nowhere else.
 has "$SESSION_BODY" 'has-session' 'session: re-attaches instead of rebuilding, preserving chart history'
+# Existence is not liveness, and conflating them WEDGES the display. remain-on-exit
+# means a dead board leaves a dead PANE rather than an ended session, so has-session
+# would say yes forever: foot -H cannot help (tmux is alive), the getty respawns
+# nothing (the session exists), and a reboot does not clear it either. Verified on
+# latitude 2026-07-29 — a killed pane reports #{pane_dead}=1 indefinitely while
+# has-session still succeeds.
+has "$SESSION_BODY" 'pane_dead' 'session: asks whether the board pane is alive, not just whether a session exists'
+has "$SESSION_BODY" 'kill-session' 'session: rebuilds from scratch when the board pane is a corpse'
+# The rebuild would otherwise discard the only record of WHY the board died.
+has "$SESSION_BODY" 'capture-pane' 'session: saves the dead pane error before rebuilding'
+has "$SESSION_BODY" 'pane_dead_status' 'session: records the exit status too'
+# `-S -`, not the default range: a dying pane scrolls, so its last output is in the
+# scrollback and a default capture comes back blank (measured on latitude
+# 2026-07-29) — which reads as "there was nothing to read" rather than "look higher".
+has "$SESSION_BODY" 'capture-pane -p -S -' 'session: captures the scrollback, where a dying pane leaves it'
+cap_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'capture-pane' | head -1 | cut -d: -f1)"
+kill_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'kill-session' | head -1 | cut -d: -f1)"
+[ -n "$cap_at" ] && [ -n "$kill_at" ] && [ "$cap_at" -lt "$kill_at" ] \
+  && pass 'session: captures the error BEFORE killing the session that holds it' \
+  || fail "session: capture($cap_at) must precede kill-session($kill_at)"
+dead_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'pane_dead' | head -1 | cut -d: -f1)"
+new_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'new-session -d' | head -1 | cut -d: -f1)"
+[ -n "$dead_at" ] && [ -n "$new_at" ] && [ "$dead_at" -lt "$new_at" ] \
+  && pass 'session: checks liveness BEFORE deciding to reuse or rebuild' \
+  || fail "session: the liveness check($dead_at) must precede new-session($new_at)"
+# A btop that fell over should cost the strip until the next kiosk restart, not
+# permanently — the reuse path brings a dead strip pane back.
+has "$SESSION_BODY" 'respawn-pane' 'session: revives a dead strip pane on reuse'
 has "$SESSION_BODY" 'resize-window' 'session: sets the geometry itself, since window-size is manual'
 # The half that cannot live in the config file, and the ordering that makes it safe.
 has "$SESSION_BODY" 'set -g window-size manual' 'session: pins window-size as a command instead'

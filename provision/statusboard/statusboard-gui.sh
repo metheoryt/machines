@@ -649,7 +649,44 @@ if [ "$MODE" = session ]; then
   # An existing session means FOOT restarted, not that the box did. Re-attaching
   # keeps the board's chart history, which lives in the running process and nowhere
   # else — otherwise a compositor hiccup throws away hours of it.
-  if ! "${TM[@]}" has-session -t "$TMUX_SESSION" 2>/dev/null; then
+  #
+  # But existence is not liveness, and conflating them wedges the display. The
+  # remain-on-exit that keeps a crashed board's error on screen also means a dead
+  # board leaves a DEAD PANE rather than an ended session: has-session says yes
+  # forever, `foot -H` cannot help because tmux is still alive, and the getty will
+  # not respawn anything because the session is there. Restarting the box would not
+  # even fix it. Verified on latitude 2026-07-29 (a killed pane reports
+  # #{pane_dead}=1 indefinitely while has-session still succeeds). So: ask about the
+  # BOARD PANE, and rebuild from scratch when it is a corpse.
+  REUSE=0
+  if "${TM[@]}" has-session -t "$TMUX_SESSION" 2>/dev/null; then
+    if [ "$("${TM[@]}" display -p -t "$TMUX_SESSION:0.0" '#{pane_dead}' 2>/dev/null)" = 1 ]; then
+      # The rebuild is about to discard the one thing that dead pane was holding: the
+      # error the board died with. `-S -` and not the default range, because it lands
+      # in the scrollback — a dying pane scrolls, so a default capture comes back
+      # blank and looks like there was never anything to read (2026-07-29).
+      {
+        printf 'board pane died with status %s\n' \
+          "$("${TM[@]}" display -p -t "$TMUX_SESSION:0.0" '#{pane_dead_status}' 2>/dev/null)"
+        "${TM[@]}" capture-pane -p -S - -t "$TMUX_SESSION:0.0" 2>/dev/null |
+          grep -v '^[[:space:]]*$' | tail -25
+      } > "${KIOSK_STATE%/}.crash" 2>/dev/null
+      sbg_note "session existed but its board pane was dead — rebuilding"
+      sbg_note "  what it died of: ${KIOSK_STATE%/}.crash"
+      "${TM[@]}" kill-session -t "$TMUX_SESSION" 2>/dev/null
+    else
+      REUSE=1
+      sbg_note 'reusing the running session — chart history preserved'
+      # If only the STRIP died, bring it back. A btop that fell over should cost the
+      # strip until the next kiosk restart, not permanently.
+      if [ "$("${TM[@]}" display -p -t "$TMUX_SESSION:0.1" '#{pane_dead}' 2>/dev/null)" = 1 ]; then
+        "${TM[@]}" respawn-pane -k -t "$TMUX_SESSION:0.1" "$BTOP_LINE" 2>>"$SESS_NOTE" &&
+          sbg_note 'strip pane was dead — respawned it'
+      fi
+    fi
+  fi
+
+  if [ "$REUSE" = 0 ]; then
     # tmux is UPSTREAM of the board here, so a tmux that will not start is a black
     # screen, not a missing strip. Never let that be the outcome.
     if ! "${TM[@]}" new-session -d -s "$TMUX_SESSION" \
