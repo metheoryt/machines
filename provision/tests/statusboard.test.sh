@@ -185,6 +185,18 @@ grep -q 'sb_cols "\$SB_ISTTY"' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'cols: the frame passes in a tty-ness measured outside the subshell'
 grep -qE '^SB_ISTTY=0; \[ -t 1 \] && SB_ISTTY=1$' "$REPO/provision/statusboard/statusboard.sh"
 eq "$?" '0' 'cols: -t 1 is evaluated in the shell that owns the real fd 1'
+# The ramp choice has the same hazard and the same fix: -ef against /dev/tty[0-9]*
+# needs no substitution, so it sees the real fd 1. Reading /proc/self/fd/1 from a
+# helper would always report a pipe, and tty1 would get glyphs it cannot draw.
+grep -q -- '-ef /dev/stdout' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'ramp: the VT test compares devices without a command substitution'
+! grep -q 'readlink /proc/self/fd/1' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'ramp: no readlink of fd 1 (it would see the frame subshell pipe)'
+# STATUSBOARD_RAMP='' rather than unset: it is exported for the chart assertions
+# above, and an empty value takes the same "not set" branch.
+eq "$(STATUSBOARD_RAMP='' SB_IS_VT=1 sb_ramp_name)" 'ascii'  'ramp: a VT gets the ASCII ramp'
+eq "$(STATUSBOARD_RAMP='' SB_IS_VT=0 sb_ramp_name)" 'height' 'ramp: anything else gets the block ramp'
+eq "$(SB_IS_VT=1 STATUSBOARD_RAMP=height sb_ramp_name)" 'height' 'ramp: the override wins on a VT too'
 
 # sb_console_font_file: console-setup names files height-x-width while FONTSIZE is
 # width-x-height. Reversing them is a silent no-op that leaves the font unchanged.

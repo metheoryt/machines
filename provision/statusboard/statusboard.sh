@@ -191,19 +191,17 @@ SB_HIST_CAP=400   # samples kept per series; more than any console is wide
 # Uni3-TerminusBold32x16 carries just U+2588, U+2591 and U+2592 (and no U+00D7).
 # So on a VT the pretty ramp would paint as replacement boxes.
 #
-# The test is the device behind stdout, not $TERM: /dev/ttyN is a VT and /dev/pts/N
-# is not, which is a fact rather than an inference. STATUSBOARD_RAMP overrides.
-sb_is_vt() {
-  local dev
-  dev="$(readlink /proc/self/fd/1 2>/dev/null)"
-  [ -n "$dev" ] || dev="$(tty 2>/dev/null)"
-  case "$dev" in /dev/tty[0-9]*) return 0 ;; esac
-  return 1
-}
+# The test is the DEVICE behind stdout, not $TERM: /dev/ttyN is a VT, /dev/pts/N is
+# not. That is a fact rather than an inference — but it can only be established in
+# the shell that owns the real fd 1, so SB_IS_VT is set once at startup (below) and
+# merely consulted here. Reading /proc/self/fd/1 from inside this function would
+# see the frame subshell's pipe and always answer "not a VT", which is how the
+# unreadable glyphs reached tty1 in the first place. STATUSBOARD_RAMP overrides.
+SB_IS_VT=0
 
 sb_ramp_name() {
   if [ -n "${STATUSBOARD_RAMP:-}" ]; then printf '%s' "$STATUSBOARD_RAMP"; return; fi
-  if sb_is_vt; then printf 'ascii'; else printf 'height'; fi
+  if [ "${SB_IS_VT:-0}" = 1 ]; then printf 'ascii'; else printf 'height'; fi
 }
 
 sb_ramp() {
@@ -675,6 +673,13 @@ SER_BAT=""; SER_PW=""; SER_LAN=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
 SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem
 # Evaluated ONCE here, where fd 1 is the real output; see sb_cols.
 SB_ISTTY=0; [ -t 1 ] && SB_ISTTY=1
+# And which device that output is. `-ef` compares device+inode, so this asks "is fd
+# 1 one of the virtual consoles" WITHOUT a command substitution — the whole point,
+# since a substitution's fd 1 is a pipe and the answer would always be no.
+for _d in /dev/tty[0-9]*; do
+  [ -e "$_d" ] && [ "$_d" -ef /dev/stdout ] && { SB_IS_VT=1; break; }
+done
+unset _d
 SB_MOUNTS=""; SB_UNMOUNTED=""
 # Declared up front because the frame reads them under `set -u`: the loop always
 # probes before its first paint, but --once and any future caller ordering should
