@@ -317,10 +317,15 @@ sbg_tmux_term() {
 #   status off
 #           the board already paints a hostname and a clock on its first row. A
 #           status bar would cost a row to repeat them.
-#   window-size manual
-#           tmux 3.5a defaults to `latest`, so the moment you attach from an 80x24
-#           SSH window the PHYSICAL display reflows to 80x24 and the chart column
-#           dies. Manual pins it, and --session sets the real size explicitly.
+#   NOT window-size
+#           it belongs here and cannot go here. tmux 3.5a defaults it to `latest`,
+#           so attaching from an 80x24 SSH window reflows the PHYSICAL display to
+#           80x24 and kills the chart column — but `set -g window-size manual` in a
+#           config read at server start CRASHES the server: measured on latitude
+#           2026-07-29, `tmux -f <conf> new-session -d` reports "server exited
+#           unexpectedly" and the server log ends mid-spawn_window with zero
+#           sessions. --session therefore sets it as a command, after the first
+#           session exists, where it is harmless and does the same job.
 #   remain-on-exit on
 #           restores what `foot -H` used to do by itself. With tmux in between, a
 #           board that dies no longer ends foot's child: btop holds the server up,
@@ -333,7 +338,6 @@ sbg_tmux_conf_text() {
 set -g default-terminal "$term"
 set -as terminal-features ",foot*:RGB"
 set -g status off
-set -g window-size manual
 set -g remain-on-exit on
 set -g mouse off
 set -g escape-time 0
@@ -653,6 +657,11 @@ if [ "$MODE" = session ]; then
       sbg_note 'strip off: tmux would not start a session'
       exec "${BOARD_CMD[@]}"
     fi
+    # Now, and not in the config file: read at server start this option crashes
+    # tmux 3.5a outright (see sbg_tmux_conf_text). Set here it pins the geometry, so
+    # attaching from a small SSH window can no longer reflow the physical display.
+    "${TM[@]}" set -g window-size manual 2>>"$SESS_NOTE" ||
+      sbg_note 'window-size stayed automatic; a small ssh attach can reflow the display'
     "${TM[@]}" split-window -t "$TMUX_SESSION" -v -l "$STRIP" "$BTOP_LINE" 2>>"$SESS_NOTE" ||
       sbg_note 'split failed; the board has the whole session'
     # Focus back on the board. btop quits on `q`; the board reads no input at all,

@@ -228,9 +228,13 @@ has "$TCONF" 'foot' 'tmux conf: scopes the RGB feature to foot, the kiosk termin
 # `set -as`, not `set -g`: terminal-features is a list, and replacing it wholesale
 # would drop the defaults tmux ships for every other terminal.
 has "$TCONF" 'set -as terminal-features' 'tmux conf: appends to terminal-features rather than replacing it'
-# tmux 3.5a defaults window-size to `latest`, so attaching from an 80x24 ssh window
-# would reflow the PHYSICAL display to 80x24 and kill the chart column.
-line "$TCONF" 'set -g window-size manual' 'tmux conf: pins the window size against a small ssh attach'
+# window-size belongs in this config and cannot go in it. tmux 3.5a defaults it to
+# `latest`, so attaching from an 80x24 ssh window would reflow the PHYSICAL display
+# and kill the chart column — but setting it in a config read at SERVER START
+# crashes the server ("server exited unexpectedly", log ends mid-spawn_window with
+# zero sessions; measured on latitude 2026-07-29). It has to be a command issued
+# after the first session exists.
+hasnt "$TCONF" 'window-size' 'tmux conf: does not set window-size at server start (it crashes 3.5a)'
 # Restores what foot -H used to do alone. With tmux between them, a board that dies
 # no longer ends foot's child — btop holds the server up and -H never fires.
 line "$TCONF" 'set -g remain-on-exit on' 'tmux conf: a dead pane keeps its error on screen'
@@ -371,6 +375,13 @@ has "$SRC" 'why the strip is or is not there' 'install: says where that record l
 # board's chart history lives in that running process and nowhere else.
 has "$SESSION_BODY" 'has-session' 'session: re-attaches instead of rebuilding, preserving chart history'
 has "$SESSION_BODY" 'resize-window' 'session: sets the geometry itself, since window-size is manual'
+# The half that cannot live in the config file, and the ordering that makes it safe.
+has "$SESSION_BODY" 'set -g window-size manual' 'session: pins window-size as a command instead'
+ws_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'set -g window-size manual' | head -1 | cut -d: -f1)"
+ns_at="$(printf '%s\n' "$SESSION_BODY" | grep -n 'new-session -d' | head -1 | cut -d: -f1)"
+[ -n "$ws_at" ] && [ -n "$ns_at" ] && [ "$ns_at" -lt "$ws_at" ] \
+  && pass 'session: pins window-size AFTER a session exists, which is what avoids the crash' \
+  || fail "session: new-session($ns_at) must precede the window-size set($ws_at)"
 # Its own socket. `-f` is honoured only when a server STARTS, so sharing the default
 # socket with a running session would silently discard the kiosk config — and a
 # `kill-server` in that session would take the display with it.
