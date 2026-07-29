@@ -194,15 +194,25 @@ health data recorded for any of them.
 |---|---|---|---|---|---|
 | **WDC WD10SPZX-21Z10T0**<br>`WD-WX91E575272W` | A0 | `E:` years archive `admin`, **664G, only online copy** | 28 796 (3.3 y) | 0 realloc / 0 events / 0 pending / 0 uncorr / 0 seek / 0 read-error — **cleanest surface in the pool** | **UDMA_CRC 144, age unknown** (see below); Start_Stop 91 599; Load_Cycle 122 818 |
 | **HGST HTS541010A9E680**<br>`670200210032` bay 1 | B1 | `H:` restic `immich-media-2024`, 650G; designated off-site copy | 27 816 (3.2 y) | 0 pending / 0 uncorr, **23 realloc events** (0 sectors) | **Load_Cycle 639 701 — past the ~600k typical rating**; Start_Stop 116 800; Power_Cycle 14 413; CRC 18 |
-| **ST1000LM024 HN-M101MBB**<br>`S2U5J9ECA34541` | A1 | `G:` restic `immich-media` + `immich-postgres`, 159G | 25 361 (2.9 y) | 0 realloc / 0 pending / 0 uncorr; CRC 0 | **Multi_Zone_Error_Rate normalised 001/100** (raw 83 172); **max-ever temp 63 °C**; Samsung M8-derived family with a weak field record |
+| **ST1000LM024 HN-M101MBB**<br>`S2U5J9ECA34541` | A1 | `G:` restic `immich-media` + `immich-postgres`, 159G | 25 361 (2.9 y) | 0 realloc / 0 events / 0 pending / 0 uncorr / 0 seek; CRC 0 | **Most wear indicators in the pool**: `Raw_Read_Error_Rate` raw 1 578, `Calibration_Retry_Count` / `Load_Retry_Count` 897, `G-Sense_Error_Rate` 783, `Spin_Up_Time` normalised 089 (worst 076), **max-ever temp 63 °C**, Load_Cycle 342 862. Samsung Spinpoint M8 family with a weak field record |
 | **ST320LT020-9YG142**<br>`W047MMKS` | *(removed)* | `F:` `Public`, 177G — retired, shelved | 36 153 (4.1 y) | 0 realloc / 0 pending / 0 uncorr | 10 ATA errors but **newest at 13 478 h — 2.6 years stale**; `Reported_Uncorrect` 11 and `Command_Timeout` 299 both historical; past thermal excursion (`190 In_the_past`) |
 
 ### What that table changes
 
 - **The drive being retired is healthier today than one being kept.** The 320G's
   scars are all 2.6 years old with a clean surface since; the ST1000LM024 carries
-  a live `Multi_Zone_Error_Rate` at the bottom of its normalised scale and has
-  seen 63 °C.
+  the pool's only cluster of live wear indicators.
+
+  > Do **not** hang that judgement on `Multi_Zone_Error_Rate 001`, as an earlier
+  > revision of this document did. That attribute is misscaled on the Samsung
+  > Spinpoint M8 family and its threshold is `000`, so it can never trip
+  > `WHEN_FAILED` — inferring degradation from its normalised value is the same
+  > mistake as reading "still accruing" into the CRC counter below. The case
+  > stands on converging *raw* counters instead, none of them ambiguous:
+  > 1 578 raw read errors, 897 calibration/load retries, 783 G-sense shock
+  > events, spin-up time degraded to 089 with worst-ever 076, and a max-ever
+  > 63 °C. Its surface is still clean (0 realloc / 0 pending / 0 uncorrectable) —
+  > this is a *mechanism* wearing out, not a platter going bad.
 - **The years archive's only online copy shows 144 CRC errors — but their age is
   unknown, and that distinction was initially overstated here.** An earlier
   revision of this document called the count "still accruing," reasoning from
@@ -274,11 +284,11 @@ against a 3 × 1TB backup pool (2.79 TB). Health data adds the ordering:
    the pool and its only fault is an interface counter; retiring it would discard
    the best disk over a connector. Its long-term role is the years-archive backup
    target, once a real 6TB exists and `admin` moves off it.
-5. **`/etc/fstab` has no data-disk entries at all** — root, ESP and swap only.
-   Every `/mnt/*` mount is currently transient, so a reboot brings latitude up
-   with empty mount points and any service pointed at nothing. UUID-based entries
-   with `nofail` are a prerequisite before services come up, independent of the
-   layout choice.
+5. ~~**`/etc/fstab` has no data-disk entries at all**~~ — **done 2026-07-29, see
+   §7.** Root, ESP and swap only; every `/mnt/*` mount was transient, so a reboot
+   brought latitude up with empty mount points and any service pointed at
+   nothing. UUID + `nofail` entries were a prerequisite before services come up,
+   independent of the layout choice.
 6. **Reserve bus 002 for the primary disk.** Both docks share bus 004; putting
    the primary there makes it contend with its own backup targets during copies.
 
@@ -291,3 +301,189 @@ say the opposite: `sdd2` (WD10SPZX) holds `admin`, `sdg2` (HGST) holds
 `backup-homeserver`. The migration plan's own Data Inventory table is correct;
 §2 is the outlier. Corrected in place, since that document exists specifically so
 disk identifiers are not retyped from memory.
+
+## 7. Mount policy and the rules for hot-swapping
+
+### 7.1. What got written (2026-07-29)
+
+`/etc/fstab` now carries UUID entries for the three volumes that were attached at
+the time. Backup of the original at `/etc/fstab.bak-20260729`.
+
+| UUID | Mount point | Device then | Options |
+|---|---|---|---|
+| `5A3014505F7576FA` | `/mnt/immich` | Kingston `nvme0n1p1` | `ro,noatime,uid=1000,gid=1000,iocharset=utf8,nofail` |
+| `EAA6CAAEA6CA7A99` | `/mnt/immich-2024` | Dock A0, `sdd2` | same + `x-systemd.device-timeout=60` |
+| `9CCED7D2CED7A2B6` | `/mnt/immich-backup` | Dock A1, `sde2` | same + `x-systemd.device-timeout=60` |
+
+Choices, and why:
+
+- **`ro` on all three.** Every one holds data whose restore has not been verified
+  yet. Read-write is a deliberate later step, never a side effect of a reboot.
+- **`nofail` on all three, including the internal NVMe.** The Kingston is slated
+  for an ext4 conversion, which changes its UUID; without `nofail` the first boot
+  after the reformat hangs on a UUID that no longer exists.
+- **`x-systemd.device-timeout=60`, not 10.** `nofail` alone already removes the
+  mount from `local-fs.target`'s hard requirements, so a missing device cannot
+  block boot at any timeout. What a short timeout *adds* is a window a cold dock
+  spinning up can miss — boot completes, the mount is silently absent, nothing
+  retries. That is the exact trap these entries exist to prevent.
+- **`pass 0`.** `ntfs3` has no fsck; never let boot try.
+
+**Verified:** `systemctl daemon-reload` + `mount -a` clean, all three
+`mnt-*.mount` units `active mounted`. **Not yet verified:** actual boot behaviour
+and late-attach auto-mount — both need a reboot or a dock power-cycle, and the
+CRC sweep on Dock A was in flight. Two open items:
+
+1. **Reboot test** after the sweep finishes.
+2. **Does a dock powered on *after* boot mount itself?** `systemd-fstab-generator`
+   does wire device→mount dependencies, but this has not been confirmed on Debian
+   13 for a late-appearing USB device. If it does not, the fix for the two dock
+   entries is `noauto,x-systemd.automount,x-systemd.idle-timeout=600` — an
+   automount unit that mounts on first access. Dock B is the safe test bed: it is
+   already powered off and shares nothing in flight with Dock A.
+
+Dock B's two volumes have **no entry yet** — the dock was off, so their UUIDs
+could not be read (the vanished devices are absent from the `blkid` cache too).
+A `TODO` block in `/etc/fstab` names the two drives, their intended mount points
+and the capture command.
+
+**Follow-up:** these lines were hand-typed into `/etc/fstab`, which is exactly the
+kind of state this repo exists to make survivable. They belong in a `provision/`
+step so a reinstall reproduces them. Not a blocker — services need the mounts
+now — but recorded so it is not forgotten.
+
+### 7.2. The stale-mount failure, observed live
+
+Two mounts were found pointing at devices that no longer existed:
+`/mnt/public` on `sdb1` and `/mnt/immich-2024-backup` on `sdc2`. `findmnt` listed
+both as mounted; `blkid` had no entry for either; `ls` returned EIO. `dmesg`
+reconstructs the whole sequence and it is worth keeping, because it demonstrates
+the mechanism rather than asserting it:
+
+```
+[47615] dock B attached:      sdf (320G, 1 partition) + sdg (HGST, 2 partitions)
+[51860] usb 4-1: USB disconnect          <- dock B powered off
+[51896] dock B back:          sdf = 6TB "Very big device", sdg = HGST
+[52728] usb 4-1: USB disconnect          <- dock B off again, 6TB pulled for return
+```
+
+The drives were `sdb` and `sdc` at boot and got mounted. The dock was then cut
+without unmounting. Two consequences followed:
+
+1. **The mounts went stale, not away.** The mount table kept the entries, so
+   every path under them returned EIO while still *looking* mounted to anything
+   that reads `/proc/mounts` — including a naive health check.
+2. **The stale mounts kept `sdb` and `sdc` allocated.** The kernel does not
+   release a `sd` letter while the block device is still referenced by a mount.
+   So the *same two drives*, replugged, came back as `sdf` and `sdg`. That is the
+   H1 renumbering hazard in the migration plan, caught in the act — and the
+   reason nothing may ever be addressed by `/dev/sdX`.
+
+Both were cleaned with a plain `umount` (read-only, nothing dirty to flush;
+`umount -l` is the fallback when a process holds the path). No I/O errors
+anywhere in `dmesg` — nothing was damaged, because the mounts were `ro`.
+
+### 7.3. Rules for the connected disks
+
+**Yes, the disks are hot-swappable — the docks are USB, and USB is designed for
+it. What is not hot-swappable is a *mounted filesystem*.** Every rule below
+follows from that one distinction.
+
+1. **Unmount before pulling a drive or cutting dock power. Always, both bays.**
+   ```
+   sudo umount /mnt/immich-2024 /mnt/immich-backup   # dock A, both bays
+   sync                                              # only matters for rw mounts
+   ```
+   Powering a dock off is identical to yanking both its drives at once.
+2. **`ro` protects the data, not the mount table.** A yanked read-only NTFS
+   volume loses nothing — there is nothing dirty. It still leaves the stale mount
+   and still holds its `sd` letter. §7.2 is what that looks like.
+3. **A yanked *read-write* `ntfs3` volume is a different matter.** The NTFS
+   journal is left dirty; Windows will demand `chkdsk` and Linux may refuse
+   anything but a read-only remount. This is a live concern the moment any of
+   these volumes goes `rw`.
+4. **Never hot-swap while a long job is touching the drive** — `dd`, `badblocks`,
+   `restic`, a copy. Beyond killing the job, a disconnect on that dock's cable
+   generates `UDMA_CRC` events, which corrupts the very measurement the sweep in
+   §4 exists to take.
+5. **Expect the letters to move, and never depend on them.** Address disks as
+   `/dev/disk/by-id/usb-<bridge-serial>-0:<bay>` and mount by `UUID=`. The
+   `by-id` path also encodes which physical bay a device is in (§2).
+6. **After a replug, let udev settle before acting**: `sudo udevadm settle`, then
+   `lsblk`. If a `by-id` link is missing for an attached device, something did
+   not finish — do not start writing.
+7. **A mount that is present is not a mount that works.** `findmnt` alone cannot
+   tell a live mount from a stale one; the cheap probe is
+   `ls "$m" >/dev/null 2>&1`, which returns EIO on a vanished device. Anything
+   that reports disk health needs this check, not just a mount-table read.
+
+## 8. Retirement, shelving, and how long a shelf keeps data
+
+### 8.1. Is any drive unfit even to shelve?
+
+**No.** Shelving asks only that a drive read back once, later, and every drive in
+the pool reports **0 reallocated sectors, 0 pending sectors and 0 offline
+uncorrectable** — including the 320G already pulled and the 8.5-year-old
+Ultrastar. A drive genuinely unfit to shelve would show pending sectors, growing
+reallocations, or a real `SMART STATUS` failure. Nothing here does.
+
+The useful distinction is different, and it is between **service** and **shelf**:
+
+| Drive | Fit to shelve? | Fit for service? |
+|---|---|---|
+| **WD10SPZX** (A0) | yes | **yes — best in pool.** Cleanest surface; only fault is an interface counter |
+| **ST320LT020** (pulled) | yes | no, and irrelevant — 177G, already shelved with data intact |
+| **HGST HTS541010A9E680** (B1) | yes | **not for a role nobody inspects.** Past its ~600k load-cycle rating; the 23 realloc events are still unexplained |
+| **ST1000LM024** (A1) | yes | **no — first out of service.** The pool's only cluster of live wear indicators (§4) |
+
+So: **the ST1000LM024 is the retirement candidate**, not the WD10SPZX. It is
+physically fine to shelve — its surface is clean — but it should stop being a
+*live backup target*, which is what it is today (`immich-media` +
+`immich-postgres`, 159G). It cannot be retired until that 159G has a second home,
+which needs the 6TB. Until then it stays in service and is simply the drive whose
+data must never be the only copy.
+
+### 8.2. How long does a shelved drive keep its data?
+
+**Practical answer: plan on 5 years, verify every 12 months, and rewrite every
+3–5 years.** The reasoning matters more than the number, because two different
+clocks are running and the slower one is the one people worry about.
+
+- **Magnetic decay is the *slow* clock.** Remanence on a shelved platter is good
+  for well over a decade at room temperature. No manufacturer publishes an
+  archival retention spec for HDDs — anyone quoting one is quoting a guess. It is
+  temperature-sensitive: a hot attic ages the magnetisation far faster than a
+  cupboard.
+- **Mechanics are the *fast* clock, and they are what actually kills shelved
+  drives.** Lubricant migrates off the spindle bearing and the head-slider air
+  bearing; the head can stick to the ramp or the platter (stiction); elastomer
+  parts and the spindle grease stiffen. The common failure of a long-shelved
+  drive is not corrupted files — it is a drive that will not spin up, or that
+  spins up and dies within hours. This mode gets worse with idle time regardless
+  of how cool and dry the storage is.
+- **Reading does not refresh anything.** A read-only verify pass proves the data
+  is still there and exercises the mechanism, but it does not rewrite a single
+  magnetic domain. Only a *write* refreshes. To actually renew the recording,
+  copy the contents off and back, or run a non-destructive read-write pass
+  (`badblocks -n`, on a drive you have another copy of).
+
+Concrete protocol for a shelved drive:
+
+- **Every 6–12 months:** power it up, `smartctl -a` (watch POH, realloc, pending),
+  and a full-surface read (`dd if=… of=/dev/null bs=1M conv=noerror,sync`) — the
+  same sweep as §4. Failures found this way are recoverable *because another copy
+  still exists*; failures found when you need the drive are not.
+- **Every 3–5 years:** rewrite it, or migrate the data to a newer disk. Treat the
+  drive as consumable and the data as the asset.
+- **Storage conditions:** cool, dry, stable temperature, antistatic bag, no
+  vibration, on a shelf rather than a garage or attic. Temperature *cycling* and
+  humidity do more damage than a steady warm room.
+- **Label the drive physically** with contents, date shelved and last-verified
+  date. An unlabelled shelved drive becomes an unknown-provenance drive within a
+  year, and then nobody dares wipe it or trust it.
+
+**And the rule that outranks all of the above: a shelved drive is not a backup.**
+It is one copy, unverified, unmonitored, and its failure is discovered only at the
+moment it is needed. The 320G on the shelf is a *convenience* — a deferral of the
+decision about what its 177G contains — not protection. Anything that matters
+needs the 3-2-1 arrangement independently of what is on the shelf.
