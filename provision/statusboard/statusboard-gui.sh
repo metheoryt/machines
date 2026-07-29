@@ -133,6 +133,14 @@ sbg_kiosk_argv() {
 # sbg_dropin_text <user>: the getty drop-in that turns the login prompt into an
 # autologin. The empty ExecStart= is required — a drop-in APPENDS to a list-typed
 # directive, so without the reset systemd would run two agettys on one VT.
+#
+# Deliberately WITHOUT Debian's `-o '-p -- \u'`. --autologin normally adds
+# `-f <user>` to the /bin/login command line itself, but supplying --login-options
+# hands that argv to the caller, so agetty stops adding it — which is how the first
+# install attempt produced a hung `/bin/login -p --` with no user and no autologin
+# at all (2026-07-29). Dropping -o is the smaller surface and was verified to yield
+# `-bash` as the target user; the environment -p would have preserved is one this
+# VT has no interest in.
 sbg_dropin_text() {
   local user="${1:-me}"
   cat <<CONF
@@ -140,7 +148,7 @@ sbg_dropin_text() {
 # cage needs to take DRM master; see the header of that script.
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty -o '-p -- \\\\u' --noclear --autologin $user - \$TERM
+ExecStart=-/sbin/agetty --noclear --autologin $user - \$TERM
 CONF
 }
 
@@ -287,6 +295,16 @@ fi
 # ── run ───────────────────────────────────────────────────────────────────────
 # The mode the profile.d hook invokes. Fails loudly rather than silently: the hook
 # does not exec, so whatever is printed here stays on screen above a shell prompt.
+
+# Once a compositor owns tty1 there is no /dev/vcs1 to dump, so the screen stops
+# being readable over SSH — and the screen is where cage's errors go. Mirror stderr
+# into a file so a failure is diagnosable from the network instead of needing
+# someone in the chair. Truncated per start, not appended: one session's worth is
+# what you want, and an append-only log on an unattended box has no rotation story.
+LOG="${STATUSBOARD_GUI_LOG:-/var/tmp/statusboard-gui.log}"
+if : > "$LOG" 2>/dev/null; then
+  exec 2> >(tee -a "$LOG" >&2)
+fi
 
 if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
   printf 'XDG_RUNTIME_DIR is unset — cage has nowhere for its Wayland socket.\n' >&2

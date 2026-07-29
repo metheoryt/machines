@@ -98,6 +98,14 @@ eq "$(printf '%s\n' "$DROPIN" | grep -c '^ExecStart=')" '2' \
   'dropin: exactly one reset plus one replacement'
 has "$(sbg_dropin_text someone)" '--autologin someone' 'dropin: honours the user argument'
 
+# No --login-options. Supplying -o hands the /bin/login argv to the caller, which
+# stops agetty from adding the `-f <user>` that --autologin exists to add. Debian's
+# stock `-o '-p -- \u'` therefore produces a HUNG `/bin/login -p --` with no user
+# — the exact symptom of the first install attempt on latitude (2026-07-29).
+hasnt "$DROPIN" '-o ' 'dropin: passes no --login-options (it would cancel the -f the autologin needs)'
+hasnt "$DROPIN" '--login-options' 'dropin: nor the long form'
+hasnt "$DROPIN" '\u' 'dropin: no \u substitution to get wrong'
+
 # ── sbg_hook_text ─────────────────────────────────────────────────────────────
 HOOK="$(sbg_hook_text /opt/gui.sh /dev/tty1)"
 has "$HOOK" '/dev/tty1' 'hook: guards on the physical console'
@@ -124,6 +132,13 @@ has "$SRC" 'systemctl disable --now "$TEXT_SERVICE"' \
 has "$SRC" 'rm -f "$PROFILE_HOOK" "$DROPIN"' 'install: rolls both artifacts back on failure'
 has "$SRC" 'WAS_TEXT' 'install: remembers whether the text board was enabled, to restore it'
 has "$SRC" 'need root' 'install: refuses to run unprivileged'
+
+# The kiosk's own diagnostics. A compositor on tty1 means no /dev/vcs1, so the
+# screen cannot be dumped over SSH any more and cage's stderr would be visible only
+# to someone sitting at the box.
+has "$SRC" 'STATUSBOARD_GUI_LOG' 'run: mirrors stderr to a log readable over SSH'
+has "$SRC" 'tee -a "$LOG" >&2' 'run: keeps stderr on the screen as well as in the log'
+has "$SRC" ': > "$LOG"' 'run: truncates per start rather than growing forever'
 
 # Verify-then-commit ordering, the lesson from statusboard.sh's --install: the
 # rollback must come from a check on the RUNNING state, not from an exit code that
