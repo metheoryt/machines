@@ -196,6 +196,44 @@ sb_battery_line() {
   printf 'battery   %s%s %3s%%%s  %s%s%s' "$col" "$bar" "$cap" "$C_RST" "$st" "$draw" "$est"
 }
 
+# sb_source_watts <voltage_uV> <current_uA>: the negotiated USB-C contract in
+# whole watts, or empty when the connector has no number to give.
+#
+# Zero is NOT a reading, and conflating the two is what this function exists to
+# stop. Measured on latitude 2026-07-29: a 65W adapter behind a PD hub left every
+# voltage and current attribute on the ucsi source psy at 0 while `usb_type` said
+# `C [PD] PD_PPS` and the battery took 15W. The old code guarded with -n, which
+# the literal string `0` satisfies, so it multiplied out to `USB-C 0W` — the same
+# text it would print for a supply really delivering nothing, next to a battery
+# the same frame called Charging. Unknown has to look different from
+# browning-out, because acting on the difference is the point of the row.
+sb_source_watts() {
+  local uv="${1:-}" ua="${2:-}" watts
+  case "$uv" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$ua" in '' | *[!0-9]*) printf ''; return ;; esac
+  { [ "$uv" -gt 0 ] && [ "$ua" -gt 0 ]; } || { printf ''; return; }
+  watts="$(awk -v v="$uv" -v a="$ua" 'BEGIN { printf "%.0f", v / 1000000 * (a / 1000000) }')"
+  [ "$watts" = 0 ] && { printf ''; return; }
+  printf '%s' "$watts"
+}
+
+# sb_source_label <watts> <usb_type>: what to call an attached USB-C supply.
+#
+# With a wattage it is the wattage. Without one, `usb_type` still says whether a
+# PD contract is live — the kernel brackets the ACTIVE type, so `C [PD] PD_PPS`
+# is PD and `[C] PD PD_PPS` is a plain Type-C port that merely lists PD among the
+# types it could do. That distinction is worth printing even with no rating:
+# `PD ?W` is a supply that will not name its contract, `?W` alone is a port that
+# never negotiated one.
+sb_source_label() {
+  local watts="${1:-}" utype="${2:-}"
+  [ -n "$watts" ] && { printf 'USB-C %sW' "$watts"; return; }
+  case "$utype" in
+    *'[PD'*) printf 'USB-C PD ?W' ;;
+    *) printf 'USB-C ?W' ;;
+  esac
+}
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # Every measured row gets a second column: a one-line sparkline of that metric's
 # recent history, sized to whatever horizontal space the frame has left. The
@@ -917,20 +955,22 @@ for d in /sys/class/power_supply/BAT*; do [ -d "$d" ] && { BAT_DIR="$d"; break; 
 # Which supply is actually feeding the box, and at what rating. On USB-C PD the
 # negotiated contract lives in the ucsi source psy, and reading it is the only
 # way to tell a 65W brick from the 15W port that browned this box out.
+#
+# Each of the two figures has a fallback, because which attribute carries the
+# contract varies by connector: voltage_now is live and voltage_max is the PDO
+# ceiling, and a connector that zeroes one sometimes fills the other.
 sb_power_source() {
-  local ac="" src="" volts amps watts
+  local ac="" src="" volts amps
   for d in /sys/class/power_supply/*/; do
     case "$(_read "$d/type")" in
       Mains) [ "$(_read "$d/online")" = 1 ] && ac="AC" ;;
       USB)
         if [ "$(_read "$d/online")" = 1 ]; then
-          volts="$(_read "$d/voltage_now")"; amps="$(_read "$d/current_max")"
-          if [ -n "$volts" ] && [ -n "$amps" ]; then
-            watts="$(awk -v v="$volts" -v a="$amps" 'BEGIN { printf "%.0f", v / 1000000 * (a / 1000000) }')"
-            src="USB-C ${watts}W"
-          else
-            src="USB-C"
-          fi
+          volts="$(_read "$d/voltage_now")"
+          [ "${volts:-0}" != 0 ] || volts="$(_read "$d/voltage_max")"
+          amps="$(_read "$d/current_max")"
+          [ "${amps:-0}" != 0 ] || amps="$(_read "$d/current_now")"
+          src="$(sb_source_label "$(sb_source_watts "$volts" "$amps")" "$(_read "$d/usb_type")")"
         fi
         ;;
     esac

@@ -112,6 +112,39 @@ OUT="$(sb_battery_line 85 Full 0 47000000 47000000)"
 has "$OUT" '85%' 'battery: zero power_now still renders'
 eq "$(printf '%s' "$OUT" | grep -c 'left')" '0' 'battery: zero rate gives no bogus estimate'
 
+# ── Power source ──────────────────────────────────────────────────────────────
+# The wattage and the label are split out of the sysfs walk for the same reason
+# sb_battery_line is: the interesting cases are the ones no attached hardware is
+# currently in, and a hub that reports zeros is one of them.
+
+eq "$(sb_source_watts 20000000 3250000)" '65' 'source: 20V at 3.25A reads as 65W'
+eq "$(sb_source_watts 20000000 3000000)" '60' 'source: 20V at 3A reads as 60W'
+eq "$(sb_source_watts 5000000 3000000)" '15'  'source: the 15W port that browned the box out still reads 15W'
+
+# The whole point: a zero is a missing reading, never a 0W supply.
+eq "$(sb_source_watts 0 0)" ''         'source: both figures zero gives no wattage'
+eq "$(sb_source_watts 0 3000000)" ''   'source: zero volts gives no wattage'
+eq "$(sb_source_watts 20000000 0)" ''  'source: zero amps gives no wattage'
+eq "$(sb_source_watts '' '')" ''       'source: absent attributes give no wattage'
+eq "$(sb_source_watts abc 3000000)" '' 'source: junk volts give no wattage'
+eq "$(sb_source_watts 20000000 xyz)" '' 'source: junk amps give no wattage'
+# 100mV at 1mA rounds to 0W. Printing that as 0W would be the original bug by a
+# longer route, so it has to come back empty too.
+eq "$(sb_source_watts 100000 1000)" ''  'source: a product that rounds to zero gives no wattage'
+
+eq "$(sb_source_label 65 'C [PD] PD_PPS')" 'USB-C 65W' \
+  'source: a known wattage wins over the type string'
+# The kernel brackets the ACTIVE type. Both directions are asserted because an
+# inverted match would pass the first case on its own.
+eq "$(sb_source_label '' 'C [PD] PD_PPS')" 'USB-C PD ?W' \
+  'source: bracketed PD with no rating says PD and admits the unknown'
+eq "$(sb_source_label '' '[C] PD PD_PPS')" 'USB-C ?W' \
+  'source: PD merely listed, not active, does not claim PD'
+eq "$(sb_source_label '' '')" 'USB-C ?W' \
+  'source: no type string at all still admits the unknown'
+eq "$(printf '%s' "$(sb_source_label '' 'C [PD] PD_PPS')" | grep -c '0W')" '0' \
+  'source: an unknown rating never renders as 0W'
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # The chart column is the reason the frame is now laid out in two passes, so the
 # padding maths is asserted as hard as the glyph maths: a one-cell error in either
