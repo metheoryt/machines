@@ -62,7 +62,7 @@ fi
 grep -q ':charset=' "$GUI"; eq "$?" '0' 'font_has_ramp: asks fontconfig by charset'
 
 # ── sbg_kiosk_argv ────────────────────────────────────────────────────────────
-ARGV="$(sbg_kiosk_argv /tmp/board.sh 'JetBrains Mono' 20 1 10 300)"
+ARGV="$(sbg_kiosk_argv /tmp/board.sh 'JetBrains Mono' 20 1 10 60)"
 line "$ARGV" 'cage' 'kiosk: cage is the compositor'
 line "$ARGV" 'foot' 'kiosk: foot is the terminal'
 line "$ARGV" 'bash' 'kiosk: the board is run through bash'
@@ -113,7 +113,7 @@ rst_at="$(grep -n 'systemctl reset-failed "\$TEXT_SERVICE"' "$GUI" | head -1 | c
 # caller that re-split a flat string would pass "Mono:size=20" as a command.
 eq "$(printf '%s\n' "$ARGV" | grep -c .)" '21' 'kiosk: argv is one argument per line'
 line "$ARGV" '--cell' 'kiosk: forwards --cell'
-line "$ARGV" '300' 'kiosk: forwards the cell duration'
+line "$ARGV" '60' 'kiosk: forwards the cell duration'
 
 # ── sbg_dropin_text ───────────────────────────────────────────────────────────
 DROPIN="$(sbg_dropin_text me)"

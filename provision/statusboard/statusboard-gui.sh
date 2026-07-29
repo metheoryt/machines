@@ -60,7 +60,7 @@ INTERVAL="${STATUSBOARD_GUI_INTERVAL:-1}"
 PROBE="${STATUSBOARD_GUI_PROBE:-10}"
 # Seconds of samples per chart cell. Matches the board's own default; passed
 # explicitly so `--check` shows every cadence the kiosk runs at in one line.
-CELL="${STATUSBOARD_GUI_CELL:-300}"
+CELL="${STATUSBOARD_GUI_CELL:-60}"
 GUI_TTY="${STATUSBOARD_GUI_TTY:-/dev/tty1}"
 GETTY_UNIT="getty@$(basename "$GUI_TTY").service"
 DROPIN_DIR="${STATUSBOARD_DROPIN_DIR:-/etc/systemd/system/$GETTY_UNIT.d}"
@@ -139,7 +139,7 @@ sbg_have_polkit() {
 #   foot -H   hold the window open after the child exits, so a board that dies
 #             leaves its error on screen instead of a black rectangle.
 sbg_kiosk_argv() {
-  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}" cell="${6:-300}"
+  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}" cell="${6:-60}"
   printf '%s\n' cage -s -d -- \
     foot -H -f "$font:size=$size" \
     -o main.pad=6x6 -o cursor.style=underline \

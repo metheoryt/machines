@@ -512,7 +512,7 @@ has "$OUT" 'charts: last' 'layout: the header names the span the charts cover'
 # The axis carries BOTH cadences now: how much time a cell covers, and how often a
 # sample was actually taken. They are no longer the same number, and a reader who
 # assumes they are will misread every chart.
-has "$OUT" '5m/cell'      'layout: the header names the cell duration in readable units'
+has "$OUT" '1m/cell'      'layout: the header names the cell duration in readable units'
 has "$OUT" '10s samples'  'layout: the header also names the sample cadence'
 OUT_FAST="$(STATUSBOARD_COLS=120 STATUSBOARD_CELL=10 bash "$REPO/provision/statusboard/statusboard.sh" --once 2>&1)"
 has "$OUT_FAST" '10s/cell' 'layout: STATUSBOARD_CELL reaches the axis label'

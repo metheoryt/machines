@@ -16,7 +16,7 @@
 #   bash statusboard.sh --once          # paint one frame and exit (for testing)
 #   bash statusboard.sh --interval 1    # seconds between REPAINTS (default 1)
 #   bash statusboard.sh --probe 10      # seconds between network probes (default 10)
-#   bash statusboard.sh --cell 300      # seconds of samples per chart cell (default 300)
+#   bash statusboard.sh --cell 60       # seconds of samples per chart cell (default 60)
 #   sudo bash statusboard.sh --install  # install + enable the tty1 service
 #   sudo bash statusboard.sh --uninstall
 #   sudo bash statusboard.sh --bigfont  # double the console font (16x32) on every VT
@@ -48,7 +48,7 @@ set -u
 # into one chart cell at render time.
 INTERVAL=1
 PROBE=10
-CELL="${STATUSBOARD_CELL:-300}"
+CELL="${STATUSBOARD_CELL:-60}"
 ONCE=0
 MODE=run
 SERVICE_NAME=statusboard.service
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
     --once) ONCE=1; shift ;;
     --interval) INTERVAL="${2:-1}"; shift 2 ;;
     --probe) PROBE="${2:-10}"; shift 2 ;;
-    --cell) CELL="${2:-300}"; shift 2 ;;
+    --cell) CELL="${2:-60}"; shift 2 ;;
     --install) MODE=install; shift ;;
     --bigfont) MODE=bigfont; shift ;;
     --uninstall) MODE=uninstall; shift ;;
@@ -205,12 +205,11 @@ sb_battery_line() {
 # History is in-memory only. The unit runs ProtectSystem=strict + ProtectHome=
 # read-only, and loosening either so a chart can survive a restart is a bad trade.
 #
-# That cost is no longer small, and pretending otherwise would be dishonest: at the
-# 5m cell a 146-cell chart needs 12h10m of uptime to fill, so a restart now throws
-# away half a day of history rather than 24 minutes of it. Fixing that means
-# persisting the series, which means giving the unit somewhere writable — a real
-# trade to make deliberately, not a footnote. --cell 60 fills in ~2.5h if the
-# shorter memory is the better deal.
+# At the 1m cell a chart column of ~76 cells fills in about 76 minutes, so a restart
+# costs an hour of history rather than the 24 minutes it cost when a cell was one
+# probe — and rather than the 6h+ a 5m cell cost, which is why 5m did not last a day.
+# A wider span is one --cell away; keeping it across restarts is not, and would mean
+# giving the unit somewhere writable. A real trade to make deliberately.
 
 # SB_K: samples folded into one chart cell. Clamped to at least 1 — a --cell below
 # --probe cannot mean "less than one sample per cell".
