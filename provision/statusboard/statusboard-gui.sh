@@ -211,6 +211,30 @@ sbg_kiosk_argv() {
     -e "$@"
 }
 
+# sbg_pty_size: "<cols> <rows>" for the terminal on stdin.
+#
+# stty, not tput. tput answers from TERMINFO — it reports the entry's nominal size,
+# or fails outright when TERM is unset or `dumb`, and either way it is not being
+# asked about the window it is actually on. stty asks the kernel. The split is
+# sized in rows and a wrong count here costs the strip SILENTLY, which is exactly
+# what the first deploy did (2026-07-29): board full-screen, no strip, nothing
+# anywhere saying why.
+sbg_pty_size() {
+  local sz rows cols
+  sz="$(stty size 2>/dev/null)"
+  rows="${sz%% *}"
+  cols="${sz##* }"
+  case "$rows" in '' | *[!0-9]*) rows=0 ;; esac
+  case "$cols" in '' | *[!0-9]*) cols=0 ;; esac
+  if [ "$rows" -eq 0 ] || [ "$cols" -eq 0 ]; then
+    rows="$(tput lines 2>/dev/null)"
+    cols="$(tput cols 2>/dev/null)"
+    case "$rows" in '' | *[!0-9]*) rows=24 ;; esac
+    case "$cols" in '' | *[!0-9]*) cols=80 ;; esac
+  fi
+  printf '%s %s' "$cols" "$rows"
+}
+
 # sbg_split_rows <total> <want> [min_board] [min_btop]: how many rows the btop strip
 # actually gets, or 0 meaning "do not split at all".
 #
@@ -523,6 +547,7 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
     "$FONT" "$FONTSIZE" "$RAMP_LO" "$RAMP_HI"
   printf 'Ctrl-Alt-F2 still reaches a console login (cage -s).\n'
   printf 'to see that screen over ssh: tmux -L %s attach -t %s\n' "$TMUX_SOCKET" "$TMUX_SESSION"
+  printf 'why the strip is or is not there: cat %s.session\n' "${KIOSK_STATE%/}"
   printf 'to undo: sudo bash %s --uninstall\n' "$SELF"
   exit 0
 fi
@@ -535,22 +560,41 @@ fi
 
 if [ "$MODE" = session ]; then
   [ -f "$BOARD" ] || { printf 'no board at %s\n' "$BOARD" >&2; exit 1; }
-  SESS_COLS="$(tput cols 2>/dev/null || printf 80)"
-  SESS_ROWS="$(tput lines 2>/dev/null || printf 24)"
+  read -r SESS_COLS SESS_ROWS <<< "$(sbg_pty_size)"
 
   mapfile -t BOARD_CMD < <(sbg_board_argv "$BOARD" "$INTERVAL" "$PROBE" "$CELL")
 
+  # Every fallback below is silent by construction: this mode's stderr goes to the
+  # pty, and the board then paints over it within a second. So the decision gets
+  # WRITTEN DOWN. Cheap, and it is the difference between "the strip is missing"
+  # and "the strip is missing because it measured 24 rows".
+  SESS_NOTE="${KIOSK_STATE%/}.session"
+  sbg_note() { printf '%s\n' "$*" >> "$SESS_NOTE" 2>/dev/null || true; }
+  : > "$SESS_NOTE" 2>/dev/null
+  sbg_note "pty ${SESS_COLS}x${SESS_ROWS}"
+
   STRIP=0
-  if [ "$BTOP" = 1 ] && [ -z "$(sbg_missing_deps tmux btop)" ]; then
+  MISSING="$(sbg_missing_deps tmux btop)"
+  if [ "$BTOP" != 1 ]; then
+    sbg_note 'strip off: STATUSBOARD_GUI_BTOP is not 1'
+  elif [ -n "$MISSING" ]; then
+    sbg_note "strip off: missing $MISSING"
+  else
     STRIP="$(sbg_split_rows "$SESS_ROWS" "$BTOP_ROWS")"
+    [ "$STRIP" -gt 0 ] ||
+      sbg_note "strip off: ${SESS_ROWS} rows cannot hold ${BOARD_MIN_ROWS} for the board plus ${BTOP_MIN_ROWS} for btop"
   fi
   # No tmux, no btop, or no room for a strip that btop would agree to draw: the
   # board takes the whole terminal, exactly as it did before any of this existed.
   # The board is the point; the strip is a bonus, and a bonus must not be able to
   # break the thing it decorates.
   [ "$STRIP" -gt 0 ] || exec "${BOARD_CMD[@]}"
+  sbg_note "strip ${STRIP} rows of [${BTOP_BOXES}], board keeps $((SESS_ROWS - STRIP - 1))"
 
-  mkdir -p "$KIOSK_STATE/btop" || exec "${BOARD_CMD[@]}"
+  mkdir -p "$KIOSK_STATE/btop" || {
+    sbg_note "strip off: cannot create $KIOSK_STATE"
+    exec "${BOARD_CMD[@]}"
+  }
   sbg_tmux_conf_text "$(sbg_tmux_term)" > "$KIOSK_STATE/tmux.conf"
   sbg_btop_conf_text "$BTOP_BOXES" > "$KIOSK_STATE/btop/btop.conf"
 
@@ -567,12 +611,12 @@ if [ "$MODE" = session ]; then
     # tmux is UPSTREAM of the board here, so a tmux that will not start is a black
     # screen, not a missing strip. Never let that be the outcome.
     if ! "${TM[@]}" new-session -d -s "$TMUX_SESSION" \
-      -x "$SESS_COLS" -y "$SESS_ROWS" "$BOARD_LINE"; then
-      printf 'tmux would not start a session — running the board alone.\n' >&2
+      -x "$SESS_COLS" -y "$SESS_ROWS" "$BOARD_LINE" 2>>"$SESS_NOTE"; then
+      sbg_note 'strip off: tmux would not start a session'
       exec "${BOARD_CMD[@]}"
     fi
-    "${TM[@]}" split-window -t "$TMUX_SESSION" -v -l "$STRIP" "$BTOP_LINE" ||
-      printf 'btop strip failed to start; the board has the screen.\n' >&2
+    "${TM[@]}" split-window -t "$TMUX_SESSION" -v -l "$STRIP" "$BTOP_LINE" 2>>"$SESS_NOTE" ||
+      sbg_note 'split failed; the board has the whole session'
     # Focus back on the board. btop quits on `q`; the board reads no input at all,
     # so it is the safe place for a stray keypress at the physical keyboard to land.
     "${TM[@]}" select-pane -t "$TMUX_SESSION:0.0" 2>/dev/null

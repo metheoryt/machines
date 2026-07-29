@@ -145,6 +145,27 @@ eq "$(printf '%s\n' "$KIOSK_SESSION_ARGV" | grep -c .)" '16' \
 sbg_kiosk_argv 'JetBrains Mono' 16 >/dev/null 2>&1
 eq "$?" '1' 'kiosk: refuses to build an argv with no command to run'
 
+# ── sbg_pty_size ──────────────────────────────────────────────────────────────
+# The size the split is computed from. It must come from the KERNEL, not terminfo:
+# tput answers from the terminfo entry (nominal 24x80) and fails outright when TERM
+# is unset or `dumb`, so the first deploy measured 24 rows on a 36-row display and
+# dropped the strip with nothing logged (2026-07-29).
+grep -q 'stty size' "$GUI"; eq "$?" '0' 'pty_size: asks the kernel via stty'
+PTY_BODY="$(awk '/^sbg_pty_size\(\)/,/^}/' "$GUI")"
+stty_at="$(printf '%s\n' "$PTY_BODY" | grep -n 'stty size' | head -1 | cut -d: -f1)"
+tput_at="$(printf '%s\n' "$PTY_BODY" | grep -n 'tput lines' | head -1 | cut -d: -f1)"
+[ -n "$stty_at" ] && [ -n "$tput_at" ] && [ "$stty_at" -lt "$tput_at" ] \
+  && pass 'pty_size: stty first, tput only as a fallback' \
+  || fail "pty_size: stty($stty_at) must be tried before tput($tput_at)"
+# Two numbers, always, whatever the terminal does — the caller feeds them straight
+# into arithmetic under `set -u`.
+SZ="$(sbg_pty_size < /dev/null)"
+eq "$(printf '%s\n' "$SZ" | wc -w | tr -d ' ')" '2' 'pty_size: always yields two fields'
+case "$SZ" in
+  *[!0-9\ ]*) fail "pty_size: both fields are numeric (got '$SZ')" ;;
+  *) pass 'pty_size: both fields are numeric even with no tty at all' ;;
+esac
+
 # ── sbg_split_rows ────────────────────────────────────────────────────────────
 # The row arithmetic for the btop strip. Both bounds are measured, not guessed:
 # btop refuses to draw a cpu-only box below 8 rows, and the board needs 25 rows of
@@ -311,7 +332,17 @@ has "$SESSION_BODY" 'exec "${BOARD_CMD[@]}"' 'session: falls back to the board a
 eq "$(printf '%s\n' "$SESSION_BODY" | grep -c 'exec "${BOARD_CMD\[@\]}"')" '3' \
   'session: every failure path ends at the board, not at a black screen'
 has "$SESSION_BODY" 'sbg_split_rows' 'session: sizes the strip against the real row count'
-has "$SESSION_BODY" 'tput lines' 'session: reads the rows from the pty it is actually on'
+has "$SESSION_BODY" 'sbg_pty_size' 'session: reads the size from the pty it is actually on'
+# Every fallback here is invisible on screen — stderr goes to the pty and the board
+# paints over it within a second — so the decision is written down instead. Without
+# this, "the strip is missing" and "the strip measured 24 rows" look identical.
+has "$SESSION_BODY" 'sbg_note' 'session: records why the strip is or is not there'
+has "$SESSION_BODY" 'sbg_note "pty ' 'session: records the size it measured'
+# One note per way out, so no path is silent.
+note_paths="$(printf '%s\n' "$SESSION_BODY" | grep -c "sbg_note .strip off")"
+[ "$note_paths" -ge 5 ] && pass 'session: every strip-off path says which one it was' \
+  || fail "session: only $note_paths of the strip-off paths are recorded"
+has "$SRC" 'why the strip is or is not there' 'install: says where that record lives'
 # has-session before new-session: an existing session means FOOT restarted, and the
 # board's chart history lives in that running process and nowhere else.
 has "$SESSION_BODY" 'has-session' 'session: re-attaches instead of rebuilding, preserving chart history'
