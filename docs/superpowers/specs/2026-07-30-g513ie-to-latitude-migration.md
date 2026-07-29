@@ -372,3 +372,57 @@ Snapshot taken before anything touches it, from the still-read-only mount:
 - Which config directories are already tracked (§4).
 - Whether the immich cluster recovers cleanly — unknown until step 7, which is
   why §12.1's snapshot exists.
+
+## 15. Resolved: the docker payload is ~62 MB
+
+The four anonymous volumes of §10 are all **Python virtualenvs**, and they
+self-declare as disposable — every one carries a `CACHEDIR.TAG`, the standard
+marker meaning "regenerable cache, do not archive":
+
+```
+CACHEDIR.TAG  bin  lib  lib64  pyvenv.cfg  share
+```
+
+The largest identifies itself outright:
+
+```
+prompt = embedthat-bot
+uv = 0.9.3
+version_info = 3.12.12
+
+4.3G  site-packages/nvidia      <- CUDA wheels
+1.7G  site-packages/torch
+593M  site-packages/triton
+```
+
+A uv-managed venv reproducible from a lockfile, four-fifths of it CUDA and torch
+wheels. The 14.7 GB that looked like the second-largest item in the migration is
+build output from removed containers.
+
+**Final disposition of all 21.3 GB:**
+
+| Category | Size | Action |
+|---|---|---|
+| 2 large orphaned venvs | 13.8 GB | drop — regenerate with `uv sync` |
+| `immich_model-cache` | 6.5 GB | drop — redownloads |
+| 2 small orphaned venvs | 80 MB | drop |
+| empty + orphaned duplicate volumes | ~2 MB | drop |
+| **`telegrind_pgdata`** | **57.31 MB** | **logical dump** |
+| `forgejo_forgejo_data` | 2.683 MB | tar |
+| `embedthat_redis_data` | 1.335 MB | drop (redis cache) or tar |
+| `jellyseerr_jellyseerr-data` | 309 kB | tar |
+| `tugtainer_tugtainer_data` | 45 kB | tar |
+
+**The entire docker volume migration is ~62 MB.** Plus immich, which needs no
+transfer at all because its 803 MB cluster and 244 GB library are already on
+latitude's NVMe (§12).
+
+The arc is worth stating plainly, because it is the general lesson: the apparent
+size went 158 GB → 21.3 GB → 62 MB. Each reduction came from asking what the bytes
+*are* rather than how many there are. A `du`-shaped view of this migration would
+have planned a multi-hour transfer of regenerable CUDA wheels and a database that
+was already at the destination.
+
+`CACHEDIR.TAG` deserves specific note: tooling that writes it is telling you the
+directory is disposable. Checking for it is cheaper than reasoning about contents,
+and here it flagged 14 GB correctly before any package listing was read.
