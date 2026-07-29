@@ -29,9 +29,19 @@ Delivered and now seated in Dock B bay 0:
 | Power_Cycle_Count | 44 |
 | Start_Stop_Count | 133 |
 | Load_Cycle_Count | 1046 |
-| Total_LBAs_Written | 5 904 970 852 764 → **~3.0 PB** (~356 TB/yr) |
-| Total_LBAs_Read | 6 962 299 994 736 → **~3.6 PB** |
+| Total_LBAs_Written | raw 5 904 970 852 764 — **~3.0 PB *if* 512-byte units (unit-unverified, see below)** |
+| Total_LBAs_Read | raw 6 962 299 994 736 — **~3.6 PB, same caveat** |
 | Newest self-test in log | **8852 hours** — i.e. ~65 600 hours / 7.5 years ago |
+
+> **The petabyte figures are not confirmed.** smartctl reports this drive as
+> `Not in smartctl database 7.3/5528`, so it has no vendor decode for attribute
+> 241/242 and the raw value is uninterpreted. HGST/Hitachi firmware has used
+> several units for these (512-byte LBAs, sectors, GiB). Reading them as 512-byte
+> LBAs yields ~3.0 PB written, i.e. 11.3 MB/s sustained across the drive's whole
+> life — plausible for nearline duty, which is weak corroboration rather than
+> confirmation. **The load-bearing number is the 74 485 power-on hours**, which is
+> unambiguous and needs no vendor decode. Treat the petabytes as supporting colour
+> and do not build an argument on them.
 
 It is a different product line from a different era. HGST was absorbed by WD, so
 "WD" is not strictly wrong, but the Ultrastar 7K6000 is an enterprise
@@ -40,8 +50,8 @@ nearline drive that shipped around 2015 — its warranty expired years ago.
 **The wear profile is unmistakably ex-datacenter:** 74 485 hours of power-on
 against only 44 power cycles and 1046 load cycles. It was spun up, left running
 for eight and a half years, and never parked. That is the *good* kind of duty
-cycle, and it explains the surprisingly clean surface below — but it is still
-8.5 years and ~3 PB.
+cycle, and it explains the surprisingly clean surface below — but 8.5 years of
+service life is 8.5 years regardless of how gently it was accumulated.
 
 ### The surface itself is genuinely clean
 
