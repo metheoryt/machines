@@ -726,3 +726,115 @@ Sequence:
 
 **No source directory is deleted at any point before its copy is verified, and
 `mkfs` is the first irreversible step in the whole migration.**
+
+---
+
+## 20. The rest of the stack, and what still has no home
+
+### 20.1 g513ie has only `C:` left
+
+`Get-PSDrive` on g513ie now returns a single filesystem drive: `C:`, 435.7 GB
+used, 517.2 GB free. **`D:`, `E:`, and `F:` are all gone** — every one of them is
+a drive now hanging off latitude:
+
+| Was | Is | Label |
+|---|---|---|
+| `D:` | `/mnt/immich` (nvme0n1p1) | Immich |
+| `E:` | `/mnt/immich-2024` (sdd2) | Immich 2024 |
+| `F:` | `/mnt/public` (sdc1) | Public |
+
+That is why `C:\Users\methe\Music\Airdrome` (navidrome's library) no longer
+exists either, and why every `.env` in `vps/homeserver` points at a drive letter
+that resolves to nothing. **The g513ie half of this migration is already over.
+What remains is re-pointing paths on latitude.**
+
+### 20.2 Every service is cleanly parameterized — one `.env` each
+
+No compose file outside `immich/` contains a host path; they all go through
+`.env`. Three needed retargeting:
+
+| Service | Was | Now |
+|---|---|---|
+| `servarr` | `DATA_ROOT=D:/Media`, `CONFIG_ROOT=D:/Media/config` | `/mnt/immich/Media`, `/mnt/immich/Media/config` — **done** |
+| `navidrome` | `C:/Users/methe/Music/Airdrome/{Navidrome,Library}` | undecided — see 20.4 |
+| `restic-server` | `RESTIC_DATA_PATH=F:/restic-repos` | undecided — see 20.4 |
+
+`tugtainer` binds `~/.docker/config.json`; that file does not exist on latitude
+yet and will need a `docker login` if tugtainer is to pull from a private
+registry.
+
+### 20.3 The hardlink comment in `servarr/.env` was aspirational
+
+The file says:
+
+> downloads (`torrents/`), `movies/`, `tv/` all live UNDER this single parent so
+> completed torrents hardlink into the library instantly.
+
+The layout is right and the hardlinking never happened — **13 files out of the
+whole `movies` tree have `st_nlink > 1`.** Docker Desktop for Windows over NTFS
+didn't deliver it. On ext4 with a single mount it will, so once the arr stack
+re-imports, `Media` should collapse from 528 GB toward ~290 GB of distinct
+content. That is a post-migration cleanup, not a migration step.
+
+### 20.4 Two things still have no home on latitude
+
+**`restic-server`'s data — 69 GB, and it is on the drive slated for erasure.**
+`F:/restic-repos` is `/mnt/public/restic-repos` (sdc1, the 320 GB drive). The
+directories read as `4.0K` to `me` because the container created them
+`root:root` mode 700 — with `sudo` they are:
+
+| Repo | Size | Snapshots |
+|---|---|---|
+| `laptop-music` | 67 GB | 14 |
+| `wsl` | 2.3 GB | 19 |
+
+The 320 GB clearing sequence plans to reformat this drive to ext4. Both repos
+were already evaluated (the `laptop-music` hold was released on evidence; `wsl`
+is marked drop), so nothing here blocks — but **`restic-server` cannot be
+started on latitude until `RESTIC_DATA_PATH` points somewhere that will still
+exist.**
+
+**navidrome's library.** The music landed at `~/staging/music` on latitude —
+89 GB, `PicardedMusic` + `OldMusic`. `staging` is a scratch name; navidrome
+wants a permanent path, and picking it is a user decision, not a default.
+
+### 20.5 immich compose, patched and validated
+
+`docker compose config` on latitude resolves cleanly:
+
+```
+image: ghcr.io/immich-app/immich-server:v3
+image: ghcr.io/immich-app/immich-machine-learning:v3-openvino
+image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf6...
+image: docker.io/valkey/valkey:9@sha256:3b55...
+  /dev/dri -> /dev/dri   (x2: quicksync + openvino)
+```
+
+`.env` paths are all POSIX now. `DB_DATA_LOCATION` deliberately points at
+`/mnt/immich/ImmichMedia/postgres` — **which will be ext4 after the reformat**,
+so the cluster goes back to a bind mount and compose.yml needs no
+external-volume declaration. `immich_pgdata` stays as a third fallback.
+
+### 20.6 Staging, in flight
+
+`ntfs3` refused `mount -o remount,rw` on `/mnt/immich-backup`:
+
+```
+ntfs3: Couldn't remount rw because journal is not replayed. Please umount/remount instead
+```
+
+A full `umount` + `mount -t ntfs3 -o rw ... UUID=9CCED7D2CED7A2B6` replays the
+journal and succeeds. **fstab was deliberately left `ro`** so a reboot returns
+the whole pool to the safe state; the rw window is only as long as the copy.
+
+Choosing `/mnt/immich-backup` as the media staging target means writing to the
+volume that holds the only (stale) restic backup of the immich library. Accepted
+knowingly: the alternative targets (`/mnt/xs` 550 GB free, `/mnt/immich-2024`
+269 GB free) leave 63 GB and negative margin respectively on a 487 GB copy, and
+a tight margin is a likelier failure than ntfs3 losing a volume. The
+irreplaceable data is on ext4 and gets a checksum pass before `mkfs` runs.
+
+Verification is armed and waits on both legs: `rsync -c` content pass over the
+irreplaceable 245.5 GB, size+mtime over the media. Both report a **flag
+histogram by column position** — the music leg taught that a regex over whole
+itemize lines matches filenames and invents thousands of false mismatches.
