@@ -628,10 +628,18 @@ originals still exist. Item by item, with what was verified:
 
 ### 10.1. `laptop-music` must not be dropped yet
 
-The original was located: **`C:\Users\methe\Music` on `server` (the G15) — 88.2 GB,
-11 550 files**, alongside `C:\Navidrome` (0.2 GB of Navidrome's own state). The 67G
-repo is a deduplicated, compressed backup of that library, so "the original still
-exists" is true.
+> **Naming, because it is actively confusing.** The *role* of server moved to
+> **latitude**; the *name* did not follow. The tailnet node and SSH alias literally
+> called `server` is still **g513ie**, the old G15, and `fleet.json` still gives
+> g513ie the logical name `server` while giving latitude `profile: server`. Every
+> reference below uses **`g513ie`** or **`latitude`** and never bare `server`.
+> Renaming the fleet entry is its own task; until it happens, `ssh server` reaches
+> the box being decommissioned.
+
+The original was located: **`C:\Users\methe\Music` on g513ie — 89 GB,
+11 550 files** (14 878 counted from WSL, which sees hidden entries), alongside
+`C:\Navidrome` (0.2 GB of Navidrome's own state). The 67G repo is a deduplicated,
+compressed backup of that library, so "the original still exists" is true.
 
 **But the original is on the machine being decommissioned.** The migration plan's
 own global constraint reads: *"The G15 is the only copy of some data until Task 15
@@ -641,8 +649,8 @@ in Task 15 succeeds."* Dropping this repo takes the music library from two copie
 reduction in safety disguised as a cleanup, and it is the only one of the six items
 where the "we still have the originals" reasoning does not hold.
 
-**The fix makes the cleanup unblock itself.** Pull the 88.2 GB library from
-`server` to latitude's root (446 GB free) *first*, then drop the repo. Three things
+**The fix makes the cleanup unblock itself.** Pull the 89 GB library from
+g513ie to latitude's root (446 GB free) *first*, then drop the repo. Three things
 land at once: the music gets a second copy on a different machine, the 320G
 actually reaches empty, and the library ends up on the host that is becoming the
 server and will run Navidrome. Root usage after the video and the music: ~130 GB
@@ -678,7 +686,102 @@ Linux-only now, so **ext4** is the right target. The UUID changes, so its
 stale UUID fails quietly rather than loudly, which is exactly how it would get
 missed.
 
-**Order, and nothing out of order:** stage video (leg 1) → pull music from server
+**Order, and nothing out of order:** stage video (leg 1) → pull music from g513ie
 → verify both → drop `qb`, the tar, and `restic-repos/wsl` → drop
 `restic-repos/laptop-music` → resolve `secrets/` → reformat → update fstab →
 push video to desktop (leg 2).
+
+**Leg 1 complete, 2026-07-29 20:24.** `~/staging/Настя Стас GoPro` on latitude —
+**41 905 063 663 bytes, 162 files, rsync exit 0**, byte-exact against the source.
+Do not delete the source on the 320G until a `rsync -n --checksum` pass confirms
+content as well as size; rsync's in-transfer verification is good but a content
+re-read is the cheap insurance before an irreversible delete.
+
+### 10.4. Every Windows-side transfer must run inside WSL
+
+**5 406 of the 11 550 music files have non-ASCII (Cyrillic) paths** — e.g.
+`OldMusic/DJ TOYOTA/104 - Сафари.mp3`, `MiyaGi Эндшпиль - Фея.mp3`. The GoPro
+folder is the same. Native Windows `scp` and `tar` send filenames in the local
+codepage and mangle them; PowerShell additionally corrupts binary pipelines.
+
+Both Windows boxes have WSL, and WSL's drvfs presents Windows filenames as proper
+UTF-8, so the fix is to run the transfer inside WSL rather than from PowerShell:
+
+| Box | WSL distro | `rsync` | Notes |
+|---|---|---|---|
+| **g513ie** | Ubuntu 26.04 LTS (was Stopped) | present | reads `/mnt/c/Users/methe/Music` correctly |
+| **desktop** | `desktop-ubuntu26`, live tailnet node `100.64.0.6` | assumed, verify | writes to `/mnt/c/...` for leg 2 |
+
+If WSL is unavailable for some step, the fallback that still preserves names is a
+WSL-produced tar streamed through the *native* ssh, driven by `cmd` — never
+PowerShell:
+
+```
+cmd /c "wsl -e tar -cf - -C /mnt/c/Users/methe Music | ssh latitude ""tar -xf - -C /home/me/staging"""
+```
+
+WSL builds the archive so the names are UTF-8; native ssh only moves opaque bytes.
+One pass, no resume.
+
+## 11. latitude has no outbound SSH identity, and MagicDNS is broken on it
+
+Two independent findings, both blocking anything latitude should initiate itself.
+Neither is a storage problem, but both were hit while planning the transfers and
+both matter more now that latitude is the server.
+
+### 11.1. No fleet key — latitude can only be *reached*, never *reach*
+
+`~/.ssh/` on latitude holds exactly `id_cyphy671` and `id_metheoryt`, both GitHub
+identities pinned with `IdentitiesOnly yes`. A search across `/home`, `/root` and
+`/etc/ssh` finds no other private key. The NixOS install's `id_ed25519` is gone.
+
+So the direction of every fleet transfer is currently forced:
+
+| From | To latitude | Why |
+|---|---|---|
+| g513ie (native Windows) | ✅ | `methe@g513ie` in latitude's `authorized_keys` |
+| desktop (native Windows) | ✅ | `methe@me-g614jv` |
+| desktop (WSL) | ✅ | `me@wsl-desktop` |
+| air | ✅ | `me@air` |
+| **g513ie (WSL)** | ❌ | its key is not authorized — this is what blocks the music rsync |
+| **latitude → anything** | ❌ | **no outbound key exists at all** |
+
+Two grants are therefore in play, and they are not the same size:
+
+1. **One public key, to unblock the music tonight** — an ed25519 keypair in
+   g513ie's WSL, its `.pub` appended to latitude's `authorized_keys`. One line in
+   one file. Avoidable entirely by using the `cmd`-driven tar stream above, which
+   needs no new trust.
+2. **A fleet identity for latitude, which is the structural fix** —
+   `ssh-keygen -t ed25519` on latitude, its `.pub` into `authorized_keys` on
+   g513ie, desktop, air and hub. Until this exists, latitude cannot pull from
+   g513ie on a schedule, cannot push backups anywhere, and cannot run the
+   fleet-dispatch scripts that assume outbound reach. A server that can only be
+   connected *to* is the wrong shape.
+
+latitude also has **no fleet `Host` aliases** — `~/.ssh/config` contains only the
+GitHub blocks. Under NixOS `modules/home/ssh.nix` generated the fleet entries;
+nothing generates them on Debian.
+
+**Dead trust to sweep:** `me-nixos-latitude5520` sits in latitude's own
+`authorized_keys`, but its private half died with the NixOS install. It is an
+orphaned grant, and it is probably present on the other fleet boxes' 
+`authorized_keys` too — worth a fleet-wide sweep when the new key is added, since
+that is the moment every box's file is being edited anyway.
+
+### 11.2. MagicDNS resolves nothing on latitude
+
+`getent hosts` fails for `g513ie.gg.ez`, `desktop.gg.ez`, `air.gg.ez`, `hub.gg.ez`
+and `server.gg.ez` alike — every name, not one bad entry. But MagicDNS is enabled
+tailnet-wide (`MagicDNSSuffix: gg.ez`, `MagicDNSEnabled: true`) and the tailnet
+itself is healthy: `100.64.0.3`, `.4` and `.7` all ping.
+
+Cause: `/etc/resolv.conf` is generated by **`dhcpcd`** and lists only
+`nameserver 192.168.8.1`. Tailscale's `100.100.100.100` resolver is never
+installed, so the `gg.ez` suffix has nowhere to resolve. There is no
+`systemd-resolved` in the path for `tailscaled` to hand DNS to.
+
+This is why `ssh desktop` from latitude reports *"Could not resolve hostname"*
+rather than a permission error. Until it is fixed, anything latitude initiates has
+to use tailnet IPs. It will bite every name-based script, so it belongs with 11.1
+rather than after it.
