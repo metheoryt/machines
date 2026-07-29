@@ -47,10 +47,19 @@ OS currently boots from.
 | Disk | Model | Size | Volume | Used |
 |---|---|---|---|---|
 | 0 | WD PC SN560 (internal NVMe) | 954G | `C:` | 441G of 953G |
-| 4 | HGST HTS541010A9E680 | 932G | `E:` `Immich 2024` — holds `admin` | 663G |
-| 1 | WDC WD10SPZX-21Z10T0 | 932G | `H:` `Immich 2024 backup` — holds `backup-homeserver` | 650G |
+| 4 | WDC WD10SPZX-21Z10T0 | 932G | `E:` `Immich 2024` — holds `admin` | 663G |
+| 1 | HGST HTS541010A9E680 | 932G | `H:` `Immich 2024 backup` — holds `backup-homeserver` | 650G |
 | 2 | ST1000LM024 HN-M101MBB | 932G | `G:` `Immich backup` — holds `backup-homeserver` | 158G |
 | 3 | ST320LT020-9YG142 | 298G | `F:` `Public` | 177G |
+
+> **Corrected 2026-07-29.** The `E:` and `H:` models were originally swapped in
+> this table. Verified against live contents on latitude: `sdd2`
+> (**WDC WD10SPZX**, dock A bay 0) holds `admin`; `sdg2` (**HGST
+> HTS541010A9E680**, dock B bay 1) holds `backup-homeserver`. The migration
+> plan's own Data Inventory table was right; this one was the outlier. Given this
+> document exists so that identifiers are never retyped from memory, the error
+> was the dangerous kind. Full per-drive health baseline and the dock bay map:
+> `../specs/2026-07-29-storage-pool-hardware-baseline.md`.
 
 Note the three "1TB" drives are 2.5-inch laptop mechanicals in the docks, not
 3.5-inch drives.
@@ -298,6 +307,17 @@ KIOXIA 512G (Gen3 ×4) stays the boot and root disk; the Kingston 1TB (Gen4 ×4)
 becomes hot data — Postgres, Immich thumbnails and cache, container volumes;
 the 6TB carries bulk media over USB; the 1TB mechanicals are backup targets on
 the two 10 Gbps USB-A ports.
+
+> **Health data added 2026-07-29 — this section was being decided on capacity
+> alone.** Per-drive SMART for all five disks now exists at
+> `../specs/2026-07-29-storage-pool-hardware-baseline.md`, and it reorders the
+> assignment: the `ST1000LM024` is the weakest keeper (`Multi_Zone_Error_Rate`
+> normalised 001/100, max-ever 63 °C) and must not hold the years-archive backup;
+> the `WD10SPZX` has the cleanest surface but a marginal link (UDMA_CRC 144, still
+> accruing) that has to be fixed *before* the 664G consolidation copy; the HGST is
+> past its nominal load-cycle rating and is the designated off-site copy. Both
+> docks also share one 10 Gbps bus at 5 Gbps each, so "the two USB-A ports" are
+> not independent bandwidth — bus 002 is the free one.
 
 ## 8. Runtime facts worth recording before the box is gone
 
@@ -601,3 +621,21 @@ has an executor — so the manifest promises more than provisioning delivers.
 - The 320G `ST320LT020` (`F:` `Public`, 177G used) carries `secrets`,
   `restic-repos`, `qb`, a GoPro folder, and `G614JV-Ubuntu-24.04.tar`. It is not
   retirable until step 4 above is done.
+
+  **Resolved 2026-07-29 — retiring is not wiping.** The drive was pulled from
+  dock B bay 0 and shelved with its data intact, which frees the bay at zero data
+  risk and needs no decision about `F:`'s contents. Step 4 is therefore *deferred,
+  not done*: the `restic-repos` / `secrets` / GoPro / Ubuntu-tar call still has to
+  be made before the disk is ever reused or disposed of. Its measured health
+  supports the deferral — SMART PASSED, surface clean (0 reallocated / 0 pending /
+  0 offline-uncorrectable), and its 10 logged ATA errors are all ≥2.6 years stale
+  (newest at 13 478 h against 36 153 h now).
+
+- **The 6TB that replaced it is not the drive that was ordered, and a return is
+  pending (2026-07-29).** Ordered a new WD Purple `WD63PURZ`; received an
+  **HGST Ultrastar `HUS726060ALE611`** with **74 485 power-on hours (8.5 years)**
+  and ~3 PB written — an out-of-warranty ex-datacenter pull. Its surface measures
+  clean, so this is a provenance and remaining-life decision, not a defect one.
+  The 22-hour `badblocks` burn-in is **on hold** pending that decision rather than
+  cancelled. Evidence and layout consequences:
+  `../specs/2026-07-29-storage-pool-hardware-baseline.md`.
