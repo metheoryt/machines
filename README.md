@@ -188,11 +188,22 @@ for the git-worktree lifecycle. Run with CWD = the worktree, no arguments.
   `/orca-setup` reports it as `LEGACY`, not as a conflict, so nothing needs
   re-pasting.
 
-**What they do.** Setup: gortex-`track`s the worktree (`--as-worktree`) *first*, then
-runs the repo's own setup script. Teardown: runs the repo's own teardown script
+**What they do.** Setup: gortex-`track`s the worktree (`--as-worktree --name
+<main-basename>-<worktree-basename>`) *first*, then runs the repo's own setup
+script. The explicit `--name` matters: `--as-worktree` alone defaults the graph
+prefix to the directory basename, and Orca lays worktrees out as
+`~/orca/workspaces/<repo>/<branch-leaf>`, so every repo's `agenda` worktree would
+fight over one `agenda` prefix. Teardown: runs the repo's own teardown script
 *first*, then `gortex untrack`s the worktree and reconciles (prunes any tracked
-`~/.config/gortex/config.yaml` path missing on disk — catches worktrees removed
-outside the IDE).
+path missing on disk — catches worktrees removed outside the IDE).
+
+Both read the tracked-repo list from the **daemon** (`gortex repos --json`), never
+from a config file on disk. They used to default to `~/.config/gortex/config.yaml`,
+which is not where gortex keeps its global config (`~/.gortex/config.yaml`) — the
+file never existed, so the coverage guard failed *closed* and no worktree was ever
+tracked, with a single misleading `main checkout not covered by gortex` line to show
+for it. Every test injected the config path, so the default branch was never
+exercised.
 
 **gortex coupling is guarded and personal.** Every gortex action is gated on
 `gortex daemon status`; with the daemon down or gortex absent the gortex step is a

@@ -8,9 +8,20 @@
 # Guarded on `gortex daemon status`; no-op when the daemon is down. Always exits 0.
 set -u
 
-CONFIG="${GORTEX_CONFIG:-$HOME/.config/gortex/config.yaml}"
-
 log() { printf '[worktree-teardown] %s\n' "$*" >&2; }
+
+# The tracked-repo paths, one per line, straight from the daemon. Twin of the
+# helper in worktree-setup.sh — see the long comment there for why this asks the
+# daemon instead of parsing $HOME/.gortex/config.yaml, why sed and not jq, and why
+# the query is captured so a failed query is distinguishable from an empty list.
+gortex_tracked_paths() {
+  local raw
+  raw=$(gortex repos --json 2>/dev/null) || return 1
+  [ -n "$raw" ] || return 1
+  printf '%s\n' "$raw" \
+    | sed -n 's/^[[:space:]]*"path"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' \
+    | sed 's/\\\\/\//g'
+}
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
   log "not inside a git work tree; nothing to do"; exit 0;
@@ -41,21 +52,23 @@ if gortex untrack "$wt_root" >/dev/null 2>&1; then
 fi
 
 # Reconcile: prune any tracked path whose directory no longer exists on disk.
-if [ -f "$CONFIG" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      *"- path:"*) : ;;
-      *) continue ;;
-    esac
-    p=${line#*path:}
-    p=$(printf '%s' "$p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+# Snapshot the list into a variable BEFORE the loop. `gortex untrack` rewrites the
+# store this list came from, so iterating it live — the old code read the config via
+# an open fd while untracking inside the loop — skips entries or reads a half-written
+# file. A variable is immune.
+if ! tracked=$(gortex_tracked_paths); then
+  log "gortex repos unavailable; skipping reconcile"
+else
+  while IFS= read -r p || [ -n "$p" ]; do
     [ -n "$p" ] || continue
     if [ ! -d "$p" ]; then
       if gortex untrack "$p" >/dev/null 2>&1; then
         log "reconcile: pruned missing path $p"
       fi
     fi
-  done < "$CONFIG"
+  done <<LIST
+$tracked
+LIST
 fi
 
 exit 0
