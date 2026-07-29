@@ -303,6 +303,38 @@ health data recorded for any of them.
   The sweep does double duty: ~113 MB/s sustained is near-native for this drive,
   which argues against severe link degradation, and it is the first end-to-end
   readability check the 664G archive has ever had.
+
+  > **RESULT — 2026-07-29 22:14. Delta 0. The 144 is historical.**
+  >
+  > The full surface was read: **1 000 205 189 120 bytes — every sector of the
+  > drive — in 10 374.9 s at 96.4 MB/s** (the average fell from 113 to 96 MB/s
+  > partway through, when Dock B and the XS2000 joined the shared bus-004 root
+  > hub, not because of anything on the drive).
+  >
+  > | Attribute | Baseline 19:21 | After full read 22:14 | Δ |
+  > |---|---|---|---|
+  > | WD10SPZX `199 UDMA_CRC_Error_Count` | 144 | **144** | **0** |
+  > | WD10SPZX `9 Power_On_Hours` | 28 797 | 28 800 | +3 |
+  > | ST1000LM024 `199 UDMA_CRC_Error_Count` | 0 | **0** | **0** |
+  > | ST1000LM024 `9 Power_On_Hours` | 25 361 | 25 364 | +3 |
+  >
+  > Three hours of sustained sequential load across the entire platter produced
+  > **not one new CRC event.** The 144 is scar tissue from past dock reseats. The
+  > link is sound, there is no bay-versus-drive question to isolate, and the
+  > A0/A1 swap in the protocol above is unnecessary. **Nothing to fix.**
+  >
+  > Two further results from the same run:
+  >
+  > - **Surface counters unchanged and still zero** after reading every sector:
+  >   `Reallocated_Sector_Ct 0`, `Current_Pending_Sector 0`,
+  >   `Offline_Uncorrectable 0`. A latent unreadable sector would have surfaced
+  >   here — that is what a full read is for.
+  > - **The 664G years archive is fully readable, verified for the first time.**
+  >   `dmesg` contains **zero** I/O, medium or unrecovered-read errors for `sdd`
+  >   across the whole run — only the boot-time attach lines. This check matters
+  >   because `conv=noerror,sync` would have padded past a bad sector silently
+  >   rather than failing, so dd's own exit status proves less than the kernel log
+  >   and the unchanged SMART counters do. All three agree.
 - **Every incumbent shows heavy head-parking wear** (Start_Stop 91k / 116k / 23k;
   Load_Cycle 639k / 122k). The docks park aggressively. Whatever 6TB ends up
   seated should have APM checked (`hdparm -B`) and aggressive spindown disabled
@@ -337,8 +369,11 @@ against a 3 × 1TB backup pool (2.79 TB). Health data adds the ordering:
    nominal load-cycle rating and is the copy nobody inspects for months. If it
    goes off-site, run `restic check --read-data` before it leaves and on every
    rotation.
-4. **Resolve the A0 CRC question before the 664G consolidation copy**, not after —
-   and note that "resolve" may mean "confirm it is historical and do nothing."
+4. ~~**Resolve the A0 CRC question before the 664G consolidation copy**~~ —
+   **resolved 2026-07-29 22:14: delta 0 over a full 1 TB read. Historical.
+   Nothing to fix, and the consolidation copy is not gated on it.** The original
+   wording anticipated this outcome — "resolve may mean confirm it is historical
+   and do nothing" — and that is what happened.
    **The WD10SPZX is not a retirement candidate.** It has the cleanest surface in
    the pool and its only fault is an interface counter; retiring it would discard
    the best disk over a connector. Its long-term role is the years-archive backup
