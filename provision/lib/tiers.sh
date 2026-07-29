@@ -278,8 +278,9 @@ tier_statusboard() {
 # anywhere: a mains-only box or a non-Dell laptop reports and returns rather than
 # failing the provision run.
 tier_battery_limit() {
-  local pct="${1:-85}" bat="" d
+  local pct="${1:-85}" start="${2:-80}" bat="" d
   case "$pct" in '' | *[!0-9]*) warn "battery limit '$pct' is not a number — skipping"; return 0 ;; esac
+  case "$start" in '' | *[!0-9]*) warn "battery floor '$start' is not a number — skipping"; return 0 ;; esac
   for d in /sys/class/power_supply/BAT*; do
     [ -f "$d/charge_control_end_threshold" ] && { bat="$d"; break; }
   done
@@ -291,27 +292,39 @@ tier_battery_limit() {
     warn "no root available non-interactively — skipping the battery charge limit"
     return 0
   fi
-  info "Installing charge-upto (limit ${pct}%)…"
+  info "Installing charge-upto (charge window ${start}-${pct}%)…"
 
   $SUDO tee /usr/local/bin/charge-upto >/dev/null <<'CU'
 #!/bin/sh
-# charge-upto [percent] — cap this laptop's battery charge level.
+# charge-upto [ceiling] [floor] — cap this laptop's battery charge level.
 #
 # Installed by tier_battery_limit in machines/provision/lib/tiers.sh. Edit the
-# tier and re-provision rather than editing this copy; to change the level, edit
-# /etc/default/charge-upto (persistent) or pass a percent (until the next boot).
+# tier and re-provision rather than editing this copy; to change the levels, edit
+# /etc/default/charge-upto (persistent) or pass them (until the next boot).
 #
-# Writing the threshold is not enough on a Dell: the EC honours charge_control_*
+# The FLOOR matters as much as the ceiling on a box that never unplugs. With a
+# floor of 50 the cell drifts down to 50%, charges back to the ceiling and repeats
+# — a 35-point cycle every time, which is harder on it than simply sitting near
+# the ceiling. A floor just under the ceiling holds it steady instead.
+#
+# Writing the thresholds is not enough on a Dell: the EC honours charge_control_*
 # only in its Custom charge mode and it comes up in [Fast]. Hence the mode write,
 # and hence it comes LAST — after the thresholds it is meant to act on.
 set -eu
 
 DEFAULT=85
+DEFAULT_START=80
 [ -r /etc/default/charge-upto ] && . /etc/default/charge-upto
 PCT="${1:-${CHARGE_UPTO:-$DEFAULT}}"
+START="${2:-${CHARGE_START:-$DEFAULT_START}}"
 case "$PCT" in '' | *[!0-9]*) echo "charge-upto: '$PCT' is not a percentage" >&2; exit 2 ;; esac
 if [ "$PCT" -lt 1 ] || [ "$PCT" -gt 100 ]; then
   echo "charge-upto: $PCT is outside 1-100" >&2; exit 2
+fi
+case "$START" in '' | *[!0-9]*) echo "charge-upto: floor '$START' is not a percentage" >&2; exit 2 ;; esac
+if [ "$START" -ge "$PCT" ]; then
+  if [ "$PCT" -gt 5 ]; then START=$((PCT - 5)); else START=1; fi
+  printf 'charge-upto: floor lowered to %s%% to stay under the %s%% ceiling\n' "$START" "$PCT" >&2
 fi
 
 found=0
@@ -319,19 +332,25 @@ for b in /sys/class/power_supply/BAT*; do
   [ -f "$b/charge_control_end_threshold" ] || continue
   found=1
 
-  # An EC that wants the end above the start needs room made first. Best-effort:
-  # Dell's ignores a start it does not like, so this may be a no-op — see the
-  # clamp note below.
+  # Floor to its minimum FIRST, so it can never block the ceiling write. The EC
+  # wants start below end, which makes the correct write order depend on whether
+  # the ceiling is moving up or down; dropping the floor out of the way first
+  # removes the dependency, and the EC clamps the 1 up to its own minimum anyway.
+  # The real floor goes in after the ceiling, when there is room for it.
   if [ -f "$b/charge_control_start_threshold" ]; then
-    start="$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo 0)"
-    case "$start" in '' | *[!0-9]*) start=0 ;; esac
-    if [ "$start" -ge "$PCT" ]; then
-      if [ "$PCT" -gt 5 ]; then room=$((PCT - 5)); else room=1; fi
-      printf '%s\n' "$room" > "$b/charge_control_start_threshold" 2>/dev/null || true
-    fi
+    printf '1\n' > "$b/charge_control_start_threshold" 2>/dev/null || true
   fi
 
   printf '%s\n' "$PCT" > "$b/charge_control_end_threshold"
+
+  if [ -f "$b/charge_control_start_threshold" ]; then
+    printf '%s\n' "$START" > "$b/charge_control_start_threshold" 2>/dev/null || true
+    gots="$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo '')"
+    if [ "$gots" != "$START" ]; then
+      printf 'charge-upto: %s asked floor %s%%, the EC applied %s%%\n' \
+        "$(basename "$b")" "$START" "$gots" >&2
+    fi
+  fi
 
   # The EC has its own range and clamps INSIDE a successful write. Measured on
   # latitude 2026-07-29: the start threshold refuses to go below 50 and the end
@@ -353,8 +372,9 @@ for b in /sys/class/power_supply/BAT*; do
     printf 'Custom\n' > "$b/charge_types"
   fi
 
-  printf 'charge-upto: %s limit %s%% mode %s — now %s%%, %s\n' \
+  printf 'charge-upto: %s %s-%s%% mode %s — now %s%%, %s\n' \
     "$(basename "$b")" \
+    "$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo '?')" \
     "$(cat "$b/charge_control_end_threshold")" \
     "$(tr ' ' '\n' < "$b/charge_types" 2>/dev/null | grep '^\[' | tr -d '[]' || echo n/a)" \
     "$(cat "$b/capacity")" "$(cat "$b/status")"
@@ -371,10 +391,16 @@ CU
   # must not silently undo `CHARGE_UPTO=60`.
   if [ ! -f /etc/default/charge-upto ]; then
     $SUDO tee /etc/default/charge-upto >/dev/null <<CUD
-# Battery charge ceiling, in percent. Read by /usr/local/bin/charge-upto and by
+# Battery charge window, in percent. Read by /usr/local/bin/charge-upto and by
 # charge-upto.service at every boot and resume. Change it here and run
 # \`sudo systemctl start charge-upto\` to apply without rebooting.
+#
+# CHARGE_START is the level charging RESUMES at. Keeping it just under the ceiling
+# holds the cell steady; a low floor makes it cycle down and back every time,
+# which is the harder life. Dell's EC will not take a floor below 50 or a ceiling
+# below 55, and clamps silently — charge-upto reports it when that happens.
 CHARGE_UPTO=$pct
+CHARGE_START=$start
 CUD
   fi
 

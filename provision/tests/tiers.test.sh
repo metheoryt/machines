@@ -107,6 +107,15 @@ has "$bbody" 'charge_types'  "tier_battery_limit writes charge_types, not just t
 has "$bbody" 'Custom'        "tier_battery_limit selects the EC's Custom charge mode"
 has "$bbody" 'charge_control_end_threshold' "tier_battery_limit writes the ceiling"
 has "$bbody" 'charge_control_start_threshold' "tier_battery_limit makes room below the ceiling"
+# The floor is the other half of the setting: a low one makes an always-plugged
+# cell cycle down and back instead of holding steady.
+has "$bbody" 'CHARGE_START' "tier_battery_limit exposes the charge floor as a knob"
+has "$bbody" 'DEFAULT_START=80' "tier_battery_limit defaults the floor just under the ceiling"
+# Floor to its minimum before the ceiling write, real floor after: the EC wants
+# start below end, so writing them in a fixed order only works if the floor is out
+# of the way first.
+eq "$(printf '%s\n' "$bbody" | grep -c "> \"\$b/charge_control_start_threshold\"")" '2' \
+  "tier_battery_limit writes the floor twice — out of the way, then for real"
 # The EC clamps inside a successful write, so a silent difference between what was
 # asked and what landed is the failure mode worth naming.
 has "$bbody" 'the EC applied' "tier_battery_limit reports a ceiling the EC clamped"
