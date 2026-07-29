@@ -34,12 +34,39 @@ done
 
 # --- live state ---
 branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-base="$(git -C "$cwd" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
-base="${base#origin/}"
-[ -n "$base" ] || base="main"
-base_checkout="$(dirname "$common")"
 
-counts="$(git -C "$cwd" rev-list --left-right --count "$base...HEAD" 2>/dev/null)"
+# The base is per-branch — a worktree can be branched off another feature
+# branch, not just the repo default. Same resolution order as the status line
+# (agents/statusline-command.sh, section 1), so both agree on what "base" is:
+#   1. branch.<head>.base — fork parent recorded at worktree-creation time
+#   2. origin/HEAD  3. main
+base="$(git -C "$cwd" config --get "branch.$branch.base" 2>/dev/null || true)"
+case "$base" in
+  refs/remotes/*) base="${base#refs/remotes/}"; base="${base#*/}" ;;   # drop remote name
+  refs/heads/*)   base="${base#refs/heads/}" ;;
+  origin/*)       base="${base#origin/}" ;;
+esac
+if [ -z "$base" ]; then
+  base="$(git -C "$cwd" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+  base="${base#origin/}"
+  [ -n "$base" ] || base="main"
+fi
+
+# Where the base branch is actually checked out — for a non-default base that is
+# some other linked worktree, not the base checkout. Say so plainly when it is
+# checked out nowhere; the merge-back has to run wherever the branch lives.
+base_checkout="$(git -C "$cwd" worktree list --porcelain 2>/dev/null |
+  awk -v want="refs/heads/$base" '
+    /^worktree /  { wt = substr($0, 10) }
+    $0 == "branch " want { print wt; exit }
+  ')"
+if [ -n "$base_checkout" ]; then
+  base_where="checked out at $base_checkout"
+else
+  base_where="not checked out in any worktree"
+fi
+
+counts="$(git -C "$cwd" rev-list --left-right --count "refs/heads/$base...HEAD" 2>/dev/null)"
 behind="$(printf '%s' "$counts" | awk '{print $1}')"
 ahead="$(printf '%s' "$counts" | awk '{print $2}')"
 [ -n "$behind" ] || behind="?"
@@ -58,7 +85,7 @@ doc="$script_dir/../../docs/git-workflow.md"
 printf 'You are in a git WORKTREE of a personal fleet-sync repo — worktree-mode git rules apply.\n\n'
 printf 'Live state:\n'
 printf '  worktree branch : %s\n' "$branch"
-printf '  base branch     : %s (checked out at %s)\n' "$base" "$base_checkout"
+printf '  base branch     : %s (%s)\n' "$base" "$base_where"
 printf '  divergence      : %s behind, %s ahead of local %s\n' "$behind" "$ahead" "$base"
 printf '  working tree    : %s\n\n' "$clean"
 
