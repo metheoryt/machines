@@ -65,16 +65,28 @@ ssh_wsl_sanitize() {
 }
 
 # Render the fleet client-config stanzas from fleet.json content (passed as $1),
-# mirroring modules/home/ssh.nix: HostName only for the hub (its ssh.host), a
-# User line only when ssh.user != me, and IdentityFile + StrictHostKeyChecking on
-# every block. Blocks are separated by a blank line, no trailing blank. Markers
-# are added by the caller. Deterministic; the only IO is invoking jq on $1.
+# HostName only for the hub (its ssh.host); User, IdentityFile and
+# StrictHostKeyChecking on EVERY block. Blocks are separated by a blank line, no
+# trailing blank. Markers are added by the caller. Deterministic; the only IO is
+# invoking jq on $1.
+#
+# User is unconditional as of 2026-07-29. It used to be emitted only when
+# ssh.user != "me", which silently assumed the LOCAL user is also `me` — true on
+# the NixOS and macOS boxes, false on the Windows members, whose local user is
+# `methe`. There a block with no User line made ssh fall back to the local name
+# and every connection to a default-user member failed with
+# `methe@latitude: Permission denied`, taking fd_run — and so /ship's fleet-pull
+# and kb-refresh's fleet-gather — down with it. Omitting a line to mean "the
+# default" only works when every box shares that default; spelling it out costs
+# one line per block and cannot be wrong.
+# (modules/home/ssh.nix carried the same rule and is now moot: latitude was the
+# last NixOS host, retired 2026-07-29.)
 ssh_wsl_render_config() {
   jq -r '
     ( [ .machines | to_entries[] |
       ( [ "Host " + .key ]
         + ( if (.value.ssh.host // null) != null then [ "  HostName " + .value.ssh.host ] else [] end )
-        + ( if (.value.ssh.user // "me") != "me" then [ "  User " + .value.ssh.user ] else [] end )
+        + [ "  User " + (.value.ssh.user // "me") ]
         + [ "  IdentityFile ~/.ssh/id_fleet", "  StrictHostKeyChecking accept-new" ]
       ) | join("\n")
     ] )

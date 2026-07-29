@@ -17,27 +17,42 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 
 ## What's tracked
 
-> **Note:** `AGENTS.md` is the canonical instruction file; `CLAUDE.md` (both here
-> and at the repo root) is an in-repo symlink → `AGENTS.md`, because Claude Code
-> reads `CLAUDE.md` while Codex reads `AGENTS.md` — one source, each tool reads
-> its own filename. Mentions of "`CLAUDE.md`" below refer to that same shared
-> content.
+> **Who owns what (2026-07-28).** Dotfiles' work-tree is `$HOME`, so any file
+> whose rightful home is a path under `$HOME` is tracked **in the dotfiles repo,
+> at that path** — not here: `~/.claude/CLAUDE.md`,
+> `~/.claude/memory/{global.md,personality/}`, `~/.claude/host-memory.md`,
+> `~/.claude/skills/{gortex-align,update-balance,worktree-agent}/`,
+> `~/.claude/statusline-command.sh`, `~/.claude/balance-refresh.py`. This repo
+> keeps what has **no** `$HOME` path: `bootstrap.sh`, the tests, and the
+> fleet-coupled plugin (`ship`, `kb-refresh`, `lib`, `orca-setup`, `orca-repair` —
+> all tested, all reading `fleet.json`).
+>
+> **One deployer per path.** Dotfiles owns everything inside `~/.claude` listed
+> above. `bootstrap.sh` owns `~/.codex` and each `~/.claude-<postfix>`, and it
+> links those **at the primary profile** (`$PRIMARY_DIR`, always `~/.claude`),
+> never at this repo. `retire_link()` clears a link left over from the old
+> arrangement and refuses to delete a real file; `link_if_present()` skips a
+> fan-out whose primary source is not in place yet.
+>
+> Exception: `settings.json` stays `copy_managed` from this repo, because Orca and
+> Claude both write the live file and the stamp logic keeps that machine-local.
+>
+> The former canonical `agents/AGENTS.md` (and its `agents/CLAUDE.md` symlink) are
+> gone — that content is now `~/.claude/CLAUDE.md` on dotfiles `main`. The
+> repo-root `AGENTS.md`/`CLAUDE.md` pair is unrelated: it is *this repo's* own
+> instruction file and stays.
 
 | Path | Linked into `~/.claude` as | Notes |
 |---|---|---|
 | `settings.json` | `~/.claude/settings.json` | personal profile config (committed) |
 | `settings.<postfix>.json` | `~/.claude-<postfix>/settings.json` | one secondary profile per file (registry). `settings.pure.json` → `~/.claude-pure` (work; committed, no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
-| `statusline-command.sh` | `statusline-command.sh` | compact status line |
-| `balance-refresh.py` | `balance-refresh.py` | spend calculator (statusline depends on it) |
-| `AGENTS.md` | `CLAUDE.md` | canonical global instructions; memory stores load via the `global-memory-load.sh` hook, not imports (see below); `agents/CLAUDE.md` is a symlink → it, and `~/.codex/AGENTS.md` links here too |
-| `memory/global.md` | `memory/global.md` | global persistent memory store |
-| `hosts/<host>.md` | `host-memory.md` | per-host memory, chosen by hostname |
+| `subagents/` | `agents/<entry>` | linked entry-by-entry, so machine-local agents coexist |
 | `plugin/` | `skills/cyphy` | whole-directory symlink — the "cyphy" skills-directory plugin (`skills/`, `agents/` [was `subagents/`], `hooks/hooks.json`, `commands/`), discovered by Claude Code as `cyphy@skills-dir`: live, in place, no copy-to-cache, no install/update step |
 
 `plugin/` is linked as **one whole directory** (`~/.claude/skills/cyphy`, and
 `~/.claude-<postfix>/skills/cyphy` in each secondary profile) — Claude Code discovers its
 `.claude-plugin/plugin.json` and loads it as `cyphy@skills-dir`. Skills and
-subagents load namespaced under the plugin (e.g. `/cyphy:update-balance`). A
+subagents load namespaced under the plugin (e.g. `/cyphy:ship`). A
 machine-local skill/agent dropped directly into `~/.claude/skills/` or
 `~/.claude/agents/` still works fine alongside it — it's just not part of
 `cyphy`.
@@ -45,9 +60,11 @@ machine-local skill/agent dropped directly into `~/.claude/skills/` or
 ### Codex (`~/.codex`) — same setup, shared content
 
 Codex is Claude-Code-compatible, so it reuses **this** config as its source of
-truth rather than a separate copy. The tool-agnostic content — `memory/`,
-`plugin/hooks/`, `plugin/skills/`, and the canonical `AGENTS.md` — is
-symlinked into `~/.codex` entry-by-entry, same as always; only Claude's own
+truth rather than a separate copy. The tool-agnostic content is symlinked into
+`~/.codex` entry-by-entry — `plugin/hooks/` and `plugin/skills/` from this repo,
+and the instruction file plus the memory stores **from the primary profile**
+(`~/.claude/CLAUDE.md`, `~/.claude/memory/*`, `~/.claude/host-memory.md`), which
+dotfiles owns. Only Claude's own
 wiring changed (a whole-directory `cyphy` plugin symlink instead of
 entry-by-entry). Only the format-divergent files live under `agents/codex/`
 (`hooks.json`, `subagents/*.toml`) and link into `~/.codex` alone — the
@@ -134,10 +151,14 @@ Two distinct things load into every session:
   each session and appended to over time. (This replaced `CLAUDE.md` `@import`s,
   which only Claude Code resolved; the hook works for Codex too.)
 
-| Scope | Instructions (curated) | Memories (Claude-written) | Synced |
+**Every store below lives in the dotfiles repo now, at its real `$HOME` path.**
+None of them is in this repo; `bootstrap.sh` only fans the other profiles out at
+the primary. Editing one is a plain write to a dotfiles-tracked file.
+
+| Scope | Instructions (curated) | Memories (Claude-written) | Where it is tracked |
 |---|---|---|---|
-| **Global** | `CLAUDE.md` | `memory/global.md` | everywhere |
-| **Per-host** | `hosts/<host>.md` (one file holds both) | per host |
+| **Global** | `~/.claude/CLAUDE.md` | `~/.claude/memory/global.md` + `memory/personality/*.md` | dotfiles `main` — shared, byte-identical everywhere |
+| **Per-host** | `~/.claude/host-memory.md` (one file holds both) | dotfiles **machine branch** — host-local, never on `main` |
 | **Per-project** | each repo's own `CLAUDE.md` | that repo's `.claude/memory/project.md` (or `CLAUDE.local.md`) | per repo |
 
 The `global-memory-load.sh` SessionStart hook injects `memory/global.md`,
@@ -145,9 +166,11 @@ the `memory/personality/` facets (`tone.md`, `habits.md`, `values.md`,
 `practices.md`), and `host-memory.md` into every session — so all of them
 load regardless of cwd, in both Claude Code and Codex (it derives the config dir
 from its own path, so the one script serves `~/.claude` and `~/.codex`).
-`host-memory.md` is a symlink to `hosts/<hostname>.md` chosen per machine
-(`ME-G614JV`, `g16`, `latitude5520`, …) — a host with no file yet gets an empty
-stub seeded by `bootstrap.sh`. The per-project store
+`host-memory.md` is a **real file on this machine's dotfiles branch** — no
+hostname lookup and no stub seeding. It replaced `hosts/<host-id>.md`, whose
+`$HOST_ID` scheme keyed on OS-hostname *identity* rather than machine and had
+drifted to 7 files for 5 boxes; dotfiles is already branch-per-machine, so it
+needs no host id at all. The per-project store
 (`<repo>/.claude/memory/project.md`) is loaded by the sibling
 `project-memory-check.sh` SessionStart hook from whatever repo you're in (merged
 with global + per-host), which also offers to start tracking it in repos that
@@ -156,10 +179,14 @@ don't have one yet (silence per-repo with an empty `.claude/memory/.skip`).
 telling Claude which file to append to; since `CLAUDE.md` outranks the default
 system prompt, that overrides the harness's built-in per-project memory dir.
 
-**These memory files are git-tracked** — a memory is committed when *you* commit
-(not auto-committed each write), and that commit + push + pull is how memories
-sync across machines. The native fallback store
-(`~/.claude/projects/<encoded>/memory/`) stays gitignored and machine-local.
+**These memory files are git-tracked in the dotfiles repo** — so unlike before,
+they ARE committed automatically: the 10-minute `dotfiles-sync` timer commits
+tracked `$HOME` changes to this machine's branch and pushes. It debounces, so one
+editing burst is one commit rather than one per tick (see
+`provision/dotfiles-sync.sh`, `sync_should_commit`). Getting a memory onto `main`
+so every box sees it is still manual: `/dotfiles-promote`. The native fallback
+store (`~/.claude/projects/<encoded>/memory/`) stays gitignored and
+machine-local.
 Never put secrets in any tracked memory file.
 
 > The global `CLAUDE.md` keeps the gortex block inside its
@@ -185,9 +212,11 @@ From this repo, prefer the `just` recipes over calling the script directly:
   (`env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh`).
 - `just agent-bootstrap-profile <postfix>` — a **secondary** profile
   `~/.claude-<postfix>`, e.g. `pure` → `~/.claude-pure` (invoked as `ccp`):
-  links the SHARED set (`AGENTS.md`→`CLAUDE.md`, `memory/`,
-  `hosts/`→`host-memory.md`, `hooks/`, `skills/`, `subagents/`, `commands/`,
-  `statusline-command.sh`, `balance-refresh.py`) **plus** the committed
+  links this repo's shared set (`plugin/` as the `cyphy` whole-directory link, and
+  `subagents/` entry-by-entry) **plus** the dotfiles-owned content sourced from the
+  PRIMARY profile, not from here (`~/.claude/CLAUDE.md`, `~/.claude/memory/*`,
+  `~/.claude/host-memory.md`, `~/.claude/statusline-command.sh`,
+  `~/.claude/balance-refresh.py`) **plus** the committed
   `settings.<postfix>.json` → `settings.json` (falls back to the primary
   `settings.json` if that file isn't committed). It never touches the
   machine-local `settings.local.json` (which holds the profile's Sentry secret)

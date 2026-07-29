@@ -8,36 +8,20 @@
 #   provision\windows.ps1
 set windows-shell := ['C:/Program Files/Git/bin/bash.exe', '-cu']
 
-# Default recipe - show help
+# Default recipe — show help.
+#
+# GENERATED from the recipes themselves, never hand-maintained. This used to be a
+# hardcoded block of @echo lines that had to be updated by hand whenever a recipe
+# landed; it drifted until 24 of 41 recipes were undocumented (provision-mac,
+# provision-wsl, backup, health, rollback, the update-* family, …). Every recipe
+# now carries [group('…')] + [doc('…')] attributes, so `just --list` IS the help
+# and cannot fall behind.
+#
+# Adding a recipe: give it both attributes. provision/tests/justfile.test.sh
+# fails the build if either is missing.
+[private]
 default:
-    @echo "🚀 NixOS System Management Commands"
-    @echo ""
-    @echo "Build and Deploy:"
-    @echo "  just build     - Build system configuration"
-    @echo "  just switch    - Build and switch to new configuration"
-    @echo "  just test      - Build and test configuration (temporary)"
-    @echo "  just boot      - Build and set for next boot"
-    @echo ""
-    @echo "Updates:"
-    @echo "  just update      - Update all flake inputs"
-    @echo "  just upgrade     - Update and set for next boot (safe for Nvidia)"
-    @echo "  just upgrade-now - Update and switch immediately"
-    @echo ""
-    @echo "Maintenance:"
-    @echo "  just clean     - Clean old generations and garbage collect"
-    @echo "  just cleanup   - Deep cleanup (remove all old generations)"
-    @echo "  just optimize  - Optimize Nix store"
-    @echo ""
-    @echo "Development:"
-    @echo "  just fmt       - Format all Nix files"
-    @echo "  just check     - Check configuration syntax"
-    @echo "  just quick     - Quick configuration validation"
-    @echo "  just shell     - Enter development shell"
-    @echo ""
-    @echo "System Info:"
-    @echo "  just status    - Show system status"
-    @echo "  just hardware  - Show hardware information"
-    @echo "  just generations - Show system generations"
+    @just --list --list-heading $'🚀 NixOS System Management — `just <recipe>`\n' --list-prefix '  '
 
 # Variables
 hostname := `hostname`
@@ -47,6 +31,8 @@ flake_dir := justfile_directory()
 # NixOS box turns this into a hostname->attr map.
 nixos_attr := "latitude"
 # Build system configuration without switching
+[group('build')]
+[doc('Build the system configuration without activating it')]
 build:
     @echo "🔨 Building NixOS configuration..."
     sudo nixos-rebuild build --flake {{flake_dir}}#{{nixos_attr}}
@@ -66,17 +52,23 @@ _check-machines-link:
 # found). No-just fallbacks: `bash agents/bootstrap.sh`, or on Windows the PS
 # script provision\windows.ps1.
 # Bootstrap personal agent config (~/.claude + ~/.codex)
+[group('fleet')]
+[doc('Link personal agent config (~/.claude + ~/.codex)')]
 agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."
     @env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
 
 # Bootstrap a secondary profile ~/.claude-<postfix> (e.g. `just agent-bootstrap-profile pure`).
 # Links the shared set + settings.<postfix>.json; machine-local settings.local.json untouched.
+[group('fleet')]
+[doc('Link a secondary agent profile ~/.claude-<postfix>')]
 agent-bootstrap-profile postfix:
     @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
     @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
 
 # Bootstrap Hermes Agent config (~/.hermes)
+[group('fleet')]
+[doc('Link Hermes Agent config (~/.hermes)')]
 hermes-bootstrap:
     @echo "🔗 Bootstrapping Hermes Agent config..."
     @bash hermes/bootstrap.sh
@@ -85,29 +77,39 @@ hermes-bootstrap:
 # bootstrap.sh skips under home-manager activation (kept fast/offline there). The
 # binary + daemon come from pkgs/gortex.nix + me.nix; this fills in the per-profile
 # skills/agents/hooks + user MCP config. Run once per box (re-run after a bump).
+[group('fleet')]
+[doc('Wire per-profile gortex skills/agents/hooks (NixOS only)')]
 gortex-setup:
     @echo "🧠 Wiring gortex (machine-local skills/agents/hooks + MCP)..."
     @GORTEX_ALLOW_NIX_WIRE=1 GORTEX_REWIRE=1 env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
 
 # Build and switch to new configuration
+[group('build')]
+[doc('Build and activate the configuration now')]
 switch: _check-machines-link
     @echo "🔧 Switching to new NixOS configuration..."
     sudo nixos-rebuild switch --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ System switched successfully!"
 
 # Build and test configuration temporarily
+[group('build')]
+[doc('Activate temporarily — reverts on next boot')]
 test: _check-machines-link
     @echo "🧪 Testing NixOS configuration..."
     sudo nixos-rebuild test --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Test complete! Changes are temporary."
 
 # Build and set for next boot
+[group('build')]
+[doc('Build and set for the next boot')]
 boot: _check-machines-link
     @echo "🥾 Setting configuration for next boot..."
     sudo nixos-rebuild boot --flake {{flake_dir}}#{{nixos_attr}}
     @echo "✅ Configuration set for next boot!"
 
 # Update flake inputs (and out-of-tree pinned packages like rustdesk, orca)
+[group('update')]
+[doc('Update flake inputs + pinned out-of-tree packages')]
 update:
     @echo "📦 Updating flake inputs..."
     nix flake update --flake {{flake_dir}}
@@ -117,11 +119,15 @@ update:
     @echo "✅ Flake inputs updated!"
 
 # Bump rustdesk-bin.nix to the latest upstream release (also run by `update`)
+[group('update')]
+[doc('Bump rustdesk-bin.nix to the latest upstream release')]
 update-rustdesk:
     @echo "📦 Checking for new RustDesk release..."
     {{flake_dir}}/scripts/update-rustdesk.sh
 
 # Bump orca-bin.nix to the latest upstream release (also run by `update`)
+[group('update')]
+[doc('Bump orca-bin.nix to the latest upstream release')]
 update-orca:
     @echo "📦 Checking for new Orca release..."
     {{flake_dir}}/scripts/update-orca.sh
@@ -129,11 +135,15 @@ update-orca:
 # Bump pkgs/gortex.nix to the latest upstream release (also run by `update`).
 # NixOS-only (needs `nix store prefetch-file`); the Windows boxes float via the
 # upstream installer in agents/bootstrap.sh.
+[group('update')]
+[doc('Bump pkgs/gortex.nix to the latest release (NixOS only)')]
 update-gortex:
     @echo "📦 Checking for new gortex release..."
     {{flake_dir}}/scripts/update-gortex.sh
 
 # Update and set for next boot (safe for Nvidia drivers)
+[group('update')]
+[doc('Update and set for next boot (safe for NVIDIA)')]
 upgrade:
     @echo "⬆️ Upgrading system..."
     just update
@@ -142,6 +152,8 @@ upgrade:
     @echo "⚠️  Please reboot your system to activate the new configuration."
 
 # Update and switch immediately (may fail with Nvidia driver mismatch)
+[group('update')]
+[doc('Update and switch immediately (may hit an NVIDIA mismatch)')]
 upgrade-now:
     @echo "⬆️ Upgrading system (immediate switch)..."
     just update
@@ -149,6 +161,8 @@ upgrade-now:
     @echo "🎉 System upgrade complete!"
 
 # Clean old generations and garbage collect
+[group('maintenance')]
+[doc('Remove generations older than 7 days, then garbage-collect')]
 clean:
     @echo "🧹 Cleaning system..."
     @echo "Removing system generations older than 7 days..."
@@ -158,6 +172,8 @@ clean:
     @echo "✅ Cleanup complete!"
 
 # Deep cleanup - remove all old generations
+[group('maintenance')]
+[doc('Deep clean — remove ALL old generations')]
 cleanup:
     @echo "🗑️ Deep cleaning system..."
     @echo "⚠️ This will remove ALL old generations. Continue? (Ctrl+C to cancel)"
@@ -168,34 +184,46 @@ cleanup:
     @echo "✅ Deep cleanup complete!"
 
 # Optimize Nix store
+[group('maintenance')]
+[doc('Deduplicate the Nix store')]
 optimize:
     @echo "⚡ Optimizing Nix store..."
     sudo nix-store --optimise
     @echo "✅ Store optimization complete!"
 
 # Format all Nix files (alejandra — matches the flake formatter + pre-commit hook)
+[group('dev')]
+[doc('Format all Nix files (alejandra)')]
 fmt:
     @echo "🎨 Formatting Nix files..."
     alejandra {{flake_dir}}
     @echo "✅ Formatting complete!"
 
 # Check configuration syntax
+[group('dev')]
+[doc('Full flake evaluation check')]
 check:
     @echo "🔍 Checking configuration..."
     nix flake check {{flake_dir}}
     @echo "✅ Configuration check passed!"
 
 # Quick configuration check
+[group('dev')]
+[doc('Fast validation — syntax + a one-host dry build')]
 quick:
     @echo "🔍 Running quick configuration check..."
     ./scripts/quick-check.sh
 
 # Enter development shell
+[group('dev')]
+[doc('Enter the development shell')]
 shell:
     @echo "🐚 Entering development shell..."
     nix develop {{flake_dir}}
 
 # Show system status
+[group('info')]
+[doc('Show system status')]
 status:
     @echo "📊 System Status"
     @echo "=================="
@@ -214,6 +242,8 @@ status:
     if command -v acpi >/dev/null 2>&1; then acpi; else echo "Battery info not available"; fi
 
 # Show hardware information
+[group('info')]
+[doc('Show hardware information')]
 hardware:
     @echo "🖥️ Hardware Information"
     @echo "======================="
@@ -233,6 +263,8 @@ hardware:
     lsusb
 
 # Show system generations
+[group('info')]
+[doc('List all system generations')]
 generations:
     @echo "📋 System Generations"
     @echo "====================="
@@ -243,6 +275,8 @@ generations:
     systemctl --user status home-manager-me.service --no-pager || echo "Home Manager service not active"
 
 # Show flake info
+[group('info')]
+[doc('Show flake metadata')]
 info:
     @echo "📄 Flake Information"
     @echo "===================="
@@ -253,6 +287,8 @@ info:
     nix flake metadata {{flake_dir}}
 
 # Rollback to previous generation
+[group('maintenance')]
+[doc('Roll back to the previous generation (prompts)')]
 rollback:
     @echo "⏪ Rolling back to previous generation..."
     @echo "⚠️ This will rollback to the previous system generation. Continue? (Ctrl+C to cancel)"
@@ -261,42 +297,56 @@ rollback:
     @echo "✅ Rollback complete!"
 
 # Show recent system changes
+[group('info')]
+[doc('Show the two most recent system generations')]
 diff:
     @echo "📈 Recent System Changes"
     @echo "========================"
     sudo nix-env --list-generations --profile /nix/var/nix/profiles/system | tail -2
 
 # Repair Nix store
+[group('maintenance')]
+[doc('Verify and repair the Nix store')]
 repair:
     @echo "🔧 Repairing Nix store..."
     sudo nix-store --verify --check-contents --repair
     @echo "✅ Store repair complete!"
 
 # Show system logs
+[group('info')]
+[doc('System logs from the last hour')]
 logs:
     @echo "📜 Recent System Logs"
     @echo "===================="
     journalctl --system --since "1 hour ago" --no-pager
 
 # Monitor system resources
+[group('info')]
+[doc('Live resource monitor (htop)')]
 monitor:
     @echo "📊 System Resource Monitor"
     @echo "Press Ctrl+C to exit"
     htop
 
 # Test configuration in VM
+[group('build')]
+[doc('Build a throwaway VM of the configuration')]
 vm:
     @echo "🖥️ Building and running configuration in VM..."
     nixos-rebuild build-vm --flake {{flake_dir}}#{{nixos_attr}}
     @echo "VM built successfully! Run ./result/bin/run-nixos-vm to start."
 
 # Build ISO installer
+[group('build')]
+[doc('Build a NixOS installer ISO')]
 iso:
     @echo "💿 Building NixOS installer ISO..."
     nix build {{flake_dir}}#nixosConfigurations.{{nixos_attr}}.config.system.build.isoImage
     @echo "✅ ISO built successfully!"
 
 # Quick system health check
+[group('info')]
+[doc('Quick system health check')]
 health:
     @echo "🏥 System Health Check"
     @echo "======================"
@@ -321,27 +371,37 @@ health:
     fi
 
 # Backup current configuration
+[group('maintenance')]
+[doc('Copy this repo to a timestamped .backup directory')]
 backup:
     @echo "💾 Backing up current configuration..."
     cp -r {{flake_dir}} {{flake_dir}}.backup.$(date +%Y%m%d_%H%M%S)
     @echo "✅ Backup created in {{flake_dir}}.backup.$(date +%Y%m%d_%H%M%S)"
 
 # Show package search
+[group('dev')]
+[doc('Search nixpkgs for PACKAGE')]
 search PACKAGE:
     @echo "🔍 Searching for package: {{PACKAGE}}"
     nix search nixpkgs {{PACKAGE}}
 
 # Show package info
+[group('dev')]
+[doc('Show nixpkgs metadata for PACKAGE')]
 show PACKAGE:
     @echo "📦 Package information for: {{PACKAGE}}"
     nix search nixpkgs#{{PACKAGE}} --json | jq
 
 # Run a package temporarily
+[group('dev')]
+[doc('Run PACKAGE once without installing it')]
 run PACKAGE:
     @echo "🏃 Running {{PACKAGE}} temporarily..."
     nix run nixpkgs#{{PACKAGE}}
 
 # Enter shell with package
+[group('dev')]
+[doc('Enter a shell with PACKAGE available')]
 shell-with PACKAGE:
     @echo "🐚 Entering shell with {{PACKAGE}}..."
     nix shell nixpkgs#{{PACKAGE}}
@@ -351,6 +411,8 @@ shell-with PACKAGE:
 # Relative path (not {{justfile_directory()}}): just runs recipes with cwd =
 # justfile dir, and on Windows the absolute {{...}} is a backslash path bash
 # mangles (C:Users… → not found) — same reason agent-bootstrap stays relative.
+[group('fleet')]
+[doc('Fleet front door — plan or apply roles for a machine')]
 provision *ARGS:
     bash provision/provision.sh {{ARGS}}
 
@@ -358,5 +420,18 @@ provision *ARGS:
 # <nickname> = tailnet node name (also its fleet.local.json nickname). Run from
 # inside the distro. Relative path (not {{flake_dir}}) — same Windows-path reason
 # as agent-bootstrap/provision.
+[group('fleet')]
+[doc('Provision THIS WSL distro as a self-declaring fleet host')]
 provision-wsl nickname:
     bash provision/provision-wsl.sh {{nickname}}
+
+# <machine> is a darwin member of fleet.json (e.g. `air`) — an argument rather
+# than detected, because stage 1 is what SETS the hostname. One sudo prompt up
+# front, then: hostname, Homebrew, tailnet, toolchain, roles.
+# Pre-auth key: `--authkey-file provision/secrets/authkey` (gitignored) or
+# $HEADSCALE_AUTHKEY. Preview with `--dry-run`.
+# Fully provision THIS Mac as a fleet member, end to end.
+[group('fleet')]
+[doc('Provision THIS Mac as a fleet member, end to end')]
+provision-mac machine *ARGS:
+    bash provision/provision-mac.sh {{machine}} {{ARGS}}

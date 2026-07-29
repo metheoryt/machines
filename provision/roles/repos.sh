@@ -18,7 +18,10 @@ role_repos() {
     local script="$repo/provision/repos.sh"
 
     case "$platform" in
-        nixos|wsl|debian)
+        nixos|wsl|debian|darwin)
+            # repos.sh is host-agnostic plain git — darwin joins every other
+            # posix platform, including nixos (cloning is imperative, so it is
+            # not a home-manager no-op here).
             if [ ! -f "$script" ]; then
                 echo "  repos: repos.sh not found at $script — is this repo cloned here?" >&2
                 return 1

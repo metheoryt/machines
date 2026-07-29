@@ -28,7 +28,11 @@ EOF
 # --- Fixture: a main repo + one linked worktree. Echoes "<main> <wt>".
 mk_repo_with_worktree() {
   local base main wt
-  base="$(mktemp -d)"
+  # `pwd -P` matters: on macOS mktemp -d hands back /var/folders/... while /var is
+  # a symlink to /private/var, and the scripts under test report git's PHYSICAL
+  # path. Without this the expectations differ from the logged calls by that prefix
+  # alone — which is why these two cases passed on Linux and failed on macOS.
+  base="$(cd "$(mktemp -d)" && pwd -P)"
   main="$base/main"
   git init -q "$main"
   ( cd "$main" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init )

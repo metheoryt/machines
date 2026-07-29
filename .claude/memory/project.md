@@ -65,11 +65,47 @@ global + per-host). One bullet per fact under a topical heading.
   distro, Ubuntu-24.04, has a stale `~/machines` (on `main`, clean, at `2815efb`)
   with `fleet-selfpull.timer` **inactive** — it was never enrolled in Trigger B, so
   it needs a `provision/linux.sh` run, not just a pull.
-- **git-autofetch has three implementations** — NixOS (systemd timer), Windows
-  (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback) — all sharing one
-  root-scan model (`find` under `$HOME` depth 4, skipping node_modules/.cache/.direnv)
-  doing refs-only `git fetch --all --prune`, never pulling (keeps the prompt's
-  "behind by N" accurate).
+- **git-autofetch has FOUR implementations** — NixOS (systemd timer), Windows
+  (Scheduled Task), WSL/Ubuntu (systemd-user timer, cron fallback), macOS (launchd
+  LaunchAgent) — all sharing one root-scan model (`find` under `$HOME` depth 4,
+  skipping node_modules/.cache/.direnv) doing refs-only `git fetch --all --prune`,
+  never pulling (keeps the prompt's "behind by N" accurate).
+- **`timeout(1)` DOES NOT EXIST on macOS** — it is GNU coreutils, not BSD, and
+  coreutils is not installed by default. This silently disabled git-autofetch on
+  `air` from provisioning until 2026-07-29 (`ed65e7c`): every fetch died "command
+  not found", `2>/dev/null` ate the message, and the script still exited 0, so
+  launchd reported a healthy job that had never fetched. `tier_autofetch` now emits
+  an `af_timeout` shim (timeout → gtimeout → POSIX sh watchdog). That shim is a
+  SANCTIONED divergence from `modules/system/git-autofetch/default.nix`, which
+  resolves `timeout` from `pkgs.coreutils` on its PATH — the rest of the two must
+  stay in sync.
+- **A best-effort loop that swallows errors must exit non-zero when EVERYTHING
+  failed.** The timeout bug above hid for a day purely because "all 7 repos failed"
+  and "all 7 succeeded" produced the same exit 0. One unreachable remote is a
+  warning; nothing working is a broken install. Applies to every scan-and-retry
+  script here (`git-autofetch`, `fleet-selfpull`, `dotfiles-sync`).
+- **GNU-only tooling is the recurring macOS trap in this repo**, and it always fails
+  quietly: `timeout` absent, `wc -l` padding its output, `grep -P` unsupported, `/proc`
+  absent (bit `orca-repair`, `a34b2c7`). When touching a script that runs on `air`,
+  check the BSD behaviour rather than assuming GNU.
+- **Don't infer a leak from killed-fetch debris.** A TERM'd `git fetch` leaves
+  `.git/objects/pack/tmp_pack_*` behind, so probing with a short budget manufactures
+  exactly the evidence of a recurring leak. Measure at the real budget before
+  changing the scan.
+- **NEVER `git fetch` a shallow clone from a scan.** A `clone --depth 1` client can
+  offer only its one commit during negotiation and its shallow boundary stops it
+  claiming any ancestor, so the server resends the whole history. `~/.hermes/hermes-agent`
+  (upstream's install.sh does `clone --depth 1 --branch main`) went 60M/1-commit to
+  350M with `refs/remotes/origin/main` legitimately reaching 18914 commits — and
+  `git gc` reclaims NOTHING, because nothing is garbage. One-way damage, repeating
+  every tick. git-autofetch skips shallow repos since 2026-07-29; they are vendored
+  installs with their own updater, not checkouts whose ahead/behind you track.
+  Restoring one needs `main` advanced to `origin/main` (i.e. let install.sh update
+  it) or a fresh clone — dropping tags and gc'ing does nothing.
+- **Upstream hermes-agent's installer is already correct** — `install.sh` uses
+  `git clone --depth 1 --branch "$BRANCH"` and its updater fetches only that branch,
+  with a comment saying why. Bloat in `~/.hermes/hermes-agent` came from OUR scan,
+  not from upstream. No PR is warranted there.
 
 ## Fleet network
 
@@ -169,6 +205,18 @@ global + per-host). One bullet per fact under a topical heading.
   `%APPDATA%\orca\profiles\local-default\orca-data.json` on Windows (`/mnt/c/Users/<winuser>/…`
   from WSL — the Windows profile name differs from `$USER`), and one box can host two
   installs: g614jv has both a Windows Orca and a WSL-native one.
+- **The Windows-native `machines` clones are converge-only — never Orca projects**
+  (decided 2026-07-26). Development happens in **g614jv's WSL `~/machines`**, the
+  active copy. `C:\Users\methe\machines` exists on g614jv for fleet/desktop-only work
+  and on g513ie for server-only work; neither does development, so neither needs Orca
+  worktrees, and both were unregistered from Orca. **Unregistering costs nothing** —
+  Orca plays no part in fleet sync: `fleet-pull.sh` reaches those clones directly over
+  SSH (members `desktop` and `server` both resolve to `C:\Users\methe\machines`) and
+  convergence fires from `core.hooksPath` → `agents/git-hooks/post-merge`, verified
+  present on g513ie. Keep the clones on disk regardless: on g614jv it is the link
+  target for the Windows-native Claude profile. Net effect — with every Orca project
+  registered at a WSL path, the `C:/`-registration hook breakage above is unreachable
+  in practice.
 - **Hand-testing an Orca `setup-runner.cmd` from MINGW64 needs `cmd //c`, not
   `cmd /c`** — MSYS path conversion rewrites the lone `/c` into a path, cmd never
   sees the switch and drops to an interactive prompt, emitting bogus
@@ -290,9 +338,9 @@ global + per-host). One bullet per fact under a topical heading.
   machine-layer only (services stay the `vps` repo), driven by the `fleet.json`
   manifest; front door `just provision` (`provision.{sh,ps1}`, per-role
   `Apply <role>? [y/N]` gate). REAL role executors under `provision/roles/`: `agents`
-  + `dotfiles` + `repos` (dotfiles = chezmoi over in-repo `dotfiles/`, machine-
-  specifics deferred to untracked `~/.gitconfig.local` via `[include]`; on NixOS
-  `agents`/`dotfiles` are home-manager no-ops but `repos` still runs `repos.sh`).
+  + `dotfiles` + `repos` (dotfiles = the private bare repo, see the dotfiles
+  bullets below; on NixOS `agents` is a home-manager no-op but `dotfiles` and
+  `repos` both run).
   `base`/`ssh-server`/`backup-client` remain UNIMPLEMENTED stubs (see Pending).
   Secrets (age/agenix) designed, not built.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
@@ -304,15 +352,141 @@ global + per-host). One bullet per fact under a topical heading.
   in-repo via chezmoi (non-Nix boxes) + agenix (NixOS), one age identity for the
   fleet. Designed, NOT yet implemented — agenix would be the repo's first
   secrets framework.
-- User keeps a separate bare-repo dotfiles tracker at `~/.dotfiles`
-  (`git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME`, alias `dotfiles`,
-  github.com/metheoryt/dotfiles, private), one branch per machine. Plain
-  files, no encryption. Secret files (SSH keys, VPN keys, etc.) are never
-  committed but ARE listed in that machine's branch `.gitignore` — the
-  ignore entry itself is the "you need to restore/regenerate this on a fresh
-  box" checklist, without ever storing the secret content. When adding a new
-  per-machine secret (e.g. an AmneziaWG private key), add its path to that
-  machine's `.dotfiles` branch `.gitignore` too, not just to this repo.
+- **`$HOME` config is the private `metheoryt/dotfiles` bare repo, not chezmoi**
+  (spec `docs/superpowers/specs/2026-07-28-dotfiles-private-bare-repo-design.md`).
+  `~/.dotfiles` is a bare repo whose work-tree is `$HOME`; each box checks out a
+  branch named by its **logical** fleet name (`latitude`, `air`, `desktop`,
+  `server`, `hub`). `provision/dotfiles-sync.sh` commits + pushes tracked changes
+  every 10 min and merges `origin/main` in behind a `merge-tree --write-tree`
+  preflight. `machines/dotfiles/` and the chezmoi role were deleted 2026-07-28.
+- **A path is shared XOR host-local.** On `main` ⇒ shared and byte-identical
+  everywhere; absent from `main` ⇒ host-local. Never both. That is why
+  home-manager-owned paths (`~/.ssh/config`, `~/.gitconfig`) are not on `main`:
+  no exclusion mechanism is needed, they simply live on non-Nix host branches.
+  Moving a path branch → `main` is the manual `/dotfiles-promote` skill.
+- **Never `add -A` in the dotfiles repo**, and never `dotfiles checkout main` on
+  a live box — the first can leak an unlisted file, the second deletes every
+  host-local file from `$HOME` for the duration.
+- **Enrolled 2026-07-28** — `air`, `hub`, `desktop`, `latitude`, and the WSL host
+  `desktop-ubuntu26` (branch auto-created from `main` by the role). **`server` is
+  NOT enrolled** — it was offline; enroll it by hand when it is back, since
+  converge on a Windows box runs `windows.ps1` only and never the role.
+  `.ssh/config` was dropped from every branch during migration (home-manager
+  deletes it on latitude); it is untracked everywhere and stays that way.
+  Enrolling `latitude` first required merging its `~/pure/backend-api` project
+  memory into `main`'s — the two boxes had accumulated 11 and 3 disjoint bullets
+  for the same repo. Whenever a collision file has real content, merge it onto
+  `main` BEFORE the checkout: the checkout overwrites, and the local content was
+  never tracked anywhere, so it is simply gone.
+- **`$HOME/CLAUDE.md` (tracked on the dotfiles repo's `main`) is a real
+  auto-loading agent-memory slot on every enrolled box** — verified with a live
+  `claude -p` probe, which reports it as project instructions for any cwd under
+  `$HOME`. That is where the "offer to track this file" nudge lives. **Cost: every
+  line is ambient in every session under `$HOME`**, including work repos, so keep
+  it to decision rules. Anything phrased around "a file you edited" misfires on
+  ordinary source files there — gate on "has no other home" instead.
+- **Agent config content lives in dotfiles, not `machines` (2026-07-28, executed
+  end-to-end across all six boxes).** The criterion is a property of the bare
+  repo: its work-tree IS `$HOME`, so a tracked path must be a path that
+  legitimately exists in a home directory.
+  `~/.claude/{CLAUDE.md,memory/global.md,memory/personality/,host-memory.md,
+  statusline-command.sh,balance-refresh.py}` and the three untested skills
+  (`gortex-align`, `update-balance`, `worktree-agent`) are dotfiles-tracked at
+  those paths; `machines` keeps `bootstrap.sh`, the tests, and the fleet-coupled
+  plugin. **This REVERSES `d9b1be4`**, which had recorded `$HOME/CLAUDE.md` as the
+  only available agent-memory slot on the premise that bootstrap's `link()` would
+  fight dotfiles for `~/.claude/…`. bootstrap no longer touches those paths — it
+  only `retire_link()`s stale links and fans `~/.codex` / `~/.claude-<postfix>` out
+  AT the primary profile (`$PRIMARY_DIR`, always `~/.claude`). `$HOME/CLAUDE.md`
+  keeps its own distinct job, above.
+- **A skill with `tests/` stays in `machines`; a skill without moves to dotfiles.**
+  The line coincides exactly with fleet coupling — every `fleet.json` reader is
+  tested — so no skill is separated from its tests or its manifest. Post-move the
+  rule holds with no exceptions: every remaining plugin skill has a `tests/` dir.
+  Invocation for the moved three is `/<name>`, not `/cyphy:<name>`.
+- **`agents/hosts/` and `agents/memory/` are gone.** Per-host memory is
+  `~/.claude/host-memory.md`, host-local on each dotfiles branch; the shared store
+  is `~/.claude/memory/`, on `main`. The old `$HOST_ID.md` scheme keyed on
+  OS-hostname identity and had drifted to 7 files for 5 machines — and it only
+  resolved on `desktop` because Windows is case-insensitive (`COMPUTERNAME` is
+  `G614JV`, the file is `g614jv.md`).
+- **HAZARD — a `machines` worktree hijacks `~/.claude` via the post-checkout
+  hook.** `git worktree add` fires the hook, which runs THAT worktree's
+  `agents/bootstrap.sh` with `SRC_DIR=<worktree>/agents`, repointing
+  `~/.claude/skills/cyphy` (and, from a pre-2026-07-28 commit, the memory /
+  instruction / statusline paths) into the worktree. When the worktree is removed
+  the links dangle, and `retire_link` will NOT clean them because its guard matches
+  only the live `$SRC_DIR`. Recovery: `rm` the dangling links, `dotfiles checkout
+  -- .claude`, then re-run `bash ~/machines/agents/bootstrap.sh`. Hit for real
+  2026-07-28 while checking out an old commit to date a test failure.
+- **`bootstrap.sh` now REFUSES to run from a copy of the repo** (2026-07-28) —
+  the guard for the hazard above, plus the second shape it took the same day: an
+  agent session snapshotted `agents/` into its own scratchpad, ran bootstrap
+  there, and left five `~/.claude` paths *and* the `memory/personality`
+  DIRECTORY dangling at `/private/tmp/…/scratchpad/pre/agents/`. Symptom is
+  nothing like the cause — Claude Code fails a statusline command **silently**,
+  so the statusline just vanishes, and the memory files read as deleted. It
+  refuses two shapes: a linked git worktree (`--git-dir` != `--git-common-dir`,
+  probed first because it is the more actionable reason) and a path under a temp
+  root. Escape hatch: `MACHINES_BOOTSTRAP_ALLOW_COPY=1`. What saved the memory
+  files that day was the commit debounce from `902c783` — `pending.since` was
+  stamped 23:30, so four personality-facet deletions were still inside the
+  window when `dotfiles-sync`'s `add -u` would otherwise have committed and
+  pushed them.
+- **`~/.gitconfig` and `~/.ssh/config` are tracked on `air`'s branch only**
+  (2026-07-28) — host-local, never on `main`: they carry absolute `/Users/me`
+  paths, air's two-account `includeIf` wiring, and this box's tailnet aliases.
+  Both generators (`tier_git_base`, `tier_ssh_accounts`) were verified
+  byte-stable, so the 10-min timer does not churn. git records mode `100644`,
+  so `.ssh/config` restores as 644, not its live 600.
+- **Anchor host-local allow-lines with a leading slash** (`!/.gitconfig`), unlike
+  the shared allow-lines, which have none. Unanchored patterns match at ANY
+  depth, so `!.gitconfig` would make a stray `.gitconfig` or `.ssh/config` inside
+  any project checkout under `$HOME` eligible for tracking.
+- **`git check-ignore -v` exits 0 on a NEGATED match too**, so `check-ignore -v
+  path && echo ignored` reports the opposite of the truth for allow-listed
+  paths. Use `check-ignore -q`, or `dotfiles add --dry-run` (refusal = ignored).
+- **`gh` recreates `~/.config/gh/config.yml` within seconds** (as a `version: "1"`
+  stub), so "move it aside, then enroll" is racy — it re-collided on two of four
+  boxes and refused the checkout both times. Move it aside for the diff, then
+  `rm` the regenerated stub immediately before running the role.
+- **On Windows, a headless converge registers no user-owned scheduled task.**
+  `windows.ps1` resolves the console user via `Win32_ComputerSystem.UserName`;
+  with nobody logged on it is null and both `fleet-selfpull` and `dotfiles-sync`
+  are skipped. Run `provision\windows.ps1` from a normal login to register them.
+- **`git --git-dir=~/.dotfiles --work-tree=$HOME ls-files` run from inside a
+  subdirectory of `$HOME`** (e.g. `~/machines`) lists nothing — git derives a
+  pathspec prefix from the cwd. `status` too. It looks exactly like an empty
+  checkout; `cd ~` first. `add -u` / `diff --cached` are NOT prefix-limited, so
+  the sync path is unaffected.
+- **`git clone --bare` sets no `remote.origin.fetch`**, so a bare dotfiles clone
+  has no `refs/remotes/origin/*` and every `origin/main` reference fails to
+  resolve. The role configures the refspec and the sync script fetches with an
+  explicit one; a repo cloned by hand needs
+  `git --git-dir=$HOME/.dotfiles config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`.
+- **The dotfiles engine is verified live end-to-end on `air`** (2026-07-28):
+  `~/.dotfiles` on branch `air`, upstream `metheoryt/dotfiles`, tree clean and
+  0/0 vs `origin/air`, and `launchctl list` shows `kz.cyphy.dotfiles-sync`
+  loaded with last exit 0 alongside `git-autofetch` / `fleet-selfpull` /
+  `hermes-serve`. All seven branches exist on the remote (`main` + one per
+  machine incl. `desktop-ubuntu26`). Branch `air` has **no upstream configured**,
+  which is normal — `dotfiles-sync.sh` pushes `origin <branch>` explicitly and
+  never consults `@{u}`, so `rev-list …HEAD...@{u}` fails while sync works fine;
+  compare against `origin/<branch>` instead.
+- **`dotfiles` reaches macOS by a different route than Linux.** `linux.sh`'s
+  workstation `TIERS` includes `dotfiles`; `macos.sh`'s does **not** (pinned by
+  `provision/tests/tiers.test.sh:82`). macOS gets it from the role front door
+  (`provision/provision.sh --machine air --apply` → `provision/roles/dotfiles.sh`),
+  which is what wired air. `tier_dotfiles_sync` is in neither array — it is called
+  by `role_dotfiles` itself (`provision/roles/dotfiles.sh:144`), so the sync timer
+  always follows the role, never the tier. Corollary: running only the driver
+  (`just provision-mac air`) leaves a Mac with no dotfiles and no sync timer.
+- Secret files (SSH keys, VPN keys) are never committed but ARE listed in that
+  machine's branch `.gitignore` — the ignore entry itself is the "you need to
+  restore/regenerate this on a fresh box" checklist, without storing the secret.
+  Rotatable credentials (`.netrc`, `.npmrc`, `.pypirc`, `.aws/credentials`,
+  `.config/gh/hosts.yml`) ARE tracked: the repo is private and the recovery
+  story is "rotate the token", not "re-key the fleet".
 - SSH keys are per-host, not shared (e.g. latitude5520's is
   `ssh-ed25519 ...  me-nixos-latitude5520`) — each fleet machine has its own
   keypair; cross-machine SSH trust needs each host's *public* key collected
@@ -404,12 +578,13 @@ global + per-host). One bullet per fact under a topical heading.
   baseline; only array-valued opt-in config (e.g. `mcp__gortex__*` allow) may live
   in machine-local `settings.local.json`. gortex permission was moved there
   2026-07-25 so the baseline carries only manually-configured, portable settings.
-- Per-host agent-memory filenames use the raw OS hostname
-  (`agents/hosts/latitude5520.md`, `g614jv.md`, `ME-G614JV.md`,
-  `methe-server.md` — not fleet aliases), threaded via a single
-  `MACHINES_HOST_ID` env var (nix passes `networking.hostName`; bootstrap
-  computes it off-nix). A curated short name drifts from what nix/bootstrap
-  resolve and misdirects the host-memory link.
+- ~~Per-host agent-memory filenames use the raw OS hostname~~ **superseded
+  2026-07-28**: there are no per-host memory *files in this repo* any more.
+  Per-host memory is `~/.claude/host-memory.md`, one per box on its own dotfiles
+  branch, so no host id is involved. `MACHINES_HOST_ID` is still passed by
+  `modules/home/claude.nix` but is now inert; `host_id()` survives in
+  `bootstrap.sh` only as the canonical hostname-sanitization spec that
+  `provision/lib/fleet.sh` and friends cite by name.
 - `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
   guard that fails loud if the repo's expected symlink location is dangling —
   added after repo-rename events silently broke agent-config linking.
@@ -421,10 +596,11 @@ global + per-host). One bullet per fact under a topical heading.
   of that laptop's installed state; `hosts/server/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
   conflate them when adding packages.
-- **`CLAUDE.md` and `agents/CLAUDE.md` are symlinks** to `AGENTS.md` /
-  `agents/AGENTS.md` (the global-memory hook works for Codex too). A tool with a
-  symlink guard (won't write through a symlink) edits nowhere useful if pointed at
-  the `CLAUDE.md` path — edit the real `AGENTS.md` target.
+- **The repo-root `CLAUDE.md` is a symlink to `AGENTS.md`** (this repo's own
+  instructions). A tool with a symlink guard (won't write through a symlink) edits
+  nowhere useful if pointed at the `CLAUDE.md` path — edit the real `AGENTS.md`
+  target. `agents/AGENTS.md` and `agents/CLAUDE.md` no longer exist: that content
+  is `~/.claude/CLAUDE.md` on dotfiles `main` since 2026-07-28.
 - **Windows `just` needs `set windows-shell := ['C:/Program
   Files/Git/bin/bash.exe','-cu']`** (in the justfile) — native PowerShell has no
   POSIX `sh`, so without it `just` fails on Windows even on `just --list`. Recipes
@@ -538,3 +714,173 @@ global + per-host). One bullet per fact under a topical heading.
   `TypeError`), which gortex hit constantly. Added 2026-07-09. When nixpkgs
   ships pylsp with the fix, delete the overlay block + its entry in the
   `overlays` list and revert to stock. Track: https://github.com/python-lsp/python-lsp-server/pull/715
+
+## Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)
+
+Plan: `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`.
+Work branch: `worktree-fleet-migration-mac-primary`.
+
+- **Kingston NVMe attach method: THUNDERBOLT ENCLOSURE** — decided 2026-07-27
+  from `dmidecode -t slot` + `lspci -t` on latitude. No free M.2 2280 socket.
+- **`dmidecode -t slot` is NOT a reliable M.2 inventory on the Latitude 5520.**
+  It reports three PCIe slots and none of them is the NVMe: the live KIOXIA sits
+  at `00:1d.0` (bus 72) and appears in NO slot entry at all. What the three
+  entries really are: "PCI-Express 0 / x16 / In Use" = `00:1c.0` → bus 71 →
+  Realtek **card reader** (not x16, not the SSD); "PCI-Express 2 / x1 / In Use" =
+  `00:14.3` → **Wi-Fi AX201**; "PCI-Express 1 / x1 / Available" = `00:1c.5`, an
+  **empty x1 root port** = the WWAN slot. Always cross-check with
+  `lspci -t -v` — a slot's `Bus Address` maps it to the real device.
+  Corollary: absence from the slot table proves nothing, since the occupied SSD
+  socket is absent too. The decisive evidence is lane width — a second NVMe
+  needs its own root port and the only free one is x1, which Dell never wires
+  for an SSD.
+- **latitude has Thunderbolt 4** (`00:0d.0` USB controller + `00:0d.2` NHI,
+  Tiger Lake) and `bolt` is already enabled — so TB3/TB4 enclosure (~2.5-3 GB/s)
+  over USB 3.2 Gen2 (~1 GB/s) for the live Immich upload tier the DB reads
+  against. `00:07.0`/`00:07.1` with their large empty bus ranges are the TB PCIe
+  tunnels, not M.2 sockets.
+- **`dmidecode` is not installed on NixOS.** Run it as
+  `nix build --no-link --print-out-paths nixpkgs#dmidecode` then
+  `sudo <path>/bin/dmidecode …` — `sudo nix shell …` fails because sudo resets
+  PATH.
+- **2 TB staging drive:** *deferred* — decided 2026-07-27 not to decide yet. If
+  ultimately skipped, Task 12 uses the G→H shuffle fallback and there is no
+  off-site copy of the live upload tier until Task 19. Recorded so the residual
+  gap does not quietly become permanent.
+- **`air` tailnet address is `100.64.0.7`, not `.5`.** Live `headscale nodes
+  list` (2026-07-27): hub .1, latitude .2, server .3, desktop .4, **ipheoryt12
+  .5**, **desktop-ubuntu26 .6**. The iPhone and the WSL host are real tailnet
+  nodes that never appear in `fleet.json` — always read Headscale, never infer
+  the next free address from the manifest.
+- ~~**Per-host memory path is `agents/hosts/<detect.hostname>.md`**~~ —
+  **removed 2026-07-28** along with the `tiers.test.sh` stub guard. bootstrap no
+  longer seeds anything into the repo, so a new host cannot dirty the tree and
+  cannot disable `fleet-selfpull`'s clean-tree gate this way. Historical note: it
+  was NOT top-level `hosts/` (that holds NixOS/Windows machine configs). Add
+  the stub in the SAME commit as the manifest entry.
+- **`provision.sh` and `linux.sh` are unrelated entry points.** `linux.sh` is a
+  standalone tier driver (`bash provision/linux.sh`); `provision.sh` is the role
+  front door (`bash provision/provision.sh --machine <m> --dry-run|--apply` —
+  flag syntax, a bare positional exits 2). `provision.sh` never invokes a tier
+  driver. `provision/macos.sh` is therefore a sibling of `linux.sh`.
+- **Platform dispatch lives in `provision/roles/*.sh`, not in `lib/fleet.sh`.**
+  `lib/fleet.sh` and `lib/Fleet.psm1` are pure manifest readers with no `case` at
+  all. Each role executor ends in a `*)` arm that prints "no posix executor" and
+  **returns 0** — an unlisted platform provisions nothing and reports success.
+  `provision/tests/roles.test.sh` guards that. `fleet-dispatch.sh` already routes
+  everything non-`windows` to plain ssh, so new POSIX platforms work there free.
+- **No `role_services` exists** (only `agents`, `dotfiles`, `repos`). Declaring an
+  unimplemented role in `fleet.json` is safe — `provision.sh:72-78` prints
+  "not yet implemented (skipped)" and continues.
+- **latitude's `nix-repo-auto-pull` has been failing silently** (found 2026-07-28
+  while enrolling `air`). Every 5 min it logs `git@github.com: Permission denied
+  (publickey)` and the unit still **exits 0** — `systemctl` reports "Finished
+  successfully", so nothing surfaces outside `journalctl -u nix-repo-auto-pull`.
+  Cause: `/home/me/.ssh/id_ed25519` is **passphrase-encrypted** (`aes256-ctr` /
+  `bcrypt` in the private-key header). The key is correctly registered on GitHub
+  ("me@NixOS Latitude 5520", `…IBnl…`) and *interactive* pulls work because the
+  login shell has an ssh-agent — but a systemd service has no agent and no TTY.
+  Consequence: **latitude cannot self-heal.** It sat at `369bbf4` while the rest
+  of the fleet moved on, and no converge can fire because converge is triggered
+  by the pull. Unblock it with a manual `git -C ~/machines pull --ff-only` from a
+  shell that has the agent.
+- **`provision/fleet-authorized-keys` was in neither converge predicate** (fixed
+  `de07b77`). It is a real provisioning input on both tiers — `keyFiles` in
+  `modules/system/ssh-server.nix:50` (nixos, baked at build time → needs a
+  rebuild) and `tier_fleet_ssh`'s merge into `~/.ssh/authorized_keys` (linux) —
+  yet matched neither `touches_nix` nor `touches_linux`. Enrolling a new member's
+  key therefore wrote ok, advanced converged-rev, and was **never applied** on
+  latitude or hub. Windows was unaffected (it reprovisions unconditionally).
+  Same silent-skip class the `fleet.json` arm of `touches_nix` already guards.
+- **A fleet box you cannot SSH into is still reachable by hopping** through one
+  whose key is already trusted: `ssh desktop 'ssh me@latitude "…"'`. Note the
+  explicit **`me@`** — desktop is Windows, so its default remote user is `methe`
+  and a bare `ssh latitude` authenticates as the wrong account.
+- **`~/.gitconfig` had two owners; the second one is gone.** `tier_git_base`
+  (`provision/lib/tiers.sh`, via `git config --global`) writes it at tier time.
+  The chezmoi template that used to overwrite it wholesale at role time
+  (`dotfiles/dot_gitconfig.tmpl`) was **deleted 2026-07-28** — it had drifted far
+  enough to drop the delta pager, the gh credential helper, all aliases,
+  `pull.rebase`, `push.autoSetupRemote`, and the cyphy671 identity `includeIf`
+  (→ silent commit misattribution).
+- **`~/.gitconfig` and `~/.ssh/config` are host-local, and promoting them to
+  `main` would break sync — settled 2026-07-28.** Both are tracked on dotfiles
+  branch `air` only (`b8c4f56`); every other branch, `main` included, carries
+  neither. Three independent reasons they must never reach `main`: (1) air's copy
+  holds absolute `/Users/me/…` paths (the cyphy671 identity `includeIf`,
+  `safe.directory`) that read `/home/me/…` on the Linux boxes — the rule is
+  *anything carrying an absolute path is host-local no matter how generic it
+  looks*; (2) `tier_git_base` still writes `~/.gitconfig` via `git config
+  --global` on **every** tier box, so a shared copy has a writer outside the
+  dotfiles engine; (3) mechanically, `dotfiles-sync.sh` stages with `add -u`, so
+  a shared `.gitconfig` would have each box commit its own variant to its machine
+  branch every 10 min and then re-conflict against `origin/main` on the merge
+  step — forever. That is the failure D5 (shared XOR host-local) exists to
+  forbid.
+- **Fleet trust is not symmetric, and `fleet-authorized-keys` is the map.** As of
+  2026-07-28 it holds latitude, g513ie(server), wsl-desktop, me-g614jv(desktop)
+  and air — **no `hub` key**. So hub is reachable *from* the fleet but cannot
+  reach *into* it (consistent with its `backup-client` role, but undocumented
+  until now). That is why diagnosing an unreachable latitude has to hop through
+  `desktop`/`server`, never through `hub`.
+- **A dirty tree silently strands a box indefinitely.** `fleet-selfpull` gates on
+  a clean working tree, so ANY uncommitted change stops every pull with no alarm.
+  Found 2026-07-28: `desktop-ubuntu26` sat **23 commits behind** because an agent
+  had left 10 uncommitted hermes-skill items there. Nothing surfaces this — the
+  box looks healthy, `fleet-selfpull.timer` is `active`, and cron is installed.
+  When a fleet member is mysteriously stale, check `git status` FIRST, before the
+  timers or the converge predicates.
+- **`git rebase` does not fire `post-merge`, so it does not converge.** The
+  convergence trigger on non-Nix boxes is the `post-merge` hook, which only runs
+  for *merge*-shaped pulls. After bringing a diverged box up to date with
+  `fetch` + `rebase`, run `bash scripts/converge.sh` explicitly or the pulled
+  change is never applied.
+- **The `~/gh/` layout is gone on `desktop-ubuntu26`.** Repos live in the
+  `repos.sh` per-account layout: `~/my`, `~/cyphy671`, `~/machines`. So
+  `qaz-code` is at **`~/cyphy671/qaz-code`**, not `~/gh/qaz-code`.
+- **`gh` 404s on another account's private repo, which is NOT evidence it is
+  gone.** Checking whether a transfer completed, `gh api repos/cyphy671/<x>` as
+  metheoryt returns 404 for a *private* repo of that other account. Test for the
+  **destination** (`gh repo view metheoryt/<x>`) instead — that one is
+  authoritative because the token owns it.
+- **latitude's `id_ed25519` is deliberately passphrase-less AND keeps push
+  access** (decided 2026-07-28). Stripping the passphrase was the chosen fix for
+  the auto-pull failure; a read-only deploy key was offered and **declined** on
+  purpose, because latitude stays read/write for pushing directly from the box.
+  So the tradeoff is accepted, not outstanding: that one plaintext file is both
+  the GitHub push key and the fleet-inbound identity, i.e. anything that can read
+  it has full push access to every repo. Do **not** "fix" this by narrowing it
+  without asking — revisit only if latitude stops being a box you commit from.
+- **Committing directly on latitude will stall its auto-pull — visibly or
+  silently, depending on how.** `nix-repo-auto-pull` skips on a **dirty tree**
+  (`exit 0`, one log line, easy to miss — the same failure mode that stranded
+  `desktop-ubuntu26` 23 commits behind), and fails loudly on a **non-ff
+  divergence** (`exit 1`, shows in `systemctl --failed`). So after committing on
+  latitude: push promptly and leave the tree clean, or the box quietly stops
+  syncing with the rest of the fleet.
+- **One auto-pull mechanism fleet-wide now** (`9b8d63c`). `nix-repo-auto-pull` /
+  `modules/system/self-update.nix` is **deleted**; NixOS runs the same
+  `provision/fleet-selfpull.sh` as every other member, via
+  `modules/system/fleet-selfpull.nix` (`services.fleetSelfpull`). latitude
+  therefore keeps `~/my/vps` fresh too, which the old single-repo puller never
+  did. Converge is unaffected — `machines-converge.path` watches
+  `.git/logs/HEAD`, so it fires for whoever moved HEAD.
+- **`fleet-selfpull.sh` had the same silent-failure bug** that
+  `nix-repo-auto-pull` did, and it had to be fixed before NixOS could adopt it:
+  it **always exited 0**, and reported *every* pull failure as `SKIP diverged`,
+  filing an auth failure as a branch-topology fact. Now fetch and merge are
+  split so the two are distinguishable, a real error exits non-zero, the
+  deliberate skips (`not-main` / `dirty` / `diverged`) stay clean, and the fetch
+  retries once. Guard: `provision/fleet-selfpull.test.sh`, 18 assertions.
+- **Two timers fetch the same repos — keep their `OnCalendar` off a shared
+  boundary.** `fleet-selfpull` is `*:03/10` (:03/:13/:23) precisely so it never
+  lands on `git-autofetch`'s `*:0/10` (:00/:10/:20). Sharing that boundary made
+  concurrent fetches collide on `refs/remotes/origin/main` and the loser fail.
+  If you ever retune either interval, re-check the offset.
+- **NixOS's auto-pull script is no longer immutable, and that is a real
+  tradeoff.** The old inline script was baked into `/nix/store`, frozen in the
+  running generation until a rebuild, so a bad commit could not brick it. The
+  shared script is read from the **working tree**, so a bad commit to
+  `fleet-selfpull.sh` breaks self-updating on **every box at once**. Accepted
+  deliberately as the cost of running one implementation; treat that test file
+  as load-bearing, not decorative.

@@ -2,13 +2,88 @@
 # Bodies moved verbatim out of provision/linux.sh; that script is now the driver
 # that resolves a profile (fleet.json "profile") and picks a tier list.
 # The profile → tier-list table that selects among these lives in the driver.
-# Consumers: provision/linux.sh. Requires the driver's helpers (info/ok/warn/die/
-# have) and globals (REPO, SUDO, PRIV, WARNINGS, APT_UPDATED) to be set BEFORE
-# sourcing.
+# Consumers: provision/linux.sh (apt) and provision/macos.sh (Homebrew).
+# Requires the driver's helpers (info/ok/warn/die/have) and globals
+# (REPO, SUDO, PRIV, WARNINGS, APT_UPDATED) to be set BEFORE sourcing.
+#
+# ── Portability contract ──────────────────────────────────────────────────────
+# Three kinds of tier live here. Know which you are editing:
+#
+#   PORTABLE  — identical on every posix platform, shared byte-for-byte:
+#               agents_config, hermes_config, git_base, agent_clis,
+#               ssh_accounts, ssh_trust. A fix here reaches every box. Do NOT
+#               fork these per platform; that is the whole point of the split.
+#   PACKAGED  — one tier per package manager, selected by the driver's tier
+#               list: apt_min/apt_dev (Debian/Ubuntu) vs brew_min/brew_dev
+#               (macOS). Same CORE/best-effort semantics, different installer.
+#   SCHEDULED — one body, an explicit Darwin branch at the top: autofetch,
+#               selfpull, hermes_dashboard. macOS has no systemd and no usable
+#               per-user cron (it needs Full Disk Access), so these install a
+#               launchd LaunchAgent instead. The Linux path below each branch is
+#               untouched — it runs live on hub and the WSL boxes, and a
+#               generic scheduler abstraction would put that at risk for no gain.
 #
 # Testable: this file only DEFINES functions, so `TIERS_LIB_ONLY=1 source` (or a
 # plain source) loads them without running any tier.
 # shellcheck shell=bash
+
+# ── Platform predicate + launchd helpers (Darwin) ─────────────────────────────
+_is_darwin() { [ "$(uname -s)" = "Darwin" ]; }
+
+# _launchd_write <label> <plist-body-fragment>: emit a LaunchAgent plist and
+# (re)load it. `bootout` before `bootstrap` because bootstrap refuses a label
+# that is already loaded, which would make every re-run a no-op after the first.
+# Returns non-zero if the load fails, so callers can warn.
+_launchd_write() {
+  local label="$1" body="$2"
+  local dir="$HOME/Library/LaunchAgents" plist
+  plist="$dir/${label}.plist"
+  mkdir -p "$dir"
+  {
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n'
+    printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    printf '<plist version="1.0">\n<dict>\n'
+    printf '  <key>Label</key><string>%s</string>\n' "$label"
+    printf '%s' "$body"
+    printf '</dict>\n</plist>\n'
+  } > "$plist"
+  launchctl bootout "gui/$(id -u)/${label}" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$plist" >/dev/null 2>&1
+}
+
+# _launchd_args <cmd…>: the <ProgramArguments> array fragment.
+_launchd_args() {
+  local a
+  printf '  <key>ProgramArguments</key>\n  <array>\n'
+  for a in "$@"; do printf '    <string>%s</string>\n' "$a"; done
+  printf '  </array>\n'
+}
+
+# _launchd_periodic <label> <interval-seconds> <cmd…> — a timer equivalent.
+# RunAtLoad is deliberately false: these fire on an interval, and running every
+# one of them the instant provisioning finishes would stack a full fetch sweep
+# on top of the install. StartInterval alone schedules the first run one
+# interval out, which matches the systemd OnBootSec=2min shape closely enough.
+_launchd_periodic() {
+  local label="$1" interval="$2"; shift 2
+  _launchd_write "$label" "$(
+    _launchd_args "$@"
+    printf '  <key>StartInterval</key><integer>%s</integer>\n' "$interval"
+    printf '  <key>ProcessType</key><string>Background</string>\n'
+  )"
+}
+
+# _launchd_service <label> <cmd…> — a long-running service equivalent
+# (systemd Type=simple + Restart=on-failure). KeepAlive/SuccessfulExit=false
+# restarts on a crash but not after a clean exit, which is what on-failure means.
+_launchd_service() {
+  local label="$1"; shift
+  _launchd_write "$label" "$(
+    _launchd_args "$@"
+    printf '  <key>RunAtLoad</key><true/>\n'
+    printf '  <key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key><false/>\n  </dict>\n'
+  )"
+}
 
 # ── CORE 1: base apt packages ─────────────────────────────────────────────────
 # Requires root. When none is reachable non-interactively (PRIV=0, e.g. a
@@ -53,10 +128,15 @@ tier_apt_dev() {
     APT_UPDATED=1
   fi
   info "Installing dev packages (apt)…"
+  # ncurses-term rides along with tmux: it carries the tmux-256color terminfo
+  # entry, without which `default-terminal "tmux-256color"` makes tmux refuse to
+  # start ("missing or unsuitable terminal"). ~/.tmux.conf probes for it and
+  # falls back, so this is about getting the better entry, not about booting.
   $SUDO apt-get install -y --no-install-recommends \
     build-essential pkg-config \
     python3-venv python3-pip \
     ripgrep fd-find fzf \
+    tmux ncurses-term \
     || warn "apt dev install failed"
 
   # fd-find installs the binary as `fdfind` on Debian/Ubuntu — add the friendly name.
@@ -126,6 +206,109 @@ tier_apt_dev() {
   return 0
 }
 
+# ── BEST-EFFORT: the physical-display status board ────────────────────────────
+# Packages only. The board itself is installed by a deliberate act
+# (provision/statusboard/statusboard.sh --install for the text board on tty2-6,
+# statusboard-gui.sh --install for the kiosk on tty1), because it takes a VT away
+# from the login prompt and that is not something a converge run should decide.
+#
+# What each one is for:
+#   cage foot foot-terminfo  the kiosk itself — a Wayland kiosk compositor running
+#                            one terminal emulator, which is what lets the charts
+#                            use the real block ramp. A psf console font tops out
+#                            at 512 glyphs and carries none of U+2581..U+2587, so
+#                            the VT path degrades to a repeating ASCII ramp.
+#   fontconfig               statusboard-gui.sh --check asks fc-list whether the
+#                            chosen font actually covers the ramp, rather than
+#                            trusting its name.
+#   fonts-jetbrains-mono     that font. NOT the Nerd Font variant — icons are a
+#                            separate decision and a separate download.
+#   btop                     for the planned second pane; unused until then.
+#
+# Best-effort throughout: a box that fails to install a terminal emulator should
+# still finish provisioning, and the check/install steps refuse to proceed on their
+# own if anything here is missing.
+tier_statusboard() {
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the status-board packages"
+    return 0
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  if [ -z "${APT_UPDATED:-}" ]; then
+    $SUDO apt-get update -qq || warn "apt-get update failed"
+    APT_UPDATED=1
+  fi
+  info "Installing status-board packages (apt)…"
+  $SUDO apt-get install -y --no-install-recommends \
+    cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop \
+    || warn "status-board package install failed — the board's --check will name what is missing"
+  return 0
+}
+
+# ── CORE 1 (darwin): base Homebrew packages ───────────────────────────────────
+# The macOS counterpart of tier_apt_min. No sudo anywhere: Homebrew owns its own
+# prefix (/opt/homebrew on Apple Silicon) and refuses to run under sudo, so the
+# PRIV/SUDO dance that tier_apt_min needs has no analogue here.
+#
+# `brew install` on an already-installed formula exits non-zero with "already
+# installed" on some versions, so each package is probed with `brew list` first
+# — otherwise a re-run of an idempotent script would abort the CORE tier.
+tier_brew_min() {
+  have brew || die "Homebrew not found — install it first: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+  info "Installing base packages (brew)…"
+  # git/curl ship with macOS but are old (git 2.39-era, curl without HTTP/3);
+  # brew's are the ones the rest of the fleet's tooling expects. python3 is NOT
+  # preinstalled on macOS 12.3+ (Apple removed it), and agents/bootstrap.sh
+  # needs it — so it is CORE here exactly as on Debian.
+  local p
+  for p in git curl wget xz unzip python3 jq; do
+    if brew list --formula "$p" >/dev/null 2>&1; then
+      ok "$p already installed"
+    else
+      brew install "$p" >/dev/null 2>&1 || die "brew install $p failed"
+      ok "$p"
+    fi
+  done
+  ok "base packages installed"
+}
+
+# ── BEST-EFFORT (darwin): the dev Homebrew layer + shell niceties ─────────────
+# The macOS counterpart of tier_apt_dev. Two deliberate differences from the
+# Debian body:
+#   • NO fdfind/batcat aliasing. Debian renames those binaries to dodge package
+#     conflicts; Homebrew installs `fd` and `bat` under their real names, so the
+#     ~/.local/bin symlinks tier_apt_dev creates would be redundant at best and
+#     would shadow the real binary with a stale link at worst.
+#   • starship/uv come from brew rather than their curl installers — same
+#     binaries, but brew can then upgrade them with everything else.
+tier_brew_dev() {
+  have brew || { warn "Homebrew not found — skipping the dev brew layer"; return 0; }
+  info "Installing dev packages (brew)…"
+  local p
+  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh; do
+    if brew list --formula "$p" >/dev/null 2>&1; then
+      ok "$p already installed"
+    elif brew install "$p" >/dev/null 2>&1; then
+      ok "$p"
+    else
+      warn "brew formula '$p' failed — skipping"
+    fi
+  done
+
+  # delta: wire it into git only if it actually installed. Identical to the
+  # Debian body — the formula is `git-delta`, the binary is `delta`.
+  if have delta; then
+    git config --global core.pager delta
+    git config --global interactive.diffFilter 'delta --color-only'
+    git config --global delta.navigate true
+    git config --global delta.line-numbers true
+  fi
+
+  # gh credential helper for HTTPS remotes (SSH remotes don't need it).
+  have gh && git config --global --replace-all credential."https://github.com".helper '!gh auth git-credential'
+  return 0
+}
+
 # ── CORE 2: agent config (Claude + Codex) — the crown jewels ──────────────────
 # agents/bootstrap.sh symlinks the version-controlled config into ~/.claude and
 # ~/.codex. It only needs git + python3 (both installed above) and has no
@@ -167,6 +350,20 @@ tier_hermes_dashboard() {
 AUTHMSG
   fi
 
+  # SCHEDULED tier — Darwin branch. The systemd unit is a managed copy from the
+  # repo; launchd cannot read it, so the plist is synthesised from the same
+  # ExecStart line (hermes/hermes-serve.service). Keep the two in step: if that
+  # unit's ExecStart changes, change this argv too.
+  if _is_darwin; then
+    if _launchd_service kz.cyphy.hermes-serve \
+         "$HOME/.local/bin/hermes" serve --host 0.0.0.0 --port 9119 --skip-build --no-open; then
+      ok "hermes-serve LaunchAgent installed → 0.0.0.0:9119"
+    else
+      warn "hermes-serve LaunchAgent failed to load — check: launchctl print gui/$(id -u)/kz.cyphy.hermes-serve"
+    fi
+    return
+  fi
+
   if ! systemctl --user show-environment >/dev/null 2>&1; then
     warn "systemd user manager not available — skipping hermes dashboard service"
     return
@@ -202,13 +399,29 @@ tier_git_base() {
 
 # ── BEST-EFFORT: gortex code-intelligence daemon binary ───────────────────────
 # Version is read from pkgs/gortex.nix so the disposable box stays pinned to the
-# same release as the Nix fleet.
+# same release as the Nix fleet. Note pkgs/gortex.nix declares
+# `platforms = ["x86_64-linux"]` and pins the linux_amd64 tarball's hash — that
+# derivation is for the Nix hosts. Only the VERSION is shared; the asset name is
+# resolved per platform here, because the upstream release also ships
+# darwin_arm64 and darwin_amd64 builds that the Nix expression never references.
+_gortex_asset() {
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64|Linux-amd64)   echo gortex_linux_amd64 ;;
+    Darwin-arm64|Darwin-aarch64) echo gortex_darwin_arm64 ;;
+    Darwin-x86_64)              echo gortex_darwin_amd64 ;;
+    *)                          return 1 ;;
+  esac
+}
+
 tier_gortex() {
   info "Installing gortex…"
   GVER="$(grep -oE 'version = "[0-9]+\.[0-9]+\.[0-9]+"' "$REPO/pkgs/gortex.nix" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+  local asset
   if [ -z "$GVER" ]; then
     warn "couldn't parse gortex version from pkgs/gortex.nix — skipping gortex"
-  elif curl -fsSL "https://github.com/zzet/gortex/releases/download/v${GVER}/gortex_linux_amd64.tar.gz" \
+  elif ! asset="$(_gortex_asset)"; then
+    warn "no gortex release asset for $(uname -s)/$(uname -m) — skipping gortex"
+  elif curl -fsSL "https://github.com/zzet/gortex/releases/download/v${GVER}/${asset}.tar.gz" \
          | tar -xz -C "$HOME/.local/bin" gortex 2>/dev/null; then
     chmod +x "$HOME/.local/bin/gortex"
     ok "gortex ${GVER} → ~/.local/bin/gortex"
@@ -271,29 +484,110 @@ tier_autofetch() {
 # git-autofetch — fetch-only refresh of every git repo under $GIT_AUTOFETCH_ROOTS
 # (default $HOME) so ahead/behind counts are accurate without fetching first.
 # NEVER pulls/merges/rebases; never touches a working tree. Installed by
-# provision/linux.sh; mirrors modules/system/git-autofetch on the Nix fleet.
+# tier_autofetch in provision/lib/tiers.sh (provision/linux.sh + provision/macos.sh);
+# mirrors modules/system/git-autofetch on the Nix fleet.
+#
+# It DELIBERATELY diverges from that Nix module in one place — the af_timeout
+# shim below. The module runs with pkgs.coreutils on its PATH, so plain
+# `timeout` always resolves there. This script has to survive a bare macOS.
+# Do not "resync" the two by deleting the shim.
 set -u
 : "${GIT_AUTOFETCH_ROOTS:=$HOME}"
+: "${GIT_AUTOFETCH_TIMEOUT:=60}"                              # per-repo wall clock
 export GIT_TERMINAL_PROMPT=0                                  # never block on auth
-export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+# ServerAlive* bounds a stall AFTER the handshake, which ConnectTimeout does not
+# cover: a wedged session is torn down in ~30s at the transport layer. It does
+# NOT replace the wall clock below — it does nothing for an https:// remote.
+export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
+
+# af_timeout SECS CMD… — bound one fetch's wall clock, portably.
+#
+# macOS has NO timeout(1). It is GNU coreutils, not BSD, and coreutils is not
+# installed by default — so the plain `timeout 60 git …` this script used to run
+# failed with "command not found" on EVERY repo. That failure was invisible three
+# times over: 2>/dev/null ate the message, `|| echo` turned it into an
+# indistinguishable "fetch failed/skipped", and the script still exited 0. launchd
+# reported a healthy job for a box that had never fetched anything. Hence both the
+# shim and the all-failed exit at the bottom.
+if command -v timeout >/dev/null 2>&1; then
+  af_timeout() { timeout "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then                # coreutils via Homebrew
+  af_timeout() { gtimeout "$@"; }
+else
+  af_timeout() {
+    _secs="$1"; shift
+    "$@" & _cmd=$!
+    ( sleep "$_secs"; kill -TERM "$_cmd" 2>/dev/null ) & _watch=$!
+    wait "$_cmd" 2>/dev/null; _rc=$?      # 143 when the watchdog fired
+    kill -TERM "$_watch" 2>/dev/null      # TERM hits the subshell, not its
+    wait "$_watch" 2>/dev/null || :       # `sleep` child — that one lingers
+    return "$_rc"                         # until it expires. Harmless.
+  }
+fi
+
+# Collect the repo list into a FILE, then read from it. `while read` on the right
+# of a pipe runs in a subshell, so the counters below would be discarded and the
+# all-failed exit could never fire.
+_list="$(mktemp)" || exit 1
+trap 'rm -f "$_list"' EXIT HUP INT TERM
 for root in $GIT_AUTOFETCH_ROOTS; do
   [ -d "$root" ] || continue
   # -prune stops find descending into a repo's own .git; skip heavy vendored
   # trees. Match .git as dir (normal repo) or file (submodule/linked worktree).
   find "$root" -maxdepth 4 \
     \( -path '*/node_modules' -o -path '*/.cache' -o -name '.direnv' \) -prune -o \
-    -name .git -prune -print 2>/dev/null \
-  | while IFS= read -r gitentry; do
-      repo=$(dirname "$gitentry")
-      timeout 60 git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
-        || echo "fetch failed/skipped: $repo" >&2
-    done
+    -name .git -prune -print 2>/dev/null >> "$_list"
 done
+
+_total=0
+_failed=0
+while IFS= read -r gitentry; do
+  repo=$(dirname "$gitentry")
+  # SKIP SHALLOW CLONES — fetching one is expensive and destroys its shallowness.
+  # A `clone --depth 1` client can only offer its single commit during negotiation,
+  # and its shallow boundary stops it claiming any ancestor, so the server resends
+  # the whole history it cannot prove the client has. Measured on
+  # ~/.hermes/hermes-agent (upstream's install.sh does `clone --depth 1 --branch`):
+  # a 60M / 1-commit clone became 350M with refs/remotes/origin/main legitimately
+  # reaching 18914 commits. `git gc` cannot reclaim that — nothing is garbage, the
+  # ref really does reach it all — so the damage is one-way.
+  #
+  # Nor is a shallow repo worth fetching: it is a vendored third-party install with
+  # its own updater (install.sh re-fetches its own branch), not a checkout whose
+  # ahead/behind you track. Skipping is not counted in _total, so a box holding only
+  # shallow clones does not trip the all-failed exit below.
+  if [ "$(git -C "$repo" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+    continue
+  fi
+  _total=$((_total + 1))
+  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
+    || { _failed=$((_failed + 1)); echo "fetch failed/skipped: $repo" >&2; }
+done < "$_list"
+
+# One unreachable remote stays a warning. EVERY repo failing is a broken install
+# — missing binary, no credentials, no network — and must exit non-zero so the
+# systemd unit / launchd job surfaces it instead of looking healthy.
+if [ "$_total" -gt 0 ] && [ "$_failed" -eq "$_total" ]; then
+  echo "git-autofetch: all $_total fetches failed" >&2
+  exit 1
+fi
 AUTOFETCH
   chmod +x "$AF"
   ok "git-autofetch → ~/.local/bin/git-autofetch"
 
   _scheduled=""
+  # SCHEDULED tier — Darwin branch. No systemd; per-user cron on macOS needs the
+  # cron binary granted Full Disk Access in System Settings, which is not
+  # scriptable, so launchd is the only install that works unattended.
+  if _is_darwin; then
+    if _launchd_periodic kz.cyphy.git-autofetch 600 "$AF"; then
+      ok "git-autofetch scheduled — launchd LaunchAgent (every ~10 min)"
+    else
+      warn "git-autofetch installed but launchctl bootstrap failed — run ~/.local/bin/git-autofetch manually"
+    fi
+    return 0
+  fi
+
   # Preferred: a systemd *user* timer. `show-environment` fails cleanly on a WSL
   # distro without systemd ("System has not been booted with systemd"), so it
   # doubles as the availability probe.
@@ -360,9 +654,22 @@ UNIT
 # One ed25519 key per account is generated as ~/.ssh/id_<user>. Edit this list to
 # add/remove accounts, or blank it to skip the whole section.
 tier_ssh_accounts() {
+  # "host-alias:github-user". The key path derives from the USER (id_<user>), so
+  # several aliases may share one account's key — that is how github.com and
+  # metheoryt.github.com stay one registered key, not two.
+  #
+  # `github.com` is not optional: the clone button, `gh repo clone`, READMEs and
+  # submodule URLs all emit git@github.com, and without a block those fall back
+  # to default key order instead of a pinned identity. The <user>.github.com
+  # aliases are self-documenting synonyms — the account is legible in the URL.
+  # Safe as names because *.github.com has no wildcard A record (verified
+  # 2026-07-28: metheoryt.github.com / cyphy671.github.com / foo.github.com all
+  # NXDOMAIN, while api.github.com resolves), so a missing block fails loudly
+  # instead of connecting somewhere unintended.
   SSH_ACCOUNTS=(
-    "github.com:metheoryt"    # personal — default host
-    "github-cyphy:cyphy671"   # isolated personal account (qaz-law etc.)
+    "github.com:metheoryt"             # canonical — what every GitHub URL uses
+    "metheoryt.github.com:metheoryt"   # readable synonym for the default account
+    "cyphy671.github.com:cyphy671"     # isolated account — size/limit blast-radius
   )
   if [ "${#SSH_ACCOUNTS[@]}" -gt 0 ]; then
     info "Wiring multi-account SSH…"
@@ -375,7 +682,9 @@ tier_ssh_accounts() {
       if [ -e "$_key" ]; then
         ok "key ~/.ssh/id_${_user} exists"
       else
-        if ssh-keygen -t ed25519 -f "$_key" -C "${_user}@$(uname -n)-wsl" -N "" >/dev/null 2>&1; then
+        # Key comment identifies the box. Was hardcoded "-wsl"; this tier now
+        # also runs on macOS, where that label would be a lie.
+        if ssh-keygen -t ed25519 -f "$_key" -C "${_user}@$(uname -n)" -N "" >/dev/null 2>&1; then
           ok "generated ~/.ssh/id_${_user}"
           _need_register="${_need_register} ${_user}"
         else
@@ -418,7 +727,7 @@ tier_ssh_accounts() {
   # (<id>+<user>@users.noreply.github.com) so a real address is never leaked and
   # pushes aren't rejected by "keep my email address private". Needs git ≥ 2.36.
   GIT_IDENTITIES=(
-    "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+    "cyphy671.github.com|cyphy671|259445360+cyphy671@users.noreply.github.com"
   )
   if [ "${#GIT_IDENTITIES[@]}" -gt 0 ]; then
     info "Wiring per-account commit identity…"
@@ -439,6 +748,67 @@ tier_ssh_accounts() {
       ok "commit identity for git@${_alias}: ${_name} <${_email}>"
     done
   fi
+}
+
+# ── BEST-EFFORT: outbound fleet SSH client config ─────────────────────────────
+# The counterpart to tier_ssh_trust: that one makes this box ACCEPT fleet logins,
+# this one lets it MAKE them (`ssh latitude`, `ssh hub`).
+#
+# On a NixOS host modules/home/ssh.nix generates ~/.ssh/config from fleet.json,
+# and on a WSL distro provision/ssh-wsl.sh does the same. A macOS box has
+# neither, and tier_ssh_accounts is NOT a substitute — it writes only the
+# GitHub-account blocks, so without this tier ~/.ssh/config on the Mac contains
+# no fleet hosts at all and `ssh latitude` falls back to the local account name
+# with no identity file.
+#
+# Rather than a third renderer that would drift from the other two, this sources
+# ssh-wsl.sh's pure helpers through its documented SSH_WSL_LIB_ONLY hook. Those
+# functions are jq over fleet.json with no WSL assumptions; everything
+# WSL-specific in that script (apt, systemd sshd, the key persisted on the
+# Windows host) lives below the guard and never runs here.
+#
+# Deliberately NOT appending this box's pubkey to provision/fleet-authorized-keys:
+# that is a one-time enrollment that dirties the repo and needs a commit, so it
+# stays a manual step. This tier only ever touches ~/.ssh/.
+tier_fleet_ssh() {
+  info "Wiring outbound fleet SSH…"
+  local helper="$REPO/provision/ssh-wsl.sh" fleet_json="$REPO/fleet.json"
+  if [ ! -f "$helper" ] || [ ! -f "$fleet_json" ]; then
+    warn "ssh-wsl.sh or fleet.json missing — skipping outbound fleet SSH config"
+    return 0
+  fi
+  have jq || { warn "jq not found — skipping outbound fleet SSH config"; return 0; }
+
+  # shellcheck source=provision/ssh-wsl.sh
+  SSH_WSL_LIB_ONLY=1 source "$helper" || {
+    warn "could not source ssh-wsl.sh helpers — skipping outbound fleet SSH config"
+    return 0
+  }
+
+  mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+  local key="$HOME/.ssh/id_fleet"
+  if [ -e "$key" ]; then
+    ok "fleet key ~/.ssh/id_fleet exists"
+  elif ssh-keygen -t ed25519 -f "$key" -C "me@$(uname -n)" -N "" >/dev/null 2>&1; then
+    ok "generated ~/.ssh/id_fleet"
+    warn "ENROLLMENT NEEDED: append the line below to provision/fleet-authorized-keys, commit, and pull on the other members — until then no fleet box will accept this one:"
+    printf '      %s\n' "$(cat "${key}.pub")" >&2
+  else
+    warn "ssh-keygen for the fleet key failed — skipping outbound fleet SSH config"
+    return 0
+  fi
+
+  local cfg="$HOME/.ssh/config" block merged
+  touch "$cfg"
+  block="$(printf '%s\n%s\n%s' \
+    "$CONFIG_MARKER_BEGIN" \
+    "$(ssh_wsl_render_config "$(cat "$fleet_json")")" \
+    "$CONFIG_MARKER_END")"
+  merged="$(ssh_wsl_merge_config "$(cat "$cfg")" "$block")"
+  printf '%s\n' "$merged" > "$cfg"
+  chmod 600 "$cfg"
+  ok "wrote fleet host blocks → ~/.ssh/config"
+  return 0
 }
 
 # ── BEST-EFFORT: shell init (WSL-safe — no chsh) ──────────────────────────────
@@ -462,6 +832,31 @@ alias ll='ls -alF'
 # ────────────────────────────────────────────────────────────────────
 EOF
     ok "updated ~/.bashrc"
+  fi
+
+  # macOS has defaulted to zsh since Catalina, and a login shell there never
+  # reads ~/.bashrc — without this the Mac would get ~/.local/bin off PATH, no
+  # starship, and no direnv, while the tier still reported success. Seeded in
+  # ADDITION to ~/.bashrc, not instead of it: `bash -lc` still happens (agent
+  # sessions, fd_run over ssh), and both files are guarded by the same marker.
+  if _is_darwin; then
+    ZSHRC="$HOME/.zshrc"
+    if ! grep -q 'machines-bootstrap' "$ZSHRC" 2>/dev/null; then
+      cat >> "$ZSHRC" <<'EOF'
+
+# ── machines-bootstrap ──────────────────────────────────────────────
+export PATH="$HOME/.local/bin:$PATH"
+# Homebrew's prefix differs by arch (/opt/homebrew on Apple Silicon,
+# /usr/local on Intel) — let brew itself say which.
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+command -v direnv   >/dev/null 2>&1 && eval "$(direnv hook zsh)"
+alias cc='claude'
+alias ll='ls -alF'
+# ────────────────────────────────────────────────────────────────────
+EOF
+      ok "updated ~/.zshrc"
+    fi
   fi
 
   # Minimal fish config (only if fish installed) — deliberately lean, not a copy
@@ -506,6 +901,22 @@ tier_selfpull() {
   FSP="$REPO/provision/fleet-selfpull.sh"
   if [ ! -f "$FSP" ]; then
     warn "provision/fleet-selfpull.sh not found — skipping fleet self-pull timer"
+  elif _is_darwin; then
+    # SCHEDULED tier — Darwin branch. FLEET_ROOTS rides in as an `env` prefix in
+    # ProgramArguments rather than an EnvironmentVariables dict, so the empty
+    # (unpinned) case needs no separate plist shape. launchd has no
+    # RandomizedDelaySec, and no KillMode problem either: it does not put the
+    # job in a cgroup, so the detached converge the post-merge hook spawns
+    # simply outlives this job — which is the behaviour KillMode=process buys
+    # on the systemd side.
+    if [ -n "$roots" ]; then
+      _launchd_periodic kz.cyphy.fleet-selfpull 600 \
+        /usr/bin/env "FLEET_ROOTS=$roots" bash "$FSP"
+    else
+      _launchd_periodic kz.cyphy.fleet-selfpull 600 /usr/bin/env bash "$FSP"
+    fi \
+      && ok "fleet-selfpull LaunchAgent installed" \
+      || warn "could not load the fleet-selfpull LaunchAgent"
   elif systemctl --user show-environment >/dev/null 2>&1; then
     _ud2="$HOME/.config/systemd/user"; mkdir -p "$_ud2"
     {
@@ -553,6 +964,146 @@ UNIT
     fi
   else
     warn "fleet-selfpull installed but not scheduled (no systemd user manager or cron)"
+  fi
+  return 0
+}
+
+# ── BEST-EFFORT: dotfiles bootstrap for boxes that never reach the role ──────
+# provision.sh's role dispatcher covers every fleet.json member. Self-declared
+# WSL hosts run linux.sh directly and never see a role, so the tier list is
+# their only path in. Same code, one call.
+tier_dotfiles() {
+  info "Bootstrapping dotfiles (bare repo)…"
+  local name
+  name="$(fleet_logical_name 2>/dev/null || true)"
+  if [ -z "$name" ]; then
+    warn "no logical fleet name (no fleet.local.json nickname, no fleet.json match) — skipping dotfiles"
+    return 0
+  fi
+  # shellcheck source=provision/roles/dotfiles.sh
+  source "$REPO/provision/roles/dotfiles.sh"
+  role_dotfiles apply wsl "$name" || warn "dotfiles bootstrap reported an error"
+  return 0
+}
+
+# ── BEST-EFFORT: dotfiles sync timer — spec 2026-07-28 §5.4 ──────────────────
+# ~10-min tick of provision/dotfiles-sync.sh: commit tracked $HOME changes to
+# this machine's branch, push, merge origin/main in (preflighted). Deliberately
+# a plain systemd USER unit rather than a Nix module even on NixOS, so the same
+# code path serves every POSIX box and NixOS retirement removes a case, not a
+# mechanism. Precedent: agents/bootstrap.sh already deploys outside the nix
+# generation for the same reason. Idempotent.
+#
+# TICK cadence matches tier_selfpull / git-autofetch (10 min) — deliberately
+# aligned. COMMIT cadence is separate and lives in the script: a tick commits
+# only once the tracked diff has settled (dotfiles-sync.sh sync_should_commit),
+# so this timer interval is NOT the rate at which commits appear. Changing the
+# script needs no re-provision — every scheduler here points at its absolute path.
+# ── Passwordless sudo (server profile) ────────────────────────────────────────
+# An always-on headless box is administered entirely over SSH, and every root task
+# here — `--install`ing a unit, apt, setupcon, a converge rebuild — otherwise needs
+# a human at a TTY to type a password. linux.sh already treats passwordless sudo as
+# a first-class case (it picks `sudo -n` when it works and degrades to PRIV=0 when
+# no root is reachable), so this tier is what makes the good branch true.
+#
+# Be honest about the trade rather than dressing it up: this is root for anything
+# already running as this user, with no second factor. It is accepted here for the
+# same reason base.nix accepts NOPASSWD nixos-rebuild — these are personal boxes
+# whose SSH is keys-only and tailnet-bound — and it is NOT in the workstation or hub
+# tier lists. Note also what it is not: sudo cannot see the tailnet. sudoers matches
+# the local host, and a local sudo has no PAM rhost, so "passwordless only over the
+# tailnet" is not expressible. The tailnet is a property of how you got here, not of
+# the privilege check.
+tier_sudo_nopasswd() {
+  local user file tmp line
+  user="${SUDO_USER:-$(id -un)}"
+  if [ "$user" = root ]; then
+    warn "cannot tell which user to grant passwordless sudo to (running as root with no SUDO_USER) — skipping"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping passwordless sudo for '$user'"
+    return 0
+  fi
+
+  # SUDOERS_DIR exists so provision/tests/sudo-nopasswd.test.sh can exercise the
+  # validate-then-install path against a temp directory; nothing sets it in anger.
+  file="${SUDOERS_DIR:-/etc/sudoers.d}/$user"
+  line="$user ALL=(ALL) NOPASSWD: ALL"
+  if [ "$($SUDO cat "$file" 2>/dev/null)" = "$line" ]; then
+    ok "passwordless sudo already configured for '$user'"
+    return 0
+  fi
+
+  # Validate BEFORE installing. A syntactically broken file under /etc/sudoers.d
+  # makes sudo refuse to run at all, and the only way back is a root shell — which
+  # on a headless box means a trip to the physical console.
+  tmp="$(mktemp)"
+  printf '%s\n' "$line" > "$tmp"
+  if ! $SUDO visudo -c -f "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    warn "visudo rejected the drop-in for '$user' — leaving sudo untouched"
+    return 0
+  fi
+  # No -o/-g: the install runs as root, so the file is root-owned already, and
+  # naming the group explicitly would fail on any system whose root group is not
+  # called "root" (macOS calls it wheel). 0440 is the part sudo actually checks —
+  # it ignores a sudoers file that is group- or world-writable.
+  $SUDO install -m 0440 "$tmp" "$file" || {
+    rm -f "$tmp"
+    warn "could not install $file"
+    return 0
+  }
+  rm -f "$tmp"
+  ok "passwordless sudo for '$user' ($file)"
+}
+
+tier_dotfiles_sync() {
+  info "Installing dotfiles sync timer…"
+  DFS="$REPO/provision/dotfiles-sync.sh"
+  if [ ! -f "$DFS" ]; then
+    warn "provision/dotfiles-sync.sh not found — skipping dotfiles sync timer"
+  elif _is_darwin; then
+    _launchd_periodic kz.cyphy.dotfiles-sync 600 /usr/bin/env bash "$DFS" \
+      && ok "dotfiles-sync LaunchAgent installed" \
+      || warn "could not load the dotfiles-sync LaunchAgent"
+  elif systemctl --user show-environment >/dev/null 2>&1; then
+    _ud3="$HOME/.config/systemd/user"; mkdir -p "$_ud3"
+    {
+      printf '[Unit]\nDescription=Sync $HOME dotfiles to this machine'\''s branch\n\n'
+      printf '[Service]\nType=oneshot\nTimeoutStartSec=5min\n'
+      printf 'ExecStart=/usr/bin/env bash %s\n' "$DFS"
+    } > "$_ud3/dotfiles-sync.service"
+    cat > "$_ud3/dotfiles-sync.timer" <<'UNIT'
+[Unit]
+Description=Periodic dotfiles sync
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+    if systemctl --user daemon-reload >/dev/null 2>&1 \
+       && systemctl --user enable --now dotfiles-sync.timer >/dev/null 2>&1; then
+      ok "dotfiles-sync.timer (systemd-user) installed"
+    else
+      warn "could not enable dotfiles-sync.timer"
+    fi
+  elif have crontab; then
+    if crontab -l 2>/dev/null | grep -qF "$DFS"; then
+      ok "dotfiles-sync cron already present"
+    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); /usr/bin/env bash %s >/dev/null 2>&1\n' "$DFS"; } \
+           | crontab - >/dev/null 2>&1; then
+      ok "dotfiles-sync cron installed"
+    else
+      warn "could not install dotfiles-sync cron"
+    fi
+  else
+    warn "dotfiles-sync installed but not scheduled (no systemd user manager or cron)"
   fi
   return 0
 }

@@ -45,18 +45,27 @@ if command -v jq >/dev/null 2>&1; then
 
   echo "$RENDERED" | grep -q '^  HostName cyphy.kz$' || fail 'render: hub HostName cyphy.kz'
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 1 ] || fail 'render: only the hub gets a HostName'
-  # 3 User lines: server (methe), hub (debian), and the trailing *.gg.ez wildcard (me).
-  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 3 ] || fail 'render: the two non-me members plus the wildcard get a User line'
+  # 4 User lines: EVERY block carries one now — latitude (me, defaulted), server
+  # (methe), hub (debian), plus the trailing *.gg.ez wildcard (me). Emitting it
+  # unconditionally is the fix for the Windows members, whose local user is
+  # `methe`: an omitted User line there resolved to methe@<member>, not me@.
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User ')" = 4 ] || fail 'render: every block gets a User line'
   echo "$RENDERED" | grep -q '^  User methe$'  || fail 'render: server → User methe'
   echo "$RENDERED" | grep -q '^  User debian$' || fail 'render: hub → User debian'
-  echo "$RENDERED" | grep -q '^  User me$'     || fail 'render: wildcard → User me'
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  User me$')" = 2 ] || fail 'render: latitude and the wildcard both → User me'
   # 4 blocks now: latitude, server, hub, and the trailing *.gg.ez wildcard.
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 4 ] || fail 'render: every block (incl. wildcard) has IdentityFile'
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 4 ] || fail 'render: every block (incl. wildcard) has StrictHostKeyChecking'
   echo "$RENDERED" | grep -q '^Host latitude$' || fail 'render: latitude block present'
-  # The default-me member (latitude) must NOT carry a User line. Extract its block.
+  # A member with no ssh.user must carry an EXPLICIT `User me` — this is the
+  # assertion that inverted on 2026-07-29. Relying on ssh's fallback to the local
+  # username is only correct where that username happens to be `me`.
   LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
-  echo "$LAT_BLOCK" | grep -q '^  User ' && fail 'render: default-me member must have no User line'
+  EXPECTED_LAT='Host latitude
+  User me
+  IdentityFile ~/.ssh/id_fleet
+  StrictHostKeyChecking accept-new'
+  eq "$LAT_BLOCK" "$EXPECTED_LAT" 'render: a default-user member gets an explicit User me'
 
   # The trailing *.gg.ez wildcard block must be present, last, and exact.
   echo "$RENDERED" | grep -q '^Host \*\.gg\.ez$' || fail 'render: wildcard *.gg.ez block present'

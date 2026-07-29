@@ -1,5 +1,11 @@
 # Fleet Provisioner — Phase 3: `dotfiles` role executor (chezmoi) — design spec
 
+> **SUPERSEDED 2026-07-28** by
+> `2026-07-28-dotfiles-private-bare-repo-design.md`. That spec reverses §2's
+> choice of chezmoi-sourced-from-`machines`: `machines` is public and dotfiles
+> must carry rotatable credentials, so the engine is now the private
+> `metheoryt/dotfiles` bare repo. Kept for the reasoning, not as guidance.
+
 > **Status:** design approved via brainstorming 2026-07-08; pending user review of
 > this written spec, then → `writing-plans`.
 > **Parent:** `docs/superpowers/specs/2026-07-08-unified-fleet-provisioner-design.md`

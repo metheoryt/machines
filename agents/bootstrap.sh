@@ -31,7 +31,63 @@ esac
 
 # Repo agents/ dir = the directory this script lives in (absolute).
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Refuse to link the live profile at a throwaway copy of this repo ──────────
+# Every link below points straight at $SRC_DIR, so bootstrapping from a COPY of
+# the repo gives the live config dir a set of symlinks whose targets vanish when
+# that copy does. Claude Code then fails the statusline command silently and the
+# dotfiles-owned memory files read as deleted — the symptom looks nothing like
+# the cause. Observed on air 2026-07-28: an agent session snapshotted agents/
+# into its own scratchpad, ran this script from there, and five ~/.claude paths
+# (statusline-command.sh, balance-refresh.py, CLAUDE.md, host-memory.md,
+# memory/global.md) plus the memory/personality DIRECTORY were left dangling at
+# /private/tmp/…/scratchpad/pre/agents/. Only the dotfiles-sync commit debounce
+# kept four personality-facet deletions from being committed and pushed.
+#
+# Two shapes are refused: a temp-dir copy, and a linked git worktree (where a
+# worktree agent would otherwise repoint the live profile at a tree that gets
+# removed on merge-back). Set MACHINES_BOOTSTRAP_ALLOW_COPY=1 to override.
+if [ -z "${MACHINES_BOOTSTRAP_ALLOW_COPY:-}" ]; then
+  _src_real="$(readlink -f "$SRC_DIR" 2>/dev/null || printf '%s' "$SRC_DIR")"
+  _why=""
+  # Worktree check FIRST: a worktree agent's tree usually also sits under a temp
+  # root, and "linked git worktree" is the more actionable of the two reasons.
+  # A linked worktree has --git-dir (…/.git/worktrees/<name>) != --git-common-dir.
+  if command -v git >/dev/null 2>&1; then
+    _gd="$(git -C "$_src_real" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    _gc="$(git -C "$_src_real" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    if [ -n "$_gd" ] && [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+      _why="it is a linked git worktree"
+    fi
+  fi
+  if [ -z "$_why" ]; then
+    case "$_src_real" in
+      /tmp/* | /private/tmp/* | /var/folders/* | /private/var/folders/*)
+        _why="it is under a temp directory" ;;
+      "${TMPDIR:-/nonexistent-tmpdir}"/*)
+        _why="it is under \$TMPDIR" ;;
+    esac
+  fi
+  if [ -n "$_why" ]; then
+    printf '  ✗ refusing to bootstrap from %s\n' "$_src_real" >&2
+    printf '    %s, so every symlink this would create in the live profile\n' "$_why" >&2
+    printf '    dies with that copy. Run it from the canonical checkout instead:\n' >&2
+    printf '        bash ~/machines/agents/bootstrap.sh\n' >&2
+    printf '    Override (you almost never want this): MACHINES_BOOTSTRAP_ALLOW_COPY=1\n' >&2
+    exit 1
+  fi
+fi
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# The PRIMARY profile's live dir — always ~/.claude, independent of which profile
+# this run is bootstrapping. Dotfiles owns the content inside it; secondary
+# profiles and ~/.codex are linked AT it, not at the repo.
+#
+# It must NOT be derived from CLAUDE_CONFIG_DIR: that variable is how a secondary
+# profile run is driven (CLAUDE_CONFIG_DIR=~/.claude-pure), so deriving from it
+# would make PRIMARY_DIR equal CLAUDE_DIR on every run and the fan-out guard
+# would never fire. MACHINES_PRIMARY_DIR exists only so the tests can point it at
+# a throwaway dir.
+PRIMARY_DIR="${MACHINES_PRIMARY_DIR:-$HOME/.claude}"
 # Backups go OUTSIDE the scanned skills/agents/commands dirs (a *.bak sibling
 # inside skills/ would be picked up by Claude as a stray duplicate skill).
 BAK_ROOT="$CLAUDE_DIR/.bootstrap-bak"
@@ -213,6 +269,49 @@ copy_managed() {
   fi
 }
 
+# retire_link <abs-dest>: remove dest IF AND ONLY IF it is a symlink pointing
+# into $SRC_DIR — i.e. a link this script used to own and no longer does. Used
+# during the handover of a path from bootstrap to the dotfiles repo: the content
+# is already a real file on converged boxes (copy_managed did that), and this
+# clears the stale symlink on a box that lagged, so the incoming dotfiles merge
+# is not blocked by an untracked path.
+#
+# NEVER deletes a real file. After the handover the real file at dest IS the
+# dotfiles-tracked content; removing it would destroy memory and the 10-minute
+# sync timer would then commit the deletion.
+retire_link() {
+  local dest="$1" tgt
+  [ -L "$dest" ] || return 0                     # real file, or nothing there
+  # ONE HOP, not _resolve(): _resolve falls back to echoing its argument when
+  # readlink -f is unavailable, and a path never matches $SRC_DIR/*, so the guard
+  # below would silently pass and nothing would ever be retired.
+  tgt="$(readlink "$dest")"
+  case "$tgt" in
+    "$SRC_DIR"/*) ;;                             # ours — fall through and drop it
+    *) return 0 ;;                               # someone else's link
+  esac
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would retire stale link: %s\n' "$dest"
+    return 0
+  fi
+  rm -f "$dest"
+  printf '  - retired stale link: %s\n' "$dest"
+}
+
+# link_if_present <abs-src> <abs-dest>: link() only if src exists. The fan-out
+# links into ~/.codex and ~/.claude-<postfix> point at the PRIMARY profile's real
+# file, which the handover ordering does not guarantee is in place yet — beat 1
+# lands this script fleet-wide, and a box whose content has not been converted
+# has nothing at the primary path. Plain link() would leave a dangling symlink
+# there; this leaves the path empty, and the next bootstrap run wires it.
+link_if_present() {
+  if [ -e "$1" ]; then
+    link "$1" "$2"
+  else
+    printf '  . skipped (source not present yet): %s\n' "$2"
+  fi
+}
+
 # host_id: this machine's hostname, sanitized to a filename. Prefers Windows
 # COMPUTERNAME (ME-G614JV), else `hostname` (g16 / latitude5520 on the nix
 # laptops). This is only the off-nix fallback: on NixOS, claude.nix passes the
@@ -220,6 +319,14 @@ copy_managed() {
 # specialArg == networking.hostName), consumed below as
 # "${MACHINES_HOST_ID:-$(host_id)}" — single source of host-naming, also used
 # by balance-refresh.py's device id.
+#
+# NO LONGER CALLED BY THIS SCRIPT (2026-07-28): per-host memory moved to dotfiles,
+# which is branch-per-machine and needs no host id. Kept deliberately — it is the
+# canonical hostname-sanitization spec that provision/lib/fleet.sh,
+# provision/macos-prep.sh and provision/tests/fleet-profile.test.sh cite by name
+# ("mirrors agents/bootstrap.sh's host_id()"). Deleting it as dead code would
+# orphan those references. modules/home/claude.nix still passes MACHINES_HOST_ID;
+# that is now inert rather than wrong.
 host_id() {
   local h="${COMPUTERNAME:-$(hostname 2>/dev/null)}"
   h="${h%%.*}"                                   # strip any DNS suffix
@@ -252,8 +359,14 @@ if [ -n "${BOOTSTRAP_LIB_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
 printf 'Bootstrapping Claude config\n  repo:  %s\n  live:  %s\n\n' "$SRC_DIR" "$CLAUDE_DIR"
 
 # Shared whole-file links (every profile).
+# statusline + balance refresh are dotfiles-owned real files at ~/.claude/.
+# settings.json references them as "$HOME/.claude/statusline-command.sh", so the
+# reference is unchanged. Secondary profiles link at the primary.
 for f in statusline-command.sh balance-refresh.py; do
-  link "$SRC_DIR/$f" "$CLAUDE_DIR/$f"
+  retire_link "$CLAUDE_DIR/$f"
+  if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+    link_if_present "$PRIMARY_DIR/$f" "$CLAUDE_DIR/$f"
+  fi
 done
 # settings.json is committed per-profile, chosen by convention (see the POSTFIX
 # block above): ~/.claude -> settings.json, ~/.claude-<postfix> ->
@@ -276,44 +389,33 @@ fi
 copy_managed "$settings_src" "$CLAUDE_DIR/settings.json"
 
 # Memory & knowledge base. Global instructions + global memory store are shared
-# across all machines; the per-host file is chosen by hostname (imported by
-# CLAUDE.md as host-memory.md). All are git-tracked and loaded into every
-# session — see README.md "Memory & knowledge base".
-# Instruction file: AGENTS.md is canonical; link ~/.claude/CLAUDE.md to it directly.
-link "$SRC_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
-_mkdir "$CLAUDE_DIR/memory"
-link "$SRC_DIR/memory/global.md" "$CLAUDE_DIR/memory/global.md"
-link "$SRC_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
-
-# Per-host memory: link agents/hosts/<host>.md -> ~/.claude/host-memory.md. Seed
-# an empty stub in the repo the first time a new host runs this, so the import
-# never dangles (commit it to start recording host-scoped memory there).
-# Host id: nix passes the authoritative hostname via MACHINES_HOST_ID (so nix and
-# bootstrap name the per-host memory file identically). Off-nix, fall back to the
-# sanitized OS hostname. Single source of host-naming — see host_id().
-HOST_ID="${MACHINES_HOST_ID:-$(host_id)}"
-host_src="$SRC_DIR/hosts/$HOST_ID.md"
-if [ ! -e "$host_src" ]; then
-  if [ -n "${DRY_RUN:-}" ]; then
-    printf '  ~ would seed host memory stub: %s\n' "$host_src"
-  else
-    mkdir -p "$SRC_DIR/hosts"
-    {
-      printf '# Host: %s\n\n' "$HOST_ID"
-      printf '<!--\nPer-host memory + instructions for this machine. Symlinked to\n'
-      # shellcheck disable=SC2088  # literal tilde: this is documentation text, not a path to expand
-      printf '~/.claude/host-memory.md and imported by ~/.claude/CLAUDE.md, so it loads ONLY\n'
-      printf 'when the hostname matches. Tracked in git, synced everywhere, inert on other\n'
-      printf 'hosts. Do NOT put secrets here.\n-->\n\n## Notes\n'
-    } > "$host_src"
-    printf '  + seeded host memory stub: %s\n' "$host_src"
-  fi
+# across all machines and still deployed from this repo. The PER-HOST file is no
+# longer one of them — it is dotfiles-owned; see the block below.
+# Agent instructions are dotfiles-owned (~/.claude/CLAUDE.md, tracked on main).
+# Distinct from $HOME/CLAUDE.md, which is ambient in every session under $HOME.
+retire_link "$CLAUDE_DIR/CLAUDE.md"
+if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 fi
-if [ -n "${DRY_RUN:-}" ] && [ ! -e "$host_src" ]; then
-  printf '  ~ would link: %s -> (seeded stub)\n' "$CLAUDE_DIR/host-memory.md"
-  would_link=$((would_link + 1))
-else
-  link "$host_src" "$CLAUDE_DIR/host-memory.md"
+# The shared memory store is dotfiles-owned: real files at
+# ~/.claude/memory/{global.md,personality/*.md}, tracked on the dotfiles repo's
+# main branch. bootstrap only clears links from the era when agents/memory/ was
+# the source. Secondary profiles and ~/.codex are linked AT the primary below.
+_mkdir "$CLAUDE_DIR/memory"
+retire_link "$CLAUDE_DIR/memory/global.md"
+retire_link "$CLAUDE_DIR/memory/personality"
+if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CLAUDE_DIR/memory/global.md"
+  link_if_present "$PRIMARY_DIR/memory/personality" "$CLAUDE_DIR/memory/personality"
+fi
+
+# Per-host memory is dotfiles-owned: a real file at ~/.claude/host-memory.md,
+# tracked on this machine's dotfiles branch (host-local — it must never reach
+# main). bootstrap only clears a stale link from the era when agents/hosts/<id>.md
+# was the source, so an unconverged box does not block the dotfiles merge.
+retire_link "$CLAUDE_DIR/host-memory.md"
+if [ "$CLAUDE_DIR" != "$PRIMARY_DIR" ]; then
+  link_if_present "$PRIMARY_DIR/host-memory.md" "$CLAUDE_DIR/host-memory.md"
 fi
 
 # cyphy plugin: one whole-directory symlink replaces the four entry-by-entry
@@ -334,12 +436,14 @@ if [ "$IS_PERSONAL" -eq 1 ]; then
   _mkdir "$CODEX_DIR"
   printf '\nBootstrapping Codex config\n  live:  %s\n\n' "$CODEX_DIR"
 
-  link "$SRC_DIR/AGENTS.md" "$CODEX_DIR/AGENTS.md"
+  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
 
   _mkdir "$CODEX_DIR/memory"
-  link "$SRC_DIR/memory/global.md"    "$CODEX_DIR/memory/global.md"
-  link "$SRC_DIR/memory/personality" "$CODEX_DIR/memory/personality"
-  link "$host_src"                    "$CODEX_DIR/host-memory.md"
+  # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
+  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CODEX_DIR/memory/global.md"
+  link_if_present "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
+  # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
+  link_if_present "$PRIMARY_DIR/host-memory.md" "$CODEX_DIR/host-memory.md"
 
   # copy_managed, NOT link: Orca injects its agent-hooks block into the live
   # hooks.json; a symlink would dirty the tracked repo file. Codex never

@@ -310,6 +310,50 @@ if (Test-Path $sshdConfig) {
 
 Warn "Reachable over the tailnet only while this box has joined the Headscale tailnet (tailscale0 up, address in 100.64.0.0/10) - verify separately."
 
+# 7g. CLIENT config - the fleet block in ~\.ssh\config (OUTBOUND). Everything
+#     above this point configures inbound SSH only, which is why these boxes had
+#     no fleet block at all and `ssh latitude` resolved to methe@latitude and was
+#     refused - taking fd_run, /ship's fleet-pull and kb-refresh's fleet-gather
+#     with it. Needs no elevation: it writes one file in the calling user's HOME.
+$fleetJsonPath = Join-Path $RepoDir 'fleet.json'
+$sshCfgModule  = Join-Path $RepoDir 'provision\lib\fleet-ssh-config.ps1'
+if (-not (Test-Path $fleetJsonPath)) {
+    Warn "fleet.json not found at $fleetJsonPath - skipped the client config."
+} elseif (-not (Test-Path $sshCfgModule)) {
+    Warn "$sshCfgModule not found - skipped the client config."
+} else {
+    try {
+        . $sshCfgModule
+        $sshDir = Join-Path $env:USERPROFILE '.ssh'
+        if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
+        $cfgPath = Join-Path $sshDir 'config'
+
+        # This box's fleet key. id_ed25519 is what the other members trust in
+        # their authorized_keys; ssh-wsl.sh's id_fleet name is WSL-side only.
+        $idFile  = '~/.ssh/id_ed25519'
+        $stanzas = Render-FleetSshConfig -FleetJson (Get-Content $fleetJsonPath -Raw) -IdentityFile $idFile
+        $block   = New-FleetSshBlock -Stanzas $stanzas
+
+        $existing = ''
+        if (Test-Path $cfgPath) { $existing = Get-Content $cfgPath -Raw }
+        $merged = Merge-FleetSshConfig -Existing $existing -Block $block
+
+        if ($existing.TrimEnd() -eq $merged.TrimEnd()) {
+            Info "~\.ssh\config already carries the current fleet block."
+        } else {
+            # LF, no BOM: OpenSSH on Windows reads this file, and a BOM makes it
+            # treat the first directive as garbage.
+            [System.IO.File]::WriteAllText($cfgPath, ($merged.TrimEnd() + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+            Info "merged the fleet block into ~\.ssh\config (block replaced; the rest untouched)."
+        }
+        if (-not (Test-Path (Join-Path $sshDir 'id_ed25519'))) {
+            Warn "no ~\.ssh\id_ed25519 on this box - the rendered IdentityFile does not exist yet, so outbound fleet SSH will fall back to default key order."
+        }
+    } catch {
+        Warn "client config generation failed: $($_.Exception.Message)"
+    }
+}
+
 # ---- 8. Fleet convergence tasks (spec 2026-07-21) ----------------------------
 # Two idempotent (-Force) Scheduled Tasks:
 #   1. machines-converge - SYSTEM task, on-demand only (fired by the post-merge
@@ -349,10 +393,17 @@ if (-not (Test-Path $convergeScript)) {
         $pullUser = $env:USERNAME
     }
     if (-not $pullUser) {
-        if (Get-ScheduledTask -TaskName 'fleet-selfpull' -EA SilentlyContinue) {
-            Info "fleet-selfpull already registered; headless SYSTEM run, no console user - leaving it."
+        # Both user-owned tasks live in the else-branch below, so a headless run
+        # skips BOTH. Name each one that is actually missing: reporting only
+        # fleet-selfpull here reads as "nothing to do" on a box where
+        # dotfiles-sync was never registered, and the sync timer then silently
+        # never exists.
+        $missing = @('fleet-selfpull','dotfiles-sync') |
+            Where-Object { -not (Get-ScheduledTask -TaskName $_ -EA SilentlyContinue) }
+        if ($missing) {
+            Warn "$($missing -join ', ') not registered and no interactive user to own it - run provision\windows.ps1 once from your normal login to create it."
         } else {
-            Warn "fleet-selfpull not registered and no interactive user to own it - run provision\windows.ps1 once from your normal login to create it."
+            Info "fleet-selfpull and dotfiles-sync already registered; headless SYSTEM run, no console user - leaving them."
         }
     } else {
         $selfpullPs1 = Join-Path $RepoDir 'provision\fleet-selfpull.ps1'
@@ -376,6 +427,28 @@ if (-not (Test-Path $convergeScript)) {
             Info "registered 'fleet-selfpull' (every 10 min, jittered) as $pullUser."
         } catch {
             Warn "fleet-selfpull registration failed for '$pullUser': $($_.Exception.Message) - leaving any existing task."
+        }
+
+        # (3) dotfiles-sync - every 10 min, as the interactive user, jittered.
+        # Same principal and settings shape as fleet-selfpull above: it touches
+        # $HOME, so it must run as the human, not SYSTEM.
+        $dfsPs1 = Join-Path $RepoDir 'provision\dotfiles-sync.ps1'
+        $dfsAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument "-NonInteractive -NoProfile -ExecutionPolicy Bypass -File `"$dfsPs1`""
+        $dfsTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 10)
+        $dfsTrigger.Repetition.Duration = ''      # empty = repeat indefinitely
+        $dfsTrigger.RandomDelay = 'PT2M'
+        $dfsSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+            -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+        $dfsPrincipal = New-ScheduledTaskPrincipal -UserId $pullUser -LogonType S4U -RunLevel Limited
+        try {
+            Register-ScheduledTask -TaskName 'dotfiles-sync' -Action $dfsAction -Trigger $dfsTrigger `
+                -Settings $dfsSettings -Principal $dfsPrincipal -Force | Out-Null
+            Info "registered 'dotfiles-sync' (every 10 min, jittered) as $pullUser."
+        } catch {
+            Warn "dotfiles-sync registration failed for '$pullUser': $($_.Exception.Message) - leaving any existing task."
         }
     }
 }

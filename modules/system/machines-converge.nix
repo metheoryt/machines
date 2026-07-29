@@ -6,7 +6,7 @@
 # misses /ship's direct pull, the common case). So a path unit, decoupled from
 # which process pulled, watches .git/ORIG_HEAD — rewritten by EVERY ff-pull —
 # and starts a ROOT oneshot that runs converge.sh. Native root => nixos-rebuild
-# has privilege, no polkit. self-update.nix stays a pure pull backend.
+# has privilege, no polkit. fleet-selfpull.nix stays a pure pull backend.
 {
   config,
   lib,

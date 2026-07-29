@@ -1,7 +1,17 @@
-# Non-Nix Linux / WSL provisioning (persisted or disposable)
+# Non-Nix provisioning (Linux / WSL / macOS)
 
-Provision a **fresh, non-Nix Linux box** — any glibc apt Linux, persisted or
-disposable — into this fleet's *portable* dev layer. It works the same whether
+> **Two entry points, and neither calls the other.**
+>
+> | | What it is | Invocation |
+> |---|---|---|
+> | `provision/linux.sh` · `provision/macos.sh` | **tier drivers** — install the toolchain. Tier bodies are shared in `provision/lib/tiers.sh`; the driver only picks the ordered list for this box's profile. | `bash provision/linux.sh` |
+> | `provision/provision.sh` | the **role front door** — reads `fleet.json`, loops `roles[]` into `role_<name>` from `provision/roles/*.sh`. | `bash provision/provision.sh --machine <m> --dry-run\|--apply` |
+>
+> Run the driver first, the front door second. `provision.sh` takes **flags**, not
+> positionals — a bare `provision.sh air` exits 2 with `unknown arg: air`.
+
+Provision a **fresh, non-Nix box** — any glibc apt Linux (persisted or
+disposable) or macOS — into this fleet's *portable* dev layer. It works the same whether
 you're provisioning a throwaway WSL2 distro (ephemeral, `wsl --unregister` to
 reset) or a long-lived daily driver: the **same git-synced Claude/Codex config**
 the NixOS laptops run (via `agents/bootstrap.sh`, which produces identical
@@ -16,7 +26,7 @@ minutes, or keep running indefinitely.
 ## What it installs
 
 - **CORE** (script aborts if these fail): apt base (`git`, `curl`, `python3`,
-  `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`); the synced agent config via
+  `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`, `tmux`); the synced agent config via
   `agents/bootstrap.sh`; `git config --global` identity + aliases.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
   `pkgs/gortex.nix`), `claude` + `codex` (native installers, no Node.js),
@@ -60,17 +70,29 @@ in the `SSH_ACCOUNTS` array near the top of that section (`host-alias:github-use
 
 ```bash
 SSH_ACCOUNTS=(
-  "github.com:metheoryt"    # personal — the default host
-  "github-cyphy:cyphy671"   # isolated personal account (e.g. qaz-law)
+  "github.com:metheoryt"             # canonical — what every GitHub URL uses
+  "metheoryt.github.com:metheoryt"   # readable synonym for the default account
+  "cyphy671.github.com:cyphy671"     # isolated account — size/limit blast-radius
 )
 ```
 
-The **first** entry owns the default `github.com` host; the rest get their alias.
-Clone accordingly:
+The key path derives from the **user** (`id_<user>`), so several aliases can share
+one account's key — that is how `github.com` and `metheoryt.github.com` stay a
+single registered key rather than two.
+
+`github.com` is **not optional**: the clone button, `gh repo clone`, READMEs and
+submodule URLs all emit `git@github.com`, and without that block those clones fall
+back to default key order instead of a pinned identity. The `<user>.github.com`
+aliases are self-documenting synonyms — the account is legible in the URL. They are
+safe as names because `*.github.com` has no wildcard A record (verified 2026-07-28),
+so a missing block fails loudly rather than connecting somewhere unintended.
+
+Clone accordingly — the alias in the URL is what picks the account:
 
 ```bash
-git clone git@github.com:metheoryt/repo.git        # personal (default key)
-git clone git@github-cyphy:cyphy671/qaz-law.git    # isolated account (its own key)
+git clone git@github.com:metheoryt/repo.git              # personal (canonical)
+git clone git@metheoryt.github.com:metheoryt/repo.git    # same account, explicit
+git clone git@cyphy671.github.com:cyphy671/laws.git      # isolated account
 ```
 
 Keys land at `~/.ssh/id_<user>` and must be **registered on the matching account**
@@ -96,17 +118,22 @@ the two never drift — via the `GIT_IDENTITIES` array next to `SSH_ACCOUNTS`
 
 ```bash
 GIT_IDENTITIES=(
-  "github-cyphy|cyphy671|259445360+cyphy671@users.noreply.github.com"
+  "cyphy671.github.com|cyphy671|259445360+cyphy671@users.noreply.github.com"
 )
 ```
 
 It keys off the **remote URL**, not a directory: git's
 `includeIf "hasconfig:remote.*.url:git@<alias>:*/**"` applies the identity to any
 repo whose remote uses that account's SSH alias, wherever it sits on disk. So a
-repo cloned as `git@github-cyphy:cyphy671/qaz-law.git` authors commits as
+repo cloned as `git@cyphy671.github.com:cyphy671/laws.git` authors commits as
 `cyphy671`, while everything else keeps the global `metheoryt@gmail.com`. No
 fixed clone directory, nothing to remember per repo. (Needs git ≥ 2.36; the
 default `github.com` account is the global identity, so list only the *others*.)
+
+Because the match is on the **alias string**, renaming an alias without updating
+`GIT_IDENTITIES` in the same commit silently drops the identity: already-cloned
+repos keep the old URL, stop matching, and author as the default account with no
+error. `provision/tests/ssh-accounts.test.sh` guards the pairing.
 
 Emails use GitHub's private **noreply** form
 (`<numeric-id>+<user>@users.noreply.github.com`) so a real address is never
@@ -117,6 +144,124 @@ account's "keep my email address private" setting. The identity files land at
 > Isolation rationale: `cyphy671` is a separate personal account used to keep
 > certain repos (e.g. a large corpus like `qaz-law`) off the main account, to
 > limit blast radius. Separate key + separate remote = the two never cross.
+
+## macOS
+
+### One command, fresh Mac (`just provision-mac`)
+
+```bash
+git clone https://github.com/<you>/machines ~/machines
+cd ~/machines
+
+# the pre-auth key (provision/secrets/ is gitignored)
+mkdir -p provision/secrets
+printf '%s' '<hskey-…>' > provision/secrets/authkey
+
+just provision-mac air --dry-run                              # preview, touches nothing
+just provision-mac air --authkey-file provision/secrets/authkey
+```
+
+Nothing else is required first — not even Homebrew. One sudo prompt up front,
+then four stages:
+
+| # | Stage | Does |
+|---|---|---|
+| 1 | `macos-prep.sh` | `scutil` hostname · Homebrew bootstrap · Remote Login |
+| 2 | `tailscale-mac.sh` | standalone cask · join Headscale · verify IP vs `fleet.json` |
+| 3 | `macos.sh` | the tier list (toolchain, agent config, gortex, fleet SSH, launchd) |
+| 4 | `provision.sh --apply` | roles: `agents`, `dotfiles`, `repos` |
+
+The machine name is an **argument, not detected** — stage 1 is what sets the
+hostname, so detection cannot work before it runs. It is validated against
+`fleet.json` (must exist, must be `platform: darwin`) before anything mutates,
+so a typo fails fast instead of renaming your Mac.
+
+**Mint the key on hub:**
+
+```bash
+ssh hub 'sudo headscale preauthkeys create --user 1 --expiration 2h'
+```
+
+There is deliberately **no `--authkey` flag** — argv is world-readable through
+`ps`, so an inline key is scrapeable by any local process while the run lasts.
+Use the file or `HEADSCALE_AUTHKEY`. (`tailscale-wsl.sh` omits it for the same
+reason.)
+
+**Two things stay manual afterwards**, both printed by the chain when it
+finishes: `gh auth login` to register the SSH keys (`tier_ssh_accounts` writes
+`IdentitiesOnly` on fresh keys, so git-over-SSH fails until you do), and
+appending `~/.ssh/id_fleet.pub` to `provision/fleet-authorized-keys` so other
+members accept this box.
+
+Each stage is independently re-runnable when only one thing needs redoing:
+
+```bash
+bash provision/macos-prep.sh air
+bash provision/tailscale-mac.sh --hostname air --authkey-file provision/secrets/authkey
+bash provision/macos.sh
+bash provision/provision.sh --machine air --apply
+```
+
+### The tier driver alone (`provision/macos.sh`)
+
+`provision/macos.sh` is the Darwin sibling of `linux.sh` — same driver shape,
+**same tier library** (`provision/lib/tiers.sh`), different package manager.
+Both Apple Silicon and Intel work. Use it directly when the Mac is already
+enrolled and you only want the toolchain refreshed:
+
+```bash
+MACHINES_TIERS_DRY_RUN=1 bash ~/machines/provision/macos.sh   # inspect the plan
+bash ~/machines/provision/macos.sh                            # apply
+```
+
+Then open a new shell (or `source ~/.zshrc`) and authenticate: `claude`, `codex`.
+Idempotent — re-run any time.
+
+**What differs from the Linux path, and why:**
+
+| | Linux (`linux.sh`) | macOS (`macos.sh`) |
+|---|---|---|
+| Packages | `tier_apt_min` / `tier_apt_dev` | `tier_brew_min` / `tier_brew_dev` |
+| Root | `sudo` probe → `PRIV=0` degrades to warn | none — Homebrew refuses sudo and owns its prefix |
+| `fd` / `bat` | installed as `fdfind`/`batcat`, symlinked to friendly names | real names already; **no aliasing** |
+| Scheduling | systemd user timer, cron fallback | **launchd** LaunchAgents |
+| Shell hooks | `~/.bashrc` (+ fish) | `~/.zshrc` **and** `~/.bashrc` (+ fish) |
+| `gortex` | `gortex_linux_amd64`, x86_64 only | `gortex_darwin_arm64` / `_amd64` |
+
+Everything else — the synced agent config, git identity, the agent CLIs,
+multi-account SSH, inbound fleet SSH trust — is the *same tier body* running on
+both. Fix it once, both platforms get it.
+
+**Scheduling.** macOS has no systemd, and per-user `cron` needs the cron binary
+granted Full Disk Access in System Settings (not scriptable), so the scheduled
+tiers install LaunchAgents into `~/Library/LaunchAgents/` instead:
+
+```bash
+launchctl list | grep kz.cyphy
+#   kz.cyphy.git-autofetch     every 10 min
+#   kz.cyphy.fleet-selfpull    every 10 min
+#   kz.cyphy.hermes-serve      long-running, restart-on-failure
+```
+
+`launchctl bootout` runs before every `bootstrap`, so re-provisioning reloads a
+changed plist rather than silently keeping the old one.
+
+**Not installed**, same trade as the Linux path: the declarative
+`development.nix` toolchain and the full `me.nix` desktop shell. Docker Desktop,
+the company VPN, and `tsh` are separate manual installs.
+
+**Roles are a separate step.** `macos.sh` is the *tier driver*; it does not read
+`fleet.json` roles. After it finishes, run the role front door:
+
+```bash
+bash provision/provision.sh --machine air --apply
+```
+
+> Never run `provision.sh --apply` from inside a git worktree. The `agents` role
+> runs `agents/bootstrap.sh`, which repoints `~/.claude` and `~/.codex` at
+> *whatever checkout it is invoked from* — from a worktree that means your live
+> agent config starts pointing into a temporary directory. Run it from the main
+> clone.
 
 ## Choosing a base distro
 

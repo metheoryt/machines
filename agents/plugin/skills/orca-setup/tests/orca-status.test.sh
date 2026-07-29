@@ -58,6 +58,44 @@ got="$(bash "$SCRIPT" "$DATA" "git@github.com:metheoryt/legacy.git" "$SETUP" "$T
 [ "$(tok "$got" archive)" = "UNWIRED" ] \
   && pass "legacy archive UNWIRED" || die "legacy archive -> '$(tok "$got" archive)'"
 
+# Preferred + accepted forms: the wrapper rename means an already-wired repo holds
+# the OLD dispatcher one-liner. That still works, so it must report LEGACY (with the
+# current value, so the skill can offer the shorter form) and NOT CONFLICT — a
+# status check that reports every wired repo as broken is a status check nobody
+# reads. The first line of the expectation is preferred; the rest are accepted.
+PREF_SETUP='wt-setup'
+PREF_TEARDOWN='wt-teardown'
+MULTI_SETUP="$PREF_SETUP
+$SETUP"
+MULTI_TEARDOWN="$PREF_TEARDOWN
+$TEARDOWN"
+
+# The fixture's `wired` repo holds the OLD dispatcher form.
+got="$(bash "$SCRIPT" "$DATA" "git@github.com:metheoryt/machines.git" "$MULTI_SETUP" "$MULTI_TEARDOWN" "/base/machines")"
+# tok returns "TOKEN<TAB>value" for the value-carrying tokens, so match the prefix.
+case "$(tok "$got" setup)" in
+  LEGACY*) pass "old dispatcher form reports LEGACY, not CONFLICT" ;;
+  *)       die "old form -> '$(tok "$got" setup)'" ;;
+esac
+printf '%s' "$got" | grep -q 'worktree-setup.sh' \
+  && pass "LEGACY surfaces the current value" || die "LEGACY did not surface the value"
+
+# And the preferred form alone is plain WIRED.
+# jq, not sed: the fixture stores the value as a JSON string with escaped quotes,
+# so a text substitution has to out-guess the escaping. Set the field instead.
+jq '(.projectHostSetups[] | select(.projectId=="github:metheoryt/machines") | .hookSettings.scripts)
+    |= { setup: "wt-setup", archive: "wt-teardown" }' "$DATA" > "$DATA.pref"
+got="$(bash "$SCRIPT" "$DATA.pref" "git@github.com:metheoryt/machines.git" "$MULTI_SETUP" "$MULTI_TEARDOWN" "/base/machines")"
+[ "$(tok "$got" setup)" = "WIRED" ] && [ "$(tok "$got" archive)" = "WIRED" ] \
+  && pass "preferred wrapper form is WIRED" || die "preferred form -> '$got'"
+
+# An unrelated value is still CONFLICT — the accepted list must not swallow everything.
+got="$(bash "$SCRIPT" "$DATA" "git@github.com:metheoryt/legacy.git" "$MULTI_SETUP" "$MULTI_TEARDOWN" "/base/legacy")"
+case "$(tok "$got" setup)" in
+  CONFLICT*) pass "an unknown script is still CONFLICT" ;;
+  *)         die "unknown -> '$(tok "$got" setup)'" ;;
+esac
+
 # Empty both -> UNWIRED both.
 got="$(bash "$SCRIPT" "$DATA" "git@github.com:metheoryt/empty.git" "$SETUP" "$TEARDOWN" "/base/empty")"
 [ "$(tok "$got" setup)" = "UNWIRED" ] && [ "$(tok "$got" archive)" = "UNWIRED" ] \

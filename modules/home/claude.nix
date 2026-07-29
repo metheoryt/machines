@@ -1,7 +1,15 @@
-# Claude Code config, version-controlled in this repo under agents/ and linked
-# into every Claude profile dir (~/.claude and each ~/.claude-<postfix>). This is
-# the nix path for Linux/macOS; Windows/non-Nix machines use agents/bootstrap.sh,
-# which produces the identical one-hop symlinks.
+# Claude Code config. This is the nix path for Linux/macOS; Windows/non-Nix
+# machines run agents/bootstrap.sh directly, producing the identical result.
+#
+# OWNERSHIP SPLIT (2026-07-28): the CONTENT of ~/.claude is no longer in this repo.
+# ~/.claude/{CLAUDE.md,memory/global.md,memory/personality/,host-memory.md,
+# statusline-command.sh,balance-refresh.py} and the three untested skills are
+# tracked in the private dotfiles bare repo at those real $HOME paths, because its
+# work-tree IS $HOME. bootstrap.sh deploys only what has no $HOME home — the cyphy
+# plugin, subagents, and the per-profile settings.json — and links ~/.codex and
+# each ~/.claude-<postfix> AT the primary profile rather than at this repo.
+# MACHINES_HOST_ID is still passed below but is now INERT: per-host memory is a
+# dotfiles branch file, so bootstrap no longer resolves a host id.
 #
 # PROFILE REGISTRY (dynamic — no hardcoded profile list): the set of profiles is
 # driven by the committed settings files. The primary settings.json plus each

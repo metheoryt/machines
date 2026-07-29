@@ -169,7 +169,24 @@ for the git-worktree lifecycle. Run with CWD = the worktree, no arguments.
   `~/machines/agents/worktree-setup.sh` and the *Delete worktree* hook at
   `~/machines/agents/worktree-teardown.sh` (absolute paths; the fleet repo path is
   stable across machines).
-- **Manual:** run either from inside a worktree.
+- **Manual:** run `wt-setup` / `wt-teardown` from inside a worktree — thin
+  `~/.local/bin` wrappers that exec the scripts above, tracked in the dotfiles repo
+  on `main` so every box has them (their bodies are `$HOME`-relative, and
+  `~/.local/bin` is on `PATH` on all six). Override the checkout location with
+  `MACHINES_ROOT`. The scripts themselves stay here rather than moving to dotfiles:
+  they are tested (`agents/tests/worktree-dispatcher.test.sh`) and read repo state,
+  and only the *invocation* needed shortening — you run these from inside whatever
+  worktree you are in, never from `~/machines`, which is also why a `just` recipe
+  would be the wrong shape.
+- **Orca takes the wrappers too** — `wt-setup` / `wt-teardown` in its *Setup
+  script* / *Archive script* fields, which is what `/orca-setup` now prints. Orca
+  shell-interprets that field, and its own `PATH` includes `~/.local/bin` (measured
+  on air by reading the running process's environment), so a bare command name
+  resolves. If a hook ever fails with *command not found* on some box, use
+  `"$HOME/.local/bin/wt-setup"` — same wrapper, no `PATH` dependency. The long
+  `bash "$HOME/machines/agents/worktree-setup.sh"` form still works and
+  `/orca-setup` reports it as `LEGACY`, not as a conflict, so nothing needs
+  re-pasting.
 
 **What they do.** Setup: gortex-`track`s the worktree (`--as-worktree`) *first*, then
 runs the repo's own setup script. Teardown: runs the repo's own teardown script

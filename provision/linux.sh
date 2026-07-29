@@ -11,6 +11,9 @@
 #   hub         — the 960MB Debian VPS: no dev apt layer, no gortex, no codex,
 #                 and deliberately no ssh_accounts (it would overwrite that
 #                 box's ~/.ssh/config and kill its only GitHub auth)
+#   server      — the always-on services box (latitude, post-NixOS): the full
+#                 interactive layer a human SSHes into, minus the code-graph and
+#                 secondary-agent tiers a box that runs services never uses
 # Resolution order: $MACHINES_PROFILE > fleet.json "profile" by OS hostname >
 # workstation. See docs/superpowers/specs/2026-07-25-hub-fleet-enrollment-tiers-design.md.
 #
@@ -65,7 +68,7 @@ case "$PROFILE" in
   workstation)
     TIERS=(apt_min apt_dev agents_config git_base gortex
            "agent_clis claude codex hermes" shell_init autofetch
-           ssh_accounts selfpull ssh_trust hermes_config hermes_dashboard) ;;
+           ssh_accounts selfpull ssh_trust dotfiles hermes_config hermes_dashboard) ;;
   hub)
     # Lean server tier. Deliberately absent: apt_dev, gortex, codex, and
     # ssh_accounts — the last would overwrite hub's ~/.ssh/config with
@@ -73,8 +76,38 @@ case "$PROFILE" in
     TIERS=(apt_min agents_config git_base "agent_clis claude"
            "shell_init --no-fish" autofetch
            "selfpull %h/machines" ssh_trust) ;;
+  server)
+    # The always-on services box. NOT the hub tier: hub is lean because it is a
+    # 960MB VPS, whereas this box has 24GB and 470GB and is SSHed into by a
+    # human, so it keeps apt_dev (gh, ripgrep/fd/fzf, fish, starship, uv) and
+    # fish. It is workstation MINUS the tiers a services box never exercises:
+    #   gortex          — a code-graph daemon that wants indexed source checkouts
+    #   codex, hermes   — secondary agent CLIs; claude alone is enough here
+    #   hermes_config / hermes_dashboard — same reason
+    # ssh_accounts IS included, unlike hub: this box starts with no key at all
+    # after the reinstall, so there is no working GitHub auth for the tier to
+    # break, and pinning the account aliases fixes the gap the NixOS config left
+    # (modules/home/ssh.nix rendered fleet hosts only — no GitHub block).
+    # selfpull stays unpinned: its default roots are "$HOME $HOME/my", which is
+    # exactly ~/machines plus ~/my/vps here, and the data disks mount outside
+    # $HOME so there is nothing to over-scan.
+    # dotfiles stays LAST, as in workstation: the bare-repo checkout is refused
+    # when an untracked file already occupies a tracked path, and after the
+    # 2026-07-28 handover no earlier tier writes one — agents/bootstrap.sh now
+    # retire_link()s ~/.claude/{CLAUDE.md,memory,host-memory.md,statusline-…}
+    # instead of symlinking them, and only claims ~/.claude/skills/cyphy, which
+    # the dotfiles branch does not track.
+    # sudo_nopasswd is server-only and runs FIRST: every later privileged tier —
+    # and every converge rebuild afterwards — then takes linux.sh's `sudo -n` path
+    # instead of needing a human at a TTY. Deliberately absent from workstation
+    # (a laptop someone carries) and from hub (its provider already set it up).
+    # statusboard is server-only and packages-only: this is the box with a physical
+    # display nobody sits at, so it is the only one that wants a kiosk compositor.
+    # Taking a VT from the login prompt stays a deliberate `--install`.
+    TIERS=(sudo_nopasswd apt_min apt_dev statusboard agents_config git_base "agent_clis claude"
+           shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
   *)
-    die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub" ;;
+    die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;
 esac
 
 printf 'profile: %s (%s)\n' "$PROFILE" "$PROFILE_SRC"

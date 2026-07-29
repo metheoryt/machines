@@ -12,7 +12,7 @@
     # System modules
     ../../../modules/system/base.nix
     ../../../modules/system/laptop.nix
-    ../../../modules/system/self-update.nix
+    ../../../modules/system/fleet-selfpull.nix
     ../../../modules/system/machines-converge.nix
     ../../../modules/system/git-autofetch
     ../../../modules/system/ssh-server.nix
@@ -65,12 +65,15 @@
   # Flatpak support
   services.flatpak.enable = true;
 
-  # Keep the flake repo auto-pulled (Claude config/memory go live via symlinks;
-  # system changes still wait for `just switch`).
-  services.nixRepoAutoPull.enable = true;
+  # Keep the personal fleet-sync repos auto-pulled, using the SAME
+  # provision/fleet-selfpull.sh as the non-Nix members — one mechanism fleet-wide
+  # (this replaced the NixOS-only nixRepoAutoPull). Claude config/memory go live
+  # via symlinks; system changes converge below.
+  services.fleetSelfpull.enable = true;
 
-  # Root convergence: rebuild this box whenever the machines repo ff-pulls
-  # (fires for both /ship's direct pull and nixRepoAutoPull's timer pull).
+  # Root convergence: rebuild this box whenever the machines repo ff-pulls. The
+  # path unit watches .git/logs/HEAD, so it fires for ANY mover — /ship's direct
+  # pull, fleetSelfpull's timer, or a manual pull.
   services.machinesConverge.enable = true;
 
   # Background `git fetch` of all repos under /home/me every 10 min, so

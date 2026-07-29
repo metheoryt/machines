@@ -35,9 +35,99 @@ Usage:
 """
 import argparse, glob, json, os, shutil, subprocess, sys, time
 
-DEFAULT_DATA = os.path.expanduser("~/.config/orca/profiles/local-default/orca-data.json")
-ENV_FILE = os.path.expanduser("~/.config/orca/orca-environments.json")
-RUNTIME_FILE = os.path.expanduser("~/.config/orca/orca-runtime.json")
+# Orca's config dir is platform-dependent. Hardcoding the Linux path made every
+# read on macOS silently miss (DEFAULT_DATA pointed at a file that does not exist),
+# and see _proc_cmdlines() for the worse half of the same bug.
+_CONFIG_DIR_CANDIDATES = (
+    os.path.expanduser("~/.config/orca"),                      # Linux / WSL
+    os.path.expanduser("~/Library/Application Support/orca"),  # macOS
+    os.path.expanduser("~/AppData/Roaming/orca"),              # Windows
+)
+
+
+def orca_config_dir():
+    """The Orca config dir for THIS box. Prefers one that actually holds the data
+    file, since a stray empty ~/.config/orca must not win over the real one."""
+    for d in _CONFIG_DIR_CANDIDATES:
+        if os.path.exists(os.path.join(d, "profiles", "local-default", "orca-data.json")):
+            return d
+    for d in _CONFIG_DIR_CANDIDATES:
+        if os.path.isdir(d):
+            return d
+    return _CONFIG_DIR_CANDIDATES[0]
+
+
+CONFIG_DIR = orca_config_dir()
+DEFAULT_DATA = os.path.join(CONFIG_DIR, "profiles", "local-default", "orca-data.json")
+ENV_FILE = os.path.join(CONFIG_DIR, "orca-environments.json")
+RUNTIME_FILE = os.path.join(CONFIG_DIR, "orca-runtime.json")
+
+
+def _pid_alive(pid):
+    """True if pid exists. /proc on Linux; signal 0 elsewhere (macOS has no /proc).
+    PermissionError means the process EXISTS but is not ours — still alive."""
+    if os.path.isdir("/proc"):
+        return os.path.exists(f"/proc/{pid}")
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _pid_cmdline(pid):
+    """Lowercased cmdline for one pid, or '' if unavailable."""
+    if os.path.isdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                return fh.read().decode("utf-8", "replace").lower()
+        except OSError:
+            return ""
+    try:
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="],
+                             capture_output=True, text=True, timeout=10)
+        return out.stdout.strip().lower()
+    except Exception:
+        return ""
+
+
+def _proc_cmdlines():
+    """Yield (pid, lowercased cmdline) for every visible process.
+
+    /proc where it exists, `ps` otherwise. THIS IS A SAFETY PATH, not a nicety:
+    the previous implementation globbed /proc only, so on macOS orca_running()
+    returned None even with the Orca UI up — and apply_should_block() then said it
+    was safe to write orca-data.json under the live UI, which is the exact
+    corruption the guard exists to prevent.
+    """
+    if os.path.isdir("/proc"):
+        for path in glob.glob("/proc/[0-9]*/cmdline"):
+            try:
+                pid = int(path.split("/")[2])
+                with open(path, "rb") as fh:
+                    yield pid, fh.read().decode("utf-8", "replace").lower()
+            except (OSError, ValueError):
+                continue
+        return
+    try:
+        out = subprocess.run(["ps", "-Ao", "pid=,command="],
+                            capture_output=True, text=True, timeout=15).stdout
+    except Exception:
+        return
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        num, _, rest = line.partition(" ")
+        try:
+            pid = int(num)
+        except ValueError:
+            continue
+        yield pid, rest.lower()
 
 
 # ── Orca-IDE liveness (the gotcha: do NOT trust $TERM_PROGRAM) ────────────────
@@ -46,8 +136,24 @@ def _orca_kind(cmd):
 
     'daemon' — the headless background daemon (daemon-entry.js) that outlives the
                window; 'ide' — the desktop UI. None if not an Orca process at all.
+
+    Three install shapes, one per platform:
+      orca-ide                       — Linux package / dev run
+      squashfs-root/orca             — Linux AppImage
+      orca.app/contents/macos/orca   — macOS app bundle
+    The macOS marker was missing, so no Orca process was EVER classified on macOS
+    and the --apply guard could not see a live UI.
+
+    The macOS marker deliberately spells out .../macos/orca rather than matching
+    "orca": the Electron helper processes live at
+    Orca.app/Contents/Frameworks/Orca Helper.app/Contents/MacOS/Orca Helper, which
+    does not contain that substring — verified against the live process table. Only
+    the Electron MAIN process owns orca-data.json, so matching only it is also the
+    honest answer, not just the conservative one.
     """
-    if "orca-ide" not in cmd and "squashfs-root/orca" not in cmd:
+    if ("orca-ide" not in cmd
+            and "squashfs-root/orca" not in cmd
+            and "orca.app/contents/macos/orca" not in cmd):
         return None
     return "daemon" if "daemon-entry" in cmd else "ide"
 
@@ -61,30 +167,25 @@ def orca_running():
     either runs — but the caller distinguishes them, because a lingering daemon
     with the window already gone is the common, confusing case.
 
-    Liveness is by orca-runtime.json + /proc — NOT $TERM_PROGRAM, which can read
-    'Orca' in a plain terminal launched from an Orca session.
+    Liveness is by orca-runtime.json + the process table (/proc on Linux, `ps`
+    elsewhere) — NOT $TERM_PROGRAM, which can read 'Orca' in a plain terminal
+    launched from an Orca session.
     """
     self_pid = os.getpid()
     daemon = None  # remember a daemon but keep looking for the UI, which wins
     try:
         rt = json.load(open(RUNTIME_FILE))
         pid = rt.get("pid")
-        if pid and os.path.exists(f"/proc/{pid}"):
-            cmd = open(f"/proc/{pid}/cmdline", "rb").read().decode("utf-8", "replace").lower()
-            kind = _orca_kind(cmd)
+        if pid and _pid_alive(pid):
+            kind = _orca_kind(_pid_cmdline(pid))
             if kind == "ide":
                 return (pid, "ide")
             if kind == "daemon":
                 daemon = (pid, "daemon")
     except Exception:
         pass
-    for p in glob.glob("/proc/[0-9]*/cmdline"):
-        pid = int(p.split("/")[2])
+    for pid, cmd in _proc_cmdlines():
         if pid == self_pid:
-            continue
-        try:
-            cmd = open(p, "rb").read().decode("utf-8", "replace").lower()
-        except OSError:
             continue
         if "orca-repair" in cmd:  # never match this script
             continue

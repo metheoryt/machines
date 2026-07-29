@@ -1,10 +1,17 @@
 {
   "machines": {
     "latitude": {
-      "platform": "nixos",
-      "tailnet": { "ip": "100.64.0.2" },
-      "roles": ["base", "ssh-server", "dev", "desktop", "laptop", "agents", "dotfiles", "repos", "backup-client"],
+      "platform": "debian",
+      "profile": "server",
+      "tailnet": { "ip": "100.64.0.8" },
+      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-client"],
       "detect": { "hostname": "latitude5520" }
+    },
+    "air": {
+      "platform": "darwin",
+      "tailnet": { "ip": "100.64.0.7" },
+      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos"],
+      "detect": { "hostname": "air" }
     },
     "desktop": {
       "platform": "windows",

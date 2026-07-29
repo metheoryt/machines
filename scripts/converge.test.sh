@@ -70,6 +70,21 @@ echo y > "$repo/provision/lib/fleet.sh"; git -C "$repo" add .; git -C "$repo" co
 rev6="$(git -C "$repo" rev-parse HEAD)"
 touches_linux "$rev5" "$rev6" && pass "touches_linux detects provision/lib/fleet.sh" || die "touches_linux detects provision/lib/fleet.sh"
 
+# provision/fleet-authorized-keys counts on BOTH tiers, and is asserted last so
+# its commit stays outside the ranges the assertions above depend on.
+#   nixos — it is the literal path in modules/system/ssh-server.nix's
+#     users.users.me.openssh.authorizedKeys.keyFiles, so the trust is baked at
+#     build time and only takes effect after a rebuild.
+#   linux — tier_fleet_ssh merges it into ~/.ssh/authorized_keys.
+# Same silent-skip shape as fleet.json: enrolling a new member's key would
+# otherwise write ok, advance converged-rev, and never be applied — leaving the
+# newly-added box permanently unable to SSH into latitude or hub.
+echo 'ssh-ed25519 AAAA test@x' > "$repo/provision/fleet-authorized-keys"
+git -C "$repo" add .; git -C "$repo" commit -qm ckeys
+revk="$(git -C "$repo" rev-parse HEAD)"
+touches_nix "$rev6" "$revk" && pass "touches_nix detects fleet-authorized-keys" || die "touches_nix detects fleet-authorized-keys"
+touches_linux "$rev6" "$revk" && pass "touches_linux detects fleet-authorized-keys" || die "touches_linux detects fleet-authorized-keys"
+
 # on_main_primary: true on main in primary checkout.
 on_main_primary && pass "on_main_primary true on main" || die "on_main_primary true on main"
 
