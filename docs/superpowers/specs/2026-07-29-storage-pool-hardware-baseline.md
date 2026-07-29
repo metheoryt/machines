@@ -1102,3 +1102,141 @@ While the 1 TB sweep of §4 was running, `dmesg` recorded:
 contiguous allocation could not be satisfied promptly. No OOM kill, no process
 lost, no disk involvement. Recorded only so it is not later mistaken for a
 storage fault found on the same night.
+
+## 13. The music is on latitude and content-verified
+
+Sequence completed 2026-07-30 00:22. `~/staging/music/` on latitude now holds
+14878 files / 94 813 954 726 bytes.
+
+Verification chain, each leg measured locally on the host that owns the data:
+
+| Leg | Method | Result |
+|---|---|---|
+| g513ie `C:\Users\methe\Music` → XS2000 | robocopy, then independent tally of both trees | `94813954726` bytes / `14878` files both sides |
+| XS2000 → latitude `~/staging/music/` | `rsync -a`, then `find`/`du -sb` | `94813954726` / `14878` |
+| live source → latitude, size+mtime | `rsync -a --dry-run -i` over the link | 0 would-transfer, 0 size diffs, 0 mtime diffs |
+| live source → latitude, **content** | `rsync -ac --dry-run -i` | **0 content differences across all 14878 files** |
+
+The `-c` run is the load-bearing one. The three tallies above it agree on byte
+*counts*, which is not the same claim as content equality — robocopy does not read
+back by default and both rsyncs were `-a`. Only the checksum pass compares content,
+and it is the one that gates a reformat.
+
+Reading the itemize output correctly matters here. Every file line was
+`.f...p.....` — the `p` is NTFS mode bits versus ext4 and is meaningless. A real
+content difference prints `c` in the **third** flag column (`.f..c......`) or a
+leading `>f`; neither appeared. Two greps written to summarise this were wrong and
+produced fiction: `^.f.*c` matches any filename containing the letter "c" (reported
+14877 false "checksum differs"), and an error grep matched files with "terror" and
+"error" in their titles. **Classify by flag column position, never by a regex that
+can reach into the filename.** The authoritative artifact is the flag histogram:
+
+```
+14878 .f...p.....
+ 3494 .d...p.....
+    6 .d..tp.....
+would-transfer (>f): 0
+```
+
+### 13.1. `restic snapshots` hangs silently on a read-only repo mount
+
+The `laptop-music` repo lives on `/mnt/public`, mounted `ro` for the migration.
+`restic snapshots` hung there with no output and no error for over five minutes.
+
+It was not slow I/O. The discriminating check, twice ten seconds apart:
+
+```
+state=Sl
+read_bytes: 8192
+--- 10s later ---
+state=Sl
+read_bytes: 8192
+```
+
+Flat counters in interruptible sleep — not reading, waiting. Cause: `restic`
+acquires a **shared lock** even for read-only commands, which means *writing*
+`locks/`. On a `ro` mount that write fails and restic retries rather than
+erroring, which presents as an indefinite hang. `--no-lock` returns instantly:
+
+```
+sudo restic -r <repo> --password-file <file> --no-lock snapshots
+```
+
+Generalise: any restic command against a repo on read-only media needs
+`--no-lock`. And a hung read is not evidence of an empty or broken repo — the
+§8.3 failure shape is concluding safety from a check that never completed.
+
+### 13.2. Verdict: `laptop-music` is redundant, the hold is released
+
+The repo is **not** a backup of g513ie's music. Its 14 snapshots (2026-05-01 to
+2026-07-05) come from a different machine and cover one subtree:
+
+```
+Host        Paths                               Size
+me-g614jv   C:\Users\methe\Music\PicardedMusic  65.071 GiB
+```
+
+Whether it holds unique content was decided by comparison, not by size:
+
+| Check | Result |
+|---|---|
+| files only in repo, absent from staged tree | **0** of 8583 |
+| files only in staged tree | 1761 — all Windows Media Player art cache (`AlbumArtSmall.jpg`, `AlbumArt_{GUID}_*.jpg`) |
+| per-file size mismatches on the 8583 shared paths | **0** |
+| sha256 of 5 restored files vs staged copies | 5 / 5 match, including Cyrillic and `$`-prefixed paths |
+
+The staged tree is a strict superset. Dropping the repo loses nothing.
+
+Note the first two numbers required care: `restic stats` reported "Total File
+Count: 11909" while a files-only listing gave 8583 — `stats` counts directories
+and metadata entries. Comparing 11909 against a `find -type f` count of 10344
+suggested ~1565 files unique to the repo, which was an artifact of comparing
+unlike denominators. The real answer, from `ls --long` filtered to `^-`, is zero.
+
+### 13.3. There is no separate iTunes library to drop
+
+`PicardedMusic` is the iTunes library after MusicBrainz Picard retagging, done in
+place — so no distinct iTunes copy survived. Searched and not found:
+
+| Location | Finding |
+|---|---|
+| g513ie `C:\Users\methe\Music` | only `OldMusic` (23.22 GB) and `PicardedMusic` (65.09 GB) |
+| g513ie recycle bin `.../Apple Music` | directory shells, **0 files**; whole bin 0.43 GB / 247 files |
+| desktop (G614JV) `C:\Users\methe\Music` | empty but for `desktop.ini` |
+| desktop, `iTunes\|Apple Music` on C: | one GDPR export (`Apple Music Activity`), listening-history data, no audio |
+| `/mnt/immich`, `/mnt/immich-2024`, `/mnt/immich-backup` | 0 audio files |
+| `/mnt/public/qb/Music` | 9.8 GB, one Linkin Park discography, 977 files — torrent corpus, already slated to drop |
+
+The instruction to prefer `PicardedMusic` over the iTunes copy is therefore
+already satisfied by the current state.
+
+### 13.4. latitude's key was never installed on g513ie
+
+An earlier note in §11.3 recorded the fleet keypair as distributed to all peers
+and verified. That was wrong for g513ie, which trusted only:
+
+```
+ssh-ed25519 AAAA...EY8n me-nixos-latitude5520
+SHA256:D9mySr0zEynxvjAtEsGPerUDkuQ5QdiPChpD3DHZunU   <- on g513ie
+SHA256:uZJCBdKuM/r+74I8ITbsOaeKpRmkqmp+bHhjbouNYm0   <- latitude's live key, me@latitude
+```
+
+A leftover from the retired NixOS install. latitude holds no copy of that private
+half (`~/.ssh` has only `id_ed25519`, `id_cyphy671`, `id_metheoryt`; no agent
+running; no `id_*` anywhere in `~/latitude-harvest`, which contains no
+`PRIVATE KEY` material at all; no match on air) — so the grant is dead clutter
+rather than live exposure. **That is a checked conclusion, not an assumption.**
+
+The false "verified" came from inferring a working link from a transfer that had
+in fact used a different route: the 15 G already in `~/staging/music` predated
+that evening's work. **A transfer completing is not evidence that the link you
+think it used works.**
+
+Fixed by appending `me@latitude` to both `administrators_authorized_keys` and the
+user file on g513ie, then confirming `AUTH_OK`. For a user in Administrators the
+default `Match Group administrators` block replaces `AuthorizedKeysFile`, so the
+user-file entry is redundant but harmless. The admin file's ACL was verified to
+grant only `NT AUTHORITY\SYSTEM` and `BUILTIN\Администраторы` — any other
+writable principal makes Windows sshd silently ignore the entire file.
+
+The stale `me-nixos-latitude5520` grant is still present and should be removed.
