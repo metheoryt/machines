@@ -18,17 +18,24 @@ export STATUSBOARD_LIB_ONLY=1
 source "$REPO/provision/statusboard/statusboard.sh"
 
 # ── sb_bar ────────────────────────────────────────────────────────────────────
-eq "$(sb_bar 0 10)"   '[..........]' 'bar: 0% is empty'
-eq "$(sb_bar 100 10)" '[##########]' 'bar: 100% is full'
-eq "$(sb_bar 50 10)"  '[#####.....]' 'bar: 50% is half'
-eq "$(sb_bar 5 20)"   '[#...................]' 'bar: 5% of 20 is one cell'
+# Glyphs follow the ramp, so the meter and the charts degrade together on a VT
+# rather than one of them painting replacement boxes.
+eq "$(sb_bar 0 10)"   '[░░░░░░░░░░]' 'bar: 0% is empty'
+eq "$(sb_bar 100 10)" '[██████████]' 'bar: 100% is full'
+eq "$(sb_bar 50 10)"  '[█████░░░░░]' 'bar: 50% is half'
+eq "$(sb_bar 5 20)"   '[█░░░░░░░░░░░░░░░░░░░]' 'bar: 5% of 20 is one cell'
+eq "$(STATUSBOARD_RAMP=ascii sb_bar 50 10)" '[#####.....]' 'bar: a VT gets the ASCII fill'
+eq "$(STATUSBOARD_RAMP=ascii sb_bar 0 10)"  '[..........]' 'bar: ASCII empty is dots'
 # A flaky EC reporting nonsense must not corrupt the frame width.
-eq "$(sb_bar 255 10)" '[##########]' 'bar: over-range clamps to full'
-eq "$(sb_bar "" 10)"  '[..........]' 'bar: empty input is 0, not an error'
-eq "$(sb_bar abc 10)" '[..........]' 'bar: non-numeric input is 0, not an error'
-# Width must not depend on fill — 20 cells plus the two brackets.
-eq "$(printf '%s' "$(sb_bar 37 20)" | wc -c | tr -d ' ')" '22' 'bar: width is stable regardless of fill'
-eq "$(printf '%s' "$(sb_bar 99 20)" | wc -c | tr -d ' ')" '22' 'bar: width identical at high fill'
+eq "$(sb_bar 255 10)" '[██████████]' 'bar: over-range clamps to full'
+eq "$(sb_bar "" 10)"  '[░░░░░░░░░░]' 'bar: empty input is 0, not an error'
+eq "$(sb_bar abc 10)" '[░░░░░░░░░░]' 'bar: non-numeric input is 0, not an error'
+# Width must not depend on fill — 20 cells plus the two brackets. Counted in
+# CHARACTERS, not bytes: the block glyphs are three bytes each.
+eq "$(printf '%s' "$(sb_bar 37 20)" | wc -m | tr -d ' ')" '22' 'bar: width is stable regardless of fill'
+eq "$(printf '%s' "$(sb_bar 99 20)" | wc -m | tr -d ' ')" '22' 'bar: width identical at high fill'
+eq "$(printf '%s' "$(STATUSBOARD_RAMP=ascii sb_bar 99 20)" | wc -m | tr -d ' ')" '22' \
+  'bar: the ASCII fill is the same width'
 
 # ── sb_micro_to_unit ──────────────────────────────────────────────────────────
 eq "$(sb_micro_to_unit 20000000 W)" '20.0W' 'micro: 20000000µ -> 20.0'
@@ -143,6 +150,55 @@ done
 eq "$(STATUSBOARD_RAMP=ascii sb_chart 4 100 '0,33,66,100')" '.:+#' 'chart: ascii ramp spans the same range'
 eq "$(STATUSBOARD_RAMP=ascii sb_chart 2 100 'x,x')"         'xx'   'chart: ascii ramp uses x for down'
 
+# ── chart colour ──────────────────────────────────────────────────────────────
+# Every assertion above ran with colour OFF and is byte-identical to the pre-colour
+# board — that is the gate working, and it is why --once stays diffable. What follows
+# turns colour ON explicitly, because otherwise none of the new code is covered.
+ESC=$'\033'
+count_sub() { # count_sub <string> <needle>
+  local s="${1:-}" pat="${2:-}" n=0
+  while [ "${s#*"$pat"}" != "$s" ]; do n=$((n + 1)); s="${s#*"$pat"}"; done
+  printf '%s' "$n"
+}
+
+eq "$(sb_heat_color 0 8)" '' 'heat: no escape at all when colour is off'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 0 8)" "${ESC}[38;2;88;166;110m" 'heat: the floor is green'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8)" "${ESC}[38;2;200;70;70m" 'heat: the ceiling is red'
+# A level past the top must clamp, not compute a colour outside the gradient.
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 99 8)" "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8)" \
+  'heat: a level past the top clamps to the ceiling colour'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color junk 8)" "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 0 8)" \
+  'heat: a non-numeric level is the floor, not an error'
+# The gradient is only worth having if the levels are actually distinguishable.
+HEATS=""
+for i in 0 1 2 3 4 5 6 7; do
+  HEATS="$HEATS$(STATUSBOARD_TRUECOLOR=1 sb_heat_color "$i" 8)"$'\n'
+done
+eq "$(printf '%s' "$HEATS" | sort -u | grep -c .)" '8' 'heat: eight levels are eight distinct colours'
+# A 16-colour terminal keeps the thresholds rather than being fed 38;2 it may not parse.
+eq "$(C_OK=${ESC}'[32m' STATUSBOARD_TRUECOLOR=0 sb_heat_color 0 8)" "${ESC}[32m" 'heat: no truecolor falls back to green'
+eq "$(C_BAD=${ESC}'[31m' STATUSBOARD_TRUECOLOR=0 sb_heat_color 7 8)" "${ESC}[31m" 'heat: no truecolor falls back to red at the top'
+
+# Run-length is a correctness property, not an optimisation: per-cell escapes cost
+# ~19 bytes, which is tens of KB a frame on a wide display at a 1s interval.
+FLAT="$(C_RST=${ESC}'[0m' STATUSBOARD_TRUECOLOR=1 sb_chart 8 100 '100,100,100,100,100,100,100,100')"
+eq "$(count_sub "$FLAT" "${ESC}[38;2")" '1' 'chart: a run of equal samples emits one colour escape'
+VARY="$(C_RST=${ESC}'[0m' STATUSBOARD_TRUECOLOR=1 sb_chart 3 100 '0,50,100')"
+eq "$(count_sub "$VARY" "${ESC}[38;2")" '3' 'chart: each change of level emits its own escape'
+# Colour must not leak past the chart into the rest of the frame.
+eq "$(count_sub "$FLAT" "${ESC}[0m")" '1' 'chart: a coloured chart resets exactly once at the end'
+# A gap carries no colour, so it has to close the run before it — otherwise the
+# blank cell inherits a background-dependent tint.
+GAP="$(C_RST=${ESC}'[0m' STATUSBOARD_TRUECOLOR=1 sb_chart 3 100 '100,-,100')"
+eq "$(count_sub "$GAP" "${ESC}[0m")" '2' 'chart: a gap closes the colour run and the chart closes again'
+# THE layout invariant: colour changes bytes, never cells. A chart one cell wider
+# than the column it was measured for wraps the whole repainting frame.
+eq "$(sb_vislen "$FLAT")" '8' 'chart: colour does not change the visible width'
+eq "$(sb_vislen "$GAP")"  '3' 'chart: nor with a gap in it'
+DOWN="$(C_BAD=${ESC}'[31m' C_RST=${ESC}'[0m' STATUSBOARD_TRUECOLOR=1 sb_chart 3 100 '100,x,100')"
+has "$DOWN" "${ESC}[31m×" 'chart: a down sample is the alarm colour whatever surrounds it'
+eq "$(sb_vislen "$DOWN")" '3' 'chart: a down sample keeps the width too'
+
 # sb_vislen / sb_pad: the two-column layout is only aligned if colour is invisible
 # to the width maths. Measuring with ${#s} instead leaves every coloured row short
 # by the length of its escapes.
@@ -228,7 +284,7 @@ has "$OUT" '/'          'disk row: shows the mount point'
 has "$OUT" 'nvme1n1p3'  'disk row: shows the device'
 has "$OUT" '1%'         'disk row: shows the percentage'
 has "$OUT" '453G'       'disk row: shows the total in GB'
-has "$OUT" '[.'         'disk row: has a horizontal bar'
+has "$OUT" '[░'         'disk row: has a horizontal bar'
 # A deep mount point must not widen the text column for every other row.
 OUT="$(sb_disk_row sdc2 /mnt/media/library/photos 100 200 50)"
 has "$OUT" '<'          'disk row: an over-long mount point is truncated tail-first'

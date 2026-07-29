@@ -55,7 +55,7 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
 
 # sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
@@ -75,6 +75,22 @@ has   "$srv" '^tier_apt_dev$'          "server KEEPS the dev apt layer (gh, fish
 has   "$srv" '^tier_shell_init$'       "server keeps fish (no --no-fish, unlike hub)"
 has   "$srv" '^tier_ssh_accounts$'     "server wires the GitHub account aliases"
 has   "$srv" '^tier_selfpull$'         "server leaves FLEET_ROOTS default (\$HOME + \$HOME/my)"
+# statusboard is the physical-display box only: a kiosk compositor on a laptop
+# someone carries, on a 960MB VPS, or on a mac is pure weight.
+has   "$srv" '^tier_statusboard$'      "server installs the status-board packages"
+hasnt "$ws"  '^tier_statusboard$'      "workstation omits the status-board packages"
+hasnt "$hub" '^tier_statusboard$'      "hub omits the status-board packages"
+hasnt "$mac" '^tier_statusboard$'      "macOS omits the status-board packages"
+# Packages only — the tier must never take a VT from the login prompt. That is the
+# deliberate `statusboard.sh --install` / `statusboard-gui.sh --install`.
+body="$(awk '/^tier_statusboard\(\)/,/^}/' "$TIERS")"
+hasnt "$body" 'systemctl'   "tier_statusboard touches no units"
+hasnt "$body" 'profile.d'   "tier_statusboard writes no profile hook"
+has   "$body" 'cage'        "tier_statusboard installs the kiosk compositor"
+has   "$body" 'foot'        "tier_statusboard installs the terminal emulator"
+has   "$body" 'btop'        "tier_statusboard installs btop"
+has   "$body" 'fonts-jetbrains-mono' "tier_statusboard installs the chart font"
+has   "$body" 'PRIV'        "tier_statusboard honours the no-root warn-and-skip contract"
 
 # ORDER GUARD: the dotfiles bare-repo checkout is REFUSED when an untracked file
 # already sits at a tracked path, so tier_dotfiles must stay last — after

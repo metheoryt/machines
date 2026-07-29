@@ -76,13 +76,17 @@ fi
 # sb_bar <percent> <width>: an ASCII meter. Clamps out-of-range input rather than
 # emitting a negative-width bar, because a flaky EC reporting 255% should not
 # corrupt the whole frame.
+# The fill glyphs follow the chart ramp, for the same reason: U+2588/U+2591 are the
+# two block glyphs a psf console font does carry, but the DEFAULT VT table here is
+# Latin-1 only, so a VT gets #/. and everything else gets the solid/shade pair.
 sb_bar() {
-  local pct="${1:-0}" width="${2:-20}" filled i out=""
+  local pct="${1:-0}" width="${2:-20}" filled i out="" on='#' off='.'
   case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
   [ "$pct" -gt 100 ] && pct=100
+  [ "$(sb_ramp_name)" = ascii ] || { on='█'; off='░'; }
   filled=$((pct * width / 100))
   for ((i = 0; i < width; i++)); do
-    if [ "$i" -lt "$filled" ]; then out="$out#"; else out="$out."; fi
+    if [ "$i" -lt "$filled" ]; then out="$out$on"; else out="$out$off"; fi
   done
   printf '[%s]' "$out"
 }
@@ -220,6 +224,67 @@ sb_down_glyph() {
   esac
 }
 
+# ── Chart colour ──────────────────────────────────────────────────────────────
+# 24-bit colour is a SEPARATE capability from "has colour at all", and it needs its
+# own gate: a Linux VT has 16, and a gradient painted with 38;2 there loses exactly
+# the distinctions it was drawn to make. Set once at startup next to SB_IS_VT (a
+# capability probe belongs where fd 1 is real), consulted here.
+#
+# Measured on latitude 2026-07-29: foot exports COLORTERM=truecolor, and tmux
+# reports RGB in #{client_termfeatures}, so the kiosk and the SSH window both light
+# up. A terminal that advertises nothing keeps the 16-colour thresholds rather than
+# being fed escapes it may not parse. STATUSBOARD_TRUECOLOR overrides either way.
+SB_TRUECOLOR=0
+
+sb_truecolor() {
+  if [ -n "${STATUSBOARD_TRUECOLOR:-}" ]; then printf '%s' "$STATUSBOARD_TRUECOLOR"; return; fi
+  printf '%s' "${SB_TRUECOLOR:-0}"
+}
+
+# sb_heat_color <level> <levels>: the colour for a chart cell at <level> of
+# <levels>. Green at the bottom through amber to red at the ceiling — the ceiling
+# is per-metric and fixed (see sb_chart), so "red" always means "at the limit this
+# metric was given", never "the highest value in this window".
+#
+# Returns the empty string when colour is off, which is what keeps --once diffable
+# and every existing chart assertion byte-identical.
+sb_heat_color() {
+  local lvl="${1:-0}" n="${2:-8}" t f r g b
+  case "$lvl" in '' | *[!0-9]*) lvl=0 ;; esac
+  case "$n" in '' | *[!0-9]*) n=8 ;; esac
+  [ "$n" -gt 1 ] || n=2
+  [ "$lvl" -lt "$n" ] || lvl=$((n - 1))
+  t=$((lvl * 100 / (n - 1)))
+  if [ "$(sb_truecolor)" = 1 ]; then
+    # Two linear segments, integer-only: green→amber over the lower half, amber→red
+    # over the upper. Endpoints are picked for a dark background at both ends.
+    if [ "$t" -lt 50 ]; then
+      f=$((t * 2))
+      r=$((88 + 126 * f / 100)); g=$((166 + 12 * f / 100)); b=$((110 - 40 * f / 100))
+    else
+      f=$(((t - 50) * 2))
+      r=$((214 - 14 * f / 100)); g=$((178 - 108 * f / 100)); b=70
+    fi
+    printf '\033[38;2;%d;%d;%dm' "$r" "$g" "$b"
+  elif [ "$t" -lt 50 ]; then printf '%s' "$C_OK"
+  elif [ "$t" -lt 80 ]; then printf '%s' "$C_WARN"
+  else printf '%s' "$C_BAD"
+  fi
+}
+
+# sb_heat_table <levels>: fill SB_HEAT with one colour per ramp level.
+#
+# The table exists for cost, not style. Colouring per SAMPLE would fork a subshell
+# for every cell — ~1500 per frame across ten charts on a 146-column display, which
+# is more than the whole frame budget at a 1s interval. There are only as many
+# distinct colours as there are ramp levels, so eight forks cover every chart.
+sb_heat_table() {
+  local n="${1:-8}" i
+  case "$n" in '' | *[!0-9]*) n=8 ;; esac
+  SB_HEAT=()
+  for ((i = 0; i < n; i++)); do SB_HEAT[i]="$(sb_heat_color "$i" "$n")"; done
+}
+
 # sb_push <csv> <sample> <cap>: append, trimming the oldest. Pure — takes the old
 # series and returns the new one, so the render loop holds the state and the
 # function stays testable.
@@ -258,6 +323,13 @@ sb_chart() {
   ramp="$(sb_ramp)"
   levels="${#ramp}"
 
+  # Colour is emitted only where it CHANGES. The naive per-cell form costs ~19 bytes
+  # a cell, which is 28KB of escapes a frame on a wide display — run-length keeps a
+  # typical chart down to a handful.
+  local -a SB_HEAT=()
+  local want="" cur=""
+  [ -n "$C_RST" ] && sb_heat_table "$levels"
+
   local -a a=()
   IFS=',' read -r -a a <<< "$csv"
   local n=${#a[@]} start=0
@@ -267,14 +339,30 @@ sb_chart() {
   for ((i = start; i < n; i++)); do
     v="${a[i]}"
     case "$v" in
-      x | X) out="$out$(sb_down_glyph)"; continue ;;
-      '' | *[!0-9]*) out="$out "; continue ;;
+      # A down sample is always the alarm colour, whatever level surrounds it.
+      x | X) want="$C_BAD"; idx=-1 ;;
+      # A gap carries no colour at all, so it also ends any run before it.
+      '' | *[!0-9]*) want=""; idx=-2 ;;
+      *)
+        [ "$v" -gt "$max" ] && v="$max"
+        idx=$((v * levels / max))
+        [ "$idx" -ge "$levels" ] && idx=$((levels - 1))
+        want="${SB_HEAT[idx]:-}"
+        ;;
     esac
-    [ "$v" -gt "$max" ] && v="$max"
-    idx=$((v * levels / max))
-    [ "$idx" -ge "$levels" ] && idx=$((levels - 1))
-    out="$out${ramp:idx:1}"
+    if [ "$want" != "$cur" ]; then
+      # Leaving colour behind needs an explicit reset; entering another does not.
+      [ -n "$cur" ] && [ -z "$want" ] && out="$out$C_RST"
+      out="$out$want"
+      cur="$want"
+    fi
+    case "$idx" in
+      -1) out="$out$(sb_down_glyph)" ;;
+      -2) out="$out " ;;
+      *) out="$out${ramp:idx:1}" ;;
+    esac
   done
+  [ -n "$cur" ] && out="$out$C_RST"
   printf '%s' "$out"
 }
 
@@ -695,6 +783,17 @@ for _d in /dev/tty[0-9]*; do
   [ -e "$_d" ] && [ "$_d" -ef /dev/stdout ] && { SB_IS_VT=1; break; }
 done
 unset _d
+# 24-bit capability, probed here for the same reason and under the same conditions:
+# only when there is colour at all and the device is not a VT. tmux is asked
+# directly rather than trusted through COLORTERM, which it can forward while still
+# refusing to pass RGB through without terminal-features.
+if [ -n "$C_RST" ] && [ "$SB_IS_VT" = 0 ]; then
+  case "${COLORTERM:-}" in truecolor | 24bit) SB_TRUECOLOR=1 ;; esac
+  if [ "$SB_TRUECOLOR" = 0 ] && [ -n "${TMUX:-}" ] &&
+    tmux display -p '#{client_termfeatures}' 2>/dev/null | grep -q RGB; then
+    SB_TRUECOLOR=1
+  fi
+fi
 SB_MOUNTS=""; SB_UNMOUNTED=""
 # Declared up front because the frame reads them under `set -u`: the loop always
 # probes before its first paint, but --once and any future caller ordering should
@@ -871,9 +970,10 @@ render_frame() {
   [ "$chartw" -gt 0 ] && span="$(printf '   %scharts: last %s (%ss/cell)%s' "$C_DIM" "$(sb_span "$chartw" "$PROBE")" "$PROBE" "$C_RST")"
   printf '%s%s%s   %s%s%s%s\n' "$C_B$C_INFO" "$(hostname)" "$C_RST" \
     "$C_DIM" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_RST" "$span"
-  local rule=60 dashes=""
+  local rule=60 dashes="" rulech='-'
+  [ "$(sb_ramp_name)" = ascii ] || rulech='─'
   [ "$chartw" -gt 0 ] && rule=$((textw + 3 + chartw))
-  for ((i = 0; i < rule; i++)); do dashes="$dashes-"; done
+  for ((i = 0; i < rule; i++)); do dashes="$dashes$rulech"; done
   printf '%s%s%s\n\n' "$C_DIM" "$dashes" "$C_RST"
 
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
@@ -887,8 +987,11 @@ render_frame() {
         printf '%s\n' "${SB_ROW_TEXT[i]}"
       fi
     else
-      printf '%s   %s%s%s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
-        "$C_DIM" "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "${SB_ROW_SERIES[i]}")" "$C_RST"
+      # No C_DIM wrapper any more: the chart carries its own per-level colour and
+      # resets itself. SGR 2 composed with a 38;2 foreground is terminal-dependent
+      # — foot dims it, others drop one of the two — so the two never overlap.
+      printf '%s   %s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
+        "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "${SB_ROW_SERIES[i]}")"
     fi
   done
 }

@@ -101,7 +101,10 @@ case "$PROFILE" in
     # and every converge rebuild afterwards — then takes linux.sh's `sudo -n` path
     # instead of needing a human at a TTY. Deliberately absent from workstation
     # (a laptop someone carries) and from hub (its provider already set it up).
-    TIERS=(sudo_nopasswd apt_min apt_dev agents_config git_base "agent_clis claude"
+    # statusboard is server-only and packages-only: this is the box with a physical
+    # display nobody sits at, so it is the only one that wants a kiosk compositor.
+    # Taking a VT from the login prompt stays a deliberate `--install`.
+    TIERS=(sudo_nopasswd apt_min apt_dev statusboard agents_config git_base "agent_clis claude"
            shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;

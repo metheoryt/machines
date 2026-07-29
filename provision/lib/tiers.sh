@@ -206,6 +206,45 @@ tier_apt_dev() {
   return 0
 }
 
+# ── BEST-EFFORT: the physical-display status board ────────────────────────────
+# Packages only. The board itself is installed by a deliberate act
+# (provision/statusboard/statusboard.sh --install for the text board on tty2-6,
+# statusboard-gui.sh --install for the kiosk on tty1), because it takes a VT away
+# from the login prompt and that is not something a converge run should decide.
+#
+# What each one is for:
+#   cage foot foot-terminfo  the kiosk itself — a Wayland kiosk compositor running
+#                            one terminal emulator, which is what lets the charts
+#                            use the real block ramp. A psf console font tops out
+#                            at 512 glyphs and carries none of U+2581..U+2587, so
+#                            the VT path degrades to a repeating ASCII ramp.
+#   fontconfig               statusboard-gui.sh --check asks fc-list whether the
+#                            chosen font actually covers the ramp, rather than
+#                            trusting its name.
+#   fonts-jetbrains-mono     that font. NOT the Nerd Font variant — icons are a
+#                            separate decision and a separate download.
+#   btop                     for the planned second pane; unused until then.
+#
+# Best-effort throughout: a box that fails to install a terminal emulator should
+# still finish provisioning, and the check/install steps refuse to proceed on their
+# own if anything here is missing.
+tier_statusboard() {
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the status-board packages"
+    return 0
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  if [ -z "${APT_UPDATED:-}" ]; then
+    $SUDO apt-get update -qq || warn "apt-get update failed"
+    APT_UPDATED=1
+  fi
+  info "Installing status-board packages (apt)…"
+  $SUDO apt-get install -y --no-install-recommends \
+    cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop \
+    || warn "status-board package install failed — the board's --check will name what is missing"
+  return 0
+}
+
 # ── CORE 1 (darwin): base Homebrew packages ───────────────────────────────────
 # The macOS counterpart of tier_apt_min. No sudo anywhere: Homebrew owns its own
 # prefix (/opt/homebrew on Apple Silicon) and refuses to run under sudo, so the
