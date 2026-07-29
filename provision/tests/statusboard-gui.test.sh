@@ -166,6 +166,30 @@ case "$SZ" in
   *) pass 'pty_size: both fields are numeric even with no tty at all' ;;
 esac
 
+# ── sbg_settle_size ───────────────────────────────────────────────────────────
+# Reading the kernel was necessary but not sufficient. foot creates the pty at a
+# default 80x24 and resizes it only after the compositor configures its surface,
+# which is AFTER it has exec'd its child — so on latitude the honest kernel answer
+# was 80x24 for a 146x36 display, and the split was dropped for lack of rows
+# (2026-07-29). The size has to be waited for, not read.
+SETTLE_BODY="$(awk '/^sbg_settle_size\(\)/,/^}/' "$GUI")"
+has "$SETTLE_BODY" 'WINCH' 'settle_size: waits for the resize signal, not a fixed guess'
+has "$SETTLE_BODY" 'trap - WINCH' 'settle_size: puts the handler back when done'
+# The signal is the fast path; the loop bound is the guarantee. A terminal that
+# never resizes must still leave with the right answer, just later.
+has "$SETTLE_BODY" 'tries' 'settle_size: is bounded, so a terminal that never signals still returns'
+# Two agreeing samples, because a compositor may configure more than once and a
+# size caught mid-sequence is as wrong as one caught before it.
+has "$SETTLE_BODY" '[ "$cur" = "$prev" ]' 'settle_size: requires the size to stop moving'
+# Fast when there is nothing to wait for: no tty, so stty fails and both loops fall
+# straight through to the terminfo fallback.
+SETTLED="$(sbg_settle_size 2 0.01 < /dev/null)"
+eq "$(printf '%s\n' "$SETTLED" | wc -w | tr -d ' ')" '2' 'settle_size: still yields two fields with no tty'
+case "$SETTLED" in
+  *[!0-9\ ]*) fail "settle_size: both fields numeric (got '$SETTLED')" ;;
+  *) pass 'settle_size: both fields are numeric' ;;
+esac
+
 # ── sbg_split_rows ────────────────────────────────────────────────────────────
 # The row arithmetic for the btop strip. Both bounds are measured, not guessed:
 # btop refuses to draw a cpu-only box below 8 rows, and the board needs 25 rows of
@@ -332,7 +356,7 @@ has "$SESSION_BODY" 'exec "${BOARD_CMD[@]}"' 'session: falls back to the board a
 eq "$(printf '%s\n' "$SESSION_BODY" | grep -c 'exec "${BOARD_CMD\[@\]}"')" '3' \
   'session: every failure path ends at the board, not at a black screen'
 has "$SESSION_BODY" 'sbg_split_rows' 'session: sizes the strip against the real row count'
-has "$SESSION_BODY" 'sbg_pty_size' 'session: reads the size from the pty it is actually on'
+has "$SESSION_BODY" 'sbg_settle_size' 'session: waits for the pty size before sizing the split'
 # Every fallback here is invisible on screen — stderr goes to the pty and the board
 # paints over it within a second — so the decision is written down instead. Without
 # this, "the strip is missing" and "the strip measured 24 rows" look identical.

@@ -235,6 +235,41 @@ sbg_pty_size() {
   printf '%s %s' "$cols" "$rows"
 }
 
+# sbg_settle_size [tries] [delay]: the pty size once it has stopped changing.
+#
+# The size read in this script's first milliseconds is a LIE. foot creates the pty
+# at a default 80x24 and resizes it only once the compositor has configured its
+# surface — which happens after it has already exec'd its child. Measured on
+# latitude 2026-07-29: `stty size` returned 80x24 on a 146x36 display, so the split
+# arithmetic concluded there was no room for the board plus btop and dropped the
+# strip. Reading the kernel instead of terminfo was necessary but not sufficient;
+# the kernel was telling the truth about a pty that had not been resized yet.
+#
+# The WINCH trap is the fast path — the kernel signals the foreground group on
+# TIOCSWINSZ, so this usually returns within one delay of foot's first configure.
+# The timeout is the GUARANTEE: a terminal that never resizes (or never signals)
+# still leaves with a correct answer, just later. The second loop exists because a
+# compositor may configure more than once, and a size caught mid-sequence is as
+# wrong as a size caught before it.
+sbg_settle_size() {
+  local tries="${1:-20}" delay="${2:-0.1}" i prev cur
+  SBG_WINCH=0
+  trap 'SBG_WINCH=1' WINCH
+  for ((i = 0; i < tries; i++)); do
+    [ "$SBG_WINCH" = 1 ] && break
+    sleep "$delay"
+  done
+  trap - WINCH
+  prev="$(sbg_pty_size)"
+  for ((i = 0; i < tries; i++)); do
+    sleep "$delay"
+    cur="$(sbg_pty_size)"
+    [ "$cur" = "$prev" ] && { printf '%s' "$cur"; return; }
+    prev="$cur"
+  done
+  printf '%s' "$prev"
+}
+
 # sbg_split_rows <total> <want> [min_board] [min_btop]: how many rows the btop strip
 # actually gets, or 0 meaning "do not split at all".
 #
@@ -560,7 +595,8 @@ fi
 
 if [ "$MODE" = session ]; then
   [ -f "$BOARD" ] || { printf 'no board at %s\n' "$BOARD" >&2; exit 1; }
-  read -r SESS_COLS SESS_ROWS <<< "$(sbg_pty_size)"
+  SESS_RAW="$(sbg_pty_size)"
+  read -r SESS_COLS SESS_ROWS <<< "$(sbg_settle_size)"
 
   mapfile -t BOARD_CMD < <(sbg_board_argv "$BOARD" "$INTERVAL" "$PROBE" "$CELL")
 
@@ -571,7 +607,9 @@ if [ "$MODE" = session ]; then
   SESS_NOTE="${KIOSK_STATE%/}.session"
   sbg_note() { printf '%s\n' "$*" >> "$SESS_NOTE" 2>/dev/null || true; }
   : > "$SESS_NOTE" 2>/dev/null
-  sbg_note "pty ${SESS_COLS}x${SESS_ROWS}"
+  # Both numbers, because the gap between them is the whole story if this ever goes
+  # wrong again: "raw 80x24, settled 146x36" says foot resized late and we waited.
+  sbg_note "pty ${SESS_COLS}x${SESS_ROWS} (raw at exec ${SESS_RAW// /x})"
 
   STRIP=0
   MISSING="$(sbg_missing_deps tmux btop)"
