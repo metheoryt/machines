@@ -16,6 +16,7 @@
 #   bash statusboard.sh --once          # paint one frame and exit (for testing)
 #   bash statusboard.sh --interval 1    # seconds between REPAINTS (default 1)
 #   bash statusboard.sh --probe 10      # seconds between network probes (default 10)
+#   bash statusboard.sh --cell 300      # seconds of samples per chart cell (default 300)
 #   sudo bash statusboard.sh --install  # install + enable the tty1 service
 #   sudo bash statusboard.sh --uninstall
 #   sudo bash statusboard.sh --bigfont  # double the console font (16x32) on every VT
@@ -38,10 +39,16 @@ set -u
 # quiet is a waste with no readable benefit (a gateway RTT does not need a 1s
 # sample rate). Cheap readings — /sys battery, /proc load — refresh on every paint.
 #
-# The charts advance at the PROBE rate, which is also what makes them span
-# something useful: 240 cells at 10s is 40 minutes, at 1s it would be 4.
+# CELL is the third cadence, and it exists because the first two pull in opposite
+# directions. The charts used to advance at the PROBE rate, which tied "how often is
+# the network measured" to "how much time does a chart cover" — and the only way to
+# widen the span was to measure less often, which makes every NUMBER on the board
+# stale (sb_sample_slow drives the text as well as the charts). So samples are still
+# taken every PROBE seconds and the text stays live; CELL samples' worth are folded
+# into one chart cell at render time.
 INTERVAL=1
 PROBE=10
+CELL="${STATUSBOARD_CELL:-300}"
 ONCE=0
 MODE=run
 SERVICE_NAME=statusboard.service
@@ -54,6 +61,7 @@ while [ $# -gt 0 ]; do
     --once) ONCE=1; shift ;;
     --interval) INTERVAL="${2:-1}"; shift 2 ;;
     --probe) PROBE="${2:-10}"; shift 2 ;;
+    --cell) CELL="${2:-300}"; shift 2 ;;
     --install) MODE=install; shift ;;
     --bigfont) MODE=bigfont; shift ;;
     --uninstall) MODE=uninstall; shift ;;
@@ -181,10 +189,29 @@ sb_battery_line() {
 # on an unattended box the second question is usually the interesting one.
 #
 # History is in-memory only. The unit runs ProtectSystem=strict + ProtectHome=
-# read-only, and loosening either so a chart can survive a restart is a bad
-# trade — a restart clearing the history is the cost, and it is small.
+# read-only, and loosening either so a chart can survive a restart is a bad trade.
+#
+# That cost is no longer small, and pretending otherwise would be dishonest: at the
+# 5m cell a 146-cell chart needs 12h10m of uptime to fill, so a restart now throws
+# away half a day of history rather than 24 minutes of it. Fixing that means
+# persisting the series, which means giving the unit somewhere writable — a real
+# trade to make deliberately, not a footnote. --cell 60 fills in ~2.5h if the
+# shorter memory is the better deal.
 
-SB_HIST_CAP=400   # samples kept per series; more than any console is wide
+# SB_K: samples folded into one chart cell. Clamped to at least 1 — a --cell below
+# --probe cannot mean "less than one sample per cell".
+SB_K=$((CELL / PROBE))
+[ "$SB_K" -ge 1 ] || SB_K=1
+# The DISPLAYED cell duration is derived back from k, never taken from CELL: with
+# --cell 250 --probe 10 the chart really shows 240s cells, and an axis that claims
+# 250 is a lie about the data.
+SB_CELL_SECS=$((SB_K * PROBE))
+
+# Samples kept per series. In CELLS this is 200 — more than any console is wide —
+# so the depth follows the fold factor rather than being a fixed sample count that
+# silently truncates a slow chart to a fraction of its width.
+SB_HIST_CAP=$((200 * SB_K))
+[ "$SB_HIST_CAP" -ge 400 ] || SB_HIST_CAP=400
 
 # Two ramps, and the default is chosen by the OUTPUT DEVICE rather than by TERM.
 #
@@ -293,18 +320,72 @@ sb_heat_table() {
 # trailing empty field, so an empty sample would silently shorten the series and
 # shift every later frame one cell to the right.
 sb_push() {
-  local csv="${1:-}" v="${2:-}" cap="${3:-$SB_HIST_CAP}" i out="" first=1
+  local csv="${1:-}" v="${2:-}" cap="${3:-$SB_HIST_CAP}"
   case "$cap" in '' | *[!0-9]*) cap="$SB_HIST_CAP" ;; esac
   [ -n "$v" ] || v='-'
   if [ -z "$csv" ]; then csv="$v"; else csv="$csv,$v"; fi
   local -a a=()
-  IFS=',' read -r -a a <<< "$csv"
+  # IFS is local so the join below can reuse it without leaking a comma into every
+  # later `read -a` in the same frame.
+  local IFS=','
+  read -r -a a <<< "$csv"
   local n=${#a[@]} start=0
   [ "$n" -gt "$cap" ] && start=$((n - cap))
-  for ((i = start; i < n; i++)); do
-    if [ "$first" = 1 ]; then out="${a[i]}"; first=0; else out="$out,${a[i]}"; fi
+  # One slice-and-join rather than a concatenation loop: the fold factor pushed the
+  # cap from 400 samples to thousands, and appending to a string n times is
+  # quadratic — at 6000 samples across a dozen series that stalls the paint.
+  printf '%s' "${a[*]:start}"
+}
+
+# sb_fold <k> <csv>: fold every <k> consecutive samples into one chart cell.
+#
+# This is what decouples the chart's time axis from the sample rate. Called by
+# render_frame on the way into sb_chart, deliberately NOT from inside it, so every
+# chart assertion keeps testing glyph maths on raw samples.
+#
+# Buckets are aligned from the NEWEST sample backwards (sliding, not anchored to a
+# wall-clock boundary). A fixed alignment would need a probe counter carried between
+# frames, and the frame runs in a `$(render_frame)` subshell that discards exactly
+# that kind of state — the same trap the sampling section warns about. The cost is
+# that completed cells re-derive on each probe instead of freezing, which on these
+# metrics is invisible.
+#
+# A bucket takes the MAX of its samples, not the mean: a 5-minute cell that hides a
+# 30-second latency spike or a brief outage is worse than one that looks alarming.
+# Any unreachable sample makes the whole cell unreachable, for the same reason.
+sb_fold() {
+  local k="${1:-1}" csv="${2:-}" j len pos n v best down seen
+  case "$k" in '' | *[!0-9]*) k=1 ;; esac
+  [ "$k" -ge 1 ] || k=1
+  [ "$k" = 1 ] && { printf '%s' "$csv"; return; }
+  [ -n "$csv" ] || { printf ''; return; }
+
+  local -a a=() out=()
+  local IFS=','
+  read -r -a a <<< "$csv"
+  n=${#a[@]}
+  # The PARTIAL bucket is the oldest one, which is what keeps the newest cell
+  # advancing every probe instead of the whole chart jumping once per cell.
+  len=$((n % k)); [ "$len" -ne 0 ] || len="$k"
+  pos=0
+  while [ "$pos" -lt "$n" ]; do
+    down=0; seen=0; best=0
+    for ((j = pos; j < pos + len && j < n; j++)); do
+      v="${a[j]}"
+      case "$v" in
+        x | X) down=1 ;;
+        '' | *[!0-9]*) : ;;
+        *) seen=1; [ "$v" -gt "$best" ] && best="$v" ;;
+      esac
+    done
+    if [ "$down" = 1 ]; then out+=('x')
+    elif [ "$seen" = 1 ]; then out+=("$best")
+    else out+=('-')
+    fi
+    pos=$((pos + len))
+    len="$k"
   done
-  printf '%s' "$out"
+  printf '%s' "${out[*]}"
 }
 
 # sb_chart <width> <max> <csv>: the sparkline. Newest sample at the RIGHT edge, so
@@ -408,6 +489,17 @@ sb_span() {
   case "$iv" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
   s=$((cells * iv))
   if [ "$s" -lt 3600 ]; then printf '%dm' $((s / 60))
+  else printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60)); fi
+}
+
+# sb_dur <seconds>: a cell duration for the axis label. "300s/cell" is arithmetic
+# the reader should not have to do.
+sb_dur() {
+  local s="${1:-0}"
+  case "$s" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
+  if [ "$s" -lt 60 ]; then printf '%ds' "$s"
+  elif [ "$s" -lt 3600 ] && [ $((s % 60)) -eq 0 ]; then printf '%dm' $((s / 60))
+  elif [ "$s" -lt 3600 ]; then printf '%dm%02ds' $((s / 60)) $((s % 60))
   else printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60)); fi
 }
 
@@ -526,7 +618,12 @@ sb_chart_width() {
   case "$textw" in '' | *[!0-9]*) printf '0'; return ;; esac
   w=$((cols - textw - 3))
   [ "$w" -ge 8 ] || w=0
-  [ "$w" -gt "$SB_HIST_CAP" ] && w="$SB_HIST_CAP"
+  # The ceiling is in CELLS, not samples: with a fold factor of k the history holds
+  # SB_HIST_CAP/k cells, and comparing a cell count against a sample count would let
+  # the chart claim k times the depth it has.
+  local maxcells=$((SB_HIST_CAP / ${SB_K:-1}))
+  [ "$maxcells" -ge 1 ] || maxcells=1
+  [ "$w" -gt "$maxcells" ] && w="$maxcells"
   printf '%s' "$w"
 }
 
@@ -613,7 +710,7 @@ User=$RUN_USER
 # cannot open it. The unit failed to start, the getty was already disabled, and
 # tty1 was left with nothing painting it — a blinking cursor and no way in.
 SupplementaryGroups=tty
-ExecStart=/bin/bash $SELF --interval $INTERVAL --probe $PROBE
+ExecStart=/bin/bash $SELF --interval $INTERVAL --probe $PROBE --cell $CELL
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
@@ -967,7 +1064,8 @@ render_frame() {
   # Header. The span marker is not decoration: the same picture is 20 minutes at
   # the tty1 interval and over an hour in the tmux window.
   local span=""
-  [ "$chartw" -gt 0 ] && span="$(printf '   %scharts: last %s (%ss/cell)%s' "$C_DIM" "$(sb_span "$chartw" "$PROBE")" "$PROBE" "$C_RST")"
+  [ "$chartw" -gt 0 ] && span="$(printf '   %scharts: last %s (%s/cell, %ss samples)%s' \
+    "$C_DIM" "$(sb_span "$chartw" "$SB_CELL_SECS")" "$(sb_dur "$SB_CELL_SECS")" "$PROBE" "$C_RST")"
   printf '%s%s%s   %s%s%s%s\n' "$C_B$C_INFO" "$(hostname)" "$C_RST" \
     "$C_DIM" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_RST" "$span"
   local rule=60 dashes="" rulech='-'
@@ -991,7 +1089,7 @@ render_frame() {
       # resets itself. SGR 2 composed with a 38;2 foreground is terminal-dependent
       # — foot dims it, others drop one of the two — so the two never overlap.
       printf '%s   %s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
-        "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "${SB_ROW_SERIES[i]}")"
+        "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "$(sb_fold "$SB_K" "${SB_ROW_SERIES[i]}")")"
     fi
   done
 }

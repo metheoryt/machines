@@ -58,6 +58,9 @@ FONT="${STATUSBOARD_GUI_FONT:-JetBrains Mono}"
 FONTSIZE="${STATUSBOARD_GUI_FONTSIZE:-16}"
 INTERVAL="${STATUSBOARD_GUI_INTERVAL:-1}"
 PROBE="${STATUSBOARD_GUI_PROBE:-10}"
+# Seconds of samples per chart cell. Matches the board's own default; passed
+# explicitly so `--check` shows every cadence the kiosk runs at in one line.
+CELL="${STATUSBOARD_GUI_CELL:-300}"
 GUI_TTY="${STATUSBOARD_GUI_TTY:-/dev/tty1}"
 GETTY_UNIT="getty@$(basename "$GUI_TTY").service"
 DROPIN_DIR="${STATUSBOARD_DROPIN_DIR:-/etc/systemd/system/$GETTY_UNIT.d}"
@@ -113,7 +116,7 @@ sbg_font_has_ramp() {
     tr ',' '\n' | grep -qxF "$family"
 }
 
-# sbg_kiosk_argv <board> <font> <size> <interval> <probe>: the kiosk command line,
+# sbg_kiosk_argv <board> <font> <size> <interval> <probe> <cell>: the kiosk command line,
 # one argument per line so a test can assert on it without re-splitting a string.
 #
 #   cage -s   VT switching stays enabled. This is the escape hatch: without it a
@@ -123,11 +126,11 @@ sbg_font_has_ramp() {
 #   foot -H   hold the window open after the child exits, so a board that dies
 #             leaves its error on screen instead of a black rectangle.
 sbg_kiosk_argv() {
-  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}"
+  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}" cell="${6:-300}"
   printf '%s\n' cage -s -d -- \
     foot -H -f "$font:size=$size" \
     -o main.pad=6x6 -o cursor.style=underline \
-    -e bash "$board" --interval "$interval" --probe "$probe"
+    -e bash "$board" --interval "$interval" --probe "$probe" --cell "$cell"
 }
 
 # sbg_dropin_text <user>: the getty drop-in that turns the login prompt into an
@@ -216,7 +219,7 @@ sbg_check() {
     rc=1
   fi
 
-  printf 'kiosk      %s\n' "$(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE" | tr '\n' ' ')"
+  printf 'kiosk      %s\n' "$(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE" "$CELL" | tr '\n' ' ')"
   return "$rc"
 }
 
@@ -313,5 +316,5 @@ if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
 fi
 [ -f "$BOARD" ] || { printf 'no board at %s\n' "$BOARD" >&2; exit 1; }
 
-mapfile -t KIOSK < <(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE")
+mapfile -t KIOSK < <(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE" "$CELL")
 exec "${KIOSK[@]}"

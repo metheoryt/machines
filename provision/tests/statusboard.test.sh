@@ -214,7 +214,17 @@ eq "$(sb_vislen "$(sb_pad "$(printf '\033[32mabc\033[0m')" 6)")" '6' 'pad: a col
 eq "$(sb_chart_width 120 60)" '57' 'chart_width: cols minus text minus the gutter'
 eq "$(sb_chart_width 80 70)"  '0'  'chart_width: no chart when under 8 cells would be left'
 eq "$(sb_chart_width 0 60)"   '0'  'chart_width: no terminal width means no charts'
-eq "$(sb_chart_width 4000 60)" "$SB_HIST_CAP" 'chart_width: capped at the history depth'
+# The ceiling is in CELLS, so it is the cap divided by the fold factor. Comparing a
+# cell count against a sample count would let a folded chart claim k times its depth.
+eq "$(sb_chart_width 4000 60)" "$((SB_HIST_CAP / SB_K))" 'chart_width: capped at the history depth in cells'
+eq "$(SB_K=1 SB_HIST_CAP=400 sb_chart_width 4000 60)" '400' 'chart_width: unfolded, the ceiling is the raw cap'
+eq "$(SB_K=30 SB_HIST_CAP=6000 sb_chart_width 4000 60)" '200' 'chart_width: at k=30 a 6000-sample history is 200 cells'
+# The depth must cover a full screen of folded cells, or a 5m chart silently shows
+# a fraction of its width.
+[ "$SB_HIST_CAP" -ge $((200 * SB_K)) ] \
+  && pass 'cap: the history holds at least 200 cells at the configured fold' \
+  || fail 'cap: the history is too shallow for the fold factor'
+eq "$SB_CELL_SECS" "$((SB_K * PROBE))" 'cell: the displayed duration is derived from k, not from --cell'
 
 # sb_trim: an uncharted row longer than the frame would wrap, and a wrapped row
 # scrolls the entire repainting display.
@@ -226,6 +236,40 @@ eq "$(sb_trim 'abc' 0)" 'abc' 'trim: a zero width is a no-op, not an empty row'
 
 # sb_span: the same picture means different things at different probe rates, so the
 # header has to say which.
+# ── sb_fold ───────────────────────────────────────────────────────────────────
+# The fold is what lets a cell be 5 minutes while the numbers stay 10 seconds old.
+eq "$(sb_fold 1 '1,2,3')"   '1,2,3' 'fold: k=1 is the identity'
+eq "$(sb_fold 0 '1,2,3')"   '1,2,3' 'fold: k=0 clamps to 1 rather than dividing by zero'
+eq "$(sb_fold junk '1,2,3')" '1,2,3' 'fold: a non-numeric k clamps to 1'
+eq "$(sb_fold 3 '')"        ''      'fold: an empty series folds to nothing'
+eq "$(sb_fold 3 '1,2,3,4,5,6')" '3,6' 'fold: takes the max of each bucket'
+# Buckets align from the NEWEST end, so the OLDEST one is the short one. Anchoring
+# the other way would freeze the newest cell for a whole cell-width.
+eq "$(sb_fold 3 '9,1,2,3,4,5,6')" '9,3,6' 'fold: the partial bucket is the oldest'
+eq "$(sb_fold 3 '5')"       '5'     'fold: a series shorter than one bucket still renders'
+# Max, not mean: a 5-minute cell that hides a spike is worse than one that alarms.
+eq "$(sb_fold 5 '0,0,90,0,0')" '90' 'fold: a spike survives the fold'
+# An outage inside the window must be visible as an outage.
+eq "$(sb_fold 3 '1,x,2')"   'x'     'fold: any unreachable sample makes the cell unreachable'
+eq "$(sb_fold 3 '-,-,-')"   '-'     'fold: an all-missing bucket stays a gap'
+eq "$(sb_fold 3 '-,4,-')"   '4'     'fold: a partly-missing bucket uses what it has'
+# Cell count, exactly: a fold that returns one cell too many or too few silently
+# shifts every chart sideways.
+eq "$(printf '%s' "$(sb_fold 10 "$(seq -s, 1 100)")" | tr ',' '\n' | grep -c .)" '10' \
+  'fold: 100 samples at k=10 is exactly 10 cells'
+eq "$(printf '%s' "$(sb_fold 10 "$(seq -s, 1 95)")" | tr ',' '\n' | grep -c .)" '10' \
+  'fold: 95 samples at k=10 is 10 cells (the oldest is partial)'
+# IFS must not leak out of the fold — a stray comma corrupts every later read -a.
+sb_fold 3 '1,2,3' >/dev/null
+eq "$(printf 'a b' | { read -r x y; printf '%s' "$y"; })" 'b' 'fold: does not leak IFS'
+
+# ── sb_dur ────────────────────────────────────────────────────────────────────
+eq "$(sb_dur 10)"   '10s'    'dur: seconds under a minute'
+eq "$(sb_dur 300)"  '5m'     'dur: a whole number of minutes'
+eq "$(sb_dur 90)"   '1m30s'  'dur: a ragged minute keeps its seconds'
+eq "$(sb_dur 3600)" '1h00m'  'dur: rolls into hours'
+eq "$(sb_dur junk)" 'n/a'    'dur: non-numeric is n/a'
+
 eq "$(sb_span 240 10)" '40m'    'span: 240 cells at 10s is 40m'
 eq "$(sb_span 240 1)"  '4m'     'span: 240 cells at 1s is 4m'
 eq "$(sb_span 600 10)" '1h40m'  'span: rolls into hours'
@@ -393,7 +437,13 @@ hasnt "$OUT" 'charts: last' 'run: no chart column when stdout is not a tty'
 OUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$REPO/provision/statusboard/statusboard.sh" --once 2>&1)"; rc=$?
 eq "$rc" '0' 'layout: --once with a forced width exits 0'
 has "$OUT" 'charts: last' 'layout: the header names the span the charts cover'
-has "$OUT" 's/cell'       'layout: the header names the probe cadence'
+# The axis carries BOTH cadences now: how much time a cell covers, and how often a
+# sample was actually taken. They are no longer the same number, and a reader who
+# assumes they are will misread every chart.
+has "$OUT" '5m/cell'      'layout: the header names the cell duration in readable units'
+has "$OUT" '10s samples'  'layout: the header also names the sample cadence'
+OUT_FAST="$(STATUSBOARD_COLS=120 STATUSBOARD_CELL=10 bash "$REPO/provision/statusboard/statusboard.sh" --once 2>&1)"
+has "$OUT_FAST" '10s/cell' 'layout: STATUSBOARD_CELL reaches the axis label'
 # Nothing may exceed the width — a frame one cell too wide wraps and the whole
 # display walks up the screen on every repaint.
 eq "$(printf '%s\n' "$OUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
