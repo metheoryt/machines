@@ -609,3 +609,76 @@ Supporting SSD health, since root is about to be leaned on:
 
 Both healthy with ample endurance left. Root has room for every staging candidate
 at once (~119G excluding `secrets/`).
+
+## 10. Clearing the 320G — disposition of each item
+
+Decision 2026-07-29: the 320G is to be emptied and reused as a pool member. The
+backups on it were generated during the desktop Windows 11 reinstall and the
+restic repos will be regenerated once the data layout is settled, since the
+originals still exist. Item by item, with what was verified:
+
+| Item | Size | Disposition | Verified? |
+|---|---|---|---|
+| `qb` | 60G | **drop** — replaceable downloads | n/a |
+| `G614JV-Ubuntu-24.04.tar` | 9.9G | **drop** — WSL export from the reinstall | The distro is live: `desktop-ubuntu26` is an active tailnet node (`100.64.0.6`) |
+| `restic-repos/wsl` | 2.3G, 19 snapshots | **drop** — same reinstall vintage | same as above |
+| `Настя Стас GoPro` | 39.0 GiB, 162 files | **move to desktop** | desktop `C:` has **1194 GB free**; `G:` has only 38.4 GB and is not a candidate |
+| `restic-repos/laptop-music` | 67G, 14 snapshots | **HOLD — see below** | Original found, but in the wrong place |
+| `secrets/` | 133K | **unresolved** — blocks the wipe | Private key material; §9 forbids staging it to plaintext root |
+
+### 10.1. `laptop-music` must not be dropped yet
+
+The original was located: **`C:\Users\methe\Music` on `server` (the G15) — 88.2 GB,
+11 550 files**, alongside `C:\Navidrome` (0.2 GB of Navidrome's own state). The 67G
+repo is a deduplicated, compressed backup of that library, so "the original still
+exists" is true.
+
+**But the original is on the machine being decommissioned.** The migration plan's
+own global constraint reads: *"The G15 is the only copy of some data until Task 15
+passes. No wipe, no sale, no reformat of any drive before the restore verification
+in Task 15 succeeds."* Dropping this repo takes the music library from two copies
+(G15 original + 320G repo) to **one copy, on the box being retired**. That is a
+reduction in safety disguised as a cleanup, and it is the only one of the six items
+where the "we still have the originals" reasoning does not hold.
+
+**The fix makes the cleanup unblock itself.** Pull the 88.2 GB library from
+`server` to latitude's root (446 GB free) *first*, then drop the repo. Three things
+land at once: the music gets a second copy on a different machine, the 320G
+actually reaches empty, and the library ends up on the host that is becoming the
+server and will run Navidrome. Root usage after the video and the music: ~130 GB
+of 453 GB.
+
+### 10.2. The video moves in two legs, not one
+
+Leg 1 — `/mnt/public/Настя Стас GoPro` → `~/staging/` on latitude root, over USB,
+native ext4, no network. Leg 2 — latitude → desktop `C:`.
+
+Splitting it is deliberate:
+
+- **The video is never single-copy.** A direct 320G → desktop move would have it
+  in flight as the only copy; leg 1 finishes before anything is deleted.
+- **The Cyrillic path is an encoding hazard on the Windows leg**, not on the Linux
+  one. Isolating it into leg 2 means the risky step is unhurried and independently
+  retryable rather than entangled with the wipe.
+- **The transfer direction is fixed by what is wired.** latitude cannot resolve or
+  authenticate to `desktop`; its `~/.ssh/config` carries only GitHub blocks and it
+  has no fleet aliases after the Debian reinstall. But `methe@me-g614jv` and
+  `me@wsl-desktop` are both in latitude's `authorized_keys`, and
+  `ssh desktop → latitude` was confirmed working. **Leg 2 runs as a pull from
+  desktop.**
+
+### 10.3. Wipe the 320G by reformatting, not by deleting
+
+Once it is empty, do not delete 177 GB of files through `ntfs3` read-write —
+remounting rw is the one operation that can damage what is still on the volume.
+Reformat instead: it is a single operation, it takes the Windows metadata
+(`$RECYCLE.BIN`, `System Volume Information`) with it, and the drive is
+Linux-only now, so **ext4** is the right target. The UUID changes, so its
+`/etc/fstab` entry (§7.1) must be updated in the same step — `nofail` means a
+stale UUID fails quietly rather than loudly, which is exactly how it would get
+missed.
+
+**Order, and nothing out of order:** stage video (leg 1) → pull music from server
+→ verify both → drop `qb`, the tar, and `restic-repos/wsl` → drop
+`restic-repos/laptop-music` → resolve `secrets/` → reformat → update fstab →
+push video to desktop (leg 2).
