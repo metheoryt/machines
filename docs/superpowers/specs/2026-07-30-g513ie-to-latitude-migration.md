@@ -426,3 +426,105 @@ was already at the destination.
 `CACHEDIR.TAG` deserves specific note: tooling that writes it is telling you the
 directory is disposable. Checking for it is cheaper than reasoning about contents,
 and here it flagged 14 GB correctly before any package listing was read.
+
+## 16. Decisions taken 2026-07-30 (user)
+
+### 16.1. latitude's root stays unencrypted — the hold is closed
+
+**Decided: no encryption on latitude.** Rationale given: it is a home,
+permanently plugged-in laptop, and passwords at rest on it are acceptable.
+
+This closes both §6 of this document and the standing hold at §9 of
+`2026-07-29-storage-pool-hardware-baseline.md`. It is a deliberate, informed
+choice rather than an oversight, and it should not be re-raised as an open
+question in future work. The threat model it accepts: physical theft of the
+machine yields the service databases, the media library index, and any
+credentials sitting on the root.
+
+The consequence for planning is that **prod `.env` files and database dumps may
+live on latitude's root directly**, which simplifies §13's sequence considerably.
+
+### 16.2. forgejo is dropped
+
+Not used. `forgejo_forgejo_data` (2.683 MB) is removed from the migration list —
+no export, no restore. The container has been down two weeks anyway.
+
+### 16.3. Everything on g513ie is stopped
+
+Restart policies cleared on all 20 containers, then all stopped:
+
+```
+docker update --restart=no $(docker ps -aq)
+docker stop $(docker ps -q)
+```
+
+`docker ps` is now empty; all 20 report `exited`. This ends the `immich_postgres`
+restart loop of §12 and removes the last hot-copy hazard from §2 — every volume
+on the box is now quiescent, so a `tar` export is safe for all of them.
+
+Clearing the restart policy *before* stopping matters: with `restart: always`
+still set, a stop can be undone by the daemon or by Docker Desktop restarting.
+
+## 17. The gitignored prod config — transferred and verified
+
+This was the genuine loss risk, and it is the category §4 pointed at: files with
+no home in any repo, which die with the machine. All of it lives in `vps` (the
+per-service prod environment) and `telegrind`.
+
+Nineteen files, transferred to `~/g513ie-prod-config/` on latitude, mode 700,
+deliberately **outside any repo checkout** so no future `git add` can reach them:
+
+| Source | Files |
+|---|---|
+| `vps/homeserver/*/.env` | `beat`, `embedthat`, `immich`, `navidrome`, `restic-server`, `servarr`, `tugtainer`, `watchtower` |
+| `vps/homeserver/telegrind/.env.prod` | 1 |
+| `vps/backup/homeserver/pass.txt` | the restic repository password |
+| `vps/homeserver/.{embedthat,telegrind}-last-deployed` | deploy state markers |
+| `telegrind/` | `.env`, `.env.prod`, `compose.override.yml`, `google-account.json` |
+| `.claude/settings.local.json` | in `vps`, `skep`, and `vps/homeserver/tugtainer` |
+
+152 KB total. Content verified with `rsync -ac --dry-run -i` against the source —
+zero differing files.
+
+Three findings worth keeping:
+
+- **`embedthat` has no secrets of its own.** Its 13742 ignored files are all
+  `node_modules`-shaped. The prod `.env` for it lives at
+  `vps/homeserver/embedthat/.env`, which is the pattern for every service: the
+  application repo carries code, `vps` carries that service's environment.
+- **`backup/homeserver/pass.txt` is the restic password**, identical to the one
+  used in §13.2 of the hardware baseline apart from line endings (13 bytes CRLF
+  versus 12 LF). So the credential was already preserved in `vps` all along, and
+  the ad-hoc `~/.restic-pw` created for that investigation was redundant — it has
+  been removed.
+- **The "three untracked files" open question from §3 is resolved.** They were
+  `.claude/settings.local.json` in `skep`, `vps`, and `vps/homeserver/tugtainer` —
+  machine-local agent settings, now transferred with the rest.
+
+A filter caveat that nearly cost two files: the first sweep piped
+`ls-files --others --ignored` through `head -40`, which silently truncated
+`vps`'s list and hid `homeserver/tugtainer/.env` and `homeserver/watchtower/.env`.
+They only appeared when the sweep was re-run filtering by *name pattern* instead
+of by position. **When enumerating things you must not miss, never bound the
+output by count.**
+
+Deliberately not transferred: `homeserver/embedthat/src/` and
+`homeserver/telegrind/src/` — deployed copies of source that regenerate from the
+repos.
+
+## 18. Remaining work
+
+1. `telegrind_pgdata` (57 MB) — start the container, `pg_dumpall`, stop, restore
+   into a scratch container on latitude to verify. The only real database export
+   left, now that forgejo is dropped and immich needs no transfer.
+2. Export `jellyseerr_jellyseerr-data` (309 kB) and `tugtainer_tugtainer_data`
+   (45 kB) by tar. All containers are stopped, so this is safe.
+3. immich on latitude: native docker, image
+   `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0`, `/mnt/immich`
+   remounted `rw`, §12.1's snapshot on hand before crash recovery runs.
+4. Clone the repos and drop `~/g513ie-prod-config/` contents into their gitignored
+   slots.
+5. Enumerate the ~20 config directories under `C:\Users\methe` against the
+   dotfiles branch (§4) — still not done, and the same "no other home" logic that
+   made §17 urgent applies to them.
+6. Decommission only after a restore verification passes.
