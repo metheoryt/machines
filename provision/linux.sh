@@ -104,7 +104,12 @@ case "$PROFILE" in
     # statusboard is server-only and packages-only: this is the box with a physical
     # display nobody sits at, so it is the only one that wants a kiosk compositor.
     # Taking a VT from the login prompt stays a deliberate `--install`.
-    TIERS=(sudo_nopasswd apt_min apt_dev statusboard agents_config git_base "agent_clis claude"
+    # battery_limit is next to statusboard for the same reason: this is the box
+    # whose hardware is a fact of the deployment rather than of the profile. A
+    # laptop wired to the wall forever needs its charge ceiling enforced, and the
+    # tier is a no-op wherever the EC exposes no threshold — so it costs a mains-
+    # only box nothing to have it in the plan.
+    TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit agents_config git_base "agent_clis claude"
            shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;

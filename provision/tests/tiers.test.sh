@@ -55,7 +55,7 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
 
 # sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
@@ -95,6 +95,36 @@ has   "$body" 'btop'        "tier_statusboard installs btop"
 has   "$body" 'polkitd'     "tier_statusboard installs polkitd (VT-switch escape hatch)"
 has   "$body" 'fonts-jetbrains-mono' "tier_statusboard installs the chart font"
 has   "$body" 'PRIV'        "tier_statusboard honours the no-root warn-and-skip contract"
+
+# battery_limit is server-only, and its whole reason for existing is the mode
+# write: the retired NixOS module set the threshold alone and the EC ignored it.
+has   "$srv" '^tier_battery_limit$'      "server installs the battery charge limit"
+hasnt "$ws"  '^tier_battery_limit$'      "workstation omits the battery charge limit"
+hasnt "$hub" '^tier_battery_limit$'      "hub omits the battery charge limit"
+hasnt "$mac" '^tier_battery_limit$'      "macOS omits the battery charge limit"
+bbody="$(awk '/^tier_battery_limit\(\)/,/^}/' "$TIERS")"
+has "$bbody" 'charge_types'  "tier_battery_limit writes charge_types, not just the threshold"
+has "$bbody" 'Custom'        "tier_battery_limit selects the EC's Custom charge mode"
+has "$bbody" 'charge_control_end_threshold' "tier_battery_limit writes the ceiling"
+has "$bbody" 'charge_control_start_threshold' "tier_battery_limit makes room below the ceiling"
+has "$bbody" 'PRIV'          "tier_battery_limit honours the no-root warn-and-skip contract"
+# The no-battery path must report and return 0, never fail a provision run on a
+# desktop or a VPS.
+has "$bbody" 'skipping the charge limit' "tier_battery_limit skips hardware with no threshold"
+has "$bbody" 'suspend.target'  "tier_battery_limit re-applies on resume, not only at boot"
+# /etc/default is the human's knob; a re-provision must not clobber a hand-set
+# CHARGE_UPTO.
+has "$bbody" '\[ ! -f /etc/default/charge-upto \]' \
+  "tier_battery_limit writes /etc/default/charge-upto only when absent"
+# The mode has to be written AFTER the ceiling it governs, or the EC applies
+# Custom against the OLD threshold and the new one only takes effect next boot.
+end_ln="$(printf '%s\n' "$bbody" | grep -n "> \"\$b/charge_control_end_threshold\"" | head -1 | cut -d: -f1)"
+mode_ln="$(printf '%s\n' "$bbody" | grep -n "> \"\$b/charge_types\"" | head -1 | cut -d: -f1)"
+if [ -n "$end_ln" ] && [ -n "$mode_ln" ] && [ "$end_ln" -lt "$mode_ln" ]; then
+  pass "tier_battery_limit writes the ceiling before switching the EC to Custom"
+else
+  die "tier_battery_limit writes the ceiling before switching the EC to Custom (end=$end_ln mode=$mode_ln)"
+fi
 
 # ORDER GUARD: the dotfiles bare-repo checkout is REFUSED when an untracked file
 # already sits at a tracked path, so tier_dotfiles must stay last — after

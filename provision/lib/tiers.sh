@@ -261,6 +261,136 @@ tier_statusboard() {
   return 0
 }
 
+# ── SERVER: cap the battery charge level ──────────────────────────────────────
+# latitude is a laptop that never moves and never leaves AC, which is the one duty
+# cycle that ruins a lithium cell: held at 100% and warm, indefinitely.
+#
+# Dell's EC can stop short of full, but ONLY in its Custom charge mode, and that is
+# the part the retired NixOS module missed: modules/hardware/dell-latitude.nix
+# wrote charge_control_end_threshold and nothing else, so the EC stayed in [Fast]
+# and charged straight past the limit that sysfs was displaying. Measured on
+# latitude 2026-07-29 — end=85, charge_types=[Fast], battery at 94% and still
+# Charging; writing Custom flipped it to `Not charging` within three seconds with
+# nothing else changed. So the limit was cosmetic for as long as it has existed,
+# on NixOS as much as here.
+#
+# A no-op on hardware with no threshold file, which is what makes it safe to run
+# anywhere: a mains-only box or a non-Dell laptop reports and returns rather than
+# failing the provision run.
+tier_battery_limit() {
+  local pct="${1:-85}" bat="" d
+  case "$pct" in '' | *[!0-9]*) warn "battery limit '$pct' is not a number — skipping"; return 0 ;; esac
+  for d in /sys/class/power_supply/BAT*; do
+    [ -f "$d/charge_control_end_threshold" ] && { bat="$d"; break; }
+  done
+  if [ -z "$bat" ]; then
+    info "no battery exposes charge_control_end_threshold — skipping the charge limit"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the battery charge limit"
+    return 0
+  fi
+  info "Installing charge-upto (limit ${pct}%)…"
+
+  $SUDO tee /usr/local/bin/charge-upto >/dev/null <<'CU'
+#!/bin/sh
+# charge-upto [percent] — cap this laptop's battery charge level.
+#
+# Installed by tier_battery_limit in machines/provision/lib/tiers.sh. Edit the
+# tier and re-provision rather than editing this copy; to change the level, edit
+# /etc/default/charge-upto (persistent) or pass a percent (until the next boot).
+#
+# Writing the threshold is not enough on a Dell: the EC honours charge_control_*
+# only in its Custom charge mode and it comes up in [Fast]. Hence the mode write,
+# and hence it comes LAST — after the thresholds it is meant to act on.
+set -eu
+
+DEFAULT=85
+[ -r /etc/default/charge-upto ] && . /etc/default/charge-upto
+PCT="${1:-${CHARGE_UPTO:-$DEFAULT}}"
+case "$PCT" in '' | *[!0-9]*) echo "charge-upto: '$PCT' is not a percentage" >&2; exit 2 ;; esac
+if [ "$PCT" -lt 1 ] || [ "$PCT" -gt 100 ]; then
+  echo "charge-upto: $PCT is outside 1-100" >&2; exit 2
+fi
+
+found=0
+for b in /sys/class/power_supply/BAT*; do
+  [ -f "$b/charge_control_end_threshold" ] || continue
+  found=1
+
+  # The EC rejects an end at or below the start, so make room before writing the
+  # ceiling. Otherwise `charge-upto 40` against a start of 50 fails with EINVAL
+  # and leaves the old limit in place while appearing to have done something.
+  if [ -f "$b/charge_control_start_threshold" ]; then
+    start="$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo 0)"
+    case "$start" in '' | *[!0-9]*) start=0 ;; esac
+    if [ "$start" -ge "$PCT" ]; then
+      if [ "$PCT" -gt 5 ]; then room=$((PCT - 5)); else room=1; fi
+      printf '%s\n' "$room" > "$b/charge_control_start_threshold"
+    fi
+  fi
+
+  printf '%s\n' "$PCT" > "$b/charge_control_end_threshold"
+
+  # Only where the EC offers Custom. A battery whose charge_types lists no such
+  # mode honours the threshold directly, and writing an unsupported mode would
+  # abort the loop under set -e.
+  if [ -w "$b/charge_types" ] && grep -q Custom "$b/charge_types"; then
+    printf 'Custom\n' > "$b/charge_types"
+  fi
+
+  printf 'charge-upto: %s limit %s%% mode %s — now %s%%, %s\n' \
+    "$(basename "$b")" \
+    "$(cat "$b/charge_control_end_threshold")" \
+    "$(tr ' ' '\n' < "$b/charge_types" 2>/dev/null | grep '^\[' | tr -d '[]' || echo n/a)" \
+    "$(cat "$b/capacity")" "$(cat "$b/status")"
+done
+
+if [ "$found" = 0 ]; then
+  echo "charge-upto: no battery exposes charge_control_end_threshold" >&2
+  exit 1
+fi
+CU
+  $SUDO chmod 0755 /usr/local/bin/charge-upto
+
+  # Written only when absent: this is the knob a human tunes, and a re-provision
+  # must not silently undo `CHARGE_UPTO=60`.
+  if [ ! -f /etc/default/charge-upto ]; then
+    $SUDO tee /etc/default/charge-upto >/dev/null <<CUD
+# Battery charge ceiling, in percent. Read by /usr/local/bin/charge-upto and by
+# charge-upto.service at every boot and resume. Change it here and run
+# \`sudo systemctl start charge-upto\` to apply without rebooting.
+CHARGE_UPTO=$pct
+CUD
+  fi
+
+  # Boot AND every resume: the EC drops back to its default mode across a power
+  # cycle, and a laptop that suspends nightly would otherwise spend most of its
+  # life uncapped.
+  $SUDO tee /etc/systemd/system/charge-upto.service >/dev/null <<'CUS'
+[Unit]
+Description=Cap the battery charge level
+After=local-fs.target suspend.target hibernate.target hybrid-sleep.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/bin/charge-upto
+
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target
+CUS
+
+  if $SUDO systemctl daemon-reload >/dev/null 2>&1 \
+    && $SUDO systemctl enable --now charge-upto.service >/dev/null 2>&1; then
+    ok "charge-upto installed and applied ($($SUDO systemctl show -p ExecMainStatus --value charge-upto.service 2>/dev/null || echo '?') exit)"
+  else
+    warn "charge-upto installed but the unit would not enable — run \`sudo charge-upto\` by hand"
+  fi
+  return 0
+}
+
 # ── CORE 1 (darwin): base Homebrew packages ───────────────────────────────────
 # The macOS counterpart of tier_apt_min. No sudo anywhere: Homebrew owns its own
 # prefix (/opt/homebrew on Apple Silicon) and refuses to run under sudo, so the
