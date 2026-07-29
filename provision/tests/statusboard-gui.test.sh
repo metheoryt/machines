@@ -81,6 +81,23 @@ line "$ARGV" '--' 'kiosk: separates cage options from the application'
 line "$ARGV" '-s' 'kiosk: cage -s keeps VT switching (Ctrl-Alt-F2 escape hatch)'
 line "$ARGV" '-H' 'kiosk: foot -H holds the window so a crashed board leaves its error visible'
 
+# The OTHER half of that escape hatch, and the half that fails silently: cage asks
+# logind's Seat.SwitchTo, which is polkit-gated, and a minimal Debian ships no
+# polkit — so logind denies it to everyone but root and the keys do nothing.
+# Measured on latitude 2026-07-29 (cage logged "Could not switch session:
+# Permission denied" on every press). --check must FAIL on this, not mention it.
+GUI_SRC="$(cat "$GUI")"
+has "$GUI_SRC" 'sbg_have_polkit' 'check: probes for a polkit authority'
+CHECK_BODY="$(awk '/^sbg_check\(\)/,/^}/' "$GUI")"
+has "$CHECK_BODY" 'sbg_have_polkit' 'check: the polkit probe runs inside sbg_check'
+# Anchored `fi`, not a bare /fi/ — the branch's own "fix:" hint contains those two
+# letters and an unanchored range would end one line early, right before the rc=1.
+polkit_rc="$(printf '%s\n' "$CHECK_BODY" | awk '/if sbg_have_polkit/,/^ *fi$/' | grep -c 'rc=1')"
+eq "$polkit_rc" '1' 'check: a missing polkit makes --check fail, not warn'
+# Presence, never polkit's own verdict: polkit answers per CALLER session, so asking
+# from an SSH shell would report "denied" on a healthy box.
+hasnt "$CHECK_BODY" 'pkcheck --action' 'check: does not ask polkit to decide for the wrong session'
+
 # One argument per line is the contract: the font family contains a space, so a
 # caller that re-split a flat string would pass "Mono:size=20" as a command.
 eq "$(printf '%s\n' "$ARGV" | grep -c .)" '21' 'kiosk: argv is one argument per line'

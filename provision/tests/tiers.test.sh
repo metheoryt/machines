@@ -89,6 +89,10 @@ hasnt "$body" 'profile.d'   "tier_statusboard writes no profile hook"
 has   "$body" 'cage'        "tier_statusboard installs the kiosk compositor"
 has   "$body" 'foot'        "tier_statusboard installs the terminal emulator"
 has   "$body" 'btop'        "tier_statusboard installs btop"
+# polkitd is the escape hatch, not a nicety: cage's VT switch goes through logind's
+# polkit-gated Seat.SwitchTo, and with no polkit installed Ctrl-Alt-Fn is denied and
+# the kiosk traps the box's only console behind the network.
+has   "$body" 'polkitd'     "tier_statusboard installs polkitd (VT-switch escape hatch)"
 has   "$body" 'fonts-jetbrains-mono' "tier_statusboard installs the chart font"
 has   "$body" 'PRIV'        "tier_statusboard honours the no-root warn-and-skip contract"
 
