@@ -165,6 +165,32 @@ without opening anything:
 `/dev/sd*` letters are not stable across replug — the 6TB inherited `sdf` from
 the 320G it replaced. Always address disks by `/dev/disk/by-id/usb-*`.
 
+### There is a fifth bay (found 2026-07-29 19:51)
+
+A **single-bay 2.5" USB enclosure**, Norelsys **NS1066** bridge, on **bus 002**
+behind a 5 Gbps hub. The ST320LT020 320G is now seated in it as `sdc`, online
+alongside all four dock drives. **The pool is five bays, not four.**
+
+Two things about this enclosure differ from the docks and both matter:
+
+- **Its bridge reports a hardcoded placeholder serial, `0123456789ABCDE`.** So
+  `usb-ATA_ST320LT020-9YG14_0123456789ABCDE-0:0` is *not* enclosure-unique — any
+  other NS1066 would collide. The dock convention above (bridge serial identifies
+  the dock) does not extend here. Address this drive by
+  **`wwn-0x5000c500531b3d59`** or `ata-ST320LT020-9YG142_W047MMKS`, both of which
+  come from the drive rather than the bridge.
+- **Write cache is disabled** on this bridge (`sd 1:0:0:0: [sdc] Write cache:
+  disabled, read cache: enabled`). Slower writes, safer against a yank.
+
+SMART passthrough works: `-d sat` returns the full attribute table with the same
+partial-passthrough pattern as the docks (`SMART STATUS` rejected, `-H` falls
+back to an attribute assessment).
+
+**The consequence is not "one more bay."** It is that the 320G no longer has to be
+*offline* in order to free a dock slot — so it can be an online, monitored,
+backed-up member, which §8.3 shows its contents demand. Dock B bay 0 stays free
+for the eventual 6TB either way.
+
 ## 3. Link and bus facts
 
 - Both docks sit on **bus 004**, a single 10 Gbps xHCI root hub, each
@@ -172,9 +198,13 @@ the 320G it replaced. Always address disks by `/dev/disk/by-id/usb-*`.
   not additive*.
 - Both docks bind `usb-storage`, **not `uas`** — no command queueing. Fine for
   sequential bulk, weaker under concurrent random I/O.
-- **Bus 002 (the second 10 Gbps root hub) is now completely free** — the Ventoy
-  install SSD has been unplugged. That is the best home for anything that should
-  not contend with the docks.
+- ~~**Bus 002 is now completely free**~~ — **no longer true as of 2026-07-29
+  19:47.** A 4-port 5 Gbps hub now sits on bus 002 port 1 carrying an SD/microSD
+  card reader (`sda`/`sdb`, both empty) and the NS1066 320G enclosure. Bus 002 is
+  still the *uncontended-with-the-docks* bus, which is what mattered, but it is no
+  longer empty and the hub caps everything behind it at **5 Gbps shared**. If the
+  6TB is to get a clean path, it should go on a **bus 002 root port directly, not
+  behind that hub** — or the hub moves to bus 003 (480M, fine for a card reader).
 - SMART passthrough over these bridges is **partial**: `-d sat` returns the full
   attribute table, capability page and error/self-test logs, but the `SMART
   STATUS` command is rejected (`Incomplete response, ATA output registers
@@ -195,7 +225,14 @@ health data recorded for any of them.
 | **WDC WD10SPZX-21Z10T0**<br>`WD-WX91E575272W` | A0 | `E:` years archive `admin`, **664G, only online copy** | 28 796 (3.3 y) | 0 realloc / 0 events / 0 pending / 0 uncorr / 0 seek / 0 read-error — **cleanest surface in the pool** | **UDMA_CRC 144, age unknown** (see below); Start_Stop 91 599; Load_Cycle 122 818 |
 | **HGST HTS541010A9E680**<br>`670200210032` bay 1 | B1 | `H:` restic `immich-media-2024`, 650G; designated off-site copy | 27 816 (3.2 y) | 0 pending / 0 uncorr, **23 realloc events** (0 sectors) | **Load_Cycle 639 701 — past the ~600k typical rating**; Start_Stop 116 800; Power_Cycle 14 413; CRC 18 |
 | **ST1000LM024 HN-M101MBB**<br>`S2U5J9ECA34541` | A1 | `G:` restic `immich-media` + `immich-postgres`, 159G | 25 361 (2.9 y) | 0 realloc / 0 events / 0 pending / 0 uncorr / 0 seek; CRC 0 | **Most wear indicators in the pool**: `Raw_Read_Error_Rate` raw 1 578, `Calibration_Retry_Count` / `Load_Retry_Count` 897, `G-Sense_Error_Rate` 783, `Spin_Up_Time` normalised 089 (worst 076), **max-ever temp 63 °C**, Load_Cycle 342 862. Samsung Spinpoint M8 family with a weak field record |
-| **ST320LT020-9YG142**<br>`W047MMKS` | *(removed)* | `F:` `Public`, 177G — retired, shelved | 36 153 (4.1 y) | 0 realloc / 0 pending / 0 uncorr | 10 ATA errors but **newest at 13 478 h — 2.6 years stale**; `Reported_Uncorrect` 11 and `Command_Timeout` 299 both historical; past thermal excursion (`190 In_the_past`) |
+| **ST320LT020-9YG142**<br>`W047MMKS` | **NS1066 enclosure**, bus 002 | `F:` `Public`, 177G — **online, and it must stay online**, see §8.3 | 36 154 (4.1 y) | 0 realloc / 0 events / 0 pending / 0 uncorr; **CRC 0** | 10 ATA errors but **newest at 13 478 h — 2.6 years stale**; `Reported_Uncorrect` 11 and `Command_Timeout` 299 both historical; past thermal excursion (`190 In_the_past`, worst 042 vs thresh 045); Start_Stop 23 713, Load_Cycle 78 349 — **least head-parking wear in the pool** |
+
+> **Reading Seagate raws.** The ST320LT020 reports `Raw_Read_Error_Rate`
+> 150 830 712 and `Seek_Error_Rate` 17 853 537 044. Those are Seagate's packed
+> multi-field counters, not error counts — the raw value is meaningless and only
+> the normalised value carries information (117/099 against threshold 006, and
+> 082/060 against 030 — both healthy). The same applies to
+> `Hardware_ECC_Recovered`. Do not read these as 150 million read errors.
 
 ### What that table changes
 
@@ -291,6 +328,19 @@ against a 3 × 1TB backup pool (2.79 TB). Health data adds the ordering:
    independent of the layout choice.
 6. **Reserve bus 002 for the primary disk.** Both docks share bus 004; putting
    the primary there makes it contend with its own backup targets during copies.
+   Revised 2026-07-29: bus 002 now carries a 5 Gbps hub with a card reader and the
+   NS1066 enclosure, so the primary wants a bus 002 **root port**, not the hub
+   (§3).
+7. **Revision — the pool is five bays and the 320G is one of them** (§2). It no
+   longer has to go offline to free a dock slot, which was the only argument for
+   shelving it. Ordering becomes: WD10SPZX → HGST *(caveat above)* →
+   **ST320LT020** → ST1000LM024. The 320G ranks above the ST1000LM024 on measured
+   wear (least head-parking in the pool, CRC 0, scars 2.6 years stale) and below
+   the others only on capacity — 298G, 122G of it free.
+8. **The 320G's own contents are now the pool's most exposed data** (§8.3): two
+   restic repositories, 40G of irreplaceable video and key material, none of it
+   with a second copy. That outranks the consolidation question, because it is
+   fixable today and the consolidation is not.
 
 ## 6. Correction to an existing doc
 
@@ -314,6 +364,7 @@ the time. Backup of the original at `/etc/fstab.bak-20260729`.
 | `5A3014505F7576FA` | `/mnt/immich` | Kingston `nvme0n1p1` | `ro,noatime,uid=1000,gid=1000,iocharset=utf8,nofail` |
 | `EAA6CAAEA6CA7A99` | `/mnt/immich-2024` | Dock A0, `sdd2` | same + `x-systemd.device-timeout=60` |
 | `9CCED7D2CED7A2B6` | `/mnt/immich-backup` | Dock A1, `sde2` | same + `x-systemd.device-timeout=60` |
+| `6C28DD2C28DCF654` | `/mnt/public` | NS1066 enclosure, `sdc1` | same + `x-systemd.device-timeout=60` |
 
 Choices, and why:
 
@@ -342,10 +393,14 @@ CRC sweep on Dock A was in flight. Two open items:
    automount unit that mounts on first access. Dock B is the safe test bed: it is
    already powered off and shares nothing in flight with Dock A.
 
-Dock B's two volumes have **no entry yet** — the dock was off, so their UUIDs
-could not be read (the vanished devices are absent from the `blkid` cache too).
-A `TODO` block in `/etc/fstab` names the two drives, their intended mount points
-and the capture command.
+The fourth entry was added at 19:56 once the 320G reappeared in the NS1066
+enclosure (§2). Its comment block in `/etc/fstab` records the placeholder-serial
+caveat, because the obvious `usb-*` path is the wrong one to use there.
+
+**Only the HGST is still without an entry** — it is in Dock B, which is powered
+off, so its UUID cannot be read (vanished devices are absent from the `blkid`
+cache too). A `TODO` block in `/etc/fstab` names it, its intended mount point
+`/mnt/immich-2024-backup`, and the capture command.
 
 **Follow-up:** these lines were hand-typed into `/etc/fstab`, which is exactly the
 kind of state this repo exists to make survivable. They belong in a `provision/`
@@ -432,7 +487,7 @@ The useful distinction is different, and it is between **service** and **shelf**
 | Drive | Fit to shelve? | Fit for service? |
 |---|---|---|
 | **WD10SPZX** (A0) | yes | **yes — best in pool.** Cleanest surface; only fault is an interface counter |
-| **ST320LT020** (pulled) | yes | no, and irrelevant — 177G, already shelved with data intact |
+| **ST320LT020** (NS1066) | yes, but **must not be** | **yes, and it has to be** — least head-parking wear in the pool, and §8.3 shows what it holds |
 | **HGST HTS541010A9E680** (B1) | yes | **not for a role nobody inspects.** Past its ~600k load-cycle rating; the 23 realloc events are still unexplained |
 | **ST1000LM024** (A1) | yes | **no — first out of service.** The pool's only cluster of live wear indicators (§4) |
 
@@ -484,6 +539,73 @@ Concrete protocol for a shelved drive:
 
 **And the rule that outranks all of the above: a shelved drive is not a backup.**
 It is one copy, unverified, unmonitored, and its failure is discovered only at the
-moment it is needed. The 320G on the shelf is a *convenience* — a deferral of the
-decision about what its 177G contains — not protection. Anything that matters
-needs the 3-2-1 arrangement independently of what is on the shelf.
+moment it is needed. Anything that matters needs the 3-2-1 arrangement
+independently of what is on the shelf.
+
+### 8.3. Correction: shelving the 320G was wrong
+
+An earlier revision of this document, and the advice that produced it, called
+shelving the ST320LT020 **zero-risk** and described its 177G as "a deferral of the
+decision about what it contains." Both statements were made **without ever
+inspecting the contents.** With the drive back online in the NS1066 enclosure,
+`/mnt/public` holds:
+
+| Path | Size | What it is |
+|---|---|---|
+| `restic-repos/laptop-music` | *(part of 69G)* | **A live restic repository** — full `config`/`data`/`index`/`keys`/`snapshots` layout |
+| `restic-repos/wsl` | *(part of 69G)* | **A second live restic repository**, same layout |
+| `Настя Стас GoPro` | 40G | Personal video — irreplaceable |
+| `qb` | 60G | Downloads — replaceable |
+| `G614JV-Ubuntu-24.04.tar` | 9.9G | WSL distro export |
+| `secrets/` | 133K | **Private SSH keys** (`id_ed25519`, `id_rsa`), wifi credentials, `wsl-secrets-*.tar` |
+
+So the drive that was being retired holds **two backup repositories, key material,
+and 40G of irreplaceable video**, and it is 4.1 years old with no second copy of
+any of it. It is not a shelf candidate; it is an under-protected pool member.
+
+**The generalisable error is not about this disk.** It is that a shelf-vs-service
+judgement was made from SMART attributes alone, on a volume whose contents had
+never been listed. Health tells you whether a drive will survive; only the
+contents tell you what it costs if it doesn't. Inspect before deciding, in that
+order.
+
+Two consequences for the layout in §5:
+
+1. **`restic-repos` is 69G of backup data that §5's coverage picture did not know
+   existed.** Before it is counted as coverage it has to be verified —
+   `restic -r /mnt/public/restic-repos/<repo> snapshots` — because 69G of a
+   corrupt repository is 69G of false comfort. Until that runs, treat it as
+   unverified bytes.
+2. **`secrets/` needs a different answer from everything else.** It is 133K of
+   private keys sitting on an offline-until-today NTFS volume. It must not simply
+   be copied onto latitude's root, for the reason in §9.
+
+## 9. Standing hold: latitude's root is not encrypted
+
+`nvme1n1p3` is **plaintext ext4**. There are no `crypt` devices, `cryptsetup` is
+not even installed, and `cryptsetup isLuks` on the root partition returns false.
+The NixOS install this machine replaced had a **LUKS-encrypted root** — that
+property was lost in the Debian 13 reinstall, and neither the migration plan nor
+the harvest doc records the loss.
+
+This is a standing hold, not a task for today, but it constrains work now:
+
+- **Do not stage `secrets/` (private keys, wifi credentials) onto root.** Moving
+  key material from an offline drive to an always-on, unencrypted server root
+  increases exposure rather than reducing it. It needs an encrypted target, or
+  `age`/`gpg` encryption at rest, or to stay where it is until one exists.
+- The other categories — the Kingston's irreplaceable data, `restic-repos`, the
+  40G of video — carry no such constraint and are fine to stage on root.
+- latitude is becoming **the server**. Full-disk encryption on a machine that
+  holds the fleet's consolidated data is a decision that should be made
+  deliberately, not inherited by default from an installer.
+
+Supporting SSD health, since root is about to be leaned on:
+
+| Device | Role | POH | Written | Wear | Errors |
+|---|---|---|---|---|---|
+| KIOXIA KBG40ZNS512G | boot / root, 446G free of 453G | 14 019 | 35.0 TB | **12 % used** | 0, spare 100 % |
+| KINGSTON SNV2S1000G | `/mnt/immich`, 160G free of 932G | 20 467 | 11.8 TB | **1 % used** | 0, spare 100 % |
+
+Both healthy with ample endurance left. Root has room for every staging candidate
+at once (~119G excluding `secrets/`).
