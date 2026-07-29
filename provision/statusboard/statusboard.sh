@@ -234,6 +234,29 @@ sb_source_label() {
   esac
 }
 
+# sb_limit_line <percent> <charge_types>: the charge-ceiling row.
+#
+# A threshold the EC is not in the mode to honour is decoration, and printing it
+# bare is how this box charged to 94% under a displayed `limit 85%` for as long as
+# the limit existed — see tier_battery_limit in provision/lib/tiers.sh. Dell's EC
+# applies charge_control_* only in Custom mode, so the mode is part of the reading,
+# not context for it. The kernel brackets the active entry.
+#
+# An EC with no charge_types file at all is not suspect: nothing there says the
+# threshold is being ignored, so the row stays quiet. Only a mode that is present
+# AND is not Custom earns the warning.
+sb_limit_line() {
+  local pct="${1:-}" types="${2:-}"
+  [ -n "$pct" ] || return 0
+  if [ -z "$types" ] || [ "${types#*\[Custom\]}" != "$types" ]; then
+    printf 'limit     %s%s%%%s' "$C_DIM" "$pct" "$C_RST"
+    return 0
+  fi
+  printf 'limit     %s%s%%%s %s(not enforced: %s)%s' \
+    "$C_DIM" "$pct" "$C_RST" "$C_WARN" \
+    "$(printf '%s' "$types" | tr ' ' '\n' | grep '^\[' | tr -d '[]')" "$C_RST"
+}
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # Every measured row gets a second column: a one-line sparkline of that metric's
 # recent history, sized to whatever horizontal space the frame has left. The
@@ -1128,6 +1151,7 @@ sb_sample_fast() {
   SB_EF="$(_read "$BAT_DIR/energy_full")"
   [ -n "$SB_EF" ] || SB_EF="$(sb_uwatthours "$(_read "$BAT_DIR/charge_full")" "$b_volt")"
   SB_LIM="$(_read "$BAT_DIR/charge_control_end_threshold")"
+  SB_LIM_MODE="$(_read "$BAT_DIR/charge_types")"
   SB_SRC="$(sb_power_source)"
   SB_UP="$(awk '{ printf "%d", $1 }' /proc/uptime 2>/dev/null)"
   SB_LOAD="$(awk '{ print $1, $2, $3 }' /proc/loadavg 2>/dev/null)"
@@ -1232,7 +1256,7 @@ render_frame() {
   sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good '%'
   # Draw is activity, not condition: 40W into a charging battery is not an alarm.
   sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat W
-  [ -n "${SB_LIM:-}" ] && sb_row "$(printf 'limit     %s%s%%%s' "$C_DIM" "$SB_LIM" "$C_RST")"
+  [ -n "${SB_LIM:-}" ] && sb_row "$(sb_limit_line "$SB_LIM" "${SB_LIM_MODE:-}")"
   sb_row ""
 
   # No chart. The series is binary, so at a ceiling of 1 every cell was the top

@@ -145,6 +145,31 @@ eq "$(sb_source_label '' '')" 'USB-C ?W' \
 eq "$(printf '%s' "$(sb_source_label '' 'C [PD] PD_PPS')" | grep -c '0W')" '0' \
   'source: an unknown rating never renders as 0W'
 
+# ── Charge limit ──────────────────────────────────────────────────────────────
+# A threshold the EC is not in the mode to honour is decoration. This box charged
+# to 94% under a displayed `limit 85%`, so the mode is part of the reading.
+
+OUT="$(sb_limit_line 85 'Trickle Fast Standard Adaptive [Custom]')"
+has "$OUT" '85%' 'limit: Custom mode shows the ceiling'
+eq "$(printf '%s' "$OUT" | grep -c 'not enforced')" '0' \
+  'limit: Custom mode adds no warning'
+
+OUT="$(sb_limit_line 85 'Trickle [Fast] Standard Adaptive Custom')"
+has "$OUT" '85%'          'limit: an unenforced ceiling still shows the number'
+has "$OUT" 'not enforced' 'limit: a mode that is not Custom is called out'
+has "$OUT" 'Fast'         'limit: the warning names the mode actually in force'
+
+# No charge_types file at all says nothing about enforcement, so it must not
+# manufacture an alarm — plenty of ECs honour the threshold directly.
+OUT="$(sb_limit_line 85 '')"
+has "$OUT" '85%' 'limit: absent charge_types still shows the ceiling'
+eq "$(printf '%s' "$OUT" | grep -c 'not enforced')" '0' \
+  'limit: absent charge_types raises no warning'
+
+# No threshold, no row.
+eq "$(sb_limit_line '' 'Trickle [Fast] Standard')" '' \
+  'limit: no threshold renders nothing at all'
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # The chart column is the reason the frame is now laid out in two passes, so the
 # padding maths is asserted as hard as the glyph maths: a one-cell error in either
