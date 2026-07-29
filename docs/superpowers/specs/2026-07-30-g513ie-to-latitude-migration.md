@@ -528,3 +528,201 @@ repos.
    dotfiles branch (§4) — still not done, and the same "no other home" logic that
    made §17 urgent applies to them.
 6. Decommission only after a restore verification passes.
+
+---
+
+## 19. Execution log, 2026-07-30 02:00–02:20 — the service side, from zero
+
+Part II above measured the *data*. This section is the *service* side, which
+turned out to be at zero on latitude, and the correction that matters most for
+anyone resuming: **§12's "immich is already on latitude" was a statement about
+bytes, not about a running service.** latitude had no Docker at all.
+
+### 19.1 Docker CE on latitude
+
+`docker: command not found`. Debian 13 trixie, so the official Docker CE repo,
+not `docker.io` — the immich and telegrind compose files need Compose v2+ as a
+plugin.
+
+Two failures worth recording, both mine, both the same shape — a `set -e`
+script whose earlier step silently didn't happen:
+
+1. `sudo: gpg: command not found` — trixie's minimal install has no `gnupg`.
+   `apt-get install gnupg` first.
+2. `E: Package 'docker-ce' has no installation candidate` while
+   `dists/trixie/stable/binary-amd64/Packages.gz` served **237 packages**. The
+   repo was fine; my second attempt had dropped the `tee
+   /etc/apt/sources.list.d/docker.list` line while fixing the first failure.
+   *A repo that answers `HTTP 200` and an apt that reports "no candidate" means
+   apt is not reading your list file — check the file exists before you doubt
+   the repo.*
+
+Landed: Docker `29.6.2`, Compose `v5.3.1`, service `enabled` + `active`,
+`me` in the `docker` group.
+
+### 19.2 The docker payload, exported and three-way verified
+
+All 20 containers were confirmed `restart=no` and stopped first — three had
+exited "5 minutes ago" (a Docker Desktop restart brought them briefly up), so
+the check was re-run rather than trusted from the earlier session.
+
+Named volumes, measured (`du -sk` / `find -type f`):
+
+| Volume | KB | Files | Verdict |
+|---|---|---|---|
+| `telegrind_pgdata` | 56152 | 987 | **live** |
+| `embedthat_redis_data` | 1316 | 1 | **live** |
+| `embedthat-bot_redis_data` | 1244 | 1 | stale — no container mounts it |
+| `jellyseerr_jellyseerr-data` | 328 | 9 | stale |
+| `jellyseerr-data` | 328 | 9 | stale |
+| `tugtainer_tugtainer_data` | 56 | 2 | **live** |
+| `telegrind_weights` | 4 | 0 | empty |
+| `forgejo_data` | 4 | 0 | empty |
+| `forgejo_forgejo_data` | 3792 | 26 | dropped by user decision |
+
+The jellyseerr pair are both stale because **jellyseerr's config is a bind
+mount, not a volume** — `D:/Media/config/jellyseerr`. Same for every arr. See
+§19.4; this is the finding that reframed the whole migration.
+
+Exported anyway (all six non-empty), `tar` from a helper container with the
+volume `:ro`, then g513ie → Mac → latitude. **sha256 identical on all three
+hosts for all six tars.** Byte counts matched the Windows-side listing exactly.
+
+### 19.3 `telegrind_pgdata` restored without writing to g513ie
+
+The plan of record was "start the container, `pg_dumpall`". That was
+unnecessary: `telegrind-postgres-1` had **`Exited (0)`** — a clean shutdown —
+so the raw data directory is self-consistent and portable to the same major
+version. The raw tar was already three-way verified, which is a stronger
+guarantee than a dump comparison, and it means **no write ever happened on
+g513ie.**
+
+Restored into a native `telegrind_pgdata` volume on latitude: 987 files, matching
+source. `postgres:15` started against it:
+
+```
+LOG:  database system was shut down at 2026-07-28 20:21:23 UTC
+LOG:  database system is ready to accept connections
+```
+
+No crash recovery. Contents: `chat` 62 rows, `file` 1 row, `alembic_version` at
+`2700e0b3a8b6`.
+
+**Gotcha:** `pg_stat_user_tables.n_live_tup` read `0` for all three tables while
+`alembic_version` demonstrably held a row. Copied clusters carry stale/reset
+statistics. Use `count(*)` to verify a restore, never `n_live_tup`.
+
+### 19.4 The real finding: the whole media stack was already on latitude
+
+`docker inspect` across every remaining container showed that **almost nothing
+lived in Docker at all.** Every arr, jellyfin, jellyseerr, qbittorrent, and
+immich_postgres binds its config from `D:` — the NVMe that is now latitude's
+`/mnt/immich`:
+
+| Bind source on g513ie | Now at | Size |
+|---|---|---|
+| `D:/Media/config/{bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,radarr,sonarr,whisparr}` | `/mnt/immich/Media/config/*` | 506 MB |
+| `D:\ImmichMedia\library` | `/mnt/immich/ImmichMedia/library` | 244 GB |
+| `D:\ImmichMedia\postgres` | `/mnt/immich/ImmichMedia/postgres` | 803 MB |
+| `E:\admin\{1970,2007..2024}` | `/mnt/immich-2024/admin/*` (sdd2) | — |
+| `C:\Users\methe\my\vps\homeserver\beat\*` | repo checkout, §19.5 | — |
+| `F:/restic-repos` | still on g513ie's F: | — |
+
+So `E:` is `/mnt/immich-2024` and `D:` is `/mnt/immich`. Nothing to transfer;
+everything to *re-point*.
+
+**Security slip, recorded:** `docker inspect --format '{{.Config.Image}} |
+{{.Config.Env}}'` on `telegrind-postgres-1` printed live `BOT_TOKEN`,
+`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, and `POSTGRES_PASSWORD` into the session
+transcript. Ask for `{{.Config.Image}}` alone. The Anthropic key and the
+Telegram bot token want rotating.
+
+### 19.5 Repos and prod config, in place
+
+Four repos cloned to `~/my` at the **same commits** g513ie had: `embedthat`
+`c8dddb8`, `skep` `a2f258d`, `telegrind` `ffce27a`, `vps` `969d3f3`. GitHub auth
+on latitude resolves to `metheoryt` via the default `~/.ssh/id_ed25519` (there
+is no per-account alias on this host — see global memory).
+
+`rsync -a ~/g513ie-prod-config/ ~/my/` dropped all 19 harvested files into their
+gitignored slots. **All 19 `cmp`-identical**, modes preserved at 600.
+`embedthat` and `telegrind` are clean; `skep` and `vps` show
+`?? .claude/settings.local.json` — those repos don't gitignore that path, and
+didn't on g513ie either. Untracked, harmless, but `git add -A` in either repo
+would stage a credential file.
+
+### 19.6 immich: the cluster is off NTFS, and the library decision
+
+`postgres` cannot run off `ntfs3`. It needs `uid 999` ownership and mode `700`,
+which a `uid=1000,gid=1000` NTFS mount cannot express. So the cluster was
+copied *out* of the read-only bind into a native volume, source never mounted rw:
+
+```sh
+docker volume create immich_pgdata
+docker run --rm -v /mnt/immich/ImmichMedia/postgres:/src:ro -v immich_pgdata:/v alpine \
+  sh -c 'cd /src && tar -cf - . | (cd /v && tar -xf -)'
+docker run --rm -v immich_pgdata:/v alpine sh -c 'chown -R 999:999 /v && chmod 700 /v'
+```
+
+`PG_VERSION` 14, **1937 entries — matching `postgres-prerecovery-20260730.tar`
+exactly**. Crash recovery will now happen on the ext4 copy, leaving the NTFS
+original as a second pristine fallback on top of the tar.
+
+`compose.yml` also needs three host-specific corrections before first start —
+latitude has an Intel iGPU, not the RTX 3050 Ti:
+
+- `immich-server` `extends: service: nvenc` → `quicksync`
+- `immich-machine-learning` `extends: service: openvino`, image suffix
+  `-cuda` → `-openvino`
+- per-year `${LOCATION_*}` binds should be explicitly `:ro` — immich indexes
+  those external libraries, it does not write them
+
+`/dev/dri/{card0,renderD128}` are present, so `quicksync`/`openvino` will bind.
+`compose.override.yml` is **not** gitignored in `vps`, and `extends` cannot be
+retargeted from an override anyway, so these go in `compose.yml` itself —
+legitimate, since `homeserver/` in that repo describes this host and this host
+is now latitude.
+
+### 19.7 Decision: reformat nvme0n1p1 to ext4, carry 732 GB
+
+`UPLOAD_LOCATION` must be writable, and the 244 GB library is the only fresh
+copy. Three options were put to the user; they chose the reformat, and then
+chose to carry the media across.
+
+`/mnt/immich` (nvme0n1p1, NTFS, `5A3014505F7576FA`), 773 GB used:
+
+| Path | Size | Fate |
+|---|---|---|
+| `ImmichMedia/library` | 244 G | carry — irreplaceable |
+| `ImmichMedia/postgres` | 803 M | already on ext4 (§19.6) |
+| `Media/config` | 506 M | carry — irreplaceable |
+| `Media/tv` + `Media/xxx` | 0.6 G | carry |
+| `Media/movies` | 249 G | carry |
+| `Media/torrents` | 238 G | carry |
+| `Media/qb-incomplete` | 41 G | **drop** — in-progress downloads |
+
+`movies` and `torrents` are near-duplicate content stored twice: only **13**
+files in `movies` have `st_nlink > 1`, so the arr stack copied rather than
+hardlinked. 528 GB of `Media` for ~290 GB of distinct content. Worth fixing
+after the move, not during it.
+
+Also on hand, and not a substitute for care: `/mnt/immich-backup` (sde2) holds
+two genuine **restic** repos — `immich-media` 158 GB and `immich-postgres`
+474 MB — roughly four weeks stale.
+
+Sequence:
+
+1. **Stage the irreplaceable 245.5 GB** to `~/immich-stage/` on ext4 root
+   (315 GB free → 70 GB margin). Source stays `ro`. Running at ~1 GB/s
+   NVMe-to-NVMe, 135560 files.
+2. Verify that stage with `rsync -ac` — content, not byte counts. This is the
+   only leg that gets a checksum pass; it is the leg that cannot be re-created.
+3. Remount `/mnt/immich-backup` **rw** by UUID `9CCED7D2CED7A2B6` and stage
+   `movies` + `torrents` (487 GB) there. Size+mtime verify only.
+4. `mkfs.ext4` on nvme0n1p1 — **the point of no return.** Gated on 2 and 3.
+5. New fstab entry by the new UUID, never `/dev/nvme0n1p1`.
+6. Copy 732 GB back; verify.
+7. Start immich; then the arr stack.
+
+**No source directory is deleted at any point before its copy is verified, and
+`mkfs` is the first irreversible step in the whole migration.**
