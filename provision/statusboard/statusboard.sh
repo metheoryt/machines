@@ -491,6 +491,17 @@ sb_pad() {
   printf '%s%s' "$s" "$pad"
 }
 
+# sb_lpad <string> <width>: pad on the LEFT to a visible width. The unit column is
+# flush right, which gives the frame a straight right edge and — because the widest
+# label ends the line — leaves no trailing whitespace on any row.
+sb_lpad() {
+  local s="${1:-}" w="${2:-0}" vis pad=""
+  vis="$(sb_vislen "$s")"
+  case "$w" in '' | *[!0-9]*) w=0 ;; esac
+  while [ "$vis" -lt "$w" ]; do pad="$pad "; vis=$((vis + 1)); done
+  printf '%s%s' "$pad" "$s"
+}
+
 # sb_trim <string> <width>: keep a row inside the frame. Only uncharted rows can
 # exceed the width (charted ones are padded to a computed column), and one that does
 # WRAPS — which on a repainting full-screen frame makes the whole display walk up
@@ -735,13 +746,19 @@ sb_cols() {
   printf '%s' "$c"
 }
 
-# sb_chart_width <cols> <textwidth>: cells left for the chart column, or 0 when
-# there is not enough room to be worth it. A chart under 8 cells wide is noise.
+# sb_chart_width <cols> <textwidth> [reserve]: cells left for the chart column, or 0
+# when there is not enough room to be worth it. A chart under 8 cells wide is noise.
+#
+# <reserve> is whatever sits to the RIGHT of the charts — the unit column. It has to
+# be subtracted here rather than trimmed later: a chart sized to the full width and
+# then followed by a label is a chart one label too wide, and on a repainting frame
+# a row that wraps walks the whole display up the screen.
 sb_chart_width() {
-  local cols="${1:-0}" textw="${2:-0}" w
+  local cols="${1:-0}" textw="${2:-0}" reserve="${3:-0}" w
   case "$cols" in '' | *[!0-9]*) printf '0'; return ;; esac
   case "$textw" in '' | *[!0-9]*) printf '0'; return ;; esac
-  w=$((cols - textw - 3))
+  case "$reserve" in '' | *[!0-9]*) reserve=0 ;; esac
+  w=$((cols - textw - 3 - reserve))
   [ "$w" -ge 8 ] || w=0
   # The ceiling is in CELLS, not samples: with a fold factor of k the history holds
   # SB_HIST_CAP/k cells, and comparing a cell count against a sample count would let
@@ -1156,22 +1173,25 @@ sb_sample_slow() {
 # widest row in the frame, and that width is not knowable until every row exists —
 # which is also what keeps the chart column aligned as values change width
 # ("41.4W ~0h26m to full" one frame, "5.2W" the next).
-SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=()
+SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=(); SB_ROW_UNIT=()
 
-# sb_row <text> [series-csv] [chart-max] [polarity]: queue one row. No series means
-# no chart (headings, blank separators, and the flat rows where a chart would say
-# nothing). Polarity is which end of the chart is the bad end — see sb_heat_color.
+# sb_row <text> [series-csv] [chart-max] [polarity] [unit]: queue one row. No series
+# means no chart (headings, blank separators, and the flat rows where a chart would
+# say nothing). Polarity is which end of the chart is the bad end — see
+# sb_heat_color. Unit is the label printed to the right of the chart: one column
+# carrying six different metrics needs to say which is which, per row, where the eye
+# already is.
 sb_row() {
   SB_ROW_TEXT+=("$1"); SB_ROW_SERIES+=("${2:-}"); SB_ROW_MAX+=("${3:-100}")
-  SB_ROW_POL+=("${4:-hi-bad}")
+  SB_ROW_POL+=("${4:-hi-bad}"); SB_ROW_UNIT+=("${5:-}")
 }
 
 render_frame() {
-  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=()
+  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=(); SB_ROW_UNIT=()
 
-  sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good
+  sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good '%'
   # Draw is activity, not condition: 40W into a charging battery is not an alarm.
-  sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat
+  sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat W
   [ -n "${SB_LIM:-}" ] && sb_row "$(printf 'limit     %s%s%%%s' "$C_DIM" "$SB_LIM" "$C_RST")"
   sb_row ""
 
@@ -1186,10 +1206,10 @@ render_frame() {
   # series is scaled in: a LAN gateway over 5ms is odd, over 20ms is wrong.
   [ -n "${SB_GW_ST:-}" ] && sb_row "$(printf 'gateway  %s  %s%s %s%s%s' "$(sb_status_glyph "$SB_GW_ST")" \
     "$C_DIM" "$SB_LAN_GW" "$(sb_hi_colour "$(sb_rtt_tenths "${SB_GW_RTT:-}")" 50 200)" \
-    "${SB_GW_RTT:-}" "$C_RST")" "$SER_GW" "$SB_MAX_GW"
+    "${SB_GW_RTT:-}" "$C_RST")" "$SER_GW" "$SB_MAX_GW" hi-bad ms
   sb_row "$(printf 'internet %s  %s%s%s' "$(sb_status_glyph "$SB_NET_ST")" \
     "$(sb_hi_colour "$(sb_rtt_tenths "${SB_NET_RTT:-}")" 500 2000)" "${SB_NET_RTT:--}" "$C_RST")" \
-    "$SER_NET" "$SB_MAX_NET"
+    "$SER_NET" "$SB_MAX_NET" hi-bad ms
   if [ "${SB_TS_ST:-}" = up ]; then
     # Scaled against the peer TOTAL, so a full chart means "the whole fleet was
     # up" and a dip means peers dropped — not just "some number of peers".
@@ -1199,9 +1219,9 @@ render_frame() {
     [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null && ts_col="$C_WARN"
     sb_row "$(printf 'tailnet  %s  %s%s  %s%s/%s peers online%s' "$(sb_status_glyph up)" \
       "$C_DIM" "$SB_TS_IP" "$ts_col" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
-      "$SER_TS" "${SB_TS_TOTAL:-1}" hi-good
+      "$SER_TS" "${SB_TS_TOTAL:-1}" hi-good peers
   else
-    sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1 hi-good
+    sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1 hi-good peers
   fi
   sb_row ""
 
@@ -1211,7 +1231,7 @@ render_frame() {
   load1="$(awk '{ printf "%d", $1 * 100 }' /proc/loadavg 2>/dev/null)"
   [ -n "$load1" ] && load_col="$(sb_hi_colour "$load1" $((SB_NCPU * 100)) $((SB_NCPU * 200)))"
   sb_row "$(printf 'uptime    %s%s%s   load %s%s%s' "$C_DIM" "$(sb_secs_to_hm "$SB_UP")" "$C_RST" \
-    "$load_col" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100))
+    "$load_col" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100)) hi-bad load
   sb_row ""
 
   # Two passes over the mount list: the bar lengths are relative to the LARGEST disk
@@ -1228,7 +1248,7 @@ render_frame() {
   while IFS='|' read -r d_dev d_mnt _ d_total d_pct d_state; do
     [ -n "$d_mnt" ] || continue
     sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}")" \
-      "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat
+      "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat MB/s
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
   # box, so it gets a row of its own rather than silently missing from the list.
@@ -1246,14 +1266,18 @@ render_frame() {
   # long, so the "not mounted" list of six disks cannot squeeze the chart column for
   # every other row (it did: 107 columns of text left 10 cells of chart on a 120-col
   # console after the font was doubled).
-  local i vis textw=0 chartw cols
+  local i vis textw=0 unitw=0 chartw cols
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
     [ -n "${SB_ROW_SERIES[i]}" ] || continue
     vis="$(sb_vislen "${SB_ROW_TEXT[i]}")"
     [ "$vis" -gt "$textw" ] && textw="$vis"
+    # The unit column is as wide as its widest label, so the labels line up as a
+    # column instead of ragging along the right edge of the charts.
+    vis="${#SB_ROW_UNIT[i]}"
+    [ "$vis" -gt "$unitw" ] && unitw="$vis"
   done
   cols="$(sb_cols "$SB_ISTTY")"
-  chartw="$(sb_chart_width "$cols" "$textw")"
+  chartw="$(sb_chart_width "$cols" "$textw" $((unitw > 0 ? unitw + 1 : 0)))"
 
   # Header. The span marker is not decoration: the same picture is 20 minutes at
   # the tty1 interval and over an hour in the tmux window.
@@ -1287,19 +1311,16 @@ render_frame() {
       # No C_DIM wrapper any more: the chart carries its own per-level colour and
       # resets itself. SGR 2 composed with a 38;2 foreground is terminal-dependent
       # — foot dims it, others drop one of the two — so the two never overlap.
-      printf '%s   %s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
+      # The unit label rides at the right edge of the chart, padded to the column
+      # width so it reads as a column. It is what a chart column carrying six
+      # different metrics needs to be readable: the label sits where the eye already
+      # is, rather than in a legend at the bottom that has to be looked up.
+      printf '%s   %s %s%s%s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
         "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "$(sb_fold "$SB_K" "${SB_ROW_SERIES[i]}")" \
-          "${SB_ROW_POL[i]}")"
+          "${SB_ROW_POL[i]}")" \
+        "$C_DIM" "$(sb_lpad "${SB_ROW_UNIT[i]}" "$unitw")" "$C_RST"
     fi
   done
-
-  # A legend, because one chart column carrying six different units is not
-  # self-explanatory — "I don't get what the tailnet chart shows" was a real
-  # question about a real chart. Printed rather than queued as a row: it must not
-  # count towards the text column it sits under, and it is only true when there are
-  # charts at all.
-  [ "$chartw" -gt 0 ] && printf '\n%scharts   battery %%   draw W   rtt ms   peers online   load   disk MB/s%s\n' \
-    "$C_DIM" "$C_RST"
   return 0
 }
 

@@ -219,12 +219,26 @@ eq "$(sb_chart_width 0 60)"   '0'  'chart_width: no terminal width means no char
 eq "$(sb_chart_width 4000 60)" "$((SB_HIST_CAP / SB_K))" 'chart_width: capped at the history depth in cells'
 eq "$(SB_K=1 SB_HIST_CAP=400 sb_chart_width 4000 60)" '400' 'chart_width: unfolded, the ceiling is the raw cap'
 eq "$(SB_K=30 SB_HIST_CAP=6000 sb_chart_width 4000 60)" '200' 'chart_width: at k=30 a 6000-sample history is 200 cells'
+# The unit column is subtracted BEFORE the chart is sized. A chart sized to the full
+# width and then followed by a label is a chart one label too wide, and a row that
+# wraps walks the whole repainting frame up the screen.
+eq "$(sb_chart_width 120 60 6)" '51' 'chart_width: the unit column is reserved out of the chart'
+eq "$(sb_chart_width 120 60)"   '57' 'chart_width: no reserve is the old behaviour'
+eq "$(sb_chart_width 120 60 junk)" '57' 'chart_width: a non-numeric reserve is treated as none'
+eq "$(sb_chart_width 80 62 8)"  '0'  'chart_width: the reserve can take the chart below the 8-cell floor'
 # The depth must cover a full screen of folded cells, or a 5m chart silently shows
 # a fraction of its width.
 [ "$SB_HIST_CAP" -ge $((200 * SB_K)) ] \
   && pass 'cap: the history holds at least 200 cells at the configured fold' \
   || fail 'cap: the history is too shallow for the fold factor'
 eq "$SB_CELL_SECS" "$((SB_K * PROBE))" 'cell: the displayed duration is derived from k, not from --cell'
+
+# sb_lpad: the unit column is flush right.
+eq "$(sb_lpad ab 5)" '   ab' 'lpad: pads on the left'
+eq "$(sb_lpad abcde 5)" 'abcde' 'lpad: an exact fit is untouched'
+eq "$(sb_lpad abcdef 3)" 'abcdef' 'lpad: never truncates'
+eq "$(sb_lpad '' 3)" '   ' 'lpad: an empty label still holds its column'
+eq "$(sb_vislen "$(sb_lpad "$(printf '\033[32mab\033[0m')" 5)")" '5' 'lpad: counts visible cells, not escapes'
 
 # sb_trim: an uncharted row longer than the frame would wrap, and a wrapped row
 # scrolls the entire repainting display.
@@ -579,7 +593,18 @@ bat_len="$(printf '%s\n' "$OUT" | awk '/^battery /{ print length($0); exit }')"
 [ -n "$lan_len" ] && [ -n "$bat_len" ] && [ "$lan_len" -lt "$bat_len" ] \
   && pass 'layout: the lan row has no chart' \
   || fail "layout: lan should be uncharted (lan=$lan_len charted=$bat_len)"
-has "$OUT" 'charts   battery %' 'layout: a legend names what each chart plots'
+# The legend is a per-row COLUMN at the right edge, not a footer: one chart column
+# carrying six metrics has to say which is which where the eye already is.
+has "$OUT" ' peers' 'layout: the tailnet chart is labelled'
+has "$OUT" ' MB/s'  'layout: the disk charts are labelled'
+has "$OUT" ' load'  'layout: the load chart is labelled'
+has "$OUT" ' ms'    'layout: the latency charts are labelled'
+# Flush right, so the frame has a straight right edge — and because the widest label
+# ends its line, no row carries trailing whitespace.
+eq "$(printf '%s\n' "$OUT" | grep -c ' $')" '0' 'layout: no row ends in whitespace'
+# Every charted row's label sits in the same column, or it is not a column.
+eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
+  'layout: the unit column ends every charted row at the same place'
 # A whole disk row, end to end: bar, percentage, size. Asserted as a shape rather
 # than a literal so the fields can be reordered without a false failure, and as a
 # COUNT so a frame that lost its disk block cannot pass.
