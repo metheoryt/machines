@@ -631,15 +631,18 @@ has an executor — so the manifest promises more than provisioning delivers.
   0 offline-uncorrectable), and its 10 logged ATA errors are all ≥2.6 years stale
   (newest at 13 478 h against 36 153 h now).
 
-- **The 6TB that replaced it is a different drive than expected, and its
-  provenance is an open question (2026-07-29).** Expected a WD Purple
-  `WD63PURZ`; the disk now seated in dock B bay 0 is an **HGST Ultrastar
-  `HUS726060ALE611`** with **74 485 power-on hours (8.5 years)** — an
-  out-of-warranty ex-datacenter drive. Its surface measures clean (0 reallocated,
-  0 pending, 0 uncorrectable, empty ATA error log), so this is a provenance and
-  remaining-life decision, not a defect one. **Whether to return it depends on
-  what the listing actually advertised**, which SMART cannot answer: sold as new
-  → mis-shipment; sold as recertified at a recert price → the drive is what was
-  sold. The 22-hour `badblocks` burn-in is **on hold** pending that answer rather
-  than cancelled. Evidence and layout consequences:
-  `../specs/2026-07-29-storage-pool-hardware-baseline.md`.
+- **The 6TB that replaced it is a relabelled drive and is going back
+  (2026-07-29).** Bought as a new WD Purple `WD63PURZ`, and the chassis carries a
+  WD Purple sticker — but the disk seated in dock B bay 0 reports
+  **`HUS726060ALE611`** (HGST Ultrastar 7K6000, 2015-era enterprise nearline)
+  with **74 485 power-on hours / 74 419 head-flying-hours — 8.5 years** and
+  3.02 PB written. Confirmed from four independent sources including the kernel's
+  SCSI inquiry and the WWN's Hitachi `000cca` OUI, where a genuine Purple would
+  show WD's `0014ee`. Its surface is clean (0 reallocated, 0 pending, 0
+  uncorrectable, empty error log) and the firmware was *not* tampered with — the
+  fraud is a sticker over an untouched old disk. The 22-hour `badblocks` burn-in
+  is **cancelled**, not deferred: it cannot change the outcome and it spends the
+  return window. **Consequence for planning: there is currently no 6TB.** The
+  Kingston-to-ext4 conversion (§5d stage 2) and the whole consolidation stay
+  blocked until a replacement lands. Evidence, dispute artefacts and layout
+  consequences: `../specs/2026-07-29-storage-pool-hardware-baseline.md`.

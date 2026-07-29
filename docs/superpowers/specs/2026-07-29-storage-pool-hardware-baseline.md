@@ -29,19 +29,41 @@ Delivered and now seated in Dock B bay 0:
 | Power_Cycle_Count | 44 |
 | Start_Stop_Count | 133 |
 | Load_Cycle_Count | 1046 |
-| Total_LBAs_Written | raw 5 904 970 852 764 — **~3.0 PB *if* 512-byte units (unit-unverified, see below)** |
-| Total_LBAs_Read | raw 6 962 299 994 736 — **~3.6 PB, same caveat** |
+| Logical Sectors Written | 5 904 970 852 764 → **3.02 PB** (unit defined by the devstat log, see below) |
 | Newest self-test in log | **8852 hours** — i.e. ~65 600 hours / 7.5 years ago |
 
-> **The petabyte figures are not confirmed.** smartctl reports this drive as
-> `Not in smartctl database 7.3/5528`, so it has no vendor decode for attribute
-> 241/242 and the raw value is uninterpreted. HGST/Hitachi firmware has used
-> several units for these (512-byte LBAs, sectors, GiB). Reading them as 512-byte
-> LBAs yields ~3.0 PB written, i.e. 11.3 MB/s sustained across the drive's whole
-> life — plausible for nearline duty, which is weak corroboration rather than
-> confirmation. **The load-bearing number is the 74 485 power-on hours**, which is
-> unambiguous and needs no vendor decode. Treat the petabytes as supporting colour
-> and do not build an argument on them.
+### The identity and the age are corroborated four independent ways
+
+This matters because the drive carries a physical **WD Purple sticker** and was
+sold as new (§1.1), so the evidence had to be strong enough to dispute a sale.
+No single source is being trusted:
+
+| Source | Reports |
+|---|---|
+| Kernel SCSI inquiry — `/sys/block/sdf/device/model` | `HUS72606` `0ALE611`, rev `0015` — read by the kernel, no smartctl involvement |
+| `lsblk` | `HUS726060ALE611  NAGUNU1X  5.5T  0x5000cca242cbab63` |
+| **WWN `0x5000cca242cbab63`** | OUI **`000cca` = Hitachi Global Storage Technologies**, burned in at manufacture. WD's own OUI is `0014ee`. |
+| SMART vendor attributes | POH 74 485, Power_Cycle 44, Load_Cycle 1046 |
+| **ACS Device Statistics log** (a separate log page from the vendor attributes) | Power-on Hours **74 485** · **Spindle Motor Power-on Hours 74 419** · **Head Flying Hours 74 419** · Head Load Events 1046 · Lifetime Power-On Resets 44 · Logical Sectors Written 5 904 970 852 764 |
+
+Two consequences:
+
+- **`Head Flying Hours 74 419` is the decisive figure.** It is not a
+  reinterpretable counter — the platters physically spun under flying heads for
+  74 419 hours, 8.49 years. Every counter across two independent log pages agrees
+  to the hour, which also means SMART was *not* tampered with. Whoever sold this
+  drive did not bother faking the firmware; they applied a label.
+- **The earlier "unit-unverified" caveat on the petabyte figure is resolved.** It
+  was raised because vendor attribute 241 has no decode for this model (the drive
+  is `Not in smartctl database 7.3/5528`). But the Device Statistics log's
+  *Logical Sectors Written* is a standardised ACS field with defined units, and
+  the drive reports 512-byte logical sectors. 5 904 970 852 764 × 512 = **3.02 PB
+  written**, confirmed rather than inferred — 11.3 MB/s sustained across the
+  drive's whole life, ~356 TB/yr, inside the 7K6000's 550 TB/yr rating.
+
+`hdparm -I` returns nothing through these USB bridges — hdparm has no SCSI-ATA
+translation layer, unlike smartctl's `-d sat`. Not a gap in the evidence, just a
+tool that does not apply here.
 
 It is a different product line from a different era. HGST was absorbed by WD, so
 "WD" is not strictly wrong, but the Ultrastar 7K6000 is an enterprise
@@ -73,26 +95,48 @@ Zero reallocated sectors, zero pending, zero uncorrectable and an empty ATA erro
 log after 8.5 years is a healthy platter set. Whatever this drive did, it was not
 abused.
 
-### Conclusion on this drive — conditional on what the listing said
+## 1.1. Conclusion: the drive is relabelled, and it goes back
 
-**The open question is provenance, and it cannot be settled from the disk.**
-SMART establishes *what the drive is* and *how long it ran*; it cannot establish
-what was advertised. Two readings, discriminated by the listing and price, not by
-any further measurement:
+Confirmed with the buyer 2026-07-29: it was **bought as new**, and **the physical
+drive carries a WD Purple sticker.** That resolves what SMART alone could not.
 
-- **Sold as a new WD Purple `WD63PURZ`** → this is a mis-shipment or a
-  misrepresented sale. Return or dispute it. A new drive with a 3-year warranty
-  and ~0 hours is not substitutable by an out-of-warranty 8.5-year pull, however
-  clean it measures.
-- **Sold as recertified / renewed / used enterprise, at a price reflecting that**
-  → the drive is what was sold, and keep-or-return becomes an ordinary value
-  judgement. A clean 8.5-year Ultrastar is a genuinely reasonable *bulk media*
-  disk; empirical failure curves still rise steeply past year six, so it is a bad
-  *only* disk.
+A genuine WD Purple 6TB reports a `WDC WD63PURZ-…` model string and a WWN under
+WD's `0014ee` OUI. This drive reports `HUS726060ALE611` under Hitachi's `000cca`
+OUI, from four independent sources including the kernel's own SCSI inquiry. Those
+are different products from different production lines — WD Purple is a
+consumer surveillance line; the Ultrastar 7K6000 is a 2015-era enterprise nearline
+drive. No rebadging explains it.
 
-Either way the constraint in §5 holds: this disk was about to become the primary
-home for ~1.5–2 TB of consolidated data, and at 8.5 years it must not be the sole
-copy of anything.
+**So the label is fake or transplanted, and this is a misrepresented sale.** The
+remedy is a return or chargeback, not a burn-in. Note also what was *not* faked:
+every counter agrees across two independent log pages, so the seller did not
+touch the firmware — the fraud is a sticker over an untouched 8.5-year-old disk.
+
+**Do not run the 22-hour `badblocks` on it.** It cannot change the outcome —
+identity and 74 419 head-flying-hours already decide it — and it spends a day of
+the return window.
+
+### Evidence to keep, if the sale is disputed
+
+- The four-source identity table above, plus the raw `smartctl -d sat -i -A -l
+  devstat` output.
+- **The sticker's serial against the firmware's `NAGUNU1X`.** This is the
+  strongest single artefact. WD serials are `WD-`/`WX`-prefixed — the genuine WD
+  drive in this same pool reads `WD-WX91E575272W`. `NAGUNU1X` is HGST format. If
+  the sticker shows a WD-format serial, the label demonstrably belongs to a
+  different physical drive.
+- WD's warranty-check page against the sticker serial: a genuine `WD63PURZ`
+  returns the product and a warranty end date. An error, or a different model,
+  shows the serial is fabricated.
+- Photographs of the sticker (look for re-application tells — bubbles,
+  misalignment, adhesive residue, wrong font) alongside the SMART output.
+
+### If it is kept anyway
+
+Should the dispute fail and the drive be kept, it is *functional* — clean surface,
+no logged errors, and enterprise drives that reach 8.5 years with zero
+reallocations often keep going. It would then be a **bulk-media and staging disk
+only**. At 8.5 years it must never be the sole copy of anything, per §5.
 
 Two deliberate consequences of that decision:
 
