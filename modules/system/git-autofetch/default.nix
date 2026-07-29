@@ -73,6 +73,11 @@ in {
         roots = lib.escapeShellArgs cfg.roots;
       in ''
         set -u
+        # Collected into a FILE, not piped into `while read`: the right-hand side of
+        # a pipe runs in a subshell, so the counters below would be discarded and
+        # the all-failed exit could never fire.
+        list="$(mktemp)"
+        trap 'rm -f "$list"' EXIT HUP INT TERM
         for root in ${roots}; do
           [ -d "$root" ] || continue
           # -prune stops find from descending into a repo's own .git; skip the
@@ -80,16 +85,39 @@ in {
           # (submodule / linked worktree) — `git -C <parent> fetch` works for both.
           find "$root" -maxdepth ${depth} \
             \( -path '*/node_modules' -o -path '*/.cache' -o -name '.direnv' \) -prune -o \
-            -name .git -prune -print 2>/dev/null \
-          | while IFS= read -r gitentry; do
-            repo=$(dirname "$gitentry")
-            if timeout 60 git -C "$repo" fetch --all --prune --quiet 2>/dev/null; then
-              :
-            else
-              echo "fetch failed/skipped: $repo" >&2
-            fi
-          done
+            -name .git -prune -print 2>/dev/null >> "$list"
         done
+
+        total=0
+        failed=0
+        while IFS= read -r gitentry; do
+          repo=$(dirname "$gitentry")
+          # SKIP SHALLOW CLONES. A `clone --depth 1` client can only offer its one
+          # commit during negotiation and its shallow boundary stops it claiming any
+          # ancestor, so the server resends the entire history. Measured on
+          # ~/.hermes/hermes-agent: a 60M / 1-commit clone became 350M with
+          # origin/main legitimately reaching 18914 commits — and `git gc` cannot
+          # reclaim it, because nothing is garbage. One-way damage, so skip.
+          if [ "$(git -C "$repo" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+            continue
+          fi
+          total=$((total + 1))
+          if timeout 60 git -C "$repo" fetch --all --prune --quiet 2>/dev/null; then
+            :
+          else
+            failed=$((failed + 1))
+            echo "fetch failed/skipped: $repo" >&2
+          fi
+        done < "$list"
+
+        # One unreachable remote is a warning; EVERY repo failing is a broken setup
+        # and must fail the unit rather than reporting success. The posix sibling in
+        # provision/lib/tiers.sh grew this after the same blind spot hid a total
+        # breakage on macOS for a day (see its af_timeout comment).
+        if [ "$total" -gt 0 ] && [ "$failed" -eq "$total" ]; then
+          echo "git-autofetch: all $total fetches failed" >&2
+          exit 1
+        fi
       '';
     };
 

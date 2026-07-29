@@ -504,21 +504,24 @@ _total=0
 _failed=0
 while IFS= read -r gitentry; do
   repo=$(dirname "$gitentry")
-  _total=$((_total + 1))
-  # A SHALLOW clone must be fetched WITHOUT tags, or this scan destroys it.
-  # `fetch --all` pulls tags by default; tags reach the FULL history; so every
-  # object behind them becomes reachable and the shallow clone silently
-  # unshallows itself. Measured on ~/.hermes/hermes-agent (installed by upstream's
-  # `git clone --depth 1`): 60M and 1 commit before one such fetch, 350M and
-  # 18832 commits after, and `git gc` cannot reclaim it because the new tags now
-  # pin all of it. --no-tags still updates origin/<branch>, so "behind by N" —
-  # the entire point of this timer — keeps working.
-  _tagopt=""
+  # SKIP SHALLOW CLONES — fetching one is expensive and destroys its shallowness.
+  # A `clone --depth 1` client can only offer its single commit during negotiation,
+  # and its shallow boundary stops it claiming any ancestor, so the server resends
+  # the whole history it cannot prove the client has. Measured on
+  # ~/.hermes/hermes-agent (upstream's install.sh does `clone --depth 1 --branch`):
+  # a 60M / 1-commit clone became 350M with refs/remotes/origin/main legitimately
+  # reaching 18914 commits. `git gc` cannot reclaim that — nothing is garbage, the
+  # ref really does reach it all — so the damage is one-way.
+  #
+  # Nor is a shallow repo worth fetching: it is a vendored third-party install with
+  # its own updater (install.sh re-fetches its own branch), not a checkout whose
+  # ahead/behind you track. Skipping is not counted in _total, so a box holding only
+  # shallow clones does not trip the all-failed exit below.
   if [ "$(git -C "$repo" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
-    _tagopt="--no-tags"
+    continue
   fi
-  # shellcheck disable=SC2086  # $_tagopt is deliberately unquoted: empty = no arg.
-  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune $_tagopt --quiet 2>/dev/null \
+  _total=$((_total + 1))
+  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
     || { _failed=$((_failed + 1)); echo "fetch failed/skipped: $repo" >&2; }
 done < "$_list"
 

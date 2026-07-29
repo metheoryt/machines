@@ -197,22 +197,32 @@ G clone -q --depth 1 --branch main "file://$tmp/deep.git" "$r6/vendored" >/dev/n
 eq "$(git -C "$r6/vendored" rev-parse --is-shallow-repository)" "true" "fixture starts shallow"
 before_objs=$(git -C "$r6/vendored" rev-list --objects --all 2>/dev/null | wc -l | tr -d '[:space:]')
 before_ref="$(otm "$r6/vendored")"
-GIT_AUTOFETCH_ROOTS="$r6" sh "$AF" >/dev/null 2>"$tmp/e6"
+# A normal repo alongside it, to prove the skip is targeted rather than the whole
+# run bailing out.
+fixture repo6 "$r6"
+before6="$(otm "$r6/repo6")"
+GIT_AUTOFETCH_ROOTS="$r6" sh "$AF" >/dev/null 2>"$tmp/e6"; rc6=$?
 after_objs=$(git -C "$r6/vendored" rev-list --objects --all 2>/dev/null | wc -l | tr -d '[:space:]')
 
+eq "$(otm "$r6/vendored")" "$before_ref" "the shallow clone was SKIPPED, not fetched"
+eq "$after_objs" "$before_objs" "the shallow clone gained no objects"
 eq "$(git -C "$r6/vendored" rev-parse --is-shallow-repository)" "true" \
-   "the shallow clone is STILL shallow after a run"
-eq "$(git -C "$r6/vendored" tag | wc -l | tr -d '[:space:]')" "0" \
-   "no tags were pulled into the shallow clone"
-eq "$(git -C "$r6/vendored" rev-list --count HEAD)" "1" \
-   "history was not deepened"
-# The feature must still work — --no-tags is not "skip the repo".
-[ "$(otm "$r6/vendored")" != "$before_ref" ] \
-  && pass "origin/main still advanced, so ahead/behind stays accurate" \
-  || die "the shallow repo was not fetched at all"
-[ "$after_objs" -le $(( before_objs + 40 )) ] \
-  && pass "object count did not balloon ($before_objs -> $after_objs)" \
-  || die "the shallow clone gained $(( after_objs - before_objs )) objects — it was unshallowed"
+   "the shallow clone is still shallow"
+# Skipping must be silent and must not look like a failure.
+grep -q "$r6/vendored" "$tmp/e6" \
+  && die "the skipped shallow repo was reported as a failure" \
+  || pass "skipping a shallow repo logs no failure"
+eq "$rc6" "0" "a run whose only skip is a shallow repo exits 0"
+[ "$(otm "$r6/repo6")" != "$before6" ] \
+  && pass "the normal repo beside it still fetched" \
+  || die "the shallow skip aborted the whole run"
+
+# A root holding ONLY shallow repos must not trip the all-failed exit: skips are
+# not counted in _total, so _total is 0 and the branch cannot fire.
+r6b="$tmp/r6b"; mkdir -p "$r6b"
+G clone -q --depth 1 --branch main "file://$tmp/deep.git" "$r6b/only-shallow" >/dev/null 2>&1
+GIT_AUTOFETCH_ROOTS="$r6b" sh "$AF" >/dev/null 2>&1
+eq "$?" "0" "a root of only shallow repos exits 0, not all-failed"
 
 # ── Case 7: no roots / no repos must not be a false alarm ─────────────────────
 # _total is 0, so the all-failed branch must not fire — otherwise a box with no
