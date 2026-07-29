@@ -585,7 +585,18 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
   printf 'font %s at %spt; charts use the real U+%s..U+%s ramp now\n' \
     "$FONT" "$FONTSIZE" "$RAMP_LO" "$RAMP_HI"
   printf 'Ctrl-Alt-F2 still reaches a console login (cage -s).\n'
-  printf 'to see that screen over ssh: tmux -L %s attach -t %s\n' "$TMUX_SOCKET" "$TMUX_SESSION"
+  # Two ways, because `attach` alone is a trap: window-size is manual (see the
+  # session block), so a client smaller than the display is CLIPPED from the
+  # top-left rather than reflowed — the bottom rows and the right-hand chart
+  # column simply are not drawn, and tmux does not pan to reach them. That is the
+  # deliberate trade for never letting an ssh window shrink the physical display.
+  # capture-pane asks the pane instead of the client, so it is size-independent.
+  printf 'to see that screen over ssh:\n'
+  printf '  tmux -L %s attach -t %s\n' "$TMUX_SOCKET" "$TMUX_SESSION"
+  printf '    needs a terminal at least as large as the display; check with `stty size`\n'
+  printf '    first, or the bottom of the board is clipped away, not reflowed\n'
+  printf '  tmux -L %s capture-pane -pe -t %s:0.0 | less -RS\n' "$TMUX_SOCKET" "$TMUX_SESSION"
+  printf '    full board in any terminal size — scroll with arrows, quit with q\n'
   printf 'why the strip is or is not there: cat %s.session\n' "${KIOSK_STATE%/}"
   printf 'to undo: sudo bash %s --uninstall\n' "$SELF"
   exit 0
