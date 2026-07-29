@@ -174,13 +174,53 @@ eq "$rc5" "0" "a killed fetch alongside a good one still exits 0"
   || die "a killed fetch aborted the loop"
 rm -f "$mask/ssh"
 
-# ── Case 6: no roots / no repos must not be a false alarm ─────────────────────
+# ── Case 6: a SHALLOW clone must survive the scan ────────────────────────────
+# `fetch --all` pulls tags, tags reach the full history, and a shallow clone
+# therefore unshallows itself — irreversibly, since the new tags pin every object
+# so `git gc` cannot reclaim them. Real damage, not hypothetical: it took
+# ~/.hermes/hermes-agent from 60M/1-commit to 350M/18832-commits in one fetch.
+r6="$tmp/r6"; mkdir -p "$r6"
+G init -q --bare "$tmp/deep.git"
+G clone -q "$tmp/deep.git" "$tmp/deep-work" >/dev/null 2>&1
+( cd "$tmp/deep-work" \
+  && for i in 1 2 3 4 5; do : > "f$i"; G add "f$i"; G commit -qm "c$i"; done \
+  && G tag -a v1 -m v1 HEAD~4 \
+  && G push -q -u origin main && G push -q --tags ) >/dev/null 2>&1
+# Depth-1 clone, exactly what upstream installers do. The URL MUST be file://:
+# git silently ignores --depth for a plain local path (it hardlinks the object
+# store instead of running the pack protocol), so a path here yields a full clone
+# and the whole case tests nothing.
+G clone -q --depth 1 --branch main "file://$tmp/deep.git" "$r6/vendored" >/dev/null 2>&1
+# Advance the remote so a working fetch has something to move.
+( cd "$tmp/deep-work" && : > new && G add new && G commit -qm c6 && G push -q ) >/dev/null 2>&1
+
+eq "$(git -C "$r6/vendored" rev-parse --is-shallow-repository)" "true" "fixture starts shallow"
+before_objs=$(git -C "$r6/vendored" rev-list --objects --all 2>/dev/null | wc -l | tr -d '[:space:]')
+before_ref="$(otm "$r6/vendored")"
+GIT_AUTOFETCH_ROOTS="$r6" sh "$AF" >/dev/null 2>"$tmp/e6"
+after_objs=$(git -C "$r6/vendored" rev-list --objects --all 2>/dev/null | wc -l | tr -d '[:space:]')
+
+eq "$(git -C "$r6/vendored" rev-parse --is-shallow-repository)" "true" \
+   "the shallow clone is STILL shallow after a run"
+eq "$(git -C "$r6/vendored" tag | wc -l | tr -d '[:space:]')" "0" \
+   "no tags were pulled into the shallow clone"
+eq "$(git -C "$r6/vendored" rev-list --count HEAD)" "1" \
+   "history was not deepened"
+# The feature must still work — --no-tags is not "skip the repo".
+[ "$(otm "$r6/vendored")" != "$before_ref" ] \
+  && pass "origin/main still advanced, so ahead/behind stays accurate" \
+  || die "the shallow repo was not fetched at all"
+[ "$after_objs" -le $(( before_objs + 40 )) ] \
+  && pass "object count did not balloon ($before_objs -> $after_objs)" \
+  || die "the shallow clone gained $(( after_objs - before_objs )) objects — it was unshallowed"
+
+# ── Case 7: no roots / no repos must not be a false alarm ─────────────────────
 # _total is 0, so the all-failed branch must not fire — otherwise a box with no
 # checkouts yet would page on every tick.
 GIT_AUTOFETCH_ROOTS="$tmp/empty-root-does-not-exist" sh "$AF" >/dev/null 2>&1
 eq "$?" "0" "a root with no repos exits 0, not the all-failed error"
 
-# ── Case 7: the transport-level stall guard is present ───────────────────────
+# ── Case 8: the transport-level stall guard is present ────────────────────────
 # ConnectTimeout only bounds the handshake. This is the one assertion here that
 # is a grep, because the property is "what we hand to ssh" and provoking a real
 # post-handshake stall needs a server.

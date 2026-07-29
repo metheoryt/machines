@@ -160,6 +160,14 @@ eq "$(sb_chart_width 80 70)"  '0'  'chart_width: no chart when under 8 cells wou
 eq "$(sb_chart_width 0 60)"   '0'  'chart_width: no terminal width means no charts'
 eq "$(sb_chart_width 4000 60)" "$SB_HIST_CAP" 'chart_width: capped at the history depth'
 
+# sb_trim: an uncharted row longer than the frame would wrap, and a wrapped row
+# scrolls the entire repainting display.
+eq "$(sb_trim 'abcdef' 10)" 'abcdef'  'trim: a short row is untouched'
+eq "$(sb_trim 'abcdefghij' 5)" 'abcd>' 'trim: a long row is cut with a marker'
+eq "$(sb_vislen "$(sb_trim "$(printf '\033[32mabcdefghij\033[0m')" 5)")" '5' \
+  'trim: a coloured row trims to the visible width'
+eq "$(sb_trim 'abc' 0)" 'abc' 'trim: a zero width is a no-op, not an empty row'
+
 # sb_span: the same picture means different things at different probe rates, so the
 # header has to say which.
 eq "$(sb_span 240 10)" '40m'    'span: 240 cells at 10s is 40m'

@@ -296,6 +296,21 @@ sb_pad() {
   printf '%s%s' "$s" "$pad"
 }
 
+# sb_trim <string> <width>: keep a row inside the frame. Only uncharted rows can
+# exceed the width (charted ones are padded to a computed column), and one that does
+# WRAPS — which on a repainting full-screen frame makes the whole display walk up
+# the screen. Colour is dropped when trimming: cutting a string mid-escape would
+# leave the rest of the frame tinted.
+sb_trim() {
+  local s="${1:-}" w="${2:-0}" vis plain
+  case "$w" in '' | *[!0-9]*) printf '%s' "$s"; return ;; esac
+  [ "$w" -gt 1 ] || { printf '%s' "$s"; return ; }
+  vis="$(sb_vislen "$s")"
+  [ "$vis" -le "$w" ] && { printf '%s' "$s"; return; }
+  plain="$(printf '%s' "$s" | sed $'s/\033\\[[0-9;?]*[a-zA-Z]//g')"
+  printf '%s>' "${plain:0:$((w - 1))}"
+}
+
 # sb_span <cells> <interval>: how much time a full chart covers. Without this the
 # same picture means 20 minutes on tty1 (3s) and 67 minutes in tmux (10s), and
 # there is no axis to tell them apart.
@@ -863,7 +878,14 @@ render_frame() {
 
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
     if [ "$chartw" = 0 ] || [ -z "${SB_ROW_SERIES[i]}" ]; then
-      printf '%s\n' "${SB_ROW_TEXT[i]}"
+      # Uncharted rows are trimmed rather than padded: they are the only ones that
+      # can be longer than the frame (the six-disk "not mounted" list on an
+      # 80-column client), and a wrapped row scrolls the whole repainting frame.
+      if [ "$cols" -gt 0 ]; then
+        printf '%s\n' "$(sb_trim "${SB_ROW_TEXT[i]}" "$cols")"
+      else
+        printf '%s\n' "${SB_ROW_TEXT[i]}"
+      fi
     else
       printf '%s   %s%s%s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
         "$C_DIM" "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "${SB_ROW_SERIES[i]}")" "$C_RST"

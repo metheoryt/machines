@@ -505,7 +505,20 @@ _failed=0
 while IFS= read -r gitentry; do
   repo=$(dirname "$gitentry")
   _total=$((_total + 1))
-  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune --quiet 2>/dev/null \
+  # A SHALLOW clone must be fetched WITHOUT tags, or this scan destroys it.
+  # `fetch --all` pulls tags by default; tags reach the FULL history; so every
+  # object behind them becomes reachable and the shallow clone silently
+  # unshallows itself. Measured on ~/.hermes/hermes-agent (installed by upstream's
+  # `git clone --depth 1`): 60M and 1 commit before one such fetch, 350M and
+  # 18832 commits after, and `git gc` cannot reclaim it because the new tags now
+  # pin all of it. --no-tags still updates origin/<branch>, so "behind by N" —
+  # the entire point of this timer — keeps working.
+  _tagopt=""
+  if [ "$(git -C "$repo" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+    _tagopt="--no-tags"
+  fi
+  # shellcheck disable=SC2086  # $_tagopt is deliberately unquoted: empty = no arg.
+  af_timeout "$GIT_AUTOFETCH_TIMEOUT" git -C "$repo" fetch --all --prune $_tagopt --quiet 2>/dev/null \
     || { _failed=$((_failed + 1)); echo "fetch failed/skipped: $repo" >&2; }
 done < "$_list"
 
