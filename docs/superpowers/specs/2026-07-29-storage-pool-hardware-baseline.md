@@ -974,3 +974,131 @@ Note `sdf3` had to be mounted with an explicit `-t ntfs3`. Auto-detection picks 
 old read-only `ntfs` driver, which is not built into this kernel, and the mount
 fails with `unknown filesystem type 'ntfs'` — a misleading error, since the
 filesystem is fine and only the driver name is wrong.
+
+### 11.6. Result — 452 MB/s, byte-verified
+
+The robocopy leg ran 22:48–22:52 on 2026-07-29 and completed:
+
+```
+              Total    Copied   Skipped  Mismatch    FAILED    Extras
+   Dirs :      3500      3500         8         0         0         0
+  Files :     14878     14877         1         0         0         0
+  Bytes :  88.302 g  88.302 g       504         0         0         0
+  Times :   0:35:06   0:03:29                       0:00:00   0:00:26
+
+  Speed :         452 283 285 Bytes/sec
+```
+
+Independent tally of both trees, counting hidden files (`-Force`), re-checked
+after the copy at 2026-07-29 23:4x with the drive still attached to g513ie:
+
+```
+TARGET 94813954726 bytes 14878 files
+SOURCE 94813954726 bytes 14878 files
+MATCH True
+```
+
+**452 MB/s against 4–10 MB/s over the link** — the sneakernet decision was worth
+roughly two orders of magnitude, and it removed the encoding risk rather than
+merely working around it.
+
+Two measurement notes worth keeping:
+
+- The **first** verification ran without `-Force` and reported `11550 files /
+  94739766854 bytes`. It matched source-to-target too, so it was not wrong — it
+  simply excluded hidden files on both sides. When a tally is used as proof of a
+  copy, state whether hidden files are in it; two correct numbers that disagree
+  invite a false "the copy is short" conclusion.
+- robocopy's `1 skipped, 504 bytes` is not a gap. Skipped means already present
+  and identical at the target; the full tallies agreeing confirms it. **Judge a
+  robocopy on the file/byte tally, never on the exit code** — 0–7 are all
+  success (it is a bitmask, not an ordinal), so a nonzero status is routine.
+
+### 11.7. Gotcha: Windows OpenSSH kills the copy when the session drops
+
+The **first** robocopy attempt died after 2 files / 0.24 GB with only the log
+header written. Cause: it was launched with
+
+```powershell
+Start-Process -NoNewWindow robocopy ...
+```
+
+which leaves the child inside the ssh session's **job object**. Windows OpenSSH
+tears that whole job down on disconnect, so the copy dies with the session —
+`nohup`, `&`, and detaching the terminal do not help, because the kill is done by
+the job object, not by a signal.
+
+The escape is to have another service create the process, so it is never in the
+session's job to begin with:
+
+```powershell
+$cmd = @'
+cmd.exe /c robocopy "C:\Users\methe\Music" "F:\music-from-g513ie" /E /MT:8 /R:2 /W:2 /NFL /NDL /NP /XJ > "C:\Users\methe\robocopy-music.log" 2>&1
+'@
+$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $cmd}
+```
+
+`Win32_Process.Create` spawns via **WmiPrvSE**, outside the job, and the copy
+outlives the session. This applies to *every* long-running task started on a
+Windows fleet member over ssh, not just this copy — a scheduled task would work
+equally well, `Start-Process` never will.
+
+Also note the here-string is passed as a **single-quoted** `@'...'@` block: over
+ssh, double-quoted PowerShell here-strings repeatedly failed with `The string is
+missing the terminator`. Where quoting cannot be made to survive the hop, base64
+the script as UTF-16LE and run `powershell -NoProfile -EncodedCommand <b64>` —
+that path has no quoting surface at all and is the reliable way to run a
+multi-line PowerShell script on a fleet Windows box.
+
+## 12. The HGST long self-test aborts through the dock
+
+`Reallocated_Event_Count 23` with `Reallocated_Sector_Ct 0` on the HGST
+HTS541010A9E680 (§4) is the one open health question in the pool: 23 relocation
+*events* recorded, 0 sectors currently held as relocated. A long self-test is the
+way to settle whether the surface is stable now.
+
+It does not finish through the dock. **Attempt 1** (with `/mnt/immich-2024-backup`
+mounted) ended:
+
+```
+# 1  Extended offline    Aborted by host    80% remaining    27818 hours
+```
+
+`dmesg` held nothing but the attach lines — no reset, no I/O error, no
+disconnect. "Aborted by host" is the drive's account of an ATA-level abort, so
+something in the path sent it, and the two candidates were the mounted volume's
+background I/O and the USB bridge itself.
+
+**Attempt 2** started 22:54 with the volume **unmounted**, removing the first
+candidate. It progressed past attempt 1's death point — 90% remaining at 22:54,
+80% at 23:14, 70% at 23:34, i.e. roughly 20 min per 10% and an ETA near 02:00.
+
+Status at the time of writing: **in progress, unresolved**. Two outcomes, both
+worth recording:
+
+- **It completes.** Then the 23 events are historical and the surface is stable,
+  and attempt 1's abort is attributable to the mounted volume's I/O — which is a
+  rule in its own right: *unmount a volume before running a long self-test on it
+  through a USB bridge.*
+- **It aborts again with nothing touching the drive.** Then the bridge is the
+  cause, and *"long self-tests cannot run through these docks"* is the finding.
+  That is not a small conclusion — it means the realloc-events question cannot be
+  settled without a direct SATA connection, and by extension that no drive in
+  this pool can be surface-verified while it lives in a dock. Any future
+  "is this disk still good?" decision would rest on attributes alone.
+
+Dock B must stay powered until the test ends either way; cutting its power is
+itself an abort and would waste the run.
+
+### Unrelated, and benign: an order-4 allocation failure
+
+While the 1 TB sweep of §4 was running, `dmesg` recorded:
+
+```
+[Wed Jul 29 21:53:03 2026] tr: page allocation failure: order:4, mode:0x40cc0(GFP_KERNEL|__GFP_COMP)
+```
+
+21 GB of page cache from the sweep sat in `inactive_file` and a 16-page
+contiguous allocation could not be satisfied promptly. No OOM kill, no process
+lost, no disk involvement. Recorded only so it is not later mistaken for a
+storage fault found on the same night.
