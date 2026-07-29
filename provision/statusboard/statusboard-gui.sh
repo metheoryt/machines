@@ -281,6 +281,11 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
   WAS_TEXT=0
   if systemctl is-enabled --quiet "$TEXT_SERVICE" 2>/dev/null; then WAS_TEXT=1; fi
   systemctl disable --now "$TEXT_SERVICE" 2>/dev/null
+  # And clear its failed state. The text board holds tty1 with Conflicts=getty@tty1,
+  # so handing that VT to the getty leaves it FAILED — which the board then reports
+  # forever as "units 1 failed", on the very display whose job is to make a failed
+  # unit mean something. A permanent false alarm is worse than no alarm.
+  systemctl reset-failed "$TEXT_SERVICE" 2>/dev/null
 
   mkdir -p "$DROPIN_DIR"
   sbg_dropin_text "$RUN_USER" > "$DROPIN"

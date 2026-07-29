@@ -98,6 +98,17 @@ eq "$polkit_rc" '1' 'check: a missing polkit makes --check fail, not warn'
 # from an SSH shell would report "denied" on a healthy box.
 hasnt "$CHECK_BODY" 'pkcheck --action' 'check: does not ask polkit to decide for the wrong session'
 
+# Taking tty1 from the text board leaves that unit FAILED (it holds the VT with
+# Conflicts=getty@tty1), and the kiosk would then report "units 1 failed" forever —
+# a permanent false alarm on the display whose job is to make that line mean
+# something. Observed on latitude 2026-07-29.
+has "$GUI_SRC" 'systemctl reset-failed "$TEXT_SERVICE"' 'install: clears the text board failed state'
+dis_at="$(grep -n 'systemctl disable --now "\$TEXT_SERVICE"' "$GUI" | head -1 | cut -d: -f1)"
+rst_at="$(grep -n 'systemctl reset-failed "\$TEXT_SERVICE"' "$GUI" | head -1 | cut -d: -f1)"
+[ -n "$dis_at" ] && [ -n "$rst_at" ] && [ "$rst_at" -gt "$dis_at" ] \
+  && pass 'install: resets the failed state AFTER disabling, never before' \
+  || fail 'install: reset-failed must follow the disable'
+
 # One argument per line is the contract: the font family contains a space, so a
 # caller that re-split a flat string would pass "Mono:size=20" as a command.
 eq "$(printf '%s\n' "$ARGV" | grep -c .)" '21' 'kiosk: argv is one argument per line'
