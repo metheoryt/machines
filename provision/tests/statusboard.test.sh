@@ -323,24 +323,96 @@ eq "$(sb_kb_to_gib 474794016)" '453' 'gib: latitude root, 474794016 KiB -> 453G'
 eq "$(sb_kb_to_gib '')"        'n/a' 'gib: empty -> n/a'
 eq "$(sb_kb_to_gib junk)"      'n/a' 'gib: non-numeric -> n/a'
 
-OUT="$(sb_disk_row nvme1n1p3 / 2524584 474794016 1)"
+# ── sb_disk_bar ───────────────────────────────────────────────────────────────
+# The bar's LENGTH is the disk's size and its FILL is how full it is, so a full 1G
+# EFI partition and a full 931G array stop looking like the same event.
+eq "$(sb_disk_bar 100 1000 1000 10)" '[██████████]' 'disk bar: the biggest disk gets the full width'
+eq "$(sb_disk_bar 50 1000 1000 10)"  '[█████░░░░░]' 'disk bar: fill is the percentage of ITS length'
+eq "$(sb_disk_bar 100 500 1000 10)"  '[█████]     ' 'disk bar: half the size is half the length'
+eq "$(sb_disk_bar 50 500 1000 10)"   '[██░░░]     ' 'disk bar: length and fill compose'
+# A tiny disk must still be visible: a zero-width bar reads as a missing disk.
+eq "$(sb_disk_bar 100 1 1000 10)"    '[█]         ' 'disk bar: a disk far smaller than the array keeps one cell'
+# THE alignment invariant — the bar field is a fixed width whatever the disk size,
+# or every column after it walks left and right per row.
+eq "$(sb_vislen "$(sb_disk_bar 50 1 1000 10)")" "$(sb_vislen "$(sb_disk_bar 50 1000 1000 10)")" \
+  'disk bar: padded to the same visible width regardless of length'
+eq "$(sb_disk_bar 50 1000 0 10)" '[█████░░░░░]' 'disk bar: no reference size means you are the biggest'
+eq "$(sb_disk_bar 255 1000 1000 10)" '[██████████]' 'disk bar: over-range clamps to full'
+eq "$(sb_disk_bar junk junk junk junk)" "$(sb_disk_bar 0 0 0 "$SB_DISK_BARW")" \
+  'disk bar: garbage in every argument degrades rather than erroring'
+eq "$(STATUSBOARD_RAMP=ascii sb_disk_bar 50 1000 1000 10)" '[#####.....]' 'disk bar: a VT gets the ASCII fill'
+
+OUT="$(sb_disk_row nvme1n1p3 / 474794016 1)"
 has "$OUT" '/'          'disk row: shows the mount point'
 has "$OUT" 'nvme1n1p3'  'disk row: shows the device'
 has "$OUT" '1%'         'disk row: shows the percentage'
 has "$OUT" '453G'       'disk row: shows the total in GB'
 has "$OUT" '[░'         'disk row: has a horizontal bar'
+# The used figure is deliberately gone: the bar says how full, the total says how
+# big, and a third number in GB said neither for the widest field in the block.
+hasnt "$OUT" '2G'       'disk row: does NOT show the used figure'
+hasnt "$OUT" ' / '      'disk row: no used/total pair remains'
 # A deep mount point must not widen the text column for every other row.
-OUT="$(sb_disk_row sdc2 /mnt/media/library/photos 100 200 50)"
+OUT="$(sb_disk_row sdc2 /mnt/media/library/photos/2024/raw 200 50)"
 has "$OUT" '<'          'disk row: an over-long mount point is truncated tail-first'
-eq "$(sb_vislen "$(sb_disk_row sdc2 /mnt/media/library/photos 100 200 50)")" \
-   "$(sb_vislen "$(sb_disk_row sdc2 /srv 100 200 50)")" \
+eq "$(sb_vislen "$(sb_disk_row sdc2 /mnt/media/library/photos/2024/raw 200 50)")" \
+   "$(sb_vislen "$(sb_disk_row sdc2 /srv 200 50)")" \
    'disk row: width does not depend on the mount point length'
+# The paths that actually live on this box must fit unabbreviated — widening the
+# field was the point, so assert the widest real one rather than the constant.
+hasnt "$(sb_disk_row sdd2 /mnt/immich-2024-backup 976000000 72)" '<' \
+  'disk row: the longest real mount point on this box is not truncated'
 # A full disk still renders; the bar is coloured by FREE space, so this is the
 # inverse of the battery row and a 99% disk must not read as healthy.
-OUT="$(sb_disk_row sda1 /mnt/x 900 1000 99)"
+OUT="$(sb_disk_row sda1 /mnt/x 1000 99)"
 has "$OUT" '99%' 'disk row: a nearly-full disk renders'
-OUT="$(sb_disk_row sda1 /mnt/x '' '' '')"
+OUT="$(sb_disk_row sda1 /mnt/x '' '')"
 has "$OUT" 'n/a' 'disk row: missing sizes degrade to n/a rather than breaking the row'
+# Relative sizing reaches the row, not just the bar.
+eq "$(sb_vislen "$(sb_disk_row sda1 /mnt/x 1000 50 1000)")" \
+   "$(sb_vislen "$(sb_disk_row sda1 /mnt/x 10 50 1000)")" \
+   'disk row: a small disk and a big one still end at the same column'
+
+# ── Disk I/O ──────────────────────────────────────────────────────────────────
+# Usage charts said nothing a console span could show — a fill level moves over
+# days. Throughput is what a chart can answer and the numbers cannot.
+DS="$(mktemp)"
+cat > "$DS" <<'STATS'
+ 259       0 nvme0n1 1000 0 4096 200 500 0 2048 100 0 0 0
+ 259       1 nvme0n1p1 900 0 2048 180 400 0 1024 90 0 0 0
+   8       0 sda 10 0 100 5 20 0 200 8 0 0 0
+STATS
+eq "$(sb_dev_sectors nvme0n1p1 "$DS")" '3072' 'dev sectors: sectors read + written'
+eq "$(sb_dev_sectors sda "$DS")"       '300'  'dev sectors: a second device is not confused with the first'
+eq "$(sb_dev_sectors nvme0n1 "$DS")"   '6144' 'dev sectors: the whole disk is a separate row from its partition'
+eq "$(sb_dev_sectors nope "$DS")"      ''     'dev sectors: an unknown device is empty, not 0'
+eq "$(sb_dev_sectors '' "$DS")"        ''     'dev sectors: no device name is empty'
+eq "$(sb_dev_sectors sda /nonexistent/diskstats)" '' 'dev sectors: an unreadable file is empty, not an error'
+rm -f "$DS"
+
+# 2048 sectors x 512B = 1MiB, over 1s.
+eq "$(sb_io_mbs 0 2048 1)"      '1'  'io: 2048 sectors in a second is 1 MB/s'
+eq "$(sb_io_mbs 0 2048 2)"      '0'  'io: the same delta over 2s rounds down to 0'
+eq "$(sb_io_mbs 0 204800 10)"   '10' 'io: 100MiB over 10s is 10 MB/s'
+eq "$(sb_io_mbs 1000 1000 10)"  '0'  'io: an idle disk is 0, not a gap'
+# The FIRST sample has no predecessor, and inventing 0 there would draw a floor
+# under every chart at startup.
+eq "$(sb_io_mbs '' 2048 10)"    ''   'io: no previous reading is a gap'
+# A dock replug renumbers sda, so the counter restarts and the delta is nonsense.
+eq "$(sb_io_mbs 5000 100 10)"   ''   'io: a counter that went backwards is a gap, not a spike'
+eq "$(sb_io_mbs 0 2048 0)"      '1'  'io: a zero interval is treated as one second'
+eq "$(sb_io_mbs 0 2048 junk)"   '1'  'io: a non-numeric interval is treated as one second'
+
+# ── sb_hi_colour ──────────────────────────────────────────────────────────────
+# Colour is suppressed here (not a tty), so what is asserted is that the tiers are
+# DISTINCT and that garbage does not error — the escapes themselves are covered by
+# the chart-colour block above.
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour 10 50 200)"  'd' 'hi_colour: a healthy value stays dim'
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour 50 50 200)"  'w' 'hi_colour: at the warn threshold it warns'
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour 200 50 200)" 'b' 'hi_colour: at the bad threshold it alarms'
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour '' 50 200)"  'd' 'hi_colour: no reading is dim, not alarming'
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour junk 50 200)" 'd' 'hi_colour: non-numeric is dim'
+eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour 9999 0 0)"   'd' 'hi_colour: zero thresholds disable both tiers'
 
 # The per-mount series store. An associative array would keep stale keys after an
 # unplug; a flat string is prunable and testable.
@@ -451,7 +523,14 @@ eq "$(printf '%s\n' "$OUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d
 # Every charted row must end at the SAME column, or the column is not a column.
 eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|lan|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
   'layout: all charted rows end at the same column (disk rows included)'
-has "$OUT" 'G / ' 'layout: the frame lists filesystems with their sizes'
+# A whole disk row, end to end: bar, percentage, size. Asserted as a shape rather
+# than a literal so the fields can be reordered without a false failure, and as a
+# COUNT so a frame that lost its disk block cannot pass.
+disk_rows="$(printf '%s\n' "$OUT" | grep -cE '\[[#.]+\] *[0-9]+% +[0-9]+G')"
+[ "${disk_rows:-0}" -ge 1 ] \
+  && pass 'layout: the frame lists filesystems as bar + percentage + size' \
+  || fail "layout: no disk row matched bar+pct+size (got $disk_rows)"
+hasnt "$OUT" 'G / ' 'layout: the used/total pair is gone from the frame'
 # An uncharted row must not narrow the chart column. The "not mounted" list is the
 # widest row on this box by 40 columns, and letting it set the text width cost every
 # chart most of its span.

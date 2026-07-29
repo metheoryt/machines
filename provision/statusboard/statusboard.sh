@@ -109,6 +109,20 @@ sb_pct_colour() {
   else printf '%s' "$C_OK"; fi
 }
 
+# sb_hi_colour <value> <warn> <bad>: the same idea for metrics where HIGH is the
+# bad end — latency, load, anything measured rather than remaining. Falls back to
+# C_DIM rather than no colour, so a healthy value keeps the quiet styling it had
+# and only a bad one draws the eye. A zero threshold disables that tier.
+sb_hi_colour() {
+  local v="${1:-}" warn="${2:-0}" bad="${3:-0}"
+  case "$v" in '' | *[!0-9]*) printf '%s' "$C_DIM"; return ;; esac
+  case "$warn" in '' | *[!0-9]*) warn=0 ;; esac
+  case "$bad" in '' | *[!0-9]*) bad=0 ;; esac
+  if [ "$bad" -gt 0 ] && [ "$v" -ge "$bad" ]; then printf '%s' "$C_BAD"
+  elif [ "$warn" -gt 0 ] && [ "$v" -ge "$warn" ]; then printf '%s' "$C_WARN"
+  else printf '%s' "$C_DIM"; fi
+}
+
 # sb_micro_to_unit <microvalue> <suffix>: µW/µV/µA → one decimal place. The whole
 # /sys/class/power_supply tree is in micro-units; printing them raw is unreadable.
 sb_micro_to_unit() {
@@ -360,7 +374,7 @@ sb_fold() {
   [ "$k" = 1 ] && { printf '%s' "$csv"; return; }
   [ -n "$csv" ] || { printf ''; return; }
 
-  local -a a=() out=()
+  local -a a=() folded=()
   local IFS=','
   read -r -a a <<< "$csv"
   n=${#a[@]}
@@ -378,14 +392,14 @@ sb_fold() {
         *) seen=1; [ "$v" -gt "$best" ] && best="$v" ;;
       esac
     done
-    if [ "$down" = 1 ]; then out+=('x')
-    elif [ "$seen" = 1 ]; then out+=("$best")
-    else out+=('-')
+    if [ "$down" = 1 ]; then folded+=('x')
+    elif [ "$seen" = 1 ]; then folded+=("$best")
+    else folded+=('-')
     fi
     pos=$((pos + len))
     len="$k"
   done
-  printf '%s' "${out[*]}"
+  printf '%s' "${folded[*]}"
 }
 
 # sb_chart <width> <max> <csv>: the sparkline. Newest sample at the RIGHT edge, so
@@ -503,6 +517,40 @@ sb_dur() {
   else printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60)); fi
 }
 
+# ── Disk I/O ──────────────────────────────────────────────────────────────────
+# The disk charts used to plot USAGE, which was the one metric on the board with
+# nothing to say: a filesystem's fill level changes over days, so at any span a
+# console can show, the chart was a flat line restating the bar next to it. Throughput
+# is the question a chart can actually answer — "was this array busy at 03:00" — and
+# it is the one the numbers cannot.
+
+# sb_dev_sectors <dev> [diskstats]: sectors read + written for one block device,
+# straight from the kernel's counters. Partitions have their own rows, so a mount
+# point maps to its own line rather than to the whole disk's.
+sb_dev_sectors() {
+  local dev="${1:-}" f="${2:-/proc/diskstats}"
+  [ -n "$dev" ] || { printf ''; return; }
+  [ -r "$f" ] || { printf ''; return; }
+  awk -v d="$dev" '$3 == d { printf "%d", $6 + $10; exit }' "$f"
+}
+
+# sb_io_mbs <prev_sectors> <cur_sectors> <seconds>: throughput in whole MB/s.
+#
+# Sectors are 512 bytes regardless of the device's physical sector size — that is
+# what the kernel's counter is defined in, and reading the real geometry to "fix" it
+# would make the number wrong.
+sb_io_mbs() {
+  local prev="${1:-}" cur="${2:-}" secs="${3:-1}"
+  case "$prev" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$cur" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$secs" in '' | *[!0-9]*) secs=1 ;; esac
+  [ "$secs" -ge 1 ] || secs=1
+  # A counter that went BACKWARDS means the device was re-enumerated — a dock replug
+  # renumbers sda — so the delta is meaningless. Report a gap, not a spike.
+  [ "$cur" -ge "$prev" ] || { printf ''; return; }
+  awk -v p="$prev" -v c="$cur" -v s="$secs" 'BEGIN { printf "%d", (c - p) * 512 / 1048576 / s }'
+}
+
 # sb_rtt_tenths <"0.516ms">: a ping time as tenths of a millisecond, which is the
 # integer unit the charts scale against (bash has no floats).
 sb_rtt_tenths() {
@@ -526,21 +574,72 @@ sb_kb_to_gib() {
   awk -v k="$kb" 'BEGIN { printf "%.0f", k / 1048576 }'
 }
 
-# sb_disk_row <dev> <mount> <used_kb> <total_kb> <pct>: one filesystem.
+# Layout constants for the disk block, named because two functions and a test all
+# have to agree on them.
+SB_DISK_PATHW=23   # fits /mnt/immich-2024-backup, the longest on this box
+SB_DISK_BARW=20    # the widest a bar can get — the size of the LARGEST disk
+
+# sb_disk_bar <pct> <total_kb> <max_total_kb> <maxw>: a meter whose LENGTH is the
+# disk's capacity and whose FILL is how much of that is used.
+#
+# A fixed-width bar makes a full 1G EFI partition and a full 931G array look like
+# the same event. Scaling the length to the biggest disk present means the block
+# reads as the actual shape of the storage: one long bar mostly full is a problem,
+# one short bar mostly full is not.
+#
+# The bar is then PADDED to maxw, because its length is now data and data of varying
+# width cannot also be the anchor every following column lines up against.
+sb_disk_bar() {
+  local pct="${1:-0}" total="${2:-0}" maxtotal="${3:-0}" maxw="${4:-$SB_DISK_BARW}"
+  local cells filled i out="" pad="" on='#' off='.'
+  case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
+  [ "$pct" -gt 100 ] && pct=100
+  case "$total" in '' | *[!0-9]*) total=0 ;; esac
+  case "$maxtotal" in '' | *[!0-9]*) maxtotal=0 ;; esac
+  case "$maxw" in '' | *[!0-9]*) maxw="$SB_DISK_BARW" ;; esac
+  [ "$maxw" -ge 1 ] || maxw=1
+  # No reference size means "you are the biggest" — which is what a single-disk box
+  # and every direct call in a test gets.
+  [ "$maxtotal" -gt 0 ] || maxtotal="$total"
+  if [ "$maxtotal" -gt 0 ] && [ "$total" -gt 0 ]; then
+    cells=$((total * maxw / maxtotal))
+  else
+    cells=0
+  fi
+  # A disk two orders of magnitude smaller than the array still gets one cell: a
+  # zero-width bar reads as a missing disk rather than a tiny one.
+  [ "$cells" -ge 1 ] || cells=1
+  [ "$cells" -le "$maxw" ] || cells="$maxw"
+  [ "$(sb_ramp_name)" = ascii ] || { on='█'; off='░'; }
+  filled=$((pct * cells / 100))
+  for ((i = 0; i < cells; i++)); do
+    if [ "$i" -lt "$filled" ]; then out="$out$on"; else out="$out$off"; fi
+  done
+  for ((i = cells; i < maxw; i++)); do pad="$pad "; done
+  printf '[%s]%s' "$out" "$pad"
+}
+
+# sb_disk_row <dev> <mount> <total_kb> <pct> [max_total_kb]: one filesystem.
+#
+# The used figure is gone on purpose: the bar already carries "how full", the total
+# carries "how big", and a third number saying the same thing in GB was the widest
+# field in the block for the least information in it.
+#
 # The bar is coloured by FREE space, so it greens down as the disk fills — the
 # inverse of the battery row, where a high number is the healthy one.
 sb_disk_row() {
-  local dev="${1:-}" mnt="${2:-}" used="${3:-}" total="${4:-}" pct="${5:-}" col free=100
+  local dev="${1:-}" mnt="${2:-}" total="${3:-}" pct="${4:-}" maxtotal="${5:-}" col free=100
   case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
   # Long mount points are shown tail-first behind a <: every row pads to the widest
   # one, so a single deep path would push the chart column off the screen for all of
   # them. The tail is the part that identifies the disk.
-  [ "${#mnt}" -gt 16 ] && mnt="<${mnt: -15}"
+  [ "${#mnt}" -gt "$SB_DISK_PATHW" ] && mnt="<${mnt: -$((SB_DISK_PATHW - 1))}"
   free=$((100 - pct))
   col="$(sb_pct_colour "$free" 20 10)"
-  printf '%-16s %s%s %3s%%%s  %5sG / %5sG  %s%s%s' \
-    "${mnt:-?}" "$col" "$(sb_bar "$pct" 12)" "$pct" "$C_RST" \
-    "$(sb_kb_to_gib "$used")" "$(sb_kb_to_gib "$total")" "$C_DIM" "${dev:-?}" "$C_RST"
+  printf '%-*s %s%s %3s%%%s  %5sG  %s%s%s' \
+    "$SB_DISK_PATHW" "${mnt:-?}" \
+    "$col" "$(sb_disk_bar "$pct" "$total" "$maxtotal" "$SB_DISK_BARW")" "$pct" "$C_RST" \
+    "$(sb_kb_to_gib "$total")" "$C_DIM" "${dev:-?}" "$C_RST"
 }
 
 # Per-disk history cannot use an associative array keyed by mount point: mounts come
@@ -870,7 +969,12 @@ sb_unmounted() {
 # from in there is discarded the instant the subshell exits, so every chart would
 # show one sample forever. Sample in the shell, format in the subshell.
 SER_BAT=""; SER_PW=""; SER_LAN=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
-SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem
+SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem — MB/s
+# Previous diskstats reading per mount, and when it was taken. Throughput is a
+# DELTA, so it needs the last counter kept in the main shell for the same reason the
+# series are: a value computed inside the frame subshell dies with it.
+SB_IO_PREV=""
+SB_IO_T=0
 # Evaluated ONCE here, where fd 1 is the real output; see sb_cols.
 SB_ISTTY=0; [ -t 1 ] && SB_ISTTY=1
 # And which device that output is. `-ef` compares device+inode, so this asks "is fd
@@ -908,6 +1012,10 @@ SB_NCPU="$(nproc 2>/dev/null || printf 1)"
 SB_MAX_PW=65
 SB_MAX_GW=500    # tenths of a ms: 50ms
 SB_MAX_NET=2000  # tenths of a ms: 200ms
+# MB/s a disk chart calls "full". 100 saturates the USB docks and the spinners in
+# them, which are the disks worth watching; the NVMe will clip during a big copy and
+# that is the honest reading of "this disk was as busy as this board can show".
+SB_MAX_IO="${STATUSBOARD_IO_MAX:-100}"
 
 # sb_sample_fast: everything that is a file read. Runs on EVERY paint, so the
 # numbers on screen are never staler than the clock beside them.
@@ -977,15 +1085,28 @@ sb_sample_slow() {
 
   # One series per mounted filesystem, keyed by mount point, pruned to what is
   # mounted right now so an unplugged dock cannot leave a stale chart behind.
-  local dev mnt used total pct keys=""
-  while IFS='|' read -r dev mnt used total pct; do
+  #
+  # The value is THROUGHPUT, not fill level: the elapsed time is measured rather than
+  # assumed to be PROBE, because the first sample after startup and any probe that
+  # ran long would otherwise scale the delta by the wrong divisor.
+  local dev mnt total pct keys="" cur prev el
+  el=$((SECONDS - SB_IO_T))
+  [ "$el" -ge 1 ] || el=1
+  # The used field is read into _ : df still reports it, the board no longer shows it.
+  while IFS='|' read -r dev mnt _ total pct; do
     [ -n "$mnt" ] || continue
     keys="$keys $mnt"
+    cur="$(sb_dev_sectors "$dev")"
+    prev="$(sb_series_get "$SB_IO_PREV" "$mnt")"
     SER_DISKS="$(sb_series_set "$SER_DISKS" "$mnt" \
-      "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$pct")")"
+      "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$(sb_io_mbs "$prev" "$cur" "$el")")")"
+    SB_IO_PREV="$(sb_series_set "$SB_IO_PREV" "$mnt" "$cur")"
   done <<< "$SB_MOUNTS"
+  SB_IO_T=$SECONDS
   # shellcheck disable=SC2086
   SER_DISKS="$(sb_series_keep "$SER_DISKS" $keys)"
+  # shellcheck disable=SC2086
+  SB_IO_PREV="$(sb_series_keep "$SB_IO_PREV" $keys)"
 }
 
 # ── Frame ─────────────────────────────────────────────────────────────────────
@@ -1011,30 +1132,50 @@ render_frame() {
 
   sb_row "$(printf 'lan      %s  %s%s %s%s' "$(sb_status_glyph "$SB_LAN_ST")" \
     "$C_DIM" "${SB_LAN_DEV:--}" "${SB_LAN_IP:--}" "$C_RST")" "$SER_LAN" 1
-  [ -n "${SB_GW_ST:-}" ] && sb_row "$(printf 'gateway  %s  %s%s %s%s' "$(sb_status_glyph "$SB_GW_ST")" \
-    "$C_DIM" "$SB_LAN_GW" "${SB_GW_RTT:-}" "$C_RST")" "$SER_GW" "$SB_MAX_GW"
+  # The RTT is the number that goes bad, so it carries its own colour while the
+  # address next to it stays dim. Thresholds are in tenths of a ms, matching what the
+  # series is scaled in: a LAN gateway over 5ms is odd, over 20ms is wrong.
+  [ -n "${SB_GW_ST:-}" ] && sb_row "$(printf 'gateway  %s  %s%s %s%s%s' "$(sb_status_glyph "$SB_GW_ST")" \
+    "$C_DIM" "$SB_LAN_GW" "$(sb_hi_colour "$(sb_rtt_tenths "${SB_GW_RTT:-}")" 50 200)" \
+    "${SB_GW_RTT:-}" "$C_RST")" "$SER_GW" "$SB_MAX_GW"
   sb_row "$(printf 'internet %s  %s%s%s' "$(sb_status_glyph "$SB_NET_ST")" \
-    "$C_DIM" "${SB_NET_RTT:--}" "$C_RST")" "$SER_NET" "$SB_MAX_NET"
+    "$(sb_hi_colour "$(sb_rtt_tenths "${SB_NET_RTT:-}")" 500 2000)" "${SB_NET_RTT:--}" "$C_RST")" \
+    "$SER_NET" "$SB_MAX_NET"
   if [ "${SB_TS_ST:-}" = up ]; then
     # Scaled against the peer TOTAL, so a full chart means "the whole fleet was
     # up" and a dip means peers dropped — not just "some number of peers".
-    sb_row "$(printf 'tailnet  %s  %s%s  %s/%s peers online%s' "$(sb_status_glyph up)" \
-      "$C_DIM" "$SB_TS_IP" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
+    # A missing peer is the bad number here, so the count carries the colour: amber
+    # while any peer is down, dim only when the whole fleet is up.
+    local ts_col="$C_DIM"
+    [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null && ts_col="$C_WARN"
+    sb_row "$(printf 'tailnet  %s  %s%s  %s%s/%s peers online%s' "$(sb_status_glyph up)" \
+      "$C_DIM" "$SB_TS_IP" "$ts_col" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
       "$SER_TS" "${SB_TS_TOTAL:-1}"
   else
     sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1
   fi
   sb_row ""
 
+  # Load thresholds are per-CPU: one runnable process per core is a busy box, two is
+  # a queue. In hundredths, matching the series.
+  local load1="" load_col="$C_DIM"
+  load1="$(awk '{ printf "%d", $1 * 100 }' /proc/loadavg 2>/dev/null)"
+  [ -n "$load1" ] && load_col="$(sb_hi_colour "$load1" $((SB_NCPU * 100)) $((SB_NCPU * 200)))"
   sb_row "$(printf 'uptime    %s%s%s   load %s%s%s' "$C_DIM" "$(sb_secs_to_hm "$SB_UP")" "$C_RST" \
-    "$C_DIM" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100))
+    "$load_col" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100))
   sb_row ""
 
-  local d_dev d_mnt d_used d_total d_pct
-  while IFS='|' read -r d_dev d_mnt d_used d_total d_pct; do
+  # Two passes over the mount list: the bar lengths are relative to the LARGEST disk
+  # present, which is not known until every disk has been seen.
+  local d_dev d_mnt d_total d_pct d_max=0
+  while IFS='|' read -r _ _ _ d_total _; do
+    case "$d_total" in '' | *[!0-9]*) continue ;; esac
+    [ "$d_total" -gt "$d_max" ] && d_max="$d_total"
+  done <<< "$SB_MOUNTS"
+  while IFS='|' read -r d_dev d_mnt _ d_total d_pct; do
     [ -n "$d_mnt" ] || continue
-    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_used" "$d_total" "$d_pct")" \
-      "$(sb_series_get "$SER_DISKS" "$d_mnt")" 100
+    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max")" \
+      "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO"
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
   # box, so it gets a row of its own rather than silently missing from the list.
@@ -1066,8 +1207,13 @@ render_frame() {
   local span=""
   [ "$chartw" -gt 0 ] && span="$(printf '   %scharts: last %s (%s/cell, %ss samples)%s' \
     "$C_DIM" "$(sb_span "$chartw" "$SB_CELL_SECS")" "$(sb_dur "$SB_CELL_SECS")" "$PROBE" "$C_RST")"
-  printf '%s%s%s   %s%s%s%s\n' "$C_B$C_INFO" "$(hostname)" "$C_RST" \
-    "$C_DIM" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_RST" "$span"
+  # The clock is the one thing on this board read from across the room, and it is also
+  # how you tell a live frame from a frozen one — so the TIME is bright and the date
+  # beside it stays dim. One `date` call: two would let the seconds disagree.
+  local now
+  now="$(date '+%Y-%m-%d %H:%M:%S')"
+  printf '%s%s%s   %s%s%s %s%s%s%s\n' "$C_B$C_INFO" "$(hostname)" "$C_RST" \
+    "$C_DIM" "${now%% *}" "$C_RST" "$C_B" "${now##* }" "$C_RST" "$span"
   local rule=60 dashes="" rulech='-'
   [ "$(sb_ramp_name)" = ascii ] || rulech='─'
   [ "$chartw" -gt 0 ] && rule=$((textw + 3 + chartw))
