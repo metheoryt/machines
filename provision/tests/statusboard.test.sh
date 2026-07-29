@@ -175,9 +175,16 @@ eq "$(sb_rtt_tenths 'down')"    ''    'rtt: garbage stays empty'
 
 # sb_cols: charts off when stdout is not a terminal (which keeps --once diffable),
 # and forceable so the layout is testable at all.
-eq "$(sb_cols)" '0' 'cols: not a tty means no charts'
-eq "$(STATUSBOARD_COLS=133 sb_cols)" '133' 'cols: STATUSBOARD_COLS forces a width'
-eq "$(STATUSBOARD_COLS=junk sb_cols)" '0'  'cols: a junk override disables charts rather than erroring'
+eq "$(sb_cols 0)" '0' 'cols: a non-terminal output means no charts'
+eq "$(STATUSBOARD_COLS=133 sb_cols 0)" '133' 'cols: STATUSBOARD_COLS forces a width'
+eq "$(STATUSBOARD_COLS=junk sb_cols 0)" '0'  'cols: a junk override disables charts rather than erroring'
+# The tty-ness is an ARGUMENT because render_frame runs inside a command
+# substitution where fd 1 is a pipe. An internal `[ -t 1 ]` disabled every chart on
+# tty1 while every forced-width test still passed, so the signature is the fix.
+grep -q 'sb_cols "\$SB_ISTTY"' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'cols: the frame passes in a tty-ness measured outside the subshell'
+grep -qE '^SB_ISTTY=0; \[ -t 1 \] && SB_ISTTY=1$' "$REPO/provision/statusboard/statusboard.sh"
+eq "$?" '0' 'cols: -t 1 is evaluated in the shell that owns the real fd 1'
 
 # sb_console_font_file: console-setup names files height-x-width while FONTSIZE is
 # width-x-height. Reversing them is a silent no-op that leaves the font unchanged.

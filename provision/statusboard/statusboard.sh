@@ -392,13 +392,23 @@ sb_console_font_file() {
   printf '/usr/share/consolefonts/%s-%s%sx%s.psf.gz' "$codeset" "$face" "$h" "$w"
 }
 
-# sb_cols: the frame width. Charts are OFF (0) when stdout is not a terminal, so
-# --once stays diffable and the existing assertions hold; STATUSBOARD_COLS forces a
-# width either way, which is how the chart and padding maths get tested.
+# sb_cols <is-tty>: the frame width. Charts are OFF (0) when the output is not a
+# terminal, so --once stays diffable; STATUSBOARD_COLS forces a width either way,
+# which is how the chart and padding maths get tested.
+#
+# Whether the output IS a terminal has to be passed in, and that is not fussiness:
+# render_frame runs inside frame="$(render_frame)", where fd 1 is a pipe. An
+# internal `[ -t 1 ]` therefore answered "not a terminal" on every frame and
+# silently disabled every chart on tty1 while the tests — which force
+# STATUSBOARD_COLS — all passed (2026-07-29). The caller evaluates -t 1 once, in the
+# shell that owns the real fd 1.
+#
+# The width itself comes from `stty size`, which reads fd 0 and so is unaffected by
+# the substitution; the unit passes StandardInput=tty for exactly this reason.
 sb_cols() {
-  local c="${STATUSBOARD_COLS:-}"
+  local istty="${1:-0}" c="${STATUSBOARD_COLS:-}"
   if [ -z "$c" ]; then
-    [ -t 1 ] || { printf '0'; return; }
+    [ "$istty" = 1 ] || { printf '0'; return; }
     c="$(stty size 2>/dev/null | awk '{ print $2 }')"
     [ -n "$c" ] || c="$(tput cols 2>/dev/null)"
     [ -n "$c" ] || c=80
@@ -663,6 +673,8 @@ sb_unmounted() {
 # show one sample forever. Sample in the shell, format in the subshell.
 SER_BAT=""; SER_PW=""; SER_LAN=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
 SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem
+# Evaluated ONCE here, where fd 1 is the real output; see sb_cols.
+SB_ISTTY=0; [ -t 1 ] && SB_ISTTY=1
 SB_MOUNTS=""; SB_UNMOUNTED=""
 # Declared up front because the frame reads them under `set -u`: the loop always
 # probes before its first paint, but --once and any future caller ordering should
@@ -825,7 +837,7 @@ render_frame() {
     vis="$(sb_vislen "${SB_ROW_TEXT[i]}")"
     [ "$vis" -gt "$textw" ] && textw="$vis"
   done
-  cols="$(sb_cols)"
+  cols="$(sb_cols "$SB_ISTTY")"
   chartw="$(sb_chart_width "$cols" "$textw")"
 
   # Header. The span marker is not decoration: the same picture is 20 minutes at
