@@ -52,10 +52,10 @@ set -u
 
 MODE=run
 FONT="${STATUSBOARD_GUI_FONT:-JetBrains Mono}"
-# 20pt is chosen to land near the 16x32 console font --bigfont installed: JetBrains
-# Mono advances 0.6em, so at 96dpi a 20pt cell is ~16px wide and ~35px tall, which
-# is ~120x31 on this panel — the geometry the chart widths were tuned against.
-FONTSIZE="${STATUSBOARD_GUI_FONTSIZE:-20}"
+# Size is purely a readability call: nothing in the board is tuned to a fixed
+# width, it re-reads the terminal size each frame. For scale, 20pt measured
+# 119x29 on latitude's panel, so 16pt gives roughly a quarter more of each axis.
+FONTSIZE="${STATUSBOARD_GUI_FONTSIZE:-16}"
 INTERVAL="${STATUSBOARD_GUI_INTERVAL:-1}"
 PROBE="${STATUSBOARD_GUI_PROBE:-10}"
 GUI_TTY="${STATUSBOARD_GUI_TTY:-/dev/tty1}"
@@ -76,7 +76,7 @@ while [ $# -gt 0 ]; do
     --install) MODE=install; shift ;;
     --uninstall) MODE=uninstall; shift ;;
     --font) FONT="${2:-}"; shift 2 ;;
-    --size) FONTSIZE="${2:-20}"; shift 2 ;;
+    --size) FONTSIZE="${2:-16}"; shift 2 ;;
     -h | --help) sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
@@ -123,7 +123,7 @@ sbg_font_has_ramp() {
 #   foot -H   hold the window open after the child exits, so a board that dies
 #             leaves its error on screen instead of a black rectangle.
 sbg_kiosk_argv() {
-  local board="${1:-}" font="${2:-}" size="${3:-20}" interval="${4:-1}" probe="${5:-10}"
+  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}"
   printf '%s\n' cage -s -d -- \
     foot -H -f "$font:size=$size" \
     -o main.pad=6x6 -o cursor.style=underline \
