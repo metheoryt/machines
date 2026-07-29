@@ -116,6 +116,28 @@ touch the firmware — the fraud is a sticker over an untouched 8.5-year-old dis
 identity and 74 419 head-flying-hours already decide it — and it spends a day of
 the return window.
 
+**The full dump is committed alongside this document** as
+[`2026-07-29-hus726060ale611-smart-evidence.txt`](2026-07-29-hus726060ale611-smart-evidence.txt)
+— 324 lines of `smartctl -x`, captured 2026-07-29 21:20 with the drive back in
+Dock B bay 0 solely to take this record. Read-only; nothing was written to the
+drive. Headline fields, all from that file:
+
+```
+Device Model:     HUS726060ALE611          <- sold as WD Purple WD63PURZ
+Serial Number:    NAGUNU1X
+LU WWN Device Id: 5 000cca 242cbab63       <- OUI 000cca = Hitachi/HGST, not WD
+Firmware Version: APGL0001
+Rotation Rate:    7200 rpm                 <- WD Purple WD63PURZ is 5400 rpm
+  9 Power_On_Hours                74485    <- 8.5 years
+0x01 0x010  Power-on Hours        74485    <- ACS devstat log agrees exactly
+0x03 0x008  Spindle Motor Power-on Hours  74420
+0x01 0x018  Logical Sectors Written  5904970852764   <- 3.02 PB
+  5 Reallocated_Sector_Ct             0
+197 Current_Pending_Sector            0
+198 Offline_Uncorrectable             0
+199 UDMA_CRC_Error_Count              0
+```
+
 ### Evidence to keep, if the sale is disputed
 
 - The four-source identity table above, plus the raw `smartctl -d sat -i -A -l
@@ -397,10 +419,16 @@ The fourth entry was added at 19:56 once the 320G reappeared in the NS1066
 enclosure (§2). Its comment block in `/etc/fstab` records the placeholder-serial
 caveat, because the obvious `usb-*` path is the wrong one to use there.
 
-**Only the HGST is still without an entry** — it is in Dock B, which is powered
-off, so its UUID cannot be read (vanished devices are absent from the `blkid`
-cache too). A `TODO` block in `/etc/fstab` names it, its intended mount point
-`/mnt/immich-2024-backup`, and the capture command.
+**Complete as of 21:19** — Dock B was powered back on, so the HGST's UUID could
+finally be read and its entry added:
+
+| `6C16E54216E50DC0` | `/mnt/immich-2024-backup` | Dock B bay 1, `sdh2` | same + `x-systemd.device-timeout=60` |
+
+All five data volumes now have UUID entries. `mount -a` clean, every mount present.
+The `TODO` block in `/etc/fstab` can be dropped.
+
+The 6TB (`sdg`) deliberately has **no entry** — it is raw, unpartitioned, and going
+back.
 
 **Follow-up:** these lines were hand-typed into `/etc/fstab`, which is exactly the
 kind of state this repo exists to make survivable. They belong in a `provision/`
@@ -879,3 +907,35 @@ in order of preference:
 
 Either way the script is at `~/staging/pull-music.sh` on latitude and is safe to
 re-run any number of times.
+
+### 11.5. Sneakernet supersedes the wifi pull
+
+A **Kingston XS2000** portable SSD — the Ventoy install drive — was plugged into
+latitude at 21:18 and is a far better vehicle than the link:
+
+| Partition | Size | FS | Label | Free |
+|---|---|---|---|---|
+| `sdf1` | 253.8G | exfat | `Boot` | 206G — Ventoy's ISO partition |
+| `sdf2` | 32M | vfat | `VTOYEFI` | Ventoy's ESP; do not touch |
+| `sdf3` | **700G** | ntfs | `data` | **638G** — general storage, holds `backup` and `windows-reinstall` |
+
+`sdf3` is the target: 638G free, and writing there does not disturb Ventoy's boot
+function. Encoding is safe end to end — NTFS stores names as UTF-16, Windows
+writes them natively, and Linux `ntfs3` reads them back as UTF-8, so the Cyrillic
+filenames never pass through a codepage conversion at all. This is *better* than
+the ssh route, not merely faster.
+
+The wifi rsync was killed at 21:19 having transferred **15G of 89G**. That work is
+not wasted: `rsync -a` skips files already present with matching size and mtime, so
+the final pass only needs the remaining ~74G.
+
+Sequence: unmount both XS2000 partitions on latitude → move the drive to g513ie →
+`robocopy` the library onto `sdf3` (native Windows-to-NTFS, no drvfs, no network) →
+move the drive back → rsync from the XS2000 into `~/staging/music/`. Then re-run
+`pull-music.sh` once as a **consistency check against the live source** — with the
+data already local it transfers nothing and only reports differences.
+
+Note `sdf3` had to be mounted with an explicit `-t ntfs3`. Auto-detection picks the
+old read-only `ntfs` driver, which is not built into this kernel, and the mount
+fails with `unknown filesystem type 'ntfs'` — a misleading error, since the
+filesystem is fine and only the driver name is wrong.
