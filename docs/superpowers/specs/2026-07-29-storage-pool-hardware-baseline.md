@@ -624,7 +624,29 @@ originals still exist. Item by item, with what was verified:
 | `restic-repos/wsl` | 2.3G, 19 snapshots | **drop** — same reinstall vintage | same as above |
 | `Настя Стас GoPro` | 39.0 GiB, 162 files | **move to desktop** | desktop `C:` has **1194 GB free**; `G:` has only 38.4 GB and is not a candidate |
 | `restic-repos/laptop-music` | 67G, 14 snapshots | **HOLD — see below** | Original found, but in the wrong place |
-| `secrets/` | 133K | **unresolved** — blocks the wipe | Private key material; §9 forbids staging it to plaintext root |
+| `secrets/` | 133K | **drop** — already migrated (decided 2026-07-29). No separate delete step: the reformat in §10.3 destroys it, which also avoids remounting `ntfs3` rw | Fingerprints recorded before destruction, below |
+
+### 10.0. `secrets/` — fingerprints kept, contents destroyed with the volume
+
+Decided: drop it, the material is already migrated. Public fingerprints recorded
+first so that a future authentication failure is diagnosable — these are public
+metadata, not key material, and keeping them costs nothing:
+
+```
+256  SHA256:fFZUwTp9Ye4HukFntyjVplkAJxczc7GWz6ssWlcyg40  methe@me-g614jv        (ED25519)
+3072 SHA256:gA8eWbg6MwUFjg6IX135LEFKJ9nYHzM52nBDfojDI/o  methe@DESKTOP-4PQ6V6B  (RSA)
+```
+
+Both are **desktop** keys, not latitude's, which corroborates the migration claim:
+`methe@me-g614jv` is live — it is in latitude's `authorized_keys` today. The RSA
+key carries the pre-rename hostname `DESKTOP-4PQ6V6B` and is legacy. The directory
+also held 22 Windows wifi profile exports (`Беспроводная сеть-*.xml`) and
+`wsl-secrets-Ubuntu-24.04.tar`; the wifi profiles are re-enterable, and they belong
+to a machine being decommissioned.
+
+No separate deletion step is scheduled: the reformat destroys it. That is
+deliberate — a targeted delete would require remounting the volume read-write
+through `ntfs3`, which is the one operation that could damage what is still on it.
 
 ### 10.1. `laptop-music` must not be dropped yet
 
@@ -785,3 +807,75 @@ This is why `ssh desktop` from latitude reports *"Could not resolve hostname"*
 rather than a permission error. Until it is fixed, anything latitude initiates has
 to use tailnet IPs. It will bite every name-based script, so it belongs with 11.1
 rather than after it.
+
+### 11.3. Resolved 2026-07-29 20:45 — latitude has a fleet identity
+
+`ssh-keygen -t ed25519 -C "me@latitude"`, passphrase-less because the fleet's
+unattended jobs need it (the same deliberate choice the retired NixOS key carried).
+
+**Fingerprint: `SHA256:uZJCBdKuM/r+74I8ITbsOaeKpRmkqmp+bHhjbouNYm0 me@latitude`**
+
+Distributed to all four peers, backups taken alongside each edit:
+
+| Host | File written | Note |
+|---|---|---|
+| air | `~/.ssh/authorized_keys` | |
+| hub | `~/.ssh/authorized_keys` | |
+| desktop | `C:\ProgramData\ssh\administrators_authorized_keys` | the user's `~/.ssh/authorized_keys` does not exist; `methe` is an admin so this file is the authoritative one |
+| g513ie | `C:\ProgramData\ssh\administrators_authorized_keys` | both files exist here, but the admin file is the one sshd consults |
+
+Fleet `Host` blocks appended to latitude's `~/.ssh/config` in a marked block, each
+with `IdentityFile ~/.ssh/id_ed25519` + `IdentitiesOnly yes`. **They use tailnet
+IPs, not `*.gg.ez` names**, because of 11.2 — with a comment saying to switch them
+to names once DNS is fixed.
+
+Verified: `ssh g513ie`, `ssh desktop`, `ssh air`, `ssh hub` all return `OK` from
+latitude. **`g513ie` does not resolve from air either** — only the literal alias
+`server` reaches it, which is the §10 naming collision biting in practice.
+
+**Deliberately not done yet:** removing the dead grants. `me-nixos-latitude5520`
+is provably orphaned and sits in the `authorized_keys` of air, hub, desktop and
+g513ie; hub additionally carries `methe@DESKTOP-4PQ6V6B`, `methe@lat5520`,
+`methe@methe-server` and `me@desktop-wsl-ubuntu-26-04`. Those four are *stale
+comments*, not provably stale keys — a comment is not a key identity, and the same
+key material may still be live under a renamed host. Removal must compare key
+material, and it must happen **after** the new key is confirmed working, never in
+the same edit that grants access.
+
+### 11.4. The g513ie link is the real transfer constraint
+
+The music pull runs as `rsync --rsync-path="wsl -e rsync"` from latitude — the
+remote end executes rsync *inside* WSL, so `/mnt/c` paths resolve and the Cyrillic
+names arrive as UTF-8. g513ie's default shell is PowerShell, which mangles binary
+pipelines when *it* does the piping; a `md5sum`-vs-`cat | md5sum` round trip of a
+5 MB binary through it matched exactly, so the rsync protocol stream survives.
+The mechanism works. The link does not:
+
+| Measurement | Value |
+|---|---|
+| Tailnet path | **direct**, `192.168.8.170:41641` — same LAN, no DERP relay |
+| `tailscale ping` RTT | **251 ms**, then **454 ms** twelve minutes later |
+| rsync throughput | 6.9 MB/s, decaying to **4.1 MB/s** |
+| Raw `/dev/zero` stream (no disk, no drvfs, no per-file overhead) | **3.0 MB/s** |
+
+**The first diagnosis was wrong and the measurement corrected it.** With 18 378
+files and a 251 ms RTT, per-file round trips looked like the obvious culprit, which
+would have made a single tar stream the fix. But a `/dev/zero` stream — no disk, no
+drvfs, one round trip total — ran *slower* than rsync. The link is
+**bandwidth-bound, not latency-bound**, so a tar stream buys nothing. (Both numbers
+were taken while the rsync was live and contending, so neither is clean in
+isolation; the conclusion rests on both being single-digit MB/s, which no amount of
+contention explains away.)
+
+At ~4 MB/s the 89 GB pull needs 6+ hours and the trend is the wrong way. Options,
+in order of preference:
+
+1. **Put g513ie on ethernet.** A 251→454 ms RTT on a local wire is a wifi problem,
+   not a network-design one. Restarting the script after plugging in costs nothing:
+   `rsync -a` skips what already landed, so the transfer resumes rather than
+   restarts.
+2. **Let it run overnight.** It is idempotent and unattended. Nothing else waits on
+   it except the 320G wipe.
+
+Either way the script is at `~/staging/pull-music.sh` on latitude and is safe to
+re-run any number of times.
