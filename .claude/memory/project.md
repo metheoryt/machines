@@ -90,10 +90,22 @@ global + per-host). One bullet per fact under a topical heading.
   check the BSD behaviour rather than assuming GNU.
 - **Don't infer a leak from killed-fetch debris.** A TERM'd `git fetch` leaves
   `.git/objects/pack/tmp_pack_*` behind, so probing with a short budget manufactures
-  exactly the evidence of a recurring leak. `~/.hermes/hermes-agent` (380MiB, 1417
-  remote branches) needed >60s for its FIRST fetch only — because the bug meant it
-  had never been fetched at all. Caught up, a tick is ~21s and leaves nothing.
-  Measure at the real budget before changing the scan's prune list.
+  exactly the evidence of a recurring leak. Measure at the real budget before
+  changing the scan.
+- **NEVER `git fetch` a shallow clone from a scan.** A `clone --depth 1` client can
+  offer only its one commit during negotiation and its shallow boundary stops it
+  claiming any ancestor, so the server resends the whole history. `~/.hermes/hermes-agent`
+  (upstream's install.sh does `clone --depth 1 --branch main`) went 60M/1-commit to
+  350M with `refs/remotes/origin/main` legitimately reaching 18914 commits — and
+  `git gc` reclaims NOTHING, because nothing is garbage. One-way damage, repeating
+  every tick. git-autofetch skips shallow repos since 2026-07-29; they are vendored
+  installs with their own updater, not checkouts whose ahead/behind you track.
+  Restoring one needs `main` advanced to `origin/main` (i.e. let install.sh update
+  it) or a fresh clone — dropping tags and gc'ing does nothing.
+- **Upstream hermes-agent's installer is already correct** — `install.sh` uses
+  `git clone --depth 1 --branch "$BRANCH"` and its updater fetches only that branch,
+  with a comment saying why. Bloat in `~/.hermes/hermes-agent` came from OUR scan,
+  not from upstream. No PR is warranted there.
 
 ## Fleet network
 
