@@ -224,6 +224,15 @@ tier_apt_dev() {
 #   fonts-jetbrains-mono     that font. NOT the Nerd Font variant — icons are a
 #                            separate decision and a separate download.
 #   btop                     for the planned second pane; unused until then.
+#   polkitd                  THE ESCAPE HATCH. cage -s enables VT switching, but
+#                            the switch itself goes through logind's Seat.SwitchTo,
+#                            which is polkit-gated. With no polkit installed at all
+#                            (a minimal Debian install has none) logind denies every
+#                            gated action to non-root, so Ctrl-Alt-F2..F7 silently
+#                            does nothing and the only console on the box is
+#                            reachable only over the network. Measured on latitude
+#                            2026-07-29: cage logged "[libseat] Could not switch
+#                            session: Permission denied" on every keypress.
 #
 # Best-effort throughout: a box that fails to install a terminal emulator should
 # still finish provisioning, and the check/install steps refuse to proceed on their
@@ -240,7 +249,7 @@ tier_statusboard() {
   fi
   info "Installing status-board packages (apt)…"
   $SUDO apt-get install -y --no-install-recommends \
-    cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop \
+    cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop polkitd \
     || warn "status-board package install failed — the board's --check will name what is missing"
   return 0
 }

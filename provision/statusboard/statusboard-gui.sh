@@ -116,6 +116,19 @@ sbg_font_has_ramp() {
     tr ',' '\n' | grep -qxF "$family"
 }
 
+# sbg_have_polkit: is a polkit authority installed at all?
+#
+# Asked by artefact rather than by dpkg so it holds on any distro, and it is a
+# presence test rather than a decision test on purpose: polkit's own answer depends
+# on the CALLER's session, so asking from an SSH shell (not on a seat, not active)
+# would say "denied" on a perfectly healthy box. Whether cage itself is authorised
+# is answerable with `pkcheck --action-id org.freedesktop.login1.chvt --process
+# $(pgrep -x cage)`, which needs the kiosk to already be running.
+sbg_have_polkit() {
+  command -v pkcheck >/dev/null 2>&1 && return 0
+  [ -x /usr/lib/polkit-1/polkitd ] || [ -x /usr/libexec/polkit-1/polkitd ]
+}
+
 # sbg_kiosk_argv <board> <font> <size> <interval> <probe> <cell>: the kiosk command line,
 # one argument per line so a test can assert on it without re-splitting a string.
 #
@@ -216,6 +229,21 @@ sbg_check() {
     printf 'board      ok (%s)\n' "$BOARD"
   else
     printf 'board      missing: %s\n' "$BOARD" >&2
+    rc=1
+  fi
+
+  # The escape hatch is TWO things, and the second one fails silently. cage -s makes
+  # the compositor honour Ctrl-Alt-Fn, but the switch it then asks for goes through
+  # logind's Seat.SwitchTo, which is polkit-gated — and a minimal Debian has no
+  # polkit at all, in which case logind denies it to everyone but root. The keys do
+  # nothing, cage logs "Could not switch session: Permission denied" where nobody
+  # looks, and the only console on the box becomes network-only. That is worth a
+  # hard failure rather than a note.
+  if sbg_have_polkit; then
+    printf 'vtswitch   ok (polkit present — Ctrl-Alt-F2..F7 can leave the kiosk)\n'
+  else
+    printf 'vtswitch   no polkit — Ctrl-Alt-Fn will be denied and the kiosk traps the console\n' >&2
+    printf '           fix: sudo apt install -y polkitd\n' >&2
     rc=1
   fi
 
