@@ -192,7 +192,7 @@ health data recorded for any of them.
 
 | Drive | Bay | Current role | POH | Surface | Notable |
 |---|---|---|---|---|---|
-| **WDC WD10SPZX-21Z10T0**<br>`WD-WX91E575272W` | A0 | `E:` years archive `admin`, **664G, only online copy** | 28 796 (3.3 y) | 0 realloc / 0 events / 0 pending / 0 uncorr — **cleanest surface in the pool** | **UDMA_CRC 144 and still accruing** (worst 199 vs value 200); Start_Stop 91 599; Load_Cycle 122 818 |
+| **WDC WD10SPZX-21Z10T0**<br>`WD-WX91E575272W` | A0 | `E:` years archive `admin`, **664G, only online copy** | 28 796 (3.3 y) | 0 realloc / 0 events / 0 pending / 0 uncorr / 0 seek / 0 read-error — **cleanest surface in the pool** | **UDMA_CRC 144, age unknown** (see below); Start_Stop 91 599; Load_Cycle 122 818 |
 | **HGST HTS541010A9E680**<br>`670200210032` bay 1 | B1 | `H:` restic `immich-media-2024`, 650G; designated off-site copy | 27 816 (3.2 y) | 0 pending / 0 uncorr, **23 realloc events** (0 sectors) | **Load_Cycle 639 701 — past the ~600k typical rating**; Start_Stop 116 800; Power_Cycle 14 413; CRC 18 |
 | **ST1000LM024 HN-M101MBB**<br>`S2U5J9ECA34541` | A1 | `G:` restic `immich-media` + `immich-postgres`, 159G | 25 361 (2.9 y) | 0 realloc / 0 pending / 0 uncorr; CRC 0 | **Multi_Zone_Error_Rate normalised 001/100** (raw 83 172); **max-ever temp 63 °C**; Samsung M8-derived family with a weak field record |
 | **ST320LT020-9YG142**<br>`W047MMKS` | *(removed)* | `F:` `Public`, 177G — retired, shelved | 36 153 (4.1 y) | 0 realloc / 0 pending / 0 uncorr | 10 ATA errors but **newest at 13 478 h — 2.6 years stale**; `Reported_Uncorrect` 11 and `Command_Timeout` 299 both historical; past thermal excursion (`190 In_the_past`) |
@@ -203,15 +203,37 @@ health data recorded for any of them.
   scars are all 2.6 years old with a clean surface since; the ST1000LM024 carries
   a live `Multi_Zone_Error_Rate` at the bottom of its normalised scale and has
   seen 63 °C.
-- **The years archive's only online copy sits behind a marginal link.** 144 CRC
-  errors, still climbing, on the drive holding 664G of irreplaceable `admin`
-  data — which is exactly the data about to be read end-to-end during
-  consolidation. CRC errors are detected and retried rather than silent, but they
-  mark a link that can drop mid-copy.
-  **Diagnostic available:** its dock-mate in bay A1 shows CRC 0 on the same dock
-  and cable, so swapping the two drives between bays A0/A1 isolates it — if the
-  count follows the drive it is the drive's connector, if it stays with the bay
-  it is the bay.
+- **The years archive's only online copy shows 144 CRC errors — but their age is
+  unknown, and that distinction was initially overstated here.** An earlier
+  revision of this document called the count "still accruing," reasoning from
+  `VALUE 200` against `WORST 199`. That divergence only proves the counter
+  degraded at *some* point across 28 796 power-on hours; it does not establish
+  that it is ongoing. CRC counters are cumulative and never reset, so a single
+  reading cannot distinguish 144 errors last week from 144 during a dock reseat
+  years ago — and a dock was reseated recently. **Only a delta under load
+  settles it.**
+
+  CRC errors are interface corruption (cable, connector, bridge PHY, bay
+  contacts), never a platter defect. They are detected and retried rather than
+  silent, so the risk they carry is a device that drops mid-copy, not corrupted
+  data.
+
+  **Test protocol, started 2026-07-29 19:21 (`~/disk-baseline/` on latitude):**
+  baseline recorded at CRC **144** / POH 28 797 for the WD10SPZX and CRC **0** /
+  POH 25 361 for its dock-mate, then a non-destructive full-surface read
+  (`dd … of=/dev/null conv=noerror,sync`, ~2.3 h at ~113 MB/s) to exercise the
+  link under sustained load. Re-read attribute 199 afterwards:
+
+  - **Delta 0** → the 144 is historical scar tissue from reseats. Nothing to fix.
+  - **Delta > 0** → the link is degrading now. Swap the two drives between bays
+    A0/A1 and repeat: if the delta follows the drive it is the drive's connector,
+    if it stays with the bay it is the bay's PHY. The shared path — cable and
+    upstream bridge — is already exonerated, since the dock-mate on the same
+    cable reads CRC 0.
+
+  The sweep does double duty: ~113 MB/s sustained is near-native for this drive,
+  which argues against severe link degradation, and it is the first end-to-end
+  readability check the 664G archive has ever had.
 - **Every incumbent shows heavy head-parking wear** (Start_Stop 91k / 116k / 23k;
   Load_Cycle 639k / 122k). The docks park aggressively. Whatever 6TB ends up
   seated should have APM checked (`hdparm -B`) and aggressive spindown disabled
@@ -246,7 +268,12 @@ against a 3 × 1TB backup pool (2.79 TB). Health data adds the ordering:
    nominal load-cycle rating and is the copy nobody inspects for months. If it
    goes off-site, run `restic check --read-data` before it leaves and on every
    rotation.
-4. **Fix the A0 link before the 664G consolidation copy**, not after.
+4. **Resolve the A0 CRC question before the 664G consolidation copy**, not after —
+   and note that "resolve" may mean "confirm it is historical and do nothing."
+   **The WD10SPZX is not a retirement candidate.** It has the cleanest surface in
+   the pool and its only fault is an interface counter; retiring it would discard
+   the best disk over a connector. Its long-term role is the years-archive backup
+   target, once a real 6TB exists and `admin` moves off it.
 5. **`/etc/fstab` has no data-disk entries at all** — root, ESP and swap only.
    Every `/mnt/*` mount is currently transient, so a reboot brings latitude up
    with empty mount points and any service pointed at nothing. UUID-based entries
