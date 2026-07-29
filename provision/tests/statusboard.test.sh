@@ -338,6 +338,12 @@ eq "$(printf '%s\n' "$OUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d
 eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|lan|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
   'layout: all charted rows end at the same column (disk rows included)'
 has "$OUT" 'G / ' 'layout: the frame lists filesystems with their sizes'
+# An uncharted row must not narrow the chart column. The "not mounted" list is the
+# widest row on this box by 40 columns, and letting it set the text width cost every
+# chart most of its span.
+eq "$(printf '%s\n' "$OUT" | awk '/^battery/ { print length($0) }')" \
+   "$(printf '%s\n' "$OUT" | awk '/^tailnet/ { print length($0) }')" \
+   'layout: charted rows agree on width regardless of the uncharted ones'
 
 # ── Paint cadence vs probe cadence ─────────────────────────────────────────────
 # The clock is repainted every second; the pings are NOT run every second. Both

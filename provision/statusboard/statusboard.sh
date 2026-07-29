@@ -836,9 +836,14 @@ render_frame() {
     fi
   fi
 
-  # Layout: widest row wins the text column, the charts take everything left.
+  # Layout: the widest CHARTED row wins the text column, and the charts take
+  # everything left. Only charted rows count — a row with no chart is free to run
+  # long, so the "not mounted" list of six disks cannot squeeze the chart column for
+  # every other row (it did: 107 columns of text left 10 cells of chart on a 120-col
+  # console after the font was doubled).
   local i vis textw=0 chartw cols
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
+    [ -n "${SB_ROW_SERIES[i]}" ] || continue
     vis="$(sb_vislen "${SB_ROW_TEXT[i]}")"
     [ "$vis" -gt "$textw" ] && textw="$vis"
   done
