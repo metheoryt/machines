@@ -222,3 +222,153 @@ Facts that cost time this session and will cost it again:
 - Does latitude's root get encrypted before or after the databases land? (§6)
 - Does anything still depend on the `server` SSH alias resolving to g513ie? The
   alias will need to move or be retired as part of decommissioning.
+
+---
+
+# Part II: the real inventory (engine up, 2026-07-30 01:2x)
+
+Docker Desktop was started at the console. Engine 29.6.2. §0's blocker is cleared
+and the numbers below replace the unknowns above.
+
+## 10. The payload is 21.3 GB, and most of that is disposable too
+
+```
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          54        20        55.14GB   30.56GB (55%)
+Containers      20        3         226.1MB   187.8MB (83%)
+Local Volumes   40        4         21.3GB    21.24GB (99%)
+Build Cache     72        0         9.706GB   6.826GB
+```
+
+§1's prediction holds: the 158 GB VHDX contains 55 GB of images and 9.7 GB of
+build cache that do not migrate, and the volume total is **21.3 GB** — 13% of the
+disk's apparent size. Of that, the single largest named volume is disposable:
+
+| Volume | Size | Links | Disposition |
+|---|---|---|---|
+| `immich_model-cache` | 6.505 GB | 0 | **drop** — ML weights, redownload on demand |
+| anonymous `3ad6bda1…` | 7.581 GB | 0 | identify before dropping |
+| anonymous `e05572c9…` | 7.075 GB | 0 | identify before dropping |
+| `telegrind_pgdata` | 57.31 MB | 1 | **Postgres — logical dump** |
+| anonymous `21f11937…` | 37.86 MB | 0 | identify |
+| anonymous `d8caab8c…` | 32.97 MB | 0 | identify |
+| `forgejo_forgejo_data` | 2.683 MB | 1 | export |
+| `embedthat_redis_data` | 1.335 MB | 1 | redis cache — likely drop |
+| `embedthat-bot_redis_data` | 1.258 MB | 0 | duplicate of the above, stale project name |
+| `jellyseerr_jellyseerr-data` | 309.2 kB | 0 | export |
+| `jellyseerr-data` | 308.6 kB | 0 | duplicate, pre-compose naming |
+| `tugtainer_tugtainer_data` | 45.12 kB | 1 | export |
+| `telegrind_weights`, `forgejo_data` | 0 B | 0 | empty, drop |
+
+Two 7 GB anonymous volumes are 14.7 GB — the largest unattributed item and the
+one thing that must be identified before any `docker volume prune`. Anonymous
+volumes with `Links: 0` are exactly what a prune deletes, and 99% of the volume
+total is reclaimable by docker's reckoning, which is not the same as safe to
+reclaim.
+
+Note the duplicate pairs (`jellyseerr-data` / `jellyseerr_jellyseerr-data`,
+`embedthat_redis_data` / `embedthat-bot_redis_data`). Compose project renames left
+orphaned copies behind; the live one is the one with `Links: 1`.
+
+## 11. 20 containers, 3 running — the stack is already mostly down
+
+```
+speedtest            running   (healthy)
+immich_redis         running   (healthy)
+immich_postgres      restarting  (1) — see §12
+embedthat-bot-1, embedthat-worker-1, telegrind-bot-1, telegrind-postgres-1,
+jellyfin, jellyseerr, sonarr, radarr, prowlarr, bazarr, whisparr, qbittorrent,
+embedthat-redis-1, forgejo, beat, tugtainer, restic-server   — exited
+```
+
+Most exited `137` (SIGKILL) 24 hours ago — consistent with a host shutdown, not
+individual failures. `forgejo` has been down two weeks. This is convenient: an
+already-stopped stack removes §2's hot-copy hazard for everything except what is
+still running.
+
+## 12. immich's database was never on g513ie — it is already on latitude
+
+The single most consequential finding. `immich_postgres` mounts:
+
+```
+bind | D:\ImmichMedia\postgres        -> /var/lib/postgresql/data
+bind | D:\ImmichMedia\library\backups -> /backups
+```
+
+**`D:` does not exist on g513ie any more.** That drive is the Kingston NVMe
+labelled `Immich`, which now lives in latitude as `/mnt/immich`. So the immich
+data directory is already physically on the target machine:
+
+| Path on latitude | Size |
+|---|---|
+| `/mnt/immich/ImmichMedia/postgres` | 803 MB — `PG_VERSION` = `14` |
+| `/mnt/immich/ImmichMedia/library` | **244 GB** — the media library |
+
+Nothing to transfer. The migration for immich is to run the same image against
+the same directory on latitude.
+
+This also explains the restart loop. With the Windows path gone, Docker Desktop
+resolved the bind into its own VM filesystem, which is out of space:
+
+```
+FATAL:  could not write lock file "postmaster.pid": No space left on device
+```
+
+That failure is *protective* — it is why no phantom empty cluster got written
+where the real one used to be. But the loop should be stopped rather than left
+running.
+
+### 12.1. The cluster was not shut down cleanly
+
+```
+postmaster.pid:  pid 1 ... ready      (written Jul 27 23:46)
+pg_wal newest:   0000000100000001000000CE   Jul 27 23:51
+```
+
+A stale pid file marked `ready` and WAL written minutes later means Postgres was
+running when the drive was pulled out from under it. First start will perform
+**crash recovery**, which is a write to the data directory — and if it goes wrong
+there is no second attempt.
+
+Snapshot taken before anything touches it, from the still-read-only mount:
+
+```
+~/immich-db-preserve/postgres-prerecovery-20260730.tar   803 MB, 1937 entries, verified readable
+```
+
+803 MB is free insurance against a 244 GB library becoming unindexable.
+
+### 12.2. Two constraints on first start
+
+- **Use the same image**, `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0`.
+  A plain `postgres:14` lacks the `pg_vectors` / vectorchord extensions the cluster
+  was created with, and the `pg_vectors` directory in the data dir confirms they
+  are in use. A mismatched build will fail to load them.
+- **`/mnt/immich` is currently `ro`.** That is deliberate for the migration and
+  must be flipped to `rw` for Postgres — which means the read-only safety net comes
+  off at the same moment crash recovery runs. Do the snapshot restore-test first.
+
+## 13. Revised sequence
+
+1. ~~Start Docker Desktop~~ — done.
+2. Stop the `immich_postgres` restart loop on g513ie so it cannot write anywhere.
+3. Identify the two 7 GB anonymous volumes. **Nothing gets pruned before this.**
+4. `telegrind_pgdata`: `pg_dumpall` from the (currently exited) container — start
+   it, dump, stop. It is 57 MB; a logical dump is trivially cheap here.
+5. Export `forgejo_forgejo_data`, `tugtainer_tugtainer_data`,
+   `jellyseerr_jellyseerr-data` by tar. All are single-digit MB.
+6. Drop `immich_model-cache`, the empty volumes, and the orphaned duplicate pairs.
+7. immich on latitude: native docker, same postgres image, `/mnt/immich` remounted
+   `rw`, snapshot verified first.
+8. Clone the repos (§3 — nothing to rescue).
+9. Enumerate the config directories against the dotfiles branch (§4).
+10. Decommission only after a restore verification passes.
+
+## 14. What is still unknown
+
+- The two 7 GB anonymous volumes (§10) — blocks the prune step.
+- Whether `telegrind_pgdata` holds anything wanted, or is a dev scratch database.
+- The three untracked files in `skep` / `vps` (§3).
+- Which config directories are already tracked (§4).
+- Whether the immich cluster recovers cleanly — unknown until step 7, which is
+  why §12.1's snapshot exists.
