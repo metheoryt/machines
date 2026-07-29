@@ -29,9 +29,19 @@ Delivered and now seated in Dock B bay 0:
 | Power_Cycle_Count | 44 |
 | Start_Stop_Count | 133 |
 | Load_Cycle_Count | 1046 |
-| Total_LBAs_Written | 5 904 970 852 764 → **~3.0 PB** (~356 TB/yr) |
-| Total_LBAs_Read | 6 962 299 994 736 → **~3.6 PB** |
+| Total_LBAs_Written | raw 5 904 970 852 764 — **~3.0 PB *if* 512-byte units (unit-unverified, see below)** |
+| Total_LBAs_Read | raw 6 962 299 994 736 — **~3.6 PB, same caveat** |
 | Newest self-test in log | **8852 hours** — i.e. ~65 600 hours / 7.5 years ago |
+
+> **The petabyte figures are not confirmed.** smartctl reports this drive as
+> `Not in smartctl database 7.3/5528`, so it has no vendor decode for attribute
+> 241/242 and the raw value is uninterpreted. HGST/Hitachi firmware has used
+> several units for these (512-byte LBAs, sectors, GiB). Reading them as 512-byte
+> LBAs yields ~3.0 PB written, i.e. 11.3 MB/s sustained across the drive's whole
+> life — plausible for nearline duty, which is weak corroboration rather than
+> confirmation. **The load-bearing number is the 74 485 power-on hours**, which is
+> unambiguous and needs no vendor decode. Treat the petabytes as supporting colour
+> and do not build an argument on them.
 
 It is a different product line from a different era. HGST was absorbed by WD, so
 "WD" is not strictly wrong, but the Ultrastar 7K6000 is an enterprise
@@ -40,8 +50,8 @@ nearline drive that shipped around 2015 — its warranty expired years ago.
 **The wear profile is unmistakably ex-datacenter:** 74 485 hours of power-on
 against only 44 power cycles and 1046 load cycles. It was spun up, left running
 for eight and a half years, and never parked. That is the *good* kind of duty
-cycle, and it explains the surprisingly clean surface below — but it is still
-8.5 years and ~3 PB.
+cycle, and it explains the surprisingly clean surface below — but 8.5 years of
+service life is 8.5 years regardless of how gently it was accumulated.
 
 ### The surface itself is genuinely clean
 
@@ -59,17 +69,30 @@ cycle, and it explains the surprisingly clean surface below — but it is still
 | ATA error log | **No Errors Logged** |
 | Health (attribute-based) | PASSED |
 
-Zero reallocated sectors after 3 PB of writes is a healthy platter set, and the
-annualised 356 TB/yr sits inside the 7K6000's 550 TB/yr rating — the drive was
-worked hard but not abused.
+Zero reallocated sectors, zero pending, zero uncorrectable and an empty ATA error
+log after 8.5 years is a healthy platter set. Whatever this drive did, it was not
+abused.
 
-### Conclusion on this drive
+### Conclusion on this drive — conditional on what the listing said
 
-**It should go back.** Not because it is failing — it measures clean — but
-because it is not the product that was paid for, and the gap is enormous: a new
-drive with warranty versus an 8.5-year-old out-of-warranty enterprise pull.
-Empirical drive-failure curves rise steeply past year six, and this disk was
-about to become the **primary** home for ~1.5–2 TB of consolidated data.
+**The open question is provenance, and it cannot be settled from the disk.**
+SMART establishes *what the drive is* and *how long it ran*; it cannot establish
+what was advertised. Two readings, discriminated by the listing and price, not by
+any further measurement:
+
+- **Sold as a new WD Purple `WD63PURZ`** → this is a mis-shipment or a
+  misrepresented sale. Return or dispute it. A new drive with a 3-year warranty
+  and ~0 hours is not substitutable by an out-of-warranty 8.5-year pull, however
+  clean it measures.
+- **Sold as recertified / renewed / used enterprise, at a price reflecting that**
+  → the drive is what was sold, and keep-or-return becomes an ordinary value
+  judgement. A clean 8.5-year Ultrastar is a genuinely reasonable *bulk media*
+  disk; empirical failure curves still rise steeply past year six, so it is a bad
+  *only* disk.
+
+Either way the constraint in §5 holds: this disk was about to become the primary
+home for ~1.5–2 TB of consolidated data, and at 8.5 years it must not be the sole
+copy of anything.
 
 Two deliberate consequences of that decision:
 
@@ -164,8 +187,17 @@ against a 3 × 1TB backup pool (2.79 TB). Health data adds the ordering:
    `admin` years archive, Immich `upload` + `profile`, `Media/config` — keeps a
    second copy on the 1TB pool at all times.
 2. **Rank the backup pool by measured health, not by size.** Best surface first:
-   WD10SPZX (fix its link first) → HGST (worn but clean) → ST1000LM024 (weakest
-   keeper). The years-archive backup should not land on the ST1000LM024.
+   WD10SPZX (fix its link first) → HGST (worn, and see the caveat below) →
+   ST1000LM024 (weakest keeper). The years-archive backup should not land on the
+   ST1000LM024.
+
+   > Caveat on that ordering: the HGST reports `Reallocated_Sector_Ct 0` but
+   > `Reallocated_Event_Count 23`. That combination is **unexplained, not
+   > benign** — on some firmware attribute 196 counts remap *attempts* including
+   > ones that recovered in place, but this has not been confirmed for this model.
+   > If those 23 are genuine remap events, the HGST's surface is weaker than its
+   > 0-sector count implies and it may not deserve second place. Resolve with a
+   > `smartctl -t long` before assigning it the years-archive backup.
 3. **The off-site copy is on the pool's most cycled drive.** The HGST is past its
    nominal load-cycle rating and is the copy nobody inspects for months. If it
    goes off-site, run `restic check --read-data` before it leaves and on every

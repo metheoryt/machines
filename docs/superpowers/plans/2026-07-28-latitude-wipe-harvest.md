@@ -631,11 +631,15 @@ has an executor — so the manifest promises more than provisioning delivers.
   0 offline-uncorrectable), and its 10 logged ATA errors are all ≥2.6 years stale
   (newest at 13 478 h against 36 153 h now).
 
-- **The 6TB that replaced it is not the drive that was ordered, and a return is
-  pending (2026-07-29).** Ordered a new WD Purple `WD63PURZ`; received an
-  **HGST Ultrastar `HUS726060ALE611`** with **74 485 power-on hours (8.5 years)**
-  and ~3 PB written — an out-of-warranty ex-datacenter pull. Its surface measures
-  clean, so this is a provenance and remaining-life decision, not a defect one.
-  The 22-hour `badblocks` burn-in is **on hold** pending that decision rather than
-  cancelled. Evidence and layout consequences:
+- **The 6TB that replaced it is a different drive than expected, and its
+  provenance is an open question (2026-07-29).** Expected a WD Purple
+  `WD63PURZ`; the disk now seated in dock B bay 0 is an **HGST Ultrastar
+  `HUS726060ALE611`** with **74 485 power-on hours (8.5 years)** — an
+  out-of-warranty ex-datacenter drive. Its surface measures clean (0 reallocated,
+  0 pending, 0 uncorrectable, empty ATA error log), so this is a provenance and
+  remaining-life decision, not a defect one. **Whether to return it depends on
+  what the listing actually advertised**, which SMART cannot answer: sold as new
+  → mis-shipment; sold as recertified at a recert price → the drive is what was
+  sold. The 22-hour `badblocks` burn-in is **on hold** pending that answer rather
+  than cancelled. Evidence and layout consequences:
   `../specs/2026-07-29-storage-pool-hardware-baseline.md`.
