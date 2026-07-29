@@ -838,3 +838,21 @@ Verification is armed and waits on both legs: `rsync -c` content pass over the
 irreplaceable 245.5 GB, size+mtime over the media. Both report a **flag
 histogram by column position** — the music leg taught that a regex over whole
 itemize lines matches filenames and invents thousands of false mismatches.
+
+### 20.7 Decisions, 2026-07-30 (user)
+
+- **navidrome stays off.** It is already broken, and not by the migration: its
+  library was `Airdrome`, a *script-reorganized copy* of `PicardedMusic`, and
+  that reorganized tree does not exist on latitude. The music itself is intact
+  at `~/staging/music` (89 GB — `PicardedMusic` + `OldMusic`) on the ext4 root,
+  outside every path this migration touches. Keep the music, leave the service
+  down, rebuild the library later. **Do not "fix" navidrome by pointing it at
+  `PicardedMusic`** — that is not what it was indexing.
+- **`restic-server` stays off** until the 320 GB clearing sequence decides where
+  `RESTIC_DATA_PATH` lives. Nothing is lost by waiting; starting it against a
+  path on a drive about to be reformatted would be worse.
+
+Services to bring up on latitude, in order: **immich**, then the **arr stack +
+jellyfin + jellyseerr** (`servarr`, already retargeted), then `telegrind`,
+`embedthat`, `beat`, `tugtainer`, `watchtower`, `speedtest`. Deliberately **not**
+starting: `navidrome`, `restic-server`, `forgejo` (dropped by user decision).
