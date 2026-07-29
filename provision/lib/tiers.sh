@@ -248,8 +248,15 @@ tier_statusboard() {
     APT_UPDATED=1
   fi
   info "Installing status-board packages (apt)…"
+  # tmux and ncurses-term are here as well as in tier_apt_min's dev layer, on
+  # purpose: the kiosk splits the display with tmux, and its config asks for
+  # `default-terminal tmux-256color` — an entry that lives in ncurses-term and
+  # without which tmux REFUSES to start. tmux sits upstream of the board in that
+  # chain, so its absence is a black screen, not a missing pane. A tier that can
+  # produce a black screen must not depend on another tier having run first.
   $SUDO apt-get install -y --no-install-recommends \
     cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop polkitd \
+    tmux ncurses-term \
     || warn "status-board package install failed — the board's --check will name what is missing"
   return 0
 }

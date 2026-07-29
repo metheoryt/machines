@@ -61,8 +61,28 @@ fi
 # because a plausibly-named font lacked the glyphs.
 grep -q ':charset=' "$GUI"; eq "$?" '0' 'font_has_ramp: asks fontconfig by charset'
 
+# ── sbg_board_argv / sbg_session_argv ────────────────────────────────────────
+BOARD_ARGV="$(sbg_board_argv /tmp/board.sh 2 20 120)"
+line "$BOARD_ARGV" 'bash' 'board_argv: runs the board through bash'
+line "$BOARD_ARGV" '/tmp/board.sh' 'board_argv: passes the board path through'
+line "$BOARD_ARGV" '2' 'board_argv: forwards the interval value'
+line "$BOARD_ARGV" '20' 'board_argv: forwards the probe value'
+line "$BOARD_ARGV" '120' 'board_argv: forwards the cell duration'
+eq "$(printf '%s\n' "$BOARD_ARGV" | grep -c .)" '8' 'board_argv: one argument per line'
+
+SESSION_ARGV="$(sbg_session_argv /opt/gui.sh)"
+line "$SESSION_ARGV" '--session' 'session_argv: re-enters the script in session mode'
+line "$SESSION_ARGV" '/opt/gui.sh' 'session_argv: re-enters THIS script, by path'
+eq "$(printf '%s\n' "$SESSION_ARGV" | grep -c .)" '3' 'session_argv: one argument per line'
+
 # ── sbg_kiosk_argv ────────────────────────────────────────────────────────────
-ARGV="$(sbg_kiosk_argv /tmp/board.sh 'JetBrains Mono' 20 1 10 60)"
+# The inner command is now an argument rather than baked in: the kiosk runs
+# `--session` (which builds the tmux layout from inside foot, where the row count
+# finally exists), while a box without tmux or btop runs the board directly. Both
+# compositions have to survive the one-argument-per-line contract, so both are
+# asserted — the font family contains a space, and a caller that re-split a flat
+# string would hand foot "Mono:size=20" as a command.
+ARGV="$(sbg_kiosk_argv 'JetBrains Mono' 20 bash /tmp/board.sh --interval 1 --probe 10 --cell 60)"
 line "$ARGV" 'cage' 'kiosk: cage is the compositor'
 line "$ARGV" 'foot' 'kiosk: foot is the terminal'
 line "$ARGV" 'bash' 'kiosk: the board is run through bash'
@@ -114,6 +134,76 @@ rst_at="$(grep -n 'systemctl reset-failed "\$TEXT_SERVICE"' "$GUI" | head -1 | c
 eq "$(printf '%s\n' "$ARGV" | grep -c .)" '21' 'kiosk: argv is one argument per line'
 line "$ARGV" '--cell' 'kiosk: forwards --cell'
 line "$ARGV" '60' 'kiosk: forwards the cell duration'
+
+# The composition the kiosk actually uses.
+KIOSK_SESSION_ARGV="$(sbg_kiosk_argv 'JetBrains Mono' 16 bash /opt/gui.sh --session)"
+line "$KIOSK_SESSION_ARGV" '--session' 'kiosk: composes with the session command'
+eq "$(printf '%s\n' "$KIOSK_SESSION_ARGV" | grep -c .)" '16' \
+  'kiosk: argv is one argument per line with the session command too'
+# An inner command is mandatory. Without the guard, `-e` would be emitted with
+# nothing after it and foot would open an interactive shell on the wall display.
+sbg_kiosk_argv 'JetBrains Mono' 16 >/dev/null 2>&1
+eq "$?" '1' 'kiosk: refuses to build an argv with no command to run'
+
+# ── sbg_split_rows ────────────────────────────────────────────────────────────
+# The row arithmetic for the btop strip. Both bounds are measured, not guessed:
+# btop refuses to draw a cpu-only box below 8 rows, and the board needs 25 rows of
+# content (measured on latitude 2026-07-29), so 26 leaves one spare for a mount
+# appearing rather than clipping `units all ok` — the alarm line.
+eq "$(sbg_split_rows 36 8)" '8' 'split_rows: the kiosk geometry fits the requested strip'
+eq "$(sbg_split_rows 36 8 26 8)" '8' 'split_rows: explicit minimums agree'
+# One row goes to the pane border tmux draws between them, so 36 rows is 35 of
+# content. A strip that would push the board under its minimum gets trimmed…
+eq "$(sbg_split_rows 36 20 26 8)" '9' 'split_rows: trims the strip rather than the board'
+eq "$(sbg_split_rows 40 30 26 8)" '13' 'split_rows: trims to exactly what is left above the board'
+# …and dropped outright once trimming would take it below what btop will draw. A
+# "Terminal size too small" box on the wall is worse than no strip at all.
+eq "$(sbg_split_rows 36 30 30 8)" '0' 'split_rows: drops the strip when the board needs almost everything'
+eq "$(sbg_split_rows 30 8 26 8)" '0' 'split_rows: drops the strip on a short display'
+eq "$(sbg_split_rows 24 8)" '0' 'split_rows: an 80x24 terminal gets the board alone'
+eq "$(sbg_split_rows 36 4 26 8)" '0' 'split_rows: refuses a strip smaller than btop will accept'
+# Never a crash and never a wrong split from junk input.
+eq "$(sbg_split_rows '' 8)" '0' 'split_rows: empty total is no split'
+eq "$(sbg_split_rows abc 8)" '0' 'split_rows: non-numeric total is no split'
+eq "$(sbg_split_rows 36 '')" '0' 'split_rows: empty request is no split'
+eq "$(sbg_split_rows 0 8)" '0' 'split_rows: a zero-row terminal is no split'
+eq "$(sbg_split_rows 1 8)" '0' 'split_rows: one row is all border, no split'
+
+# ── sbg_tmux_conf_text ────────────────────────────────────────────────────────
+TCONF="$(sbg_tmux_conf_text tmux-256color)"
+line "$TCONF" 'set -g default-terminal "tmux-256color"' 'tmux conf: uses the terminfo entry it is given'
+has "$(sbg_tmux_conf_text screen-256color)" 'default-terminal "screen-256color"' \
+  'tmux conf: the terminfo entry is a parameter, not a constant'
+# tmux forwards COLORTERM but will not pass 24-bit escapes through without this,
+# which is why the board asks #{client_termfeatures} instead of trusting COLORTERM.
+# Without the line the charts silently drop to the 16-colour thresholds.
+has "$TCONF" 'terminal-features' 'tmux conf: declares terminal features'
+has "$TCONF" 'RGB' 'tmux conf: declares RGB so the chart gradient survives tmux'
+has "$TCONF" 'foot' 'tmux conf: scopes the RGB feature to foot, the kiosk terminal'
+# `set -as`, not `set -g`: terminal-features is a list, and replacing it wholesale
+# would drop the defaults tmux ships for every other terminal.
+has "$TCONF" 'set -as terminal-features' 'tmux conf: appends to terminal-features rather than replacing it'
+# tmux 3.5a defaults window-size to `latest`, so attaching from an 80x24 ssh window
+# would reflow the PHYSICAL display to 80x24 and kill the chart column.
+line "$TCONF" 'set -g window-size manual' 'tmux conf: pins the window size against a small ssh attach'
+# Restores what foot -H used to do alone. With tmux between them, a board that dies
+# no longer ends foot's child — btop holds the server up and -H never fires.
+line "$TCONF" 'set -g remain-on-exit on' 'tmux conf: a dead pane keeps its error on screen'
+# The board already paints a hostname and a clock on row one.
+line "$TCONF" 'set -g status off' 'tmux conf: no status bar to repeat the board header'
+
+# ── sbg_btop_conf_text ────────────────────────────────────────────────────────
+BCONF="$(sbg_btop_conf_text cpu)"
+# btop has no --config flag, so the boxes can only be chosen through a file.
+line "$BCONF" 'shown_boxes = "cpu"' 'btop conf: shows only the boxes it is given'
+has "$(sbg_btop_conf_text 'cpu mem')" 'shown_boxes = "cpu mem"' \
+  'btop conf: the box list is a parameter'
+has "$BCONF" 'truecolor = True' 'btop conf: keeps 24-bit colour'
+has "$BCONF" 'theme_background = False' 'btop conf: sits on foot background instead of its own slab'
+# btop REWRITES its config on exit, so this must never be the user's own file —
+# the kiosk would then be changing what plain `btop` does in an interactive shell.
+has "$GUI_SRC" 'XDG_CONFIG_HOME=' 'btop conf: handed to btop through a private XDG_CONFIG_HOME'
+hasnt "$GUI_SRC" '$HOME/.config/btop' 'btop conf: never writes the user own btop config'
 
 # ── sbg_dropin_text ───────────────────────────────────────────────────────────
 DROPIN="$(sbg_dropin_text me)"
@@ -210,6 +300,36 @@ if [ -f "$BOARD_SH" ]; then
 else
   printf '  SKIP board cross-checks (%s missing)\n' "$BOARD_SH"
 fi
+
+# ── The session mode's failure modes ──────────────────────────────────────────
+# tmux sits UPSTREAM of the board in cage -> foot -> tmux -> board, which inverts
+# the usual calculus: a missing or broken layer here is a BLACK SCREEN, not a
+# missing pane. Every path out of the split has to end at the board.
+SESSION_BODY="$(awk '/^if \[ "\$MODE" = session \]/,/^fi$/' "$GUI")"
+has "$SESSION_BODY" 'exec "${BOARD_CMD[@]}"' 'session: falls back to the board alone'
+# One for no-room/no-deps, one for mkdir, one for a tmux that will not start.
+eq "$(printf '%s\n' "$SESSION_BODY" | grep -c 'exec "${BOARD_CMD\[@\]}"')" '3' \
+  'session: every failure path ends at the board, not at a black screen'
+has "$SESSION_BODY" 'sbg_split_rows' 'session: sizes the strip against the real row count'
+has "$SESSION_BODY" 'tput lines' 'session: reads the rows from the pty it is actually on'
+# has-session before new-session: an existing session means FOOT restarted, and the
+# board's chart history lives in that running process and nowhere else.
+has "$SESSION_BODY" 'has-session' 'session: re-attaches instead of rebuilding, preserving chart history'
+has "$SESSION_BODY" 'resize-window' 'session: sets the geometry itself, since window-size is manual'
+# Its own socket. `-f` is honoured only when a server STARTS, so sharing the default
+# socket with a running session would silently discard the kiosk config — and a
+# `kill-server` in that session would take the display with it.
+has "$SESSION_BODY" '-L "$TMUX_SOCKET"' 'session: runs on its own tmux socket, not the user server'
+# %q, because tmux joins a multi-word command back into one string and re-splits it.
+has "$SESSION_BODY" "printf '%q " 'session: quotes the command tmux will re-split'
+# Killing cage leaves a DETACHED tmux server running the board on an invisible pty,
+# and on reinstall the new foot would re-attach to a session running the old board.
+has "$SRC" 'sbg_kill_tmux' 'install: kills the kiosk tmux server, not just cage'
+KILL_AT="$(gui_line 'sbg_kill_tmux "\$RUN_USER" "\$TMUX_SOCKET"' | head -1)"
+GETTY_AT="$(gui_line 'systemctl restart "\$GETTY_UNIT"' | head -1)"
+[ -n "$KILL_AT" ] && [ -n "$GETTY_AT" ] && [ "$KILL_AT" -lt "$GETTY_AT" ] \
+  && pass 'install: kills the stale session BEFORE restarting the getty' \
+  || fail "install: kill($KILL_AT) must precede the getty restart($GETTY_AT)"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 OUT="$(bash "$GUI" --help 2>&1)"; eq "$?" '0' 'help: exits 0'

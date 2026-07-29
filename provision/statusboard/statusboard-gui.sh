@@ -61,6 +61,50 @@ PROBE="${STATUSBOARD_GUI_PROBE:-10}"
 # Seconds of samples per chart cell. Matches the board's own default; passed
 # explicitly so `--check` shows every cadence the kiosk runs at in one line.
 CELL="${STATUSBOARD_GUI_CELL:-60}"
+
+# ── the btop strip, and why tmux is under it ──────────────────────────────────
+#
+# The board answers "is anything wrong". btop answers "what is this machine doing
+# right now" — per-core load, per-core temperature, CPU frequency, none of which
+# the board carries (it has load average only, and no thermals at all).
+#
+# It has to be a STACK. Not side-by-side, not rotating pages. btop computes its
+# own minimum terminal size from the boxes it is showing and refuses to draw below
+# it; measured on this box (2026-07-29):
+#
+#   cpu               draws in 8 rows
+#   mem               needs 36x10
+#   cpu mem           needs 60x18
+#   cpu mem net proc  needs 80x24   (the default, and why 80x24 is the number
+#                                    everyone remembers as "btop's minimum")
+#
+# The board needs 25 rows and the full width for its charts. At the kiosk's
+# measured 146x36 that leaves exactly one geometry that fits: board on top, a
+# cpu-only btop strip beneath. Rotating full-screen windows would fit anything at
+# all, and is worse for a wall display — the thing you looked up for is on the
+# other page half the time.
+#
+# tmux earns its place twice. It is the only splitter available (foot has no
+# panes), and it makes the physical display READABLE OVER SSH: under cage there is
+# no /dev/vcs1 to dump, so until now the only remote view of that screen was the
+# stderr tee in --run mode. `tmux -L board attach` is the screen itself.
+BTOP="${STATUSBOARD_GUI_BTOP:-1}"
+BTOP_ROWS="${STATUSBOARD_GUI_BTOP_ROWS:-8}"
+BTOP_BOXES="${STATUSBOARD_GUI_BTOP_BOXES:-cpu}"
+# Both minimums are measured, not guessed. 26 is the board's 25 rows of content
+# plus one spare, so gaining a mount does not clip `units all ok` — the alarm
+# line, and the worst line on the board to lose silently.
+BOARD_MIN_ROWS="${STATUSBOARD_GUI_BOARD_MIN_ROWS:-26}"
+BTOP_MIN_ROWS=8
+# Its OWN tmux server. `-f` is read only when a server STARTS, so sharing the
+# default socket with an already-running session would silently discard this
+# config — and `tmux kill-server` in that session would take the display with it.
+TMUX_SOCKET="${STATUSBOARD_GUI_TMUX_SOCKET:-board}"
+TMUX_SESSION="${STATUSBOARD_GUI_TMUX_SESSION:-board}"
+# Generated configs. Per-user and volatile on purpose: they are rewritten on every
+# start, so they can never drift from the script that produced them.
+KIOSK_STATE="${STATUSBOARD_GUI_STATE:-${XDG_RUNTIME_DIR:-/var/tmp}/statusboard-kiosk}"
+
 GUI_TTY="${STATUSBOARD_GUI_TTY:-/dev/tty1}"
 GETTY_UNIT="getty@$(basename "$GUI_TTY").service"
 DROPIN_DIR="${STATUSBOARD_DROPIN_DIR:-/etc/systemd/system/$GETTY_UNIT.d}"
@@ -78,6 +122,10 @@ while [ $# -gt 0 ]; do
     --check) MODE=check; shift ;;
     --install) MODE=install; shift ;;
     --uninstall) MODE=uninstall; shift ;;
+    # Not for humans: this is how the kiosk re-enters itself from inside foot,
+    # where the pty size is finally knowable and the split can be sized to it.
+    --session) MODE=session; shift ;;
+    --no-btop) BTOP=0; shift ;;
     --font) FONT="${2:-}"; shift 2 ;;
     --size) FONTSIZE="${2:-16}"; shift 2 ;;
     -h | --help) sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -129,21 +177,130 @@ sbg_have_polkit() {
   [ -x /usr/lib/polkit-1/polkitd ] || [ -x /usr/libexec/polkit-1/polkitd ]
 }
 
-# sbg_kiosk_argv <board> <font> <size> <interval> <probe> <cell>: the kiosk command line,
-# one argument per line so a test can assert on it without re-splitting a string.
+# sbg_board_argv <board> <interval> <probe> <cell>: the board itself, one argument
+# per line so a caller can compose it into a larger argv without re-splitting.
+sbg_board_argv() {
+  printf '%s\n' bash "${1:-}" --interval "${2:-1}" --probe "${3:-10}" --cell "${4:-60}"
+}
+
+# sbg_session_argv <self>: re-enter this script in --session mode. That is what
+# builds the tmux layout, and it has to happen inside foot because the row count
+# the split is sized against does not exist until then.
+sbg_session_argv() {
+  printf '%s\n' bash "${1:-}" --session
+}
+
+# sbg_kiosk_argv <font> <size> <cmd>...: the kiosk command line, one argument per
+# line so a test can assert on it without re-splitting a string.
 #
 #   cage -s   VT switching stays enabled. This is the escape hatch: without it a
 #             compositor owning tty1 swallows Ctrl-Alt-F2 and the only console on
 #             the box is unreachable from the box.
 #   cage -d   no client-side decorations — a title bar on a kiosk is wasted rows.
 #   foot -H   hold the window open after the child exits, so a board that dies
-#             leaves its error on screen instead of a black rectangle.
+#             leaves its error on screen instead of a black rectangle. Note that
+#             with tmux in the middle this no longer covers a dying BOARD — see
+#             remain-on-exit in sbg_tmux_conf_text, which is what restores it.
 sbg_kiosk_argv() {
-  local board="${1:-}" font="${2:-}" size="${3:-16}" interval="${4:-1}" probe="${5:-10}" cell="${6:-60}"
+  local font="${1:-}" size="${2:-16}"
+  shift 2 2>/dev/null || true
+  [ $# -gt 0 ] || return 1
   printf '%s\n' cage -s -d -- \
     foot -H -f "$font:size=$size" \
     -o main.pad=6x6 -o cursor.style=underline \
-    -e bash "$board" --interval "$interval" --probe "$probe" --cell "$cell"
+    -e "$@"
+}
+
+# sbg_split_rows <total> <want> [min_board] [min_btop]: how many rows the btop strip
+# actually gets, or 0 meaning "do not split at all".
+#
+# The board is the reason the display exists, so it wins every conflict: the strip
+# is trimmed to whatever is left above min_board, and DROPPED rather than shrunk
+# past the point where btop would refuse to draw — a "Terminal size too small" box
+# on the wall is worse than no strip.
+sbg_split_rows() {
+  local total="${1:-0}" want="${2:-0}" minb="${3:-${BOARD_MIN_ROWS:-26}}" \
+    mint="${4:-${BTOP_MIN_ROWS:-8}}" avail
+  case "$total" in '' | *[!0-9]*) printf 0; return ;; esac
+  case "$want" in '' | *[!0-9]*) printf 0; return ;; esac
+  case "$minb" in '' | *[!0-9]*) minb=26 ;; esac
+  case "$mint" in '' | *[!0-9]*) mint=8 ;; esac
+  # One row is spent on the border tmux draws between the two panes.
+  avail=$((total - 1))
+  [ "$avail" -gt 0 ] || { printf 0; return; }
+  [ $((avail - want)) -ge "$minb" ] || want=$((avail - minb))
+  [ "$want" -ge "$mint" ] || { printf 0; return; }
+  printf '%s' "$want"
+}
+
+# sbg_tmux_term: which terminfo entry to hand tmux.
+#
+# `default-terminal "tmux-256color"` makes tmux REFUSE TO START when that entry is
+# absent ("missing or unsuitable terminal") — and here that would mean a black
+# screen rather than a degraded one, because tmux is upstream of the board. The
+# entry ships in ncurses-term, which the status-board tier installs; this exists so
+# a box that somehow lacks it loses colour depth instead of the display.
+sbg_tmux_term() {
+  if infocmp tmux-256color >/dev/null 2>&1; then
+    printf 'tmux-256color'
+  else
+    printf 'screen-256color'
+  fi
+}
+
+# sbg_tmux_conf_text [term]: the kiosk's tmux config. Every line is load-bearing.
+#
+#   terminal-features ,foot*:RGB
+#           tmux forwards COLORTERM but will not pass 24-bit escapes through
+#           without this — which is exactly why the board asks tmux directly via
+#           #{client_termfeatures} instead of trusting COLORTERM. Omit it and the
+#           charts silently drop to the 16-colour thresholds inside the kiosk.
+#   status off
+#           the board already paints a hostname and a clock on its first row. A
+#           status bar would cost a row to repeat them.
+#   window-size manual
+#           tmux 3.5a defaults to `latest`, so the moment you attach from an 80x24
+#           SSH window the PHYSICAL display reflows to 80x24 and the chart column
+#           dies. Manual pins it, and --session sets the real size explicitly.
+#   remain-on-exit on
+#           restores what `foot -H` used to do by itself. With tmux in between, a
+#           board that dies no longer ends foot's child: btop holds the server up,
+#           -H never fires, and the failure would be invisible on the very display
+#           whose job is to report failures.
+sbg_tmux_conf_text() {
+  local term="${1:-tmux-256color}"
+  cat <<CONF
+# Generated by statusboard-gui.sh — rewritten on every start. Do not edit.
+set -g default-terminal "$term"
+set -as terminal-features ",foot*:RGB"
+set -g status off
+set -g window-size manual
+set -g remain-on-exit on
+set -g mouse off
+set -g escape-time 0
+set -g history-limit 500
+set -g pane-border-style "fg=colour238"
+set -g pane-active-border-style "fg=colour238"
+CONF
+}
+
+# sbg_btop_conf_text <boxes>: btop's config for the strip.
+#
+# btop has no --config flag, so choosing its boxes means a config file and a
+# private XDG_CONFIG_HOME pointed at it. Private because btop REWRITES its config
+# on exit: sharing the user's would let the kiosk quietly change what plain `btop`
+# does in an interactive shell.
+sbg_btop_conf_text() {
+  local boxes="${1:-cpu}"
+  cat <<CONF
+# Generated by statusboard-gui.sh — rewritten on every start. Do not edit.
+shown_boxes = "$boxes"
+update_ms = 2000
+# The strip sits on foot's background rather than painting a slab of its own.
+theme_background = False
+truecolor = True
+vim_keys = False
+CONF
 }
 
 # sbg_dropin_text <user>: the getty drop-in that turns the login prompt into an
@@ -247,7 +404,29 @@ sbg_check() {
     rc=1
   fi
 
-  printf 'kiosk      %s\n' "$(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE" "$CELL" | tr '\n' ' ')"
+  # tmux and btop are the LAYOUT, not the board. A missing one costs the strip; it
+  # must never cost the display, so neither is a hard failure — --session falls
+  # back to the board alone, full screen, exactly as it ran before the strip
+  # existed.
+  if [ "$BTOP" != 1 ]; then
+    printf 'strip      off (STATUSBOARD_GUI_BTOP=0) — board alone, full screen\n'
+  else
+    missing="$(sbg_missing_deps tmux btop)"
+    if [ -n "$missing" ]; then
+      printf 'strip      missing %s — will fall back to the board alone, full screen\n' "$missing"
+      printf '           fix: sudo apt install -y tmux btop\n'
+    else
+      printf 'strip      ok (tmux, btop) — %s rows of [%s] under the board\n' \
+        "$BTOP_ROWS" "$BTOP_BOXES"
+      printf '           board keeps the rest, at least %s rows; below that the strip is dropped\n' \
+        "$BOARD_MIN_ROWS"
+    fi
+  fi
+
+  local -a inner=()
+  mapfile -t inner < <(sbg_session_argv "$SELF")
+  printf 'kiosk      %s\n' "$(sbg_kiosk_argv "$FONT" "$FONTSIZE" "${inner[@]}" | tr '\n' ' ')"
+  printf 'cadence    interval %ss, probe %ss, cell %ss\n' "$INTERVAL" "$PROBE" "$CELL"
   return "$rc"
 }
 
@@ -262,10 +441,26 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
   [ "$(id -u)" = 0 ] || { printf 'need root for --%s\n' "$MODE" >&2; exit 1; }
   RUN_USER="${STATUSBOARD_USER:-${SUDO_USER:-me}}"
 
+  # Killing cage is not enough. The kiosk's tmux server is DETACHED from its
+  # client, so losing foot leaves the board and btop running forever on an
+  # invisible pty — and on --install it would also mean the freshly restarted foot
+  # re-attaches to a session still running the OLD board. As root the socket has to
+  # be reached as the user who owns it; /tmp/tmux-0 is not /tmp/tmux-1000.
+  sbg_kill_tmux() {
+    local user="${1:-me}" sock="${2:-board}"
+    if command -v runuser >/dev/null 2>&1; then
+      runuser -u "$user" -- tmux -L "$sock" kill-server 2>/dev/null
+    else
+      su -s /bin/sh -c "tmux -L '$sock' kill-server" "$user" 2>/dev/null
+    fi
+    return 0
+  }
+
   if [ "$MODE" = uninstall ]; then
     rm -f "$PROFILE_HOOK" "$DROPIN"
     rmdir "$DROPIN_DIR" 2>/dev/null
     systemctl daemon-reload
+    sbg_kill_tmux "$RUN_USER" "$TMUX_SOCKET"
     pkill -u "$RUN_USER" -x cage 2>/dev/null
     systemctl restart "$GETTY_UNIT" 2>/dev/null
     printf 'removed the kiosk; %s is a normal login prompt again\n' "$GUI_TTY"
@@ -286,6 +481,9 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
   # forever as "units 1 failed", on the very display whose job is to make a failed
   # unit mean something. A permanent false alarm is worse than no alarm.
   systemctl reset-failed "$TEXT_SERVICE" 2>/dev/null
+  # Before the getty restarts, so the new foot builds a fresh session instead of
+  # re-attaching to one running the board from before this install.
+  sbg_kill_tmux "$RUN_USER" "$TMUX_SOCKET"
 
   mkdir -p "$DROPIN_DIR"
   sbg_dropin_text "$RUN_USER" > "$DROPIN"
@@ -320,12 +518,70 @@ if [ "$MODE" = install ] || [ "$MODE" = uninstall ]; then
     exit 1
   fi
 
-  printf 'kiosk is up on %s: cage -> foot -> statusboard.sh\n' "$GUI_TTY"
+  printf 'kiosk is up on %s: cage -> foot -> tmux -> statusboard.sh + btop\n' "$GUI_TTY"
   printf 'font %s at %spt; charts use the real U+%s..U+%s ramp now\n' \
     "$FONT" "$FONTSIZE" "$RAMP_LO" "$RAMP_HI"
   printf 'Ctrl-Alt-F2 still reaches a console login (cage -s).\n'
+  printf 'to see that screen over ssh: tmux -L %s attach -t %s\n' "$TMUX_SOCKET" "$TMUX_SESSION"
   printf 'to undo: sudo bash %s --uninstall\n' "$SELF"
   exit 0
+fi
+
+# ── session ───────────────────────────────────────────────────────────────────
+# Runs INSIDE foot. This is the first point in the chain where the terminal's real
+# row count exists, and the split has to be sized against real rows rather than a
+# guess — get it wrong by one and the board's bottom line, the one that says
+# whether any unit failed, is the line that falls off.
+
+if [ "$MODE" = session ]; then
+  [ -f "$BOARD" ] || { printf 'no board at %s\n' "$BOARD" >&2; exit 1; }
+  SESS_COLS="$(tput cols 2>/dev/null || printf 80)"
+  SESS_ROWS="$(tput lines 2>/dev/null || printf 24)"
+
+  mapfile -t BOARD_CMD < <(sbg_board_argv "$BOARD" "$INTERVAL" "$PROBE" "$CELL")
+
+  STRIP=0
+  if [ "$BTOP" = 1 ] && [ -z "$(sbg_missing_deps tmux btop)" ]; then
+    STRIP="$(sbg_split_rows "$SESS_ROWS" "$BTOP_ROWS")"
+  fi
+  # No tmux, no btop, or no room for a strip that btop would agree to draw: the
+  # board takes the whole terminal, exactly as it did before any of this existed.
+  # The board is the point; the strip is a bonus, and a bonus must not be able to
+  # break the thing it decorates.
+  [ "$STRIP" -gt 0 ] || exec "${BOARD_CMD[@]}"
+
+  mkdir -p "$KIOSK_STATE/btop" || exec "${BOARD_CMD[@]}"
+  sbg_tmux_conf_text "$(sbg_tmux_term)" > "$KIOSK_STATE/tmux.conf"
+  sbg_btop_conf_text "$BTOP_BOXES" > "$KIOSK_STATE/btop/btop.conf"
+
+  TM=(tmux -L "$TMUX_SOCKET" -f "$KIOSK_STATE/tmux.conf")
+  # %q, not bare words: tmux joins a multi-word command back into one string and
+  # re-splits it itself, so anything with a space in it needs to survive that.
+  BOARD_LINE="$(printf '%q ' "${BOARD_CMD[@]}")"
+  BTOP_LINE="$(printf '%q ' env "XDG_CONFIG_HOME=$KIOSK_STATE" btop)"
+
+  # An existing session means FOOT restarted, not that the box did. Re-attaching
+  # keeps the board's chart history, which lives in the running process and nowhere
+  # else — otherwise a compositor hiccup throws away hours of it.
+  if ! "${TM[@]}" has-session -t "$TMUX_SESSION" 2>/dev/null; then
+    # tmux is UPSTREAM of the board here, so a tmux that will not start is a black
+    # screen, not a missing strip. Never let that be the outcome.
+    if ! "${TM[@]}" new-session -d -s "$TMUX_SESSION" \
+      -x "$SESS_COLS" -y "$SESS_ROWS" "$BOARD_LINE"; then
+      printf 'tmux would not start a session — running the board alone.\n' >&2
+      exec "${BOARD_CMD[@]}"
+    fi
+    "${TM[@]}" split-window -t "$TMUX_SESSION" -v -l "$STRIP" "$BTOP_LINE" ||
+      printf 'btop strip failed to start; the board has the screen.\n' >&2
+    # Focus back on the board. btop quits on `q`; the board reads no input at all,
+    # so it is the safe place for a stray keypress at the physical keyboard to land.
+    "${TM[@]}" select-pane -t "$TMUX_SESSION:0.0" 2>/dev/null
+  fi
+  # window-size is manual, so this is the only thing that ever sets the geometry —
+  # which is the point: a later `tmux attach` from a small SSH window cannot reflow
+  # the physical display out from under itself.
+  "${TM[@]}" resize-window -t "$TMUX_SESSION" -x "$SESS_COLS" -y "$SESS_ROWS" 2>/dev/null
+  exec "${TM[@]}" attach -t "$TMUX_SESSION"
 fi
 
 # ── run ───────────────────────────────────────────────────────────────────────
@@ -349,5 +605,6 @@ if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
 fi
 [ -f "$BOARD" ] || { printf 'no board at %s\n' "$BOARD" >&2; exit 1; }
 
-mapfile -t KIOSK < <(sbg_kiosk_argv "$BOARD" "$FONT" "$FONTSIZE" "$INTERVAL" "$PROBE" "$CELL")
+mapfile -t INNER < <(sbg_session_argv "$SELF")
+mapfile -t KIOSK < <(sbg_kiosk_argv "$FONT" "$FONTSIZE" "${INNER[@]}")
 exec "${KIOSK[@]}"
