@@ -414,6 +414,53 @@ eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour '' 50 200)"  'd' 'hi_colour: no read
 eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour junk 50 200)" 'd' 'hi_colour: non-numeric is dim'
 eq "$(C_DIM=d C_WARN=w C_BAD=b sb_hi_colour 9999 0 0)"   'd' 'hi_colour: zero thresholds disable both tiers'
 
+# ── chart polarity ────────────────────────────────────────────────────────────
+# A full battery painted red and a fully-reachable fleet painted red were both on
+# screen (2026-07-29). The gradient's direction is per-metric, not global.
+FLOOR="$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 0 8)"
+CEIL="$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8)"
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8 hi-good)" "$FLOOR" 'polarity: hi-good paints a FULL chart green'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 0 8 hi-good)" "$CEIL"  'polarity: hi-good paints an EMPTY chart red'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8 hi-bad)"  "$CEIL"  'polarity: hi-bad is unchanged at the ceiling'
+eq "$(STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8)"         "$CEIL"  'polarity: hi-bad is still the default'
+# flat is for activity rather than condition — throughput, charge draw. One colour,
+# because the glyph height already carries the magnitude.
+eq "$(C_INFO=i STATUSBOARD_TRUECOLOR=1 sb_heat_color 0 8 flat)" 'i' 'polarity: flat is one accent colour at the floor'
+eq "$(C_INFO=i STATUSBOARD_TRUECOLOR=1 sb_heat_color 7 8 flat)" 'i' 'polarity: and the same colour at the ceiling'
+# End to end through sb_chart: a full flat-polarity chart must emit exactly one
+# colour, and a hi-good one must not open in the alarm colour.
+FLATC="$(C_RST=${ESC}'[0m' C_INFO=${ESC}'[36m' STATUSBOARD_TRUECOLOR=1 sb_chart 4 100 '100,100,100,100' flat)"
+eq "$(count_sub "$FLATC" "${ESC}[36m")" '1' 'polarity: a flat chart emits its accent colour once'
+GOODC="$(C_RST=${ESC}'[0m' STATUSBOARD_TRUECOLOR=1 sb_chart 4 100 '100,100,100,100' hi-good)"
+has "$GOODC" "$FLOOR" 'polarity: a full hi-good chart is painted with the green end'
+hasnt "$GOODC" "$CEIL" 'polarity: and never with the red end'
+
+# ── a mount whose device vanished ─────────────────────────────────────────────
+# Unplug a dock and the kernel keeps the mount, so df goes on reporting size, used
+# and percentage from memory. On 2026-07-29 that showed two disks as healthy at 60%
+# and 70% while the disks had come back as different device nodes, unmounted. df
+# alone cannot be trusted; the row has to say so.
+OUT="$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732 gone)"
+has "$OUT" 'gone'        'gone mount: says so where the bar was'
+hasnt "$OUT" '[█'        'gone mount: draws no fill — the figure is a memory, not a reading'
+hasnt "$OUT" '[░'        'gone mount: draws no bar at all'
+has "$OUT" '/mnt/public' 'gone mount: still names the mount point'
+has "$OUT" '60%'         'gone mount: keeps the last-known figure ("it was 60% when it went")'
+# THE alignment invariant, which a differently-shaped row is exactly how you break.
+eq "$(sb_vislen "$OUT")" \
+   "$(sb_vislen "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732 ok)")" \
+   'gone mount: the row is the same visible width as a live one'
+# Default is live, so every existing caller and test keeps its old meaning.
+hasnt "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732)" 'gone' \
+  'gone mount: omitting the state means live'
+
+# sb_mounts must decide liveness by the DEVICE NODE. stat()ing the mount point would
+# block on a dead NFS mount and reading it would spin up a sleeping disk every probe.
+MSRC="$(awk '/^sb_mounts\(\)/,/^}/' "$REPO/provision/statusboard/statusboard.sh")"
+has "$MSRC" '[ -b "/dev/$dev" ]' 'mounts: liveness is the block device node existing'
+has "$MSRC" 'state=gone'         'mounts: emits a gone state'
+hasnt "$MSRC" 'stat '            'mounts: does not stat the mount point'
+
 # The per-mount series store. An associative array would keep stale keys after an
 # unplug; a flat string is prunable and testable.
 S="$(sb_series_set '' /mnt/a '1,2,3')"
@@ -521,8 +568,18 @@ has "$OUT_FAST" '10s/cell' 'layout: STATUSBOARD_CELL reaches the axis label'
 eq "$(printf '%s\n' "$OUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
   'layout: no row is wider than the terminal'
 # Every charted row must end at the SAME column, or the column is not a column.
-eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|lan|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
+# `lan` is deliberately absent from this list: it no longer has a chart, so it is
+# free to run short like any other uncharted row.
+eq "$(printf '%s\n' "$OUT" | awk '/^(battery|source|internet|tailnet|uptime|\/|<)/ { print length($0) }' | sort -u | wc -l | tr -d ' ')" '1' \
   'layout: all charted rows end at the same column (disk rows included)'
+# The lan chart was a binary series at a ceiling of 1: every cell the top glyph, in
+# the loudest colour on the board, saying what the ok/down glyph already said.
+lan_len="$(printf '%s\n' "$OUT" | awk '/^lan /{ print length($0); exit }')"
+bat_len="$(printf '%s\n' "$OUT" | awk '/^battery /{ print length($0); exit }')"
+[ -n "$lan_len" ] && [ -n "$bat_len" ] && [ "$lan_len" -lt "$bat_len" ] \
+  && pass 'layout: the lan row has no chart' \
+  || fail "layout: lan should be uncharted (lan=$lan_len charted=$bat_len)"
+has "$OUT" 'charts   battery %' 'layout: a legend names what each chart plots'
 # A whole disk row, end to end: bar, percentage, size. Asserted as a shape rather
 # than a literal so the fields can be reordered without a false failure, and as a
 # COUNT so a frame that lost its disk block cannot pass.

@@ -281,19 +281,32 @@ sb_truecolor() {
   printf '%s' "${SB_TRUECOLOR:-0}"
 }
 
-# sb_heat_color <level> <levels>: the colour for a chart cell at <level> of
-# <levels>. Green at the bottom through amber to red at the ceiling — the ceiling
+# sb_heat_color <level> <levels> [polarity]: the colour for a chart cell at <level>
+# of <levels>. Green at the bottom through amber to red at the ceiling — the ceiling
 # is per-metric and fixed (see sb_chart), so "red" always means "at the limit this
 # metric was given", never "the highest value in this window".
+#
+# POLARITY exists because that is only true for half the metrics on this board. A
+# full battery painted red and a fully-reachable fleet painted red are both wrong,
+# and they were both wrong on screen (2026-07-29):
+#
+#   hi-bad   default. Latency, load, anything where the ceiling is the problem.
+#   hi-good  battery charge, peers online. The gradient is inverted: a full bar is
+#            green and a DIP goes amber then red, which is when to look at it.
+#   flat     activity, not condition — disk throughput, charge draw. One accent
+#            colour, because the glyph height already carries the magnitude and a
+#            gradient here would only invent an alarm that does not exist.
 #
 # Returns the empty string when colour is off, which is what keeps --once diffable
 # and every existing chart assertion byte-identical.
 sb_heat_color() {
-  local lvl="${1:-0}" n="${2:-8}" t f r g b
+  local lvl="${1:-0}" n="${2:-8}" pol="${3:-hi-bad}" t f r g b
   case "$lvl" in '' | *[!0-9]*) lvl=0 ;; esac
   case "$n" in '' | *[!0-9]*) n=8 ;; esac
   [ "$n" -gt 1 ] || n=2
   [ "$lvl" -lt "$n" ] || lvl=$((n - 1))
+  [ "$pol" = flat ] && { printf '%s' "$C_INFO"; return; }
+  [ "$pol" = hi-good ] && lvl=$((n - 1 - lvl))
   t=$((lvl * 100 / (n - 1)))
   if [ "$(sb_truecolor)" = 1 ]; then
     # Two linear segments, integer-only: green→amber over the lower half, amber→red
@@ -319,10 +332,10 @@ sb_heat_color() {
 # is more than the whole frame budget at a 1s interval. There are only as many
 # distinct colours as there are ramp levels, so eight forks cover every chart.
 sb_heat_table() {
-  local n="${1:-8}" i
+  local n="${1:-8}" pol="${2:-hi-bad}" i
   case "$n" in '' | *[!0-9]*) n=8 ;; esac
   SB_HEAT=()
-  for ((i = 0; i < n; i++)); do SB_HEAT[i]="$(sb_heat_color "$i" "$n")"; done
+  for ((i = 0; i < n; i++)); do SB_HEAT[i]="$(sb_heat_color "$i" "$n" "$pol")"; done
 }
 
 # sb_push <csv> <sample> <cap>: append, trimming the oldest. Pure — takes the old
@@ -409,7 +422,7 @@ sb_fold() {
 # auto-scaling makes a 0.5ms→0.6ms gateway fill the chart and look alarming. With
 # a fixed ceiling, flat-and-low is the healthy shape and stays visually boring.
 sb_chart() {
-  local width="${1:-0}" max="${2:-100}" csv="${3:-}" ramp levels out="" i v idx
+  local width="${1:-0}" max="${2:-100}" csv="${3:-}" pol="${4:-hi-bad}" ramp levels out="" i v idx
   case "$width" in '' | *[!0-9]*) printf ''; return ;; esac
   [ "$width" -gt 0 ] || { printf ''; return; }
   case "$max" in '' | *[!0-9]*) max=100 ;; esac
@@ -422,7 +435,7 @@ sb_chart() {
   # typical chart down to a handful.
   local -a SB_HEAT=()
   local want="" cur=""
-  [ -n "$C_RST" ] && sb_heat_table "$levels"
+  [ -n "$C_RST" ] && sb_heat_table "$levels" "$pol"
 
   local -a a=()
   IFS=',' read -r -a a <<< "$csv"
@@ -627,7 +640,8 @@ sb_disk_bar() {
 # The bar is coloured by FREE space, so it greens down as the disk fills — the
 # inverse of the battery row, where a high number is the healthy one.
 sb_disk_row() {
-  local dev="${1:-}" mnt="${2:-}" total="${3:-}" pct="${4:-}" maxtotal="${5:-}" col free=100
+  local dev="${1:-}" mnt="${2:-}" total="${3:-}" pct="${4:-}" maxtotal="${5:-}" state="${6:-ok}"
+  local col free=100 bar
   case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
   # Long mount points are shown tail-first behind a <: every row pads to the widest
   # one, so a single deep path would push the chart column off the screen for all of
@@ -635,9 +649,22 @@ sb_disk_row() {
   [ "${#mnt}" -gt "$SB_DISK_PATHW" ] && mnt="<${mnt: -$((SB_DISK_PATHW - 1))}"
   free=$((100 - pct))
   col="$(sb_pct_colour "$free" 20 10)"
+  bar="$(sb_disk_bar "$pct" "$total" "$maxtotal" "$SB_DISK_BARW")"
+  if [ "$state" != ok ]; then
+    # Everything df still reports about a vanished disk is a memory, so the row says
+    # so where the bar was and dims the stale figures rather than dropping them —
+    # "it was 60% full when it went" is worth more than a blank.
+    bar="$(sb_pad "$(printf '!! %s !!' "$state")" $((SB_DISK_BARW + 2)))"
+    col="$C_BAD"
+    printf '%-*s %s%s%s %s%3s%%  %5sG  %s%s' \
+      "$SB_DISK_PATHW" "${mnt:-?}" \
+      "$C_BAD" "$bar" "$C_RST" \
+      "$C_DIM" "$pct" "$(sb_kb_to_gib "$total")" "${dev:-?}" "$C_RST"
+    return
+  fi
   printf '%-*s %s%s %3s%%%s  %5sG  %s%s%s' \
     "$SB_DISK_PATHW" "${mnt:-?}" \
-    "$col" "$(sb_disk_bar "$pct" "$total" "$maxtotal" "$SB_DISK_BARW")" "$pct" "$C_RST" \
+    "$col" "$bar" "$pct" "$C_RST" \
     "$(sb_kb_to_gib "$total")" "$C_DIM" "${dev:-?}" "$C_RST"
 }
 
@@ -933,14 +960,28 @@ sb_tailnet() {
 # device name, and 1K blocks instead of a suffix that varies by implementation.
 # Only /dev/* sources, so tmpfs, devtmpfs, efivarfs and the rest of the virtual
 # tree stay out; loop devices are excluded too — a snap mount is not a disk.
+# The sixth field is the mount's LIVENESS, and it exists because df cannot be
+# trusted on its own. Unplug a dock and the kernel keeps the mount: df goes on
+# reporting the mount point with its last-known size, used and percentage, so the
+# board showed two vanished disks as healthy at 60% and 70% while the disks
+# themselves had come back as different device nodes, unmounted (2026-07-29).
+#
+# The test is whether the backing device node still exists. That is the cheapest
+# question with an unambiguous answer — stat()ing the mount point itself would block
+# on a dead NFS mount, and reading it would spin up a sleeping disk on every probe.
 sb_mounts() {
+  local dev mnt used total pct state
   df -P -k 2>/dev/null | awk 'NR > 1 && $1 ~ /^\/dev\// && $1 !~ /^\/dev\/(loop|ram)/ {
     dev = $1; sub(/^\/dev\//, "", dev)
     mnt = $6
     for (i = 7; i <= NF; i++) mnt = mnt " " $i      # mount points may contain spaces
     pct = $5; sub(/%$/, "", pct)
     printf "%s|%s|%s|%s|%s\n", dev, mnt, $3, $2, pct
-  }'
+  }' | while IFS='|' read -r dev mnt used total pct; do
+    state=ok
+    [ -b "/dev/$dev" ] || state=gone
+    printf '%s|%s|%s|%s|%s|%s\n' "$dev" "$mnt" "$used" "$total" "$pct" "$state"
+  done
 }
 
 # sb_unmounted: connected disks with nothing mounted off them — the whole point of
@@ -967,7 +1008,7 @@ sb_unmounted() {
 # the loop paints with frame="$(render_frame)", a SUBSHELL. A series appended to
 # from in there is discarded the instant the subshell exits, so every chart would
 # show one sample forever. Sample in the shell, format in the subshell.
-SER_BAT=""; SER_PW=""; SER_LAN=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
+SER_BAT=""; SER_PW=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
 SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem — MB/s
 # Previous diskstats reading per mount, and when it was taken. Throughput is a
 # DELTA, so it needs the last counter kept in the main shell for the same reason the
@@ -1062,7 +1103,6 @@ sb_sample_slow() {
   w=""
   [ -n "$SB_PW" ] && w="$(awk -v p="$SB_PW" 'BEGIN { printf "%d", p / 1000000 }')"
   SER_PW="$(sb_push "$SER_PW" "$w")"
-  SER_LAN="$(sb_push "$SER_LAN" "$([ "$SB_LAN_ST" = up ] && printf 1 || printf x)")"
   if [ "${SB_GW_ST:-}" = up ]; then
     SER_GW="$(sb_push "$SER_GW" "$(sb_rtt_tenths "$SB_GW_RTT")")"
   elif [ -n "${SB_GW_ST:-}" ]; then
@@ -1092,10 +1132,13 @@ sb_sample_slow() {
   el=$((SECONDS - SB_IO_T))
   [ "$el" -ge 1 ] || el=1
   # The used field is read into _ : df still reports it, the board no longer shows it.
-  while IFS='|' read -r dev mnt _ total pct; do
+  while IFS='|' read -r dev mnt _ total pct state; do
     [ -n "$mnt" ] || continue
     keys="$keys $mnt"
-    cur="$(sb_dev_sectors "$dev")"
+    # A vanished device has no diskstats row, so this is already a gap — asking
+    # anyway would be one fork per dead mount per probe for a guaranteed empty.
+    cur=""
+    [ "$state" = ok ] && cur="$(sb_dev_sectors "$dev")"
     prev="$(sb_series_get "$SB_IO_PREV" "$mnt")"
     SER_DISKS="$(sb_series_set "$SER_DISKS" "$mnt" \
       "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$(sb_io_mbs "$prev" "$cur" "$el")")")"
@@ -1113,24 +1156,31 @@ sb_sample_slow() {
 # widest row in the frame, and that width is not knowable until every row exists —
 # which is also what keeps the chart column aligned as values change width
 # ("41.4W ~0h26m to full" one frame, "5.2W" the next).
-SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=()
+SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=()
 
-# sb_row <text> [series-csv] [chart-max]: queue one row. No series means no chart
-# (headings, blank separators, and the flat rows where a chart would say nothing).
+# sb_row <text> [series-csv] [chart-max] [polarity]: queue one row. No series means
+# no chart (headings, blank separators, and the flat rows where a chart would say
+# nothing). Polarity is which end of the chart is the bad end — see sb_heat_color.
 sb_row() {
   SB_ROW_TEXT+=("$1"); SB_ROW_SERIES+=("${2:-}"); SB_ROW_MAX+=("${3:-100}")
+  SB_ROW_POL+=("${4:-hi-bad}")
 }
 
 render_frame() {
-  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=()
+  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=()
 
-  sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100
-  sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW"
+  sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good
+  # Draw is activity, not condition: 40W into a charging battery is not an alarm.
+  sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat
   [ -n "${SB_LIM:-}" ] && sb_row "$(printf 'limit     %s%s%%%s' "$C_DIM" "$SB_LIM" "$C_RST")"
   sb_row ""
 
+  # No chart. The series is binary, so at a ceiling of 1 every cell was the top
+  # glyph — a solid bar that said exactly what the ok/down glyph beside it already
+  # said, in the loudest colour on the board. A link that flaps still shows up: the
+  # gateway RTT chart gaps at the same moment.
   sb_row "$(printf 'lan      %s  %s%s %s%s' "$(sb_status_glyph "$SB_LAN_ST")" \
-    "$C_DIM" "${SB_LAN_DEV:--}" "${SB_LAN_IP:--}" "$C_RST")" "$SER_LAN" 1
+    "$C_DIM" "${SB_LAN_DEV:--}" "${SB_LAN_IP:--}" "$C_RST")"
   # The RTT is the number that goes bad, so it carries its own colour while the
   # address next to it stays dim. Thresholds are in tenths of a ms, matching what the
   # series is scaled in: a LAN gateway over 5ms is odd, over 20ms is wrong.
@@ -1149,9 +1199,9 @@ render_frame() {
     [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null && ts_col="$C_WARN"
     sb_row "$(printf 'tailnet  %s  %s%s  %s%s/%s peers online%s' "$(sb_status_glyph up)" \
       "$C_DIM" "$SB_TS_IP" "$ts_col" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
-      "$SER_TS" "${SB_TS_TOTAL:-1}"
+      "$SER_TS" "${SB_TS_TOTAL:-1}" hi-good
   else
-    sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1
+    sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1 hi-good
   fi
   sb_row ""
 
@@ -1167,14 +1217,18 @@ render_frame() {
   # Two passes over the mount list: the bar lengths are relative to the LARGEST disk
   # present, which is not known until every disk has been seen.
   local d_dev d_mnt d_total d_pct d_max=0
-  while IFS='|' read -r _ _ _ d_total _; do
+  while IFS='|' read -r _ _ _ d_total _ d_state; do
     case "$d_total" in '' | *[!0-9]*) continue ;; esac
+    # A dead mount's size is stale, so it does not get to set the scale every live
+    # disk is measured against.
+    [ "$d_state" = ok ] || continue
     [ "$d_total" -gt "$d_max" ] && d_max="$d_total"
   done <<< "$SB_MOUNTS"
-  while IFS='|' read -r d_dev d_mnt _ d_total d_pct; do
+  local d_state
+  while IFS='|' read -r d_dev d_mnt _ d_total d_pct d_state; do
     [ -n "$d_mnt" ] || continue
-    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max")" \
-      "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO"
+    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}")" \
+      "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
   # box, so it gets a row of its own rather than silently missing from the list.
@@ -1234,9 +1288,19 @@ render_frame() {
       # resets itself. SGR 2 composed with a 38;2 foreground is terminal-dependent
       # — foot dims it, others drop one of the two — so the two never overlap.
       printf '%s   %s\n' "$(sb_pad "${SB_ROW_TEXT[i]}" "$textw")" \
-        "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "$(sb_fold "$SB_K" "${SB_ROW_SERIES[i]}")")"
+        "$(sb_chart "$chartw" "${SB_ROW_MAX[i]}" "$(sb_fold "$SB_K" "${SB_ROW_SERIES[i]}")" \
+          "${SB_ROW_POL[i]}")"
     fi
   done
+
+  # A legend, because one chart column carrying six different units is not
+  # self-explanatory — "I don't get what the tailnet chart shows" was a real
+  # question about a real chart. Printed rather than queued as a row: it must not
+  # count towards the text column it sits under, and it is only true when there are
+  # charts at all.
+  [ "$chartw" -gt 0 ] && printf '\n%scharts   battery %%   draw W   rtt ms   peers online   load   disk MB/s%s\n' \
+    "$C_DIM" "$C_RST"
+  return 0
 }
 
 if [ "$ONCE" = 1 ]; then
