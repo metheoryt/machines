@@ -556,15 +556,22 @@ global + per-host). One bullet per fact under a topical heading.
   `/sys/block/<dev>/device/{model,vendor}` plus `lsblk -dn -o SERIAL,WWN` —
   never `smartctl`. Note sysfs `model` is space-padded, so `grep -q` it rather
   than comparing with `[ = ]`.
-- **Dock B bay 1 (HGST HTS541010A9E680 / `JD100ACC2V5ZVK`, UUID
-  `6C16E54216E50DC0`) holds the only second copy of `/mnt/immich-2024`** — and it
-  is a **restic repo**, not a file-level copy: `immich-media-2024`, 651 GB on
-  disk, 9 snapshots of `E:\admin` from `methe-server`, newest **2026-07-02** at
-  662.946 GiB. Verified openable 2026-07-30. So the archive has ~4 weeks of
-  unbacked-up delta, and restoring it needs restic + the repo password, not a
-  copy. fstab mounts it `ro,nofail` at `/mnt/immich-2024-backup`. Leaving dock B
-  powered off silently drops the 664 GB archive to a single copy.
-- **The restic password for that repo is already tracked** — dotfiles allow-line
+- **Dock B bay 1 (HGST HTS541010A9E680 / `JD100ACC2V5ZVK`) holds the second copy
+  of the 664 GB `/mnt/immich-2024` archive, and since 2026-07-30 it is a plain
+  file copy, not a restic repo.** Reformatted to ext4, label
+  `immich-2024-copy`, **new UUID `25f3c751-3df9-44d6-b626-3ff119cc82fe`** (the
+  old NTFS `6C16E54216E50DC0` is gone), fstab mounts it `defaults,noatime,nofail`
+  read-**write** at `/mnt/immich-2024-backup`. The `immich-media-2024` restic
+  repo it used to hold (651 GB, 9 snapshots of `E:\admin` from `methe-server`,
+  newest 2026-07-02) was deliberately destroyed by that reformat — the plain copy
+  replaced it so recovery needs no password and is browsable. Copy verified
+  byte-exact: **711832525257 bytes / 20456 files**, identical per-year across all
+  19 dirs (1970, 2007-2024). Source stays `ntfs3,ro` on `sdd2`
+  (`EAA6CAAEA6CA7A99`). Leaving either dock powered off drops the archive to a
+  single copy. Not yet checksum-verified — `sdd` has 144 UDMA CRC errors, so an
+  `rsync -c` pass is still owed.
+- **The restic password for the homeserver repos is already tracked** (it was the
+  password for the now-destroyed `immich-media-2024` too) — dotfiles allow-line
   `!/g513ie-prod-config/vps/backup/homeserver/pass.txt` (13 bytes), harvested off
   g513ie. `~/my/vps/backup/homeserver/pass.txt` on latitude is now a **symlink**
   at it, so the live path resticprofile reads (`RESTIC_PASSWORD_FILE: "pass.txt"`,
