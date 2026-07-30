@@ -117,8 +117,18 @@ fi
 #     worktree (a fresh worktree carries only committed files). Idempotent; never
 #     clobber; a dangling symlink counts as already-linked. Skipped in the main
 #     checkout, where there is nothing distinct to link into.
+#
+#     `.env` is DELIBERATELY NOT IN THIS LIST. It is repo-semantic: a repo whose
+#     worktrees need per-worktree isolation writes its own `.env` from the bracket-2
+#     script below (backend-api's docker/worktree-setup.sh upserts WT_NS there), and
+#     a symlink to the main checkout's `.env` poisons that. The append branch of such
+#     an upsert follows the symlink and writes INTO the main checkout — which then
+#     stops resolving to its no-`.env` defaults — while every worktree reads that one
+#     file and shares a single namespace: same compose project, image tag and test
+#     DBs, silently. A repo that genuinely wants main's `.env` shared can link it
+#     from its own script; this dispatcher cannot know which of the two a repo means.
 if [ "$gitdir" != "$common" ]; then
-  for rel in .env .claude/settings.local.json; do
+  for rel in .claude/settings.local.json; do
     src="$main_root/$rel"
     dst="$wt_root/$rel"
     if [ -e "$src" ] && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then

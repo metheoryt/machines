@@ -210,12 +210,29 @@ store6="$(mk_store "$main" "$winpath")"; calls="$(mktemp)"
 check "reconcile unescapes a JSON-escaped Windows path" \
   'grep -qF "untrack C:/Users/methe/gone" "$calls"'
 
-# Case 12: generic config linking — a .env in main is symlinked into a fresh worktree.
+# Case 12: regression — `.env` is DELIBERATELY NOT linked. It is repo-semantic: a repo
+# that isolates worktrees writes its own .env from its bracket-2 script (backend-api
+# upserts WT_NS there). Symlinked, the append branch of that upsert follows the link
+# and writes into the MAIN checkout's .env — which then stops resolving to its
+# no-.env defaults — and every worktree reads that one file, sharing one compose
+# project / image tag / test-DB namespace. Silent collision, so assert both halves:
+# no link in the worktree, and main's .env byte-untouched.
 fb="$(mk_fakebin)"; read -r main wt <<<"$(mk_repo_with_worktree)"
 store="$(mk_store "$main")"
 printf 'SECRET=1\n' > "$main/.env"
 ( cd "$wt" && PATH="$fb:$PATH" FAKE_GORTEX_REPOS="$store" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
-check "setup symlinks .env from main into the worktree" '[ -L "$wt/.env" ] && [ "$(cat "$wt/.env")" = "SECRET=1" ]'
+check "setup does not link .env into the worktree" '[ ! -L "$wt/.env" ] && [ ! -e "$wt/.env" ]'
+check "setup leaves the main checkout .env untouched" '[ "$(cat "$main/.env")" = "SECRET=1" ]'
+
+# Case 12b: end-to-end — a repo-local setup script that writes .env writes into the
+# WORKTREE, never through a symlink into main. This is the behaviour case 12 protects.
+mkdir -p "$wt/docker"
+printf '#!/usr/bin/env bash\nprintf "WT_NS=x\\n" >> "$(git rev-parse --show-toplevel)/.env"\n' > "$wt/docker/worktree-setup.sh"
+chmod +x "$wt/docker/worktree-setup.sh"
+( cd "$wt" && PATH="$fb:$PATH" FAKE_GORTEX_REPOS="$store" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
+check "a repo-local .env write lands in the worktree, not in main" \
+  '[ ! -L "$wt/.env" ] && grep -q WT_NS "$wt/.env" && ! grep -q WT_NS "$main/.env"'
+rm -rf "$wt/docker" "$wt/.env"
 
 # Case 13: nested-path config is linked with its parent dir created.
 mkdir -p "$main/.claude"; printf '{"x":1}\n' > "$main/.claude/settings.local.json"
@@ -226,20 +243,25 @@ check "setup symlinks nested .claude/settings.local.json" '[ -L "$wt/.claude/set
 # Case 14: a pre-existing dest file is NOT clobbered.
 read -r main2 wt2 <<<"$(mk_repo_with_worktree)"
 store2="$(mk_store "$main2")"
-printf 'MAIN=1\n' > "$main2/.env"; printf 'LOCAL=1\n' > "$wt2/.env"
+mkdir -p "$main2/.claude" "$wt2/.claude"
+printf 'MAIN=1\n' > "$main2/.claude/settings.local.json"
+printf 'LOCAL=1\n' > "$wt2/.claude/settings.local.json"
 ( cd "$wt2" && PATH="$fb:$PATH" FAKE_GORTEX_REPOS="$store2" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
-check "setup does not clobber an existing dest file" '[ ! -L "$wt2/.env" ] && [ "$(cat "$wt2/.env")" = "LOCAL=1" ]'
+check "setup does not clobber an existing dest file" \
+  '[ ! -L "$wt2/.claude/settings.local.json" ] && grep -q LOCAL "$wt2/.claude/settings.local.json"'
 
 # Case 15: idempotent — re-run exits 0 and leaves the link intact.
 store="$(mk_store "$main")"
 ( cd "$wt" && PATH="$fb:$PATH" FAKE_GORTEX_REPOS="$store" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 ); rc=$?
-check "setup re-run is idempotent (exit 0, link intact)" '[ "'$rc'" -eq 0 ] && [ -L "$wt/.env" ]'
+check "setup re-run is idempotent (exit 0, link intact)" \
+  '[ "'$rc'" -eq 0 ] && [ -L "$wt/.claude/settings.local.json" ]'
 
-# Case 16: link step is skipped in the main checkout (.env stays a real file, not a symlink).
+# Case 16: link step is skipped in the main checkout (the linkable file stays a real
+# file, not a symlink into itself).
 read -r main3 wt3 <<<"$(mk_repo_with_worktree)"
 store3="$(mk_store "$main3")"
-printf 'X=1\n' > "$main3/.env"
+mkdir -p "$main3/.claude"; printf 'X=1\n' > "$main3/.claude/settings.local.json"
 ( cd "$main3" && PATH="$fb:$PATH" FAKE_GORTEX_REPOS="$store3" GORTEX_CALLS="$(mktemp)" FAKE_GORTEX_DAEMON_UP=0 bash "$setup" >/dev/null 2>&1 )
-check "link step skipped in main checkout (.env not a symlink)" '[ ! -L "$main3/.env" ]'
+check "link step skipped in main checkout (file not a symlink)" '[ ! -L "$main3/.claude/settings.local.json" ]'
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
