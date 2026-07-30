@@ -619,8 +619,15 @@ global + per-host). One bullet per fact under a topical heading.
   carry it. Same class of trap as jellyfin's `encoding.xml`. Set to `qsv` +
   `temporalAQ:false` 2026-07-31; old row saved at
   `~/immich-system-config.bak-20260731-0051.json`. Note only *overrides* live in
-  that row, so an absent key means "default", not "unset". **Verify accel with a
-  real encode, not a codec list:**
+  that row, so an absent key means "default", not "unset" — and **immich rewrites
+  the row on startup**, dropping keys that equal the default and adding ones it has
+  migrated in (it dropped the `temporalAQ:false` and `accelDecode:true` written by
+  hand, and added `realtime:{enabled,resolutions}`). That rewrite is a handy proof
+  the app actually read your edit; it also means a hand-set value silently
+  disappearing from the row does not imply the *effective* value changed. Because
+  `realtime` was added rather than dropped, the rule is not purely drop-defaults —
+  confirm effective values in the UI rather than trusting the row.
+  **Verify accel with a real encode, not a codec list:**
   `docker exec immich_server ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30:duration=2 -c:v hevc_qsv -f null -`
   (passed; iHD driver, VA-API 1.23.0, container runs as root so `/dev/dri` perms
   are moot).
