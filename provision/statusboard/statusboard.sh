@@ -1608,29 +1608,50 @@ sb_sample_slow() {
     fi
   done
   if [ -n "$spinners" ]; then
-    local rr parks
+    local rr parks i n idx cand=""
     # Word splitting is the point — $spinners is a space-joined list.
     # shellcheck disable=SC2206
     rr=($spinners)
+    n="${#rr[@]}"
     # The cursor is clamped rather than wrapped with %, so unplugging a dock
     # mid-rotation cannot leave it pointing past the end of a shorter list.
-    [ "$SB_TEMP_RR" -lt "${#rr[@]}" ] || SB_TEMP_RR=0
-    disk="${rr[$SB_TEMP_RR]}"
-    SB_TEMP_RR=$((SB_TEMP_RR + 1))
-    # Learned lazily, inside the round-robin slot, so the cost is one extra fork for
-    # one drive on one probe rather than a query storm for every drive at once. APM
-    # level is a persistent setting, so the answer is cached for the process lifetime.
-    parks="$(sb_series_get "$SB_PARKS" "$disk")"
-    if [ -z "$parks" ]; then
-      parks="$(sb_drive_parks "$disk")"
-      SB_PARKS="$(sb_series_set "$SB_PARKS" "$disk" "$parks")"
+    [ "$SB_TEMP_RR" -lt "$n" ] || SB_TEMP_RR=0
+    # SCAN from the cursor rather than taking whatever it happens to point at, and take
+    # BUSY drives first. The plain round-robin skipped a drive that was spinning in this
+    # probe merely because its turn had not come up — and eligibility for a
+    # standby-capable drive is per-probe, so a missed burst meant reading `-` for as
+    # long as it stayed idle afterwards. Here that is precisely the two drives carrying
+    # the backups (sdd, sdg).
+    #
+    # Busy first also means no APM query for a drive that is already spinning: being
+    # busy is sufficient on its own, so the cheaper test is the one asked first.
+    #
+    # Still exactly ONE temperature read per probe. The scan picks which drive to spend
+    # it on; it never spends more.
+    for ((i = 0; i < n; i++)); do
+      idx=$(((SB_TEMP_RR + i) % n))
+      case " $busy " in
+        *" ${rr[$idx]} "*) cand="${rr[$idx]}"; SB_TEMP_RR=$((idx + 1)); break ;;
+      esac
+    done
+    # Nothing spinning, so fall back to the drives that cannot park anyway. Their APM
+    # level is learned lazily here and cached for the process lifetime: worst case one
+    # fork per spinner across the first few probes, then never again.
+    if [ -z "$cand" ]; then
+      for ((i = 0; i < n; i++)); do
+        idx=$(((SB_TEMP_RR + i) % n))
+        disk="${rr[$idx]}"
+        parks="$(sb_series_get "$SB_PARKS" "$disk")"
+        if [ -z "$parks" ]; then
+          parks="$(sb_drive_parks "$disk")"
+          SB_PARKS="$(sb_series_set "$SB_PARKS" "$disk" "$parks")"
+        fi
+        [ "$parks" = no ] && { cand="$disk"; SB_TEMP_RR=$((idx + 1)); break; }
+      done
     fi
-    local free=0
-    [ "$parks" = no ] && free=1
-    case " $busy " in *" $disk "*) free=1 ;; esac
-    if [ "$free" = 1 ]; then
-      cur="$(sb_smart_temp "$disk")"
-      [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
+    if [ -n "$cand" ]; then
+      cur="$(sb_smart_temp "$cand")"
+      [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$cand" "$cur")"
     fi
   fi
   # shellcheck disable=SC2086
