@@ -254,9 +254,15 @@ tier_statusboard() {
   # without which tmux REFUSES to start. tmux sits upstream of the board in that
   # chain, so its absence is a black screen, not a missing pane. A tier that can
   # produce a black screen must not depend on another tier having run first.
+  # smartmontools is the only way to a temperature on a USB-attached drive: the
+  # kernel's drivetemp hwmon covers native SATA, and nothing behind a USB-SATA bridge
+  # gets a hwmon node at all. Without it the disk block's temperature column is a row
+  # of dashes on every spinner. It happened to be installed on latitude by hand, which
+  # is exactly the state this tier exists to remove — a reinstall would have lost the
+  # temperatures with no error to explain why.
   $SUDO apt-get install -y --no-install-recommends \
     cage foot foot-terminfo fontconfig fonts-jetbrains-mono btop polkitd \
-    tmux ncurses-term \
+    tmux ncurses-term smartmontools \
     || warn "status-board package install failed — the board's --check will name what is missing"
   return 0
 }
@@ -430,6 +436,111 @@ CUS
   return 0
 }
 
+# ── SERVER: let the status board read the CPU's energy counter ─────────────────
+# The board's `power` row is the machine's actual consumption, and RAPL's psys domain
+# is the only place on this hardware that number exists. The battery reports zero
+# (charging is capped and inhibited), and the USB-C source psy reports zero through
+# the PD hub — measured 2026-07-29.
+#
+# SECURITY, stated plainly rather than buried: /sys/class/powercap/*/energy_uj ships
+# mode 0400 root:root because fine-grained energy readings are a side channel. The
+# PLATYPUS work (CVE-2020-8694) recovered AES and RSA key material from exactly this
+# interface, which is why the kernel restricted it to root in 5.10. This tier widens
+# it to one group.
+#
+# On THIS box that grants no capability that did not already exist: the same user is
+# already NOPASSWD ALL through tier_sudo_nopasswd, so anything running as them can
+# `sudo cat` the file today. The change is a convenience — no fork and no auth.log
+# entry every ten seconds — not a new privilege.
+#
+# It is scoped to a GROUP rather than 0444 so that statement stays exactly true.
+# World-readable would hand the side channel to every other uid on the box, including
+# ones that cannot reach root, and nothing here needs that.
+#
+# Deliberately its own tier, not folded into tier_statusboard: that tier is
+# packages-only by design (see the note in linux.sh) and installing a unit from it
+# would quietly end that property.
+tier_rapl_read() {
+  local grp="${1:-}" d found=""
+  for d in /sys/class/powercap/intel-rapl:*; do
+    [ -f "$d/energy_uj" ] && { found=1; break; }
+  done
+  if [ -z "$found" ]; then
+    info "no RAPL energy counter on this hardware — skipping the power-draw reader"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the RAPL read permission"
+    return 0
+  fi
+  # The group the BOARD runs as, which is the invoking user's primary group. Passed
+  # explicitly only by a test; deriving it means the tier works on a box where the
+  # service user is not called `me`.
+  [ -n "$grp" ] || grp="$(id -gn 2>/dev/null || printf '')"
+  if [ -z "$grp" ]; then
+    warn "cannot determine this user's group — skipping the RAPL read permission"
+    return 0
+  fi
+  info "Installing statusboard-rapl-read (energy counter readable by group $grp)…"
+
+  $SUDO tee /usr/local/bin/statusboard-rapl-read >/dev/null <<CU
+#!/bin/sh
+# statusboard-rapl-read — make the RAPL energy counters group-readable.
+#
+# Installed by tier_rapl_read in machines/provision/lib/tiers.sh; edit the tier and
+# re-provision rather than editing this copy. See that tier for why this is safe on
+# this box and what it would cost on one without passwordless sudo.
+#
+# Re-run at every boot and resume because these are sysfs attributes: their mode is a
+# property of the live kernel object, so it is reset by a reboot and by anything that
+# reloads intel_rapl_msr. A one-time chmod would silently stop working.
+set -eu
+
+GROUP="\${RAPL_GROUP:-$grp}"
+[ -r /etc/default/statusboard-rapl-read ] && . /etc/default/statusboard-rapl-read
+
+found=0
+for d in /sys/class/powercap/intel-rapl:*; do
+  [ -f "\$d/energy_uj" ] || continue
+  found=1
+  # Only the PARENT domains. The subdomains (intel-rapl:0:0 core, intel-rapl:0:1
+  # uncore) are matched by the same glob and the board never reads them, so leaving
+  # them at 0400 keeps the widened surface as small as the feature allows.
+  case "\$(basename "\$d")" in *:*:*) continue ;; esac
+  chgrp "\$GROUP" "\$d/energy_uj" 2>/dev/null || continue
+  chmod 0440 "\$d/energy_uj" 2>/dev/null || true
+  printf 'statusboard-rapl-read: %s (%s) now %s\n' \\
+    "\$(basename "\$d")" "\$(cat "\$d/name" 2>/dev/null || echo '?')" \\
+    "\$(stat -c '%a %U:%G' "\$d/energy_uj" 2>/dev/null || echo '?')"
+done
+
+[ "\$found" = 1 ] || { echo "statusboard-rapl-read: no RAPL energy counter present" >&2; exit 1; }
+CU
+  $SUDO chmod 0755 /usr/local/bin/statusboard-rapl-read
+
+  $SUDO tee /etc/systemd/system/statusboard-rapl-read.service >/dev/null <<'RS'
+[Unit]
+Description=Make the RAPL energy counters readable by the status board
+After=sysinit.target suspend.target hibernate.target hybrid-sleep.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/bin/statusboard-rapl-read
+
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target
+RS
+
+  if $SUDO systemctl daemon-reload >/dev/null 2>&1 \
+    && $SUDO systemctl enable --now statusboard-rapl-read.service >/dev/null 2>&1; then
+    ok "statusboard-rapl-read installed and applied"
+  else
+    warn "statusboard-rapl-read installed but the unit would not enable — the board's power row will read n/a"
+  fi
+  return 0
+}
+
 # ── CORE 1 (darwin): base Homebrew packages ───────────────────────────────────
 # The macOS counterpart of tier_apt_min. No sudo anywhere: Homebrew owns its own
 # prefix (/opt/homebrew on Apple Silicon) and refuses to run under sudo, so the
@@ -491,6 +602,47 @@ tier_brew_dev() {
 
   # gh credential helper for HTTPS remotes (SSH remotes don't need it).
   have gh && git config --global --replace-all credential."https://github.com".helper '!gh auth git-credential'
+  return 0
+}
+
+# ── BEST-EFFORT (darwin): GUI apps from Homebrew Cask ─────────────────────────
+# The third brew tier. Casks are not formulas and the difference bites twice:
+#
+#   • `brew list --formula <cask>` NEVER matches, so the idempotency probe here
+#     uses `brew list --cask`. With the wrong flag every re-run reinstalls.
+#   • A cask carrying `binary` / shell-completion artifacts links them OUTSIDE
+#     the Homebrew prefix (/usr/local/bin, /opt/homebrew/share/…) and shells out
+#     to `sudo` to do it. With no TTY the password read fails and the cask
+#     ROLLS THE WHOLE INSTALL BACK — app moved to the Caskroom, files purged.
+#     `--no-binaries` does not dodge it (kubectl and the completions still
+#     sudo-link). So: this tier only completes from an interactive terminal;
+#     over SSH or from an agent it warns and moves on. Hence BEST-EFFORT, and
+#     hence the install is NOT output-redirected like the formula loops above —
+#     the sudo prompt has to be visible.
+#
+# docker-desktop is here rather than in a Nix module because air is a Mac: the
+# unpaid Docker Desktop is what every other non-NixOS box already runs (server,
+# the WSL distros), so one engine story covers the whole imperative tier.
+tier_brew_cask() {
+  have brew || { warn "Homebrew not found — skipping the cask layer"; return 0; }
+  info "Installing GUI apps (brew --cask)…"
+  local c
+  for c in docker-desktop; do
+    if brew list --cask "$c" >/dev/null 2>&1; then
+      ok "$c already installed"
+    elif brew install --cask "$c"; then
+      ok "$c"
+    else
+      warn "cask '$c' failed — it needs an interactive sudo. Re-run from a terminal window: brew install --cask $c"
+    fi
+  done
+
+  # Docker Desktop links the CLI on install, but the daemon only exists once the
+  # app's first launch has installed its privileged helper — nothing headless can
+  # do that, and until it happens `docker` is a client pointed at no socket.
+  if [ -d /Applications/Docker.app ] && ! docker info >/dev/null 2>&1; then
+    warn "Docker Desktop present but the daemon is down — launch it once: open -a Docker"
+  fi
   return 0
 }
 

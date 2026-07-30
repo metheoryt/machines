@@ -170,6 +170,122 @@ eq "$(printf '%s' "$OUT" | grep -c 'not enforced')" '0' \
 eq "$(sb_limit_line '' 'Trickle [Fast] Standard')" '' \
   'limit: no threshold renders nothing at all'
 
+# ── Platform power draw (sb_rapl_watts / sb_power_line) ───────────────────────
+# RAPL gives an energy COUNTER, so every assertion here is about a pair of readings
+# and the window between them — there is no such thing as one-sample watts.
+
+# µJ per second is µW, so this is the whole conversion: 183 J over 10s is 18.3W.
+eq "$(sb_rapl_watts 0 183000000 262143328850 10)" '18300000' \
+  'rapl: energy delta over the window becomes µW'
+eq "$(sb_rapl_watts 1000000 19300000 262143328850 1)" '18300000' \
+  'rapl: a one-second window needs no special case'
+
+# The first sample after startup has no predecessor. Empty, never zero — the same
+# rule sb_source_watts exists to enforce.
+eq "$(sb_rapl_watts '' 500 262143328850 10)" '' \
+  'rapl: no previous reading yields no watts, not 0W'
+eq "$(sb_rapl_watts 500 '' 262143328850 10)" '' \
+  'rapl: an unreadable counter yields no watts, not 0W'
+eq "$(sb_rapl_watts abc 500 262143328850 10)" '' 'rapl: junk yields nothing'
+
+# The counter wraps about every four hours at this box's idle draw, so a negative
+# delta is a rollover and one range has to be added back.
+eq "$(sb_rapl_watts 262143328000 182999150 262143328850 10)" '18300000' \
+  'rapl: a wrapped counter is corrected by one range, not reported as a drop'
+eq "$(sb_rapl_watts 500 100 0 10)" '' \
+  'rapl: a wrap with no known range yields nothing rather than a guess'
+eq "$(sb_rapl_watts 500 100 '' 10)" '' \
+  'rapl: a wrap with an empty range yields nothing'
+
+# A window far longer than a probe means the loop stalled or the box slept. The
+# counter kept running, so the average would be arithmetically fine and physically
+# meaningless.
+eq "$(sb_rapl_watts 0 183000000 262143328850 21600)" '' \
+  'rapl: a suspend-length window is a gap, not a tiny wattage'
+eq "$(sb_rapl_watts 0 183000000 262143328850 0)" '' \
+  'rapl: a zero-length window yields nothing'
+
+# The DOMAIN has to reach the screen: psys and package-0 differ by 3x on this box,
+# so a bare number would be read as the machine's draw either way.
+OUT="$(sb_power_line 18300000 psys)"
+has "$OUT" '18.3W' 'power: the row carries the wattage'
+has "$OUT" 'psys'   'power: the row names the RAPL domain it measured'
+has "$(sb_power_line 6400000 package-0)" 'package-0' \
+  'power: the narrower fallback domain is named too'
+has "$(sb_power_line '' psys)" 'n/a' \
+  'power: no reading reads n/a rather than 0W'
+
+# ── Drive temperature ─────────────────────────────────────────────────────────
+# sb_smart_temp_parse: from smartctl's JSON, because the attribute table is ambiguous.
+eq "$(sb_smart_temp_parse '{"temperature":{"current":47}}')" '47' \
+  'temp: the current temperature is read out of the JSON'
+eq "$(sb_smart_temp_parse '{"power":{"current":9},"temperature":{"current":47}}')" '47' \
+  'temp: a "current" in another object does not win'
+eq "$(sb_smart_temp_parse '{"temperature":{"op_limit_min":10,"current":39,"lifetime_max":63}}')" '39' \
+  'temp: the current field is found among its siblings'
+eq "$(sb_smart_temp_parse '{"device":{"name":"/dev/sdf"}}')" '' \
+  'temp: no temperature object yields nothing'
+eq "$(sb_smart_temp_parse '')" '' 'temp: empty output yields nothing'
+
+# sb_smart_asleep: smartctl's exit code cannot tell these apart — measured on
+# latitude, a sleeping sdf and a nonexistent /dev/sdZZ both exited 2.
+asleep() {
+  if sb_smart_asleep "$1"; then printf yes; else printf no; fi
+}
+eq "$(asleep '{"messages":[{"string":"Device is in SLEEP mode, exit(2)"}],"exit_status":2}')" yes \
+  'temp: a sleeping drive is recognised from the message, not the exit code'
+eq "$(asleep '{"messages":[{"string":"Device is in STANDBY mode, exit(2)"}],"exit_status":2}')" yes \
+  'temp: STANDBY counts as parked as well as SLEEP'
+eq "$(asleep '{"messages":[{"string":"Smartctl open device: /dev/sdZZ [SAT] failed"}],"exit_status":2}')" no \
+  'temp: an absent device exits 2 as well and must NOT be called parked'
+eq "$(asleep '{"temperature":{"current":47},"exit_status":0}')" no \
+  'temp: a healthy reading is not parked'
+
+# sb_temp_cell: three outcomes, three strings, and all of them exactly four columns —
+# the disk block pads to the widest row, so a field that changed width with its own
+# content would move the chart column on whichever rows had a reading.
+strip() { printf '%s' "$1" | sed 's/\x1b\[[0-9;]*m//g'; }
+while read -r t_c t_rota; do
+  CELL="$(strip "$(sb_temp_cell "$t_c" "$t_rota")")"
+  eq "${#CELL}" '4' "temp: the cell for '$t_c' is four columns wide"
+done <<'PROBES'
+47 1
+5 1
+105 0
+zzz 1
+junk 1
+PROBES
+eq "$(strip "$(sb_temp_cell '' 1)")" '   -' \
+  'temp: no reading renders a dash, never 0C'
+eq "$(strip "$(sb_temp_cell zzz 1)")" ' zzz' \
+  'temp: a parked drive says so instead of showing a dash'
+eq "$(strip "$(sb_temp_cell 47 1)")" ' 47C' \
+  'temp: a reading renders without a degree sign — the VT console font may lack it'
+
+# Spinners and flash have different limits, so one threshold pair cannot serve both —
+# and this is the one part of the board where that distinction is load-bearing, since
+# 52C is a warning on a 2.5" spinner and unremarkable on an NVMe.
+#
+# Colour is suppressed here (stdout is not a tty), which would make every colour
+# assertion vacuously true against an empty needle. So the palette is swapped for
+# legible markers for the duration of this block, and restored afterwards.
+T_WARN_SAVE="$C_WARN"; T_BAD_SAVE="$C_BAD"; T_DIM_SAVE="$C_DIM"; T_RST_SAVE="$C_RST"
+C_WARN='<warn>'; C_BAD='<bad>'; C_DIM='<dim>'; C_RST='<rst>'
+has   "$(sb_temp_cell 52 1)" '<warn>' 'temp: 52C warns on a spinner'
+hasnt "$(sb_temp_cell 52 0)" '<warn>' 'temp: 52C is unremarkable on an SSD'
+has   "$(sb_temp_cell 58 1)" '<bad>'  'temp: 58C is bad on a spinner'
+hasnt "$(sb_temp_cell 58 0)" '<bad>'  'temp: 58C is not yet bad on an SSD'
+has   "$(sb_temp_cell 72 0)" '<warn>' 'temp: 72C warns on an SSD'
+has   "$(sb_temp_cell 82 0)" '<bad>'  'temp: 82C is bad on an SSD'
+has   "$(sb_temp_cell 30 1)" '<dim>'  'temp: a cool drive stays quiet'
+has   "$(sb_temp_cell zzz)"  '<dim>'  'temp: a parked drive stays quiet'
+has   "$(sb_temp_cell '')"   '<dim>'  'temp: an unreadable drive stays quiet'
+# An unknown rotational flag must take the spinner thresholds: it is the assumption
+# whose consequences are safer, and the disk row passes an empty string for a mount
+# whose drive could not be resolved.
+has   "$(sb_temp_cell 52 '')" '<warn>' 'temp: unknown rotation warns like a spinner'
+C_WARN="$T_WARN_SAVE"; C_BAD="$T_BAD_SAVE"; C_DIM="$T_DIM_SAVE"; C_RST="$T_RST_SAVE"
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # The chart column is the reason the frame is now laid out in two passes, so the
 # padding maths is asserted as hard as the glyph maths: a one-cell error in either

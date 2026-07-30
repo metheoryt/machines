@@ -14,9 +14,12 @@
 #
 # What differs from linux.sh, and why:
 #   • Homebrew, not apt — so tier_brew_min / tier_brew_dev replace the apt pair
-#     in the tier list. Homebrew refuses to run under sudo and owns its own
-#     prefix, so the whole PRIV/SUDO probe linux.sh needs has no analogue: SUDO
-#     stays empty and PRIV stays 1.
+#     in the tier list, plus tier_brew_cask, which has no Linux counterpart at
+#     all. Homebrew refuses to run under sudo and owns its own prefix, so the
+#     whole PRIV/SUDO probe linux.sh needs has no analogue: SUDO stays empty and
+#     PRIV stays 1. The cask layer is the one exception: a cask links binaries
+#     into /usr/local/bin THROUGH sudo, so tier_brew_cask is the single tier here
+#     that wants an interactive terminal (see its comment in tiers.sh).
 #   • No fdfind/batcat aliasing — brew installs `fd` and `bat` under their real
 #     names (see tier_brew_dev).
 #   • launchd, not systemd — tier_autofetch / tier_selfpull / tier_hermes_dashboard
@@ -72,7 +75,7 @@ fi
 # would be inventing a machine that does not exist.
 case "$PROFILE" in
   workstation)
-    TIERS=(brew_min brew_dev agents_config git_base gortex
+    TIERS=(brew_min brew_dev brew_cask agents_config git_base gortex
            "agent_clis claude codex hermes" shell_init autofetch
            ssh_accounts fleet_ssh selfpull ssh_trust
            hermes_config hermes_dashboard) ;;
@@ -128,8 +131,14 @@ Next steps:
         launchctl list | grep kz.cyphy
     Expect kz.cyphy.git-autofetch and kz.cyphy.fleet-selfpull.
 
+Docker Desktop comes from tier_brew_cask, but its daemon does not: the app has to
+run once, interactively, to install its privileged helper.
+  • If the cask step warned, re-run it in a terminal window:
+        brew install --cask docker-desktop
+  • Then launch it once:  open -a Docker   (verify: docker run --rm hello-world)
+
 Not installed by design (only a NixOS host gets these): the declarative dev
-toolchain (docker, language servers, the full fish/ghostty/GNOME setup).
+toolchain (language servers, the full fish/ghostty/GNOME setup).
 EOF
 
 exit 0

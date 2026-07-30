@@ -55,7 +55,7 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_rapl_read tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
 
 # sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
@@ -95,6 +95,10 @@ has   "$body" 'btop'        "tier_statusboard installs btop"
 has   "$body" 'polkitd'     "tier_statusboard installs polkitd (VT-switch escape hatch)"
 has   "$body" 'fonts-jetbrains-mono' "tier_statusboard installs the chart font"
 has   "$body" 'PRIV'        "tier_statusboard honours the no-root warn-and-skip contract"
+# smartmontools is the ONLY route to a temperature on a USB-attached drive: the
+# kernel's drivetemp hwmon covers native SATA and nothing behind a USB-SATA bridge
+# gets a hwmon node. Without it the disk block's temperature column is dashes.
+has   "$body" 'smartmontools' "tier_statusboard installs smartmontools (USB drive temperatures)"
 
 # battery_limit is server-only, and its whole reason for existing is the mode
 # write: the retired NixOS module set the threshold alone and the EC ignored it.
@@ -137,6 +141,39 @@ if [ -n "$end_ln" ] && [ -n "$mode_ln" ] && [ "$end_ln" -lt "$mode_ln" ]; then
 else
   die "tier_battery_limit writes the ceiling before switching the EC to Custom (end=$end_ln mode=$mode_ln)"
 fi
+
+# rapl_read is server-only, and it is the one tier here that widens a permission the
+# kernel deliberately tightened — so the guards on HOW MUCH it widens are the point
+# of these assertions, not decoration.
+has   "$srv" '^tier_rapl_read$'      "server installs the RAPL read permission"
+hasnt "$ws"  '^tier_rapl_read$'      "workstation omits the RAPL read permission"
+hasnt "$hub" '^tier_rapl_read$'      "hub omits the RAPL read permission"
+hasnt "$mac" '^tier_rapl_read$'      "macOS omits the RAPL read permission"
+# TWO slices, because the negative assertions below would otherwise be satisfied by
+# the comment that EXPLAINS what the tier refuses to do. rbody spans the section
+# header (where the reasoning lives); rcode is the executable part alone, and is what
+# "never writes 0444" has to be asserted against.
+rbody="$(awk '/^# ── SERVER: let the status board read/,/^}/' "$TIERS")"
+rcode="$(awk '/^tier_rapl_read\(\)/,/^}/' "$TIERS")"
+# Group-scoped, never world-readable: 0444 would hand the PLATYPUS side channel to
+# every uid on the box, including ones with no route to root. The zero-new-capability
+# argument in the tier's comment is only true of the group form.
+has   "$rcode" '0440'   "tier_rapl_read grants group read, not world read"
+has   "$rcode" 'chgrp'  "tier_rapl_read scopes the widened attribute to a group"
+hasnt "$rcode" '0444'   "tier_rapl_read never makes the energy counter world-readable"
+hasnt "$rcode" '0644'   "tier_rapl_read never makes the energy counter writable"
+# Parent domains only. intel-rapl:0:0 (core) and intel-rapl:0:1 (uncore) match the
+# same glob and the board never reads them, so they stay at 0400.
+has   "$rcode" '\*:\*:\*' "tier_rapl_read skips the RAPL subdomains"
+# sysfs modes are properties of a live kernel object: a reboot or an intel_rapl_msr
+# reload resets them, so a one-time chmod would silently stop working.
+has   "$rcode" 'suspend.target' "tier_rapl_read re-applies on resume, not only at boot"
+has   "$rcode" 'PRIV'   "tier_rapl_read honours the no-root warn-and-skip contract"
+has   "$rcode" 'skipping the power-draw reader' \
+  "tier_rapl_read skips hardware with no RAPL domain"
+# The security decision has to be readable where it is made, not only in a commit
+# message — this tier is the one a future reader will question.
+has   "$rbody" 'PLATYPUS' "tier_rapl_read names the side channel it is widening"
 
 # ORDER GUARD: the dotfiles bare-repo checkout is REFUSED when an untracked file
 # already sits at a tracked path, so tier_dotfiles must stay last — after
@@ -182,7 +219,7 @@ grep -q 'KillMode=process' "$TIERS" \
 # makes these assertions possible at all; if someone moves the precondition
 # above the dry-run exit, every case below starts failing with "targets macOS".
 eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_brew_min tier_brew_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
+   "tier_brew_min tier_brew_dev tier_brew_cask tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
    "macos workstation tier list and order"
 
 # tier_fleet_ssh is darwin-only ON PURPOSE. NixOS gets its fleet client config
@@ -228,7 +265,10 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # IS in fleet.json and reaches role_dotfiles through the dispatcher, behind its
 # `Apply dotfiles? [y/N]` gate. Adding it to macos.sh would enroll the box at
 # tier time, which provision-mac.sh runs BEFORE roles — pre-empting that gate.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|fleet_ssh|dotfiles)$' | tr '\n' ' '; }
+#
+# tier_brew_cask is the third exception, and the least interesting one: Homebrew
+# Cask ships macOS .app bundles, so there is no Linux counterpart to forget.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

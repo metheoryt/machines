@@ -222,6 +222,7 @@ Idempotent — re-run any time.
 | | Linux (`linux.sh`) | macOS (`macos.sh`) |
 |---|---|---|
 | Packages | `tier_apt_min` / `tier_apt_dev` | `tier_brew_min` / `tier_brew_dev` |
+| GUI apps | — | `tier_brew_cask` — Docker Desktop; the one tier needing an interactive sudo |
 | Root | `sudo` probe → `PRIV=0` degrades to warn | none — Homebrew refuses sudo and owns its prefix |
 | `fd` / `bat` | installed as `fdfind`/`batcat`, symlinked to friendly names | real names already; **no aliasing** |
 | Scheduling | systemd user timer, cron fallback | **launchd** LaunchAgents |
@@ -231,6 +232,13 @@ Idempotent — re-run any time.
 Everything else — the synced agent config, git identity, the agent CLIs,
 multi-account SSH, inbound fleet SSH trust — is the *same tier body* running on
 both. Fix it once, both platforms get it.
+
+**`tier_brew_cask` is the one tier that needs a terminal.** A cask links binaries
+into `/usr/local/bin` through `sudo`; with no TTY the password read fails and the
+cask rolls the entire install back. So provisioning a fresh Mac **over SSH, or
+from an agent, will skip Docker Desktop with a warning** — that is by design, not
+a bug. Re-run the named command from a terminal window on the box, then launch
+the app once so it installs its privileged helper.
 
 **Scheduling.** macOS has no systemd, and per-user `cron` needs the cron binary
 granted Full Disk Access in System Settings (not scriptable), so the scheduled

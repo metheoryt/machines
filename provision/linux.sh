@@ -109,7 +109,11 @@ case "$PROFILE" in
     # laptop wired to the wall forever needs its charge ceiling enforced, and the
     # tier is a no-op wherever the EC exposes no threshold — so it costs a mains-
     # only box nothing to have it in the plan.
-    TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit agents_config git_base "agent_clis claude"
+    # rapl_read follows statusboard for the same reason and with the same shape: the
+    # board's power row reads the CPU's energy counter, which ships root-only, and
+    # this widens it to the board's group. It is a no-op on hardware with no RAPL
+    # domain. It is a REAL, if small, security decision — see the tier's comment.
+    TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit rapl_read agents_config git_base "agent_clis claude"
            shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;

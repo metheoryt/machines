@@ -257,6 +257,142 @@ sb_limit_line() {
     "$(printf '%s' "$types" | tr ' ' '\n' | grep '^\[' | tr -d '[]')" "$C_RST"
 }
 
+# ── Platform power draw ───────────────────────────────────────────────────────
+# The battery row answers "what is flowing in or out of the cell", which on a box
+# that never unplugs is zero — the one number it cannot give is what the machine is
+# actually spending. RAPL can, within limits spelled out on sb_power_line.
+
+# The longest window sb_rapl_watts will average over, in seconds. Generous next to
+# the 10s probe so one slow paint still publishes a number, tight enough that a
+# suspend/resume gap does not: the energy counter keeps running while the loop is
+# stopped, so a 6-hour gap would average out to something arithmetically correct and
+# physically meaningless.
+SB_RAPL_MAX_WINDOW="${STATUSBOARD_RAPL_MAX_WINDOW:-120}"
+
+# sb_rapl_watts <prev_uj> <cur_uj> <max_range_uj> <seconds>: average power in µW
+# across the window between two RAPL energy reads, or empty when the pair cannot
+# yield a number.
+#
+# RAPL exposes a monotonic ENERGY counter, not a power reading, so watts only exist
+# BETWEEN two samples. That makes the first sample after startup blank by
+# construction — which is the correct output, not a bug to paper over with a zero.
+#
+# The counter WRAPS, and here it wraps often enough to matter: the range is 262143 J
+# and psys idles near 18W on this box, so it rolls over roughly every four hours. A
+# negative delta is that rollover rather than a fault, and adding one range back
+# recovers the true delta. Only ONE wrap is assumed — at a 10s probe a second one
+# would need 26kW.
+sb_rapl_watts() {
+  local prev="${1:-}" cur="${2:-}" max="${3:-}" secs="${4:-}"
+  case "$prev" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$cur" in '' | *[!0-9]*) printf ''; return ;; esac
+  case "$secs" in '' | *[!0-9]*) printf ''; return ;; esac
+  [ "$secs" -ge 1 ] || { printf ''; return; }
+  [ "$secs" -le "${SB_RAPL_MAX_WINDOW:-120}" ] || { printf ''; return; }
+  case "$max" in *[!0-9]*) max=0 ;; esac
+  # µJ per second IS µW, so the division is the whole conversion.
+  awk -v p="$prev" -v c="$cur" -v m="${max:-0}" -v s="$secs" 'BEGIN {
+    d = c - p
+    if (d < 0) {
+      if (m <= 0) exit          # wrapped, but no range to correct by — say nothing
+      d += m
+      if (d < 0) exit           # more than one wrap: not a window we can average
+    }
+    printf "%d", d / s
+  }'
+}
+
+# sb_power_line <uwatts> <domain>: the platform-draw row.
+#
+# The DOMAIN is printed rather than merely recorded here, because the fallback
+# changes what the number MEANS by a factor of three. Measured on latitude
+# 2026-07-30, at the same moment: psys 18.3W, package-0 6.4W. A row reading just
+# "6.4W" on a box without psys would be taken for the machine's draw.
+#
+# And neither domain is wall power — psys is not either. It is the SoC platform
+# rail: CPU, GPU, memory, board logic. The five bus-powered USB spinners on this box
+# sit outside it, which is why 18W is plainly less than what the brick delivers.
+# Measuring the real total needs a meter at the socket, not a counter in the CPU.
+sb_power_line() {
+  local uw="${1:-}" dom="${2:-}" suffix=""
+  [ -n "$uw" ] || { printf '%spower     n/a%s' "$C_DIM" "$C_RST"; return; }
+  [ -n "$dom" ] && suffix="  $C_DIM$dom$C_RST"
+  printf 'power     %s%s' "$(sb_micro_to_unit "$uw" W)" "$suffix"
+}
+
+# ── Drive temperature ─────────────────────────────────────────────────────────
+# Seven drives, five of them 2.5" spinners stacked in USB docks with no airflow
+# designed for them, is exactly the arrangement where heat is the thing that kills
+# the array — and the one condition the disk block could not show.
+
+# sb_smart_temp_parse <smartctl -j output>: current temperature in whole °C.
+#
+# From the JSON, not the attribute table, on purpose. The table is ambiguous — sdc
+# on this box reports BOTH `190 Airflow_Temperature_Cel` and `194
+# Temperature_Celsius` — and its raw column carries trailing commentary
+# (`39 (Min/Max 3/63)`) that a naive field grab turns into a number it is not.
+# smartctl 7.x has already resolved both into .temperature.current.
+#
+# Narrowed to the temperature object before the number is taken, because "current"
+# occurs in other objects of the same document.
+sb_smart_temp_parse() {
+  local json="${1:-}" c
+  c="$(printf '%s' "$json" | tr -d ' \n' |
+    sed -n 's/.*"temperature":{[^}]*"current":\([0-9]\{1,\}\).*/\1/p' | head -1)"
+  case "$c" in '' | *[!0-9]*) printf ''; return ;; esac
+  printf '%s' "$c"
+}
+
+# sb_smart_asleep <smartctl -j output>: true when smartctl declined to read because
+# the drive is parked.
+#
+# Needed because smartctl's exit code cannot answer this. Bit 1 of its status means
+# "device open failed, OR did not return IDENTIFY, OR is in a low-power mode", and
+# measured on latitude 2026-07-30 both a sleeping sdf and a nonexistent /dev/sdZZ
+# exited 2. The distinction lives only in the message, and it is a distinction worth
+# keeping: one drive is resting, the other cannot be monitored at all.
+sb_smart_asleep() {
+  local json="${1:-}"
+  printf '%s' "$json" | tr -d ' \n' |
+    grep -qiE '"string":"Deviceisin(SLEEP|STANDBY|IDLE)mode'
+}
+
+# sb_temp_cell <celsius|zzz> [rotational]: the temperature field of a disk row.
+#
+# Three outcomes, deliberately three distinct strings:
+#   47C   a reading
+#   zzz   parked — no temperature BECAUSE the drive is asleep, which is the healthy
+#         state for a spinner nobody is using, and is worth saying out loud
+#   -     no reading and no reason: an unknown USB bridge, no smartctl, no root
+#
+# Collapsing the last two would hide the difference between "resting" and "cannot be
+# monitored", and only one of those is an answer.
+#
+# `C`, not `°C`: the primary display is a Linux VT whose console font is a 256-glyph
+# psf table, and the same gap that keeps the block ramp off this screen (see
+# sb_ramp_name) makes a degree sign a gamble for one column of decoration. It would
+# also break the field's width, being multi-byte where printf pads bytes.
+#
+# Every branch is FOUR visible columns wide. The disk block pads to the widest row
+# and every following column lines up against it, so a field that changed width with
+# its own content would move the chart column per row.
+sb_temp_cell() {
+  local c="${1:-}" rota="${2:-1}" col
+  case "$c" in
+    zzz) printf '%s%4s%s' "$C_DIM" 'zzz' "$C_RST"; return ;;
+    '' | *[!0-9]*) printf '%s%4s%s' "$C_DIM" '-' "$C_RST"; return ;;
+  esac
+  # Spinners and flash have different limits, so one threshold pair cannot serve
+  # both. 2.5" mobile drives are specced to a 55°C case; NVMe throttles in the 70s
+  # and is rated past that, so warning at 50 on an SSD would cry wolf on every one.
+  if [ "${rota:-1}" = 0 ]; then
+    col="$(sb_hi_colour "$c" 70 80)"
+  else
+    col="$(sb_hi_colour "$c" 50 55)"
+  fi
+  printf '%s%3sC%s' "$col" "$c" "$C_RST"
+}
+
 # ── Time charts ───────────────────────────────────────────────────────────────
 # Every measured row gets a second column: a one-line sparkline of that metric's
 # recent history, sized to whatever horizontal space the frame has left. The
@@ -703,7 +839,8 @@ sb_disk_bar() {
   printf '[%s]%s' "$out" "$pad"
 }
 
-# sb_disk_row <dev> <mount> <total_kb> <pct> [max_total_kb]: one filesystem.
+# sb_disk_row <dev> <mount> <total_kb> <pct> [max_total_kb] [state] [temp_c] [rota]:
+# one filesystem.
 #
 # The used figure is gone on purpose: the bar already carries "how full", the total
 # carries "how big", and a third number saying the same thing in GB was the widest
@@ -711,8 +848,14 @@ sb_disk_bar() {
 #
 # The bar is coloured by FREE space, so it greens down as the disk fills — the
 # inverse of the battery row, where a high number is the healthy one.
+#
+# Temperature is a property of the DRIVE, not of the filesystem, so two partitions of
+# one disk deliberately show the same figure — / and /boot/efi are both nvme1n1 here.
+# It renders through sb_temp_cell even when there is no reading, because a column
+# that appeared only on some rows would break the alignment of every row.
 sb_disk_row() {
   local dev="${1:-}" mnt="${2:-}" total="${3:-}" pct="${4:-}" maxtotal="${5:-}" state="${6:-ok}"
+  local temp="${7:-}" rota="${8:-1}"
   local col free=100 bar
   case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
   # Long mount points are shown tail-first behind a <: every row pads to the widest
@@ -728,16 +871,23 @@ sb_disk_row() {
     # "it was 60% full when it went" is worth more than a blank.
     bar="$(sb_pad "$(printf '!! %s !!' "$state")" $((SB_DISK_BARW + 2)))"
     col="$C_BAD"
-    printf '%-*s %s%s%s %s%3s%%  %5sG  %s%s' \
+    # A vanished disk has no temperature and no prospect of one, but it keeps the
+    # column: the block pads to the widest row, so dropping a field here would shift
+    # the chart column for every OTHER row in the frame.
+    printf '%-*s %s%s%s %s%3s%%  %5sG%s  %s  %s%s%s' \
       "$SB_DISK_PATHW" "${mnt:-?}" \
       "$C_BAD" "$bar" "$C_RST" \
-      "$C_DIM" "$pct" "$(sb_kb_to_gib "$total")" "${dev:-?}" "$C_RST"
+      "$C_DIM" "$pct" "$(sb_kb_to_gib "$total")" "$C_RST" \
+      "$(sb_temp_cell '' "$rota")" \
+      "$C_DIM" "${dev:-?}" "$C_RST"
     return
   fi
-  printf '%-*s %s%s %3s%%%s  %5sG  %s%s%s' \
+  printf '%-*s %s%s %3s%%%s  %5sG  %s  %s%s%s' \
     "$SB_DISK_PATHW" "${mnt:-?}" \
     "$col" "$bar" "$pct" "$C_RST" \
-    "$(sb_kb_to_gib "$total")" "$C_DIM" "${dev:-?}" "$C_RST"
+    "$(sb_kb_to_gib "$total")" \
+    "$(sb_temp_cell "$temp" "$rota")" \
+    "$C_DIM" "${dev:-?}" "$C_RST"
 }
 
 # Per-disk history cannot use an associative array keyed by mount point: mounts come
@@ -1004,6 +1154,117 @@ sb_power_source() {
   else printf 'battery only'; fi
 }
 
+# sb_rapl_pick: the powercap domain to meter, as "dir|name", or empty.
+#
+# Chosen by NAME, never by index. The intel-rapl:* glob also matches SUBdomains —
+# this box has intel-rapl:0:0 (core) and intel-rapl:0:1 (uncore) — so an
+# index-ordered pick would land on a fraction of the package and call it the
+# platform. psys first because it is the widest rail the CPU exposes; package-0 is
+# the fallback and means something much smaller, which is why sb_power_line prints
+# whichever one won.
+#
+# Readability is part of the match. energy_uj ships 0400 root:root (the kernel
+# restricted it after the PLATYPUS side channel), so on a box where nothing has
+# widened it this returns empty and the row honestly says n/a instead of 0W.
+sb_rapl_pick() {
+  local d want
+  for want in psys package-0; do
+    for d in /sys/class/powercap/intel-rapl:*; do
+      [ -f "$d/name" ] || continue
+      [ "$(_read "$d/name")" = "$want" ] || continue
+      [ -r "$d/energy_uj" ] || continue
+      printf '%s|%s' "$d" "$want"
+      return 0
+    done
+  done
+  printf ''
+}
+
+# sb_disk_of <partition-or-disk>: the whole-disk device a partition belongs to.
+#
+# Via sysfs, never by trimming trailing digits: `nvme1n1p3` trimmed that way is
+# `nvme1n`, which is not a device. The parent link answers both naming schemes
+# uniformly. A name with no `partition` file already IS a whole disk and comes back
+# unchanged, rather than walking up into /sys/class/block itself.
+sb_disk_of() {
+  local p="${1:-}" l
+  [ -n "$p" ] || { printf ''; return; }
+  [ -e "/sys/class/block/$p" ] || { printf ''; return; }
+  [ -f "/sys/class/block/$p/partition" ] || { printf '%s' "$p"; return; }
+  l="$(readlink -f "/sys/class/block/$p/.." 2>/dev/null)" || { printf ''; return; }
+  [ -n "$l" ] || { printf ''; return; }
+  basename "$l"
+}
+
+# sb_rotational <disk>: 1 for a spinner, 0 for flash, 1 when unknown.
+#
+# Defaults to spinner because that is the assumption with the safer consequences: it
+# picks the tighter temperature thresholds and it keeps the drive in the
+# poll-only-when-busy path.
+sb_rotational() {
+  local r
+  r="$(_read "/sys/block/${1:-}/queue/rotational")"
+  case "$r" in 0) printf 0 ;; *) printf 1 ;; esac
+}
+
+# sb_hwmon_temp <disk>: temperature in whole °C from the kernel's own hwmon node, or
+# empty. Free — one sysfs read, no fork, no root — which is why it is tried first and
+# why NVMe temperatures need no rate limiting at all.
+#
+# Matches the `Composite` label rather than assuming temp1: nvme1n1 here exposes
+# temp1 Composite and temp2 "Sensor 1", and which index carries which is a property
+# of the drive's firmware. Composite is the drive's own summary figure. Falls back to
+# the lowest-numbered sensor when nothing is labelled — which is what a
+# drivetemp-backed SATA disk looks like, should that module ever load here.
+sb_hwmon_temp() {
+  local disk="${1:-}" f lab first="" m="" raw
+  [ -n "$disk" ] || { printf ''; return; }
+  for f in /sys/block/"$disk"/device/hwmon*/temp*_input; do
+    [ -f "$f" ] || continue
+    [ -n "$first" ] || first="$f"
+    lab="${f%_input}_label"
+    if [ -f "$lab" ] && [ "$(_read "$lab")" = Composite ]; then m="$f"; break; fi
+  done
+  [ -n "$m" ] || m="$first"
+  [ -n "$m" ] || { printf ''; return; }
+  raw="$(_read "$m")"
+  # iwlwifi exposes a temp1_input that reads EMPTY on this box, so a sensor file
+  # existing is not a promise that it holds a number.
+  case "$raw" in '' | *[!0-9]*) printf ''; return ;; esac
+  awk -v v="$raw" 'BEGIN { printf "%d", (v + 500) / 1000 }'
+}
+
+# smartctl lives in /usr/sbin, which is NOT on this user's PATH — a bare `smartctl`
+# is exactly why an earlier probe on this box concluded it was not installed. Root is
+# probed once rather than per call, and its absence simply means no SMART readings.
+SB_SMARTCTL="${STATUSBOARD_SMARTCTL:-/usr/sbin/smartctl}"
+SB_SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then SB_SUDO="sudo -n"; fi
+fi
+
+# sb_smart_temp <disk>: temperature over the USB-SATA bridge, `zzz` when the drive is
+# parked, or empty when it cannot be read. Costs a fork, root, and 0.1-0.6s measured
+# on latitude — which is why sb_sample_slow asks about one drive per probe at most.
+#
+# `-n standby` is insurance, not the mechanism. It cannot be the mechanism: sdd's
+# bridge answers `CHECK POWER MODE not implemented, ignoring -n option`, so on that
+# drive smartctl will read — and therefore spin up — whatever the flag says. The real
+# protection is upstream, in only asking about drives that are already doing IO.
+sb_smart_temp() {
+  local disk="${1:-}" out rc
+  [ -n "$disk" ] || { printf ''; return; }
+  [ -x "$SB_SMARTCTL" ] || { printf ''; return; }
+  out="$($SB_SUDO "$SB_SMARTCTL" -n standby -A -j -d sat "/dev/$disk" 2>/dev/null)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    # Exit 2 alone proves nothing: measured on latitude, a sleeping sdf and a
+    # nonexistent /dev/sdZZ both exited 2. Only the message separates them.
+    sb_smart_asleep "$out" && { printf 'zzz'; return; }
+  fi
+  sb_smart_temp_parse "$out"
+}
+
 sb_lan() {
   local dev ip4 gw
   dev="$(ip route show default 2>/dev/null | awk '/^default/ { print $5; exit }')"
@@ -1088,13 +1349,24 @@ sb_unmounted() {
 # the loop paints with frame="$(render_frame)", a SUBSHELL. A series appended to
 # from in there is discarded the instant the subshell exits, so every chart would
 # show one sample forever. Sample in the shell, format in the subshell.
-SER_BAT=""; SER_PW=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""
+SER_BAT=""; SER_PW=""; SER_GW=""; SER_NET=""; SER_TS=""; SER_LOAD=""; SER_PSYS=""
 SER_DISKS=""   # "mountpoint=csv" per line, one entry per mounted filesystem — MB/s
 # Previous diskstats reading per mount, and when it was taken. Throughput is a
 # DELTA, so it needs the last counter kept in the main shell for the same reason the
 # series are: a value computed inside the frame subshell dies with it.
 SB_IO_PREV=""
 SB_IO_T=0
+# Same reason again for RAPL: watts are a delta of an energy counter, so the previous
+# reading and its timestamp have to outlive the frame that used them. The domain is
+# resolved once — powercap does not gain or lose domains at runtime.
+SB_RAPL_DIR=""; SB_RAPL_NAME=""; SB_RAPL_MAX=""
+SB_RAPL_PREV=""; SB_RAPL_T=0; SB_PSYS=""
+IFS='|' read -r SB_RAPL_DIR SB_RAPL_NAME <<< "$(sb_rapl_pick)"
+[ -n "$SB_RAPL_DIR" ] && SB_RAPL_MAX="$(_read "$SB_RAPL_DIR/max_energy_range_uj")"
+# Drive temperatures, and the round-robin cursor over the spinners. Keyed by DISK
+# rather than by mount, because temperature is a property of the drive: / and
+# /boot/efi are two filesystems on one nvme1n1 and share its figure.
+SB_TEMPS=""; SB_DISKOF=""; SB_ROTA=""; SB_TEMP_RR=0
 # Evaluated ONCE here, where fd 1 is the real output; see sb_cols.
 SB_ISTTY=0; [ -t 1 ] && SB_ISTTY=1
 # And which device that output is. `-ef` compares device+inode, so this asks "is fd
@@ -1203,13 +1475,38 @@ sb_sample_slow() {
   esac
   SER_LOAD="$(sb_push "$SER_LOAD" "$(awk '{ printf "%d", $1 * 100 }' /proc/loadavg 2>/dev/null)")"
 
+  # Platform draw. Sampled here rather than on the fast path because it is a DELTA:
+  # the window between two probes is the averaging interval, which makes one probe
+  # one chart cell — the same relationship the disk throughput series has.
+  #
+  # Re-resolved while it is still missing, rather than only at startup. The energy
+  # counter is root-readable by default and a unit widens it (tier_rapl_read), so a
+  # board that came up first would otherwise be stuck at "no domain" until its next
+  # restart — and on the kiosk a restart costs an hour of chart history. Four failed
+  # globs per probe is a cheaper standing cost than that.
+  [ -n "$SB_RAPL_DIR" ] || {
+    IFS='|' read -r SB_RAPL_DIR SB_RAPL_NAME <<< "$(sb_rapl_pick)"
+    [ -n "$SB_RAPL_DIR" ] && SB_RAPL_MAX="$(_read "$SB_RAPL_DIR/max_energy_range_uj")"
+  }
+  if [ -n "$SB_RAPL_DIR" ]; then
+    local e_now
+    e_now="$(_read "$SB_RAPL_DIR/energy_uj")"
+    SB_PSYS="$(sb_rapl_watts "$SB_RAPL_PREV" "$e_now" "$SB_RAPL_MAX" "$((SECONDS - SB_RAPL_T))")"
+    SB_RAPL_PREV="$e_now"
+    SB_RAPL_T=$SECONDS
+  fi
+  w=""
+  [ -n "$SB_PSYS" ] && w="$(awk -v p="$SB_PSYS" 'BEGIN { printf "%d", p / 1000000 }')"
+  SER_PSYS="$(sb_push "$SER_PSYS" "$w")"
+
   # One series per mounted filesystem, keyed by mount point, pruned to what is
   # mounted right now so an unplugged dock cannot leave a stale chart behind.
   #
   # The value is THROUGHPUT, not fill level: the elapsed time is measured rather than
   # assumed to be PROBE, because the first sample after startup and any probe that
   # ran long would otherwise scale the delta by the wrong divisor.
-  local dev mnt total pct keys="" cur prev el
+  local dev mnt total pct keys="" cur prev el mbs
+  local disk disks="" busy="" spinners=""
   el=$((SECONDS - SB_IO_T))
   [ "$el" -ge 1 ] || el=1
   # The used field is read into _ : df still reports it, the board no longer shows it.
@@ -1221,15 +1518,74 @@ sb_sample_slow() {
     cur=""
     [ "$state" = ok ] && cur="$(sb_dev_sectors "$dev")"
     prev="$(sb_series_get "$SB_IO_PREV" "$mnt")"
+    mbs="$(sb_io_mbs "$prev" "$cur" "$el")"
     SER_DISKS="$(sb_series_set "$SER_DISKS" "$mnt" \
-      "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$(sb_io_mbs "$prev" "$cur" "$el")")")"
+      "$(sb_push "$(sb_series_get "$SER_DISKS" "$mnt")" "$mbs")")"
     SB_IO_PREV="$(sb_series_set "$SB_IO_PREV" "$mnt" "$cur")"
+
+    # Which physical drive this filesystem sits on, resolved here rather than in the
+    # frame: the frame repaints every second and this is a readlink.
+    disk=""
+    [ "$state" = ok ] && disk="$(sb_disk_of "$dev")"
+    SB_DISKOF="$(sb_series_set "$SB_DISKOF" "$mnt" "$disk")"
+    [ -n "$disk" ] || continue
+    case " $disks " in *" $disk "*) : ;; *) disks="$disks $disk" ;; esac
+    # Nonzero throughput on ANY of a drive's filesystems means the drive is spinning
+    # right now, which is what makes asking it for a temperature free.
+    if [ -n "$mbs" ] && [ "$mbs" -gt 0 ] 2>/dev/null; then
+      case " $busy " in *" $disk "*) : ;; *) busy="$busy $disk" ;; esac
+    fi
   done <<< "$SB_MOUNTS"
   SB_IO_T=$SECONDS
   # shellcheck disable=SC2086
   SER_DISKS="$(sb_series_keep "$SER_DISKS" $keys)"
   # shellcheck disable=SC2086
   SB_IO_PREV="$(sb_series_keep "$SB_IO_PREV" $keys)"
+  # shellcheck disable=SC2086
+  SB_DISKOF="$(sb_series_keep "$SB_DISKOF" $keys)"
+
+  # Temperatures, in two tiers with very different costs.
+  #
+  # hwmon is free — a sysfs read — so every drive that has one is refreshed on every
+  # probe. That covers both NVMe drives here outright.
+  #
+  # SMART over the USB bridges is not free: a fork, root, and 0.1-0.6s per drive
+  # measured on latitude. Five spinners polled every probe would spend a fifth of the
+  # board's time in smartctl, so at most ONE is asked per probe, round-robin.
+  #
+  # And a spinner is only ELIGIBLE while it is doing IO. This is the real protection
+  # against a monitor that wears out what it is monitoring: `-n standby` cannot
+  # provide it, because sdd's bridge reports CHECK POWER MODE not implemented and
+  # ignores the flag, so polling a parked sdd would spin it up — every probe, forever.
+  # Two of these drives are set to an APM level that parks them (sdd=96, sdg=1) and
+  # sdg has already passed 639k load cycles. An idle drive keeps its last reading,
+  # which is honest: a drive doing nothing is not changing temperature quickly.
+  for disk in $disks; do
+    SB_ROTA="$(sb_series_set "$SB_ROTA" "$disk" "$(sb_rotational "$disk")")"
+    cur="$(sb_hwmon_temp "$disk")"
+    if [ -n "$cur" ]; then
+      SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
+    elif [ "$(sb_series_get "$SB_ROTA" "$disk")" = 1 ]; then
+      case " $busy " in *" $disk "*) spinners="$spinners $disk" ;; esac
+    fi
+  done
+  if [ -n "$spinners" ]; then
+    local rr
+    # Word splitting is the point — $spinners is a space-joined list.
+    # shellcheck disable=SC2206
+    rr=($spinners)
+    # The cursor is clamped rather than wrapped with %, so unplugging a dock
+    # mid-rotation cannot leave it pointing past the end of a shorter list.
+    [ "$SB_TEMP_RR" -lt "${#rr[@]}" ] || SB_TEMP_RR=0
+    disk="${rr[$SB_TEMP_RR]}"
+    SB_TEMP_RR=$((SB_TEMP_RR + 1))
+    cur="$(sb_smart_temp "$disk")"
+    [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
+  fi
+  # shellcheck disable=SC2086
+  SB_TEMPS="$(sb_series_keep "$SB_TEMPS" $disks)"
+  # shellcheck disable=SC2086
+  SB_ROTA="$(sb_series_keep "$SB_ROTA" $disks)"
 }
 
 # ── Frame ─────────────────────────────────────────────────────────────────────
@@ -1256,6 +1612,13 @@ render_frame() {
   sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good '%'
   # Draw is activity, not condition: 40W into a charging battery is not an alarm.
   sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat W
+  # Consumption, and flat for the same reason: a busy machine drawing more is the
+  # machine working, not a fault. Charted against the same 65W ceiling as the source
+  # row so the two can be read against each other — what comes in versus what the
+  # platform spends. Suppressed entirely where RAPL is unreadable rather than shown
+  # as a permanent n/a, since on such a box it is not a reading that has gone missing.
+  [ -n "$SB_RAPL_DIR" ] &&
+    sb_row "$(sb_power_line "${SB_PSYS:-}" "$SB_RAPL_NAME")" "$SER_PSYS" "$SB_MAX_PW" flat W
   [ -n "${SB_LIM:-}" ] && sb_row "$(sb_limit_line "$SB_LIM" "${SB_LIM_MODE:-}")"
   sb_row ""
 
@@ -1308,10 +1671,14 @@ render_frame() {
     [ "$d_state" = ok ] || continue
     [ "$d_total" -gt "$d_max" ] && d_max="$d_total"
   done <<< "$SB_MOUNTS"
-  local d_state
+  local d_state d_disk
   while IFS='|' read -r d_dev d_mnt _ d_total d_pct d_state; do
     [ -n "$d_mnt" ] || continue
-    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}")" \
+    # Both lookups are keyed by DRIVE, not by mount: temperature belongs to the
+    # hardware, so every filesystem on one disk shows the same figure.
+    d_disk="$(sb_series_get "$SB_DISKOF" "$d_mnt")"
+    sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}" \
+      "$(sb_series_get "$SB_TEMPS" "$d_disk")" "$(sb_series_get "$SB_ROTA" "$d_disk")")" \
       "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat MB/s
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
