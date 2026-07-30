@@ -735,9 +735,11 @@ has "$TS_OUT" '100.64.0.5|ipheoryt12|iOS|offline|1d' 'tailnet: offline carries i
 TS_RELAY="$(printf '%s\n' '100.64.0.9  air  fleet  macOS  active; relay "fra", tx 1 rx 2' | sb_ts_parse 100.64.0.8)"
 has "$TS_RELAY" '|air|macOS|relay|' 'tailnet: a relayed peer is up, and says so'
 eq "$(printf '%s\n' "$TS_RELAY" | head -1)" 'up|100.64.0.8|1|1' 'tailnet: a relayed peer counts as online'
-# Degradations. None of these may produce a summary the caller cannot read: the row
-# renders from field 3 and 4 under `set -u`, so "no output" must still be "0 of 0".
-eq "$(printf '' | sb_ts_parse 100.64.0.8)" 'up|100.64.0.8|0|0' 'tailnet: no input is 0 of 0, not empty'
+# Degradations. A fork that produced nothing is NOT a tailnet with no peers: a live
+# daemon always prints its own line, so no output means the fork failed or timed out.
+# Reporting that as up|0|0 would paint "I am alone" and "I cannot see" identically, and
+# the alert strip would read it as healthy.
+eq "$(printf '' | sb_ts_parse 100.64.0.8)" 'down|100.64.0.8||' 'tailnet: an empty fork is down, not 0 peers'
 eq "$(printf '%s\n' '100.64.0.5  ipheoryt12  fleet  iOS  offline' | sb_ts_parse 100.64.0.8 | head -1)" \
   'up|100.64.0.8|0|1' 'tailnet: offline with no last-seen still parses'
 eq "$(printf '%s\n' '# Health check:' '#   - some warning' '100.64.0.1  hub  fleet  linux  -' \

@@ -1050,7 +1050,16 @@ sb_ts_parse() {
       if (state != "offline") up++
       rows = rows sprintf("%s|%s|%s|%s|%s\n", $1, $2, $4, state, age)
     }
-    END { printf "up|%s|%d|%d\n%s", self, up + 0, n + 0, rows }
+    # NR discriminates "no tailnet" from "alone on the tailnet", and it is exact: a
+    # working daemon with zero peers STILL prints its own line, so NR >= 1. NR == 0
+    # only happens when the fork produced nothing — timeout fired, or tailscaled
+    # wedged between `tailscale ip` and this call. Reporting that as up|0|0 would
+    # paint "I am alone" and "I cannot see" as the same pixels, and the alert strip
+    # would call it fine.
+    END {
+      if (NR == 0) { printf "down|%s||\n", self; exit }
+      printf "up|%s|%d|%d\n%s", self, up + 0, n + 0, rows
+    }
   '
 }
 
