@@ -745,6 +745,49 @@ eq "$(printf '%s\n' '100.64.0.5  ipheoryt12  fleet  iOS  offline' | sb_ts_parse 
 eq "$(printf '%s\n' '# Health check:' '#   - some warning' '100.64.0.1  hub  fleet  linux  -' \
   | sb_ts_parse 100.64.0.8 | head -1)" 'up|100.64.0.8|1|1' 'tailnet: health-check preamble is not a peer'
 
+# ── The alert strip (sb_alert_line) ───────────────────────────────────────────
+# Escapes are stripped before comparing: whether the helpers emit colour depends on
+# whether the TEST's stdout is a terminal, so an exact-string assertion that kept them
+# would pass in CI and fail for a human running the same file.
+plain() { printf '%s' "$1" | sed $'s/\033\\[[0-9;?]*[a-zA-Z]//g'; }
+
+# No alerts is not an empty strip. "all clear" is how a working strip says nothing is
+# wrong — an empty line is indistinguishable from a strip that broke.
+eq "$(plain "$(sb_alert_line)")" 'all clear' 'strip: no alerts reads as all clear'
+eq "$(plain "$(sb_alert_line '')")" 'all clear' 'strip: an empty alert is not an alert'
+# Alert texts contain spaces. The list is built by index for exactly this reason: an
+# unquoted array expansion would split "2 units failed" into three alerts.
+eq "$(plain "$(sb_alert_line 'bad:2 units failed')")" '2 units failed' \
+  'strip: an alert keeps its spaces'
+# Worst first, whatever order they arrive in: a dead mount and a slow peer are not the
+# same news, and the strip is read left to right.
+eq "$(plain "$(STATUSBOARD_RAMP=ascii sb_alert_line 'warn:1 peer offline' 'bad:tailnet down')")" \
+  'tailnet down | 1 peer offline' 'strip: bad alerts are listed before warnings'
+# Colour is the WORST severity's, not the first one's.
+eq "$(count_sub "$(C_BAD=${ESC}'[31m' C_WARN=${ESC}'[33m' sb_alert_line 'warn:x' 'bad:y')" "${ESC}[31m")" '1' \
+  'strip: one bad alert makes the whole strip bad-coloured'
+eq "$(count_sub "$(C_BAD=${ESC}'[31m' C_WARN=${ESC}'[33m' sb_alert_line 'warn:x' 'warn:y')" "${ESC}[31m")" '0' \
+  'strip: warnings alone stay amber'
+# An unknown severity is treated as a warning rather than dropped: an alert nobody can
+# classify is still an alert, and silently swallowing it is the one failure mode this
+# line exists to prevent.
+eq "$(plain "$(sb_alert_line 'weird:something')")" 'something' 'strip: an unknown severity still shows'
+# The separator follows the ramp, like every other glyph: U+00B7 is not in the VT font.
+has "$(plain "$(STATUSBOARD_RAMP=ascii sb_alert_line 'bad:a' 'bad:b')")" 'a | b' \
+  'strip: a VT gets an ASCII separator'
+has "$(plain "$(STATUSBOARD_RAMP=height sb_alert_line 'bad:a' 'bad:b')")" 'a · b' \
+  'strip: everything else gets the middle dot'
+
+# ── Page tabs ─────────────────────────────────────────────────────────────────
+# The VISIBLE width must not depend on which page is active — only the colour moves —
+# or the alert text beside the tabs shifts every time the board rotates.
+eq "$(plain "$(sb_page_tabs 0 system fleet docker)")" 'system fleet docker' 'tabs: every page is listed'
+eq "$(plain "$(sb_page_tabs 2 system fleet docker)")" 'system fleet docker' 'tabs: the text is the same on any page'
+t0="$(sb_page_tabs 0 system fleet docker)"; t2="$(sb_page_tabs 2 system fleet docker)"
+eq "$(sb_vislen "$t0")" "$(sb_vislen "$t2")" 'tabs: visible width does not move with the active page'
+eq "$(count_sub "$(C_B=${ESC}'[1m' sb_page_tabs 1 system fleet docker)" "${ESC}[1m")" '1' \
+  'tabs: exactly one page is lit'
+
 # ── The script itself ─────────────────────────────────────────────────────────
 bash -n "$REPO/provision/statusboard/statusboard.sh"; eq "$?" '0' 'script: syntax is valid'
 # The unit text is only materialised under --install (root), so assert on the
@@ -883,6 +926,43 @@ eq "$(grep -vE '^[[:space:]]*#' "$SB" | grep -c 'tailscale status')" '1' \
 # live devices only); an unbounded socket call to a wedged tailscaled would freeze the
 # clock painted beside it.
 grep -q 'timeout 5 tailscale status' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
+# The page list is read out of the script rather than repeated here, so a page added
+# in step N is exercised by these assertions without touching this file.
+PAGES="$(grep -oE '^SB_PAGES=\([^)]*\)' "$SB" | sed -E 's/^SB_PAGES=\(//; s/\)$//')"
+[ -n "$PAGES" ]; eq "$?" '0' 'pages: the script declares a page list'
+for pg in $PAGES; do
+  POUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$SB" --once --page "$pg" 2>&1)"; prc=$?
+  eq "$prc" '0' "pages: --once --page $pg exits 0"
+  # Every page pays the same width rule. A page whose rows are one cell too wide wraps,
+  # and a wrapped row makes the whole repainting frame walk up the screen — which is
+  # invisible in a test that only ever renders page 1.
+  eq "$(printf '%s\n' "$POUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
+    "pages: no row on $pg is wider than the terminal"
+  # And every page carries the strip, because that is the whole reason rotating is safe.
+  eq "$(printf '%s\n' "$POUT" | grep -cE '^(alerts|'"$(printf '%s' "$PAGES" | tr ' ' '|')"') ' | tr -d ' ')" '1' \
+    "pages: $pg carries exactly one alert strip"
+done
+# An unknown page name is a usage error, not a silent fall back to page 1: --page is
+# how a test or a human asks for one specific page, and painting a different one is a
+# wrong answer that looks like a right one.
+bash "$SB" --once --page nosuchpage >/dev/null 2>&1
+eq "$?" '2' 'pages: an unknown --page name exits 2'
+
+# The keyboard must never turn the kiosk into a spin loop. `read -t` with stdin closed
+# or redirected returns instantly, every iteration, forever — so the read is guarded on
+# stdin being a TERMINAL (-t 0), not on stdout being one, and a board with no keyboard
+# sleeps exactly as it did before pages existed.
+grep -q 'if \[ ! -t 0 \]; then sleep "\$INTERVAL"' "$SB"
+eq "$?" '0' 'pages: no keyboard means sleep, not a busy read'
+grep -q 'read -r -t "\$INTERVAL" -n 1 key' "$SB"; eq "$?" '0' 'pages: a keypress is acted on without waiting out the interval'
+# Paging selects what is RENDERED, never what is measured: sampling stays unconditional
+# in the loop, or fifteen seconds on another page comes back as a hole in every chart.
+sample_ln="$(grep -nE '^  sb_sample_slow$' "$SB" | tail -1 | cut -d: -f1)"
+page_ln="$(grep -nE '^  if \[ "\$SB_PAGE_HOLD" = 0 \]' "$SB" | head -1 | cut -d: -f1)"
+[ -n "$sample_ln" ] && [ -n "$page_ln" ] && [ "$sample_ln" -lt "$page_ln" ]
+eq "$?" '0' 'pages: every series is sampled before any page selection happens'
 
 # --bigfont must stay out of --install: that path has already broken the console
 # once, and a font change is an unrelated risk to fold into it.

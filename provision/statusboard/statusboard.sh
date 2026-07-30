@@ -17,9 +17,15 @@
 #   bash statusboard.sh --interval 1    # seconds between REPAINTS (default 1)
 #   bash statusboard.sh --probe 10      # seconds between network probes (default 10)
 #   bash statusboard.sh --cell 60       # seconds of samples per chart cell (default 60)
+#   bash statusboard.sh --page fleet    # start on (or, with --once, paint) one page
 #   sudo bash statusboard.sh --install  # install + enable the tty1 service
 #   sudo bash statusboard.sh --uninstall
 #   sudo bash statusboard.sh --bigfont  # double the console font (16x32) on every VT
+#
+# The board ROTATES through its pages every STATUSBOARD_PAGE_SECS (default 15): the
+# frame fits 26 rows and the fleet does not fit beside the disks. With a keyboard
+# attached, 1..9 pick a page, n/p step, and space holds and releases the rotation. The
+# alert strip is on every page, so a page you are not looking at cannot hide a fault.
 #
 # --install takes over tty1 and leaves gettys on tty2..tty6, so a console login
 # is still one Alt-F2 away. That trade is deliberate: a dashboard you have to
@@ -62,10 +68,11 @@ while [ $# -gt 0 ]; do
     --interval) INTERVAL="${2:-1}"; shift 2 ;;
     --probe) PROBE="${2:-10}"; shift 2 ;;
     --cell) CELL="${2:-60}"; shift 2 ;;
+    --page) SB_PAGE_ARG="${2:-}"; shift 2 ;;
     --install) MODE=install; shift ;;
     --bigfont) MODE=bigfont; shift ;;
     --uninstall) MODE=uninstall; shift ;;
-    -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -1063,6 +1070,66 @@ sb_ts_parse() {
   '
 }
 
+# ── The alert strip ───────────────────────────────────────────────────────────
+# sb_alert_line <sev:text>…: the one line every page carries, whichever page is up.
+#
+# It is what makes paging safe. The board's whole value is that a glance from across
+# the room says the box is fine, and a page that is not on screen cannot say that —
+# so every condition worth a colour is summarised here, at a fixed position on the
+# frame, on all pages.
+#
+# Deliberately NOT "stop rotating and hold on the failing page": a box that flaps
+# would then never show you anything else.
+#
+# Worst severity wins the colour and its alerts are listed first — a dead mount and a
+# slow ping are not the same news. Zero alerts is not an empty line: "all clear" is
+# how the strip says it is working rather than missing.
+sb_alert_line() {
+  local a sev text col sep out="" i
+  local -a bad=() warn=() all=()
+  for a in "$@"; do
+    [ -n "$a" ] || continue
+    sev="${a%%:*}"; text="${a#*:}"
+    case "$sev" in
+      bad) bad+=("$text") ;;
+      *) warn+=("$text") ;;
+    esac
+  done
+  if [ "${#bad[@]}" = 0 ] && [ "${#warn[@]}" = 0 ]; then
+    printf '%sall clear%s' "$C_DIM" "$C_RST"
+    return
+  fi
+  all+=(${bad[@]+"${bad[@]}"})
+  all+=(${warn[@]+"${warn[@]}"})
+  # Alert texts contain spaces, so the list is built by index — an unquoted array
+  # expansion would split "2 units failed" into three alerts.
+  sep=' · '
+  [ "$(sb_ramp_name)" = ascii ] && sep=' | '
+  for ((i = 0; i < ${#all[@]}; i++)); do
+    if [ -z "$out" ]; then out="${all[i]}"; else out="$out$sep${all[i]}"; fi
+  done
+  col="$C_WARN"
+  [ "${#bad[@]}" -gt 0 ] && col="$C_BAD"
+  printf '%s%s%s' "$col" "$out" "$C_RST"
+}
+
+# sb_page_tabs <active-index> <name>…: the page list with the active one lit. Its
+# VISIBLE width does not depend on which page is active — only the colour moves — so
+# the alert text beside it does not shift as the board rotates.
+sb_page_tabs() {
+  local active="${1:-0}" i=0 out="" n
+  shift
+  for n in "$@"; do
+    if [ "$i" = "$active" ]; then
+      out="$out${out:+ }$C_B$C_INFO$n$C_RST"
+    else
+      out="$out${out:+ }$C_DIM$n$C_RST"
+    fi
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
 [ "${STATUSBOARD_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
 # ── Install / uninstall ───────────────────────────────────────────────────────
@@ -1554,6 +1621,7 @@ sb_sample_slow() {
   ts_out="$(sb_tailnet)"
   read -r SB_TS_ST SB_TS_IP SB_TS_PEERS SB_TS_TOTAL <<< "$ts_out"
   unset IFS
+  # shellcheck disable=SC2034  # read by the fleet page; see the declaration
   case "$ts_out" in
     *$'\n'*) SB_TS_PEERLIST="${ts_out#*$'\n'}" ;;
     *) SB_TS_PEERLIST="" ;;
@@ -1757,9 +1825,90 @@ sb_row() {
   SB_ROW_POL+=("${4:-hi-bad}"); SB_ROW_UNIT+=("${5:-}")
 }
 
-render_frame() {
-  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=(); SB_ROW_UNIT=()
+# ── Pages ─────────────────────────────────────────────────────────────────────
+# One entry per page, in rotation order. The name is both what the tabs print and the
+# emitter that is called for it (sb_page_<name>), so adding a page is adding a
+# function and a word to this list.
+#
+# The pages exist because the frame's binding constraint is VERTICAL: 25 rows into 27,
+# with the mount list and the conditional rows able to eat the rest. Rotating costs
+# nothing an unattended board misses — the alert strip is on every page precisely so
+# a hidden page cannot hide a failure.
+SB_PAGES=(system)
+# Seconds each page holds before the board rotates. Long enough to read a full frame,
+# short enough that a glance from across the room catches every page inside a minute.
+SB_PAGE_SECS="${STATUSBOARD_PAGE_SECS:-15}"
+SB_PAGE=0        # index into SB_PAGES — which page is on screen
+SB_PAGE_HOLD=0   # 1 while a keypress has paused the rotation
+next_page=0      # $SECONDS at which the next rotation is due
 
+# --page (and --once --page) pick a starting page BY NAME. Resolved here rather than
+# during argument parsing, because the page set is defined here: an unknown name is a
+# usage error and must not silently paint page 1.
+if [ -n "${SB_PAGE_ARG:-}" ]; then
+  SB_PAGE=-1
+  for ((_i = 0; _i < ${#SB_PAGES[@]}; _i++)); do
+    [ "${SB_PAGES[_i]}" = "$SB_PAGE_ARG" ] && SB_PAGE="$_i"
+  done
+  if [ "$SB_PAGE" -lt 0 ]; then
+    printf 'unknown page: %s (have: %s)\n' "$SB_PAGE_ARG" "${SB_PAGES[*]}" >&2
+    exit 2
+  fi
+fi
+
+# sb_alerts: every condition worth the strip, one "sev:text" per line, and NOTHING
+# else — no forks, no probes. It reads only what sb_sample_* already sampled, because
+# it runs inside the frame subshell on every paint.
+#
+# The severities are a judgement about what wakes someone up. A filesystem at 95%, a
+# vanished mount and a failed unit are bad; a peer offline, a disk at 90% and a box
+# that has fallen back to battery are warnings — real, but they do not mean the box
+# has stopped doing its job.
+sb_alerts() {
+  local dev mnt total pct state count=0
+  if [ -n "${SB_FAILED:-}" ] && [ "${SB_FAILED:-0}" -gt 0 ] 2>/dev/null; then
+    printf 'bad:%s unit%s failed\n' "$SB_FAILED" "$([ "$SB_FAILED" = 1 ] || printf s)"
+  fi
+  # A mount whose backing device is gone: df goes on reporting its last-known size, so
+  # without this the strip would call a vanished disk healthy.
+  count=0
+  while IFS='|' read -r dev mnt _ total pct state; do
+    [ -n "$mnt" ] || continue
+    [ "${state:-ok}" = ok ] || { count=$((count + 1)); continue; }
+    case "$pct" in '' | *[!0-9]*) continue ;; esac
+    if [ "$pct" -ge 95 ]; then printf 'bad:%s %s%% full\n' "$mnt" "$pct"
+    elif [ "$pct" -ge 90 ]; then printf 'warn:%s %s%% full\n' "$mnt" "$pct"; fi
+  done <<< "${SB_MOUNTS:-}"
+  [ "$count" -gt 0 ] && printf 'bad:%s mount%s gone\n' "$count" "$([ "$count" = 1 ] || printf s)"
+  case "${SB_LAN_ST:-}" in up | '') : ;; *) printf 'bad:lan down\n' ;; esac
+  case "${SB_GW_ST:-}" in up | '') : ;; *) printf 'bad:gateway unreachable\n' ;; esac
+  case "${SB_NET_ST:-}" in up | '') : ;; *) printf 'bad:no internet\n' ;; esac
+  if [ "${SB_TS_ST:-}" = down ]; then
+    printf 'bad:tailnet down\n'
+  elif [ "${SB_TS_ST:-}" = up ] && [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null; then
+    count=$((SB_TS_TOTAL - SB_TS_PEERS))
+    printf 'warn:%s peer%s offline\n' "$count" "$([ "$count" = 1 ] || printf s)"
+  fi
+  # On an always-on box wired to the wall, running on battery IS the alert — it is the
+  # only warning of a power cut that reaches the screen before the box dies.
+  case "${SB_ST:-}" in
+    Discharging)
+      if [ -n "${SB_CAP:-}" ] && [ "${SB_CAP:-100}" -lt 20 ] 2>/dev/null; then
+        printf 'bad:on battery, %s%%\n' "$SB_CAP"
+      elif [ -n "${SB_CAP:-}" ]; then
+        printf 'warn:on battery, %s%%\n' "$SB_CAP"
+      else
+        printf 'warn:on battery\n'
+      fi
+      ;;
+  esac
+  [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
+  return 0
+}
+
+# sb_page_system: the board as it was before there were pages — power, network,
+# uptime, filesystems, units.
+sb_page_system() {
   sb_row "$(sb_battery_line "$SB_CAP" "$SB_ST" "$SB_PW" "$SB_EN" "$SB_EF")" "$SER_BAT" 100 hi-good '%'
   # Draw is activity, not condition: 40W into a charging battery is not an alarm.
   sb_row "$(printf 'source    %s' "$SB_SRC")" "$SER_PW" "$SB_MAX_PW" flat W
@@ -1843,11 +1992,27 @@ render_frame() {
     fi
   fi
 
+  return 0
+}
+
+# render_frame [page]: the shared tail — layout, header, strip, rule, paint. The rows
+# themselves come from whichever page emitter is named, defaulting to the one on
+# screen.
+render_frame() {
+  local page="${1:-${SB_PAGES[SB_PAGE]}}"
+  SB_ROW_TEXT=(); SB_ROW_SERIES=(); SB_ROW_MAX=(); SB_ROW_POL=(); SB_ROW_UNIT=()
+  "sb_page_$page"
+
   # Layout: the widest CHARTED row wins the text column, and the charts take
   # everything left. Only charted rows count — a row with no chart is free to run
   # long, so the "not mounted" list of six disks cannot squeeze the chart column for
   # every other row (it did: 107 columns of text left 10 cells of chart on a 120-col
   # console after the font was doubled).
+  #
+  # Computed PER PAGE, deliberately: each page gets the full chart width its own rows
+  # allow. Taking the widest text column across every page would keep the charts from
+  # shifting as the board rotates, at the price of squeezing every page down to the
+  # worst one — and the chart width is what the board is for.
   local i vis textw=0 unitw=0 chartw cols
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
     [ -n "${SB_ROW_SERIES[i]}" ] || continue
@@ -1877,7 +2042,28 @@ render_frame() {
   [ "$(sb_ramp_name)" = ascii ] || rulech='─'
   [ "$chartw" -gt 0 ] && rule=$((textw + 3 + chartw))
   for ((i = 0; i < rule; i++)); do dashes="$dashes$rulech"; done
-  printf '%s%s%s\n\n' "$C_DIM" "$dashes" "$C_RST"
+  printf '%s%s%s\n' "$C_DIM" "$dashes" "$C_RST"
+
+  # The strip, at a fixed line on every page — see sb_alert_line. One row is what it
+  # costs, forever, which is why it gets no separator rule of its own.
+  #
+  # Its left field is the page tabs once there is more than one page, and the word
+  # "alerts" while there is only one: the tabs are the more useful thing to spend
+  # those columns on, and their visible width is constant, so the alert text does not
+  # move when the board rotates. Trimmed like an uncharted row, since a wrapped line
+  # scrolls the whole repainting frame.
+  local strip_label alerts_txt strip al
+  local -a alerts=()
+  while IFS= read -r al; do [ -n "$al" ] && alerts+=("$al"); done <<< "$(sb_alerts)"
+  alerts_txt="$(sb_alert_line ${alerts[@]+"${alerts[@]}"})"
+  if [ "${#SB_PAGES[@]}" -gt 1 ]; then
+    strip_label="$(sb_page_tabs "$SB_PAGE" "${SB_PAGES[@]}")"
+  else
+    strip_label="alerts"
+  fi
+  strip="$(printf '%s   %s' "$strip_label" "$alerts_txt")"
+  if [ "$cols" -gt 0 ]; then printf '%s\n\n' "$(sb_trim "$strip" "$cols")"
+  else printf '%s\n\n' "$strip"; fi
 
   for ((i = 0; i < ${#SB_ROW_TEXT[@]}; i++)); do
     if [ "$chartw" = 0 ] || [ -z "${SB_ROW_SERIES[i]}" ]; then
@@ -1919,12 +2105,53 @@ fi
 cleanup() { [ -t 1 ] && printf '\033[?25h\033[?7h'; }
 trap cleanup EXIT INT TERM
 
+# sb_wait_key: the pacing between paints, and the keyboard, in one call. `read -t` is
+# the sleep, so a keypress is acted on the moment it arrives rather than up to
+# INTERVAL later.
+#
+# ONLY when stdin is a terminal. With stdin closed or redirected — a unit with no tty,
+# a pipe, a test — `read -t` returns instantly every iteration, which turns an
+# unattended kiosk into a 100%-CPU spin loop. A board with no keyboard sleeps exactly
+# as it did before pages existed.
+#
+# Manual selection HOLDS: picking a page means you want to look at it, and rotating
+# away from it four seconds later is the opposite of the request. Space releases.
+sb_wait_key() {
+  local key="" idx
+  if [ ! -t 0 ]; then sleep "$INTERVAL"; return 0; fi
+  read -r -t "$INTERVAL" -n 1 key 2>/dev/null || true
+  [ -n "$key" ] || return 0
+  case "$key" in
+    ' ')
+      SB_PAGE_HOLD=$((1 - SB_PAGE_HOLD))
+      # Releasing a hold restarts the dwell, so the page you were reading does not
+      # flip away the instant you let go of it.
+      [ "$SB_PAGE_HOLD" = 0 ] && next_page=$((SECONDS + SB_PAGE_SECS)) ;;
+    n | N | ']')
+      SB_PAGE=$(((SB_PAGE + 1) % ${#SB_PAGES[@]})); SB_PAGE_HOLD=1 ;;
+    p | P | '[')
+      SB_PAGE=$(((SB_PAGE - 1 + ${#SB_PAGES[@]}) % ${#SB_PAGES[@]})); SB_PAGE_HOLD=1 ;;
+    [1-9])
+      idx=$((key - 1))
+      [ "$idx" -lt "${#SB_PAGES[@]}" ] && { SB_PAGE="$idx"; SB_PAGE_HOLD=1; } ;;
+  esac
+  return 0
+}
+
 # The probe clock is $SECONDS (shell uptime), not date arithmetic: it needs no fork
-# and cannot drift against the loop, since it IS the loop's own elapsed time.
+# and cannot drift against the loop, since it IS the loop's own elapsed time. The page
+# clock is the same clock, for the same reason.
 next_probe=0
+next_page=$((SECONDS + SB_PAGE_SECS))
 while :; do
   # Sample in this shell — the chart series must outlive the frame, and
   # frame="$(render_frame)" is a subshell.
+  #
+  # EVERY series is sampled on every probe, whichever page is on screen. Sampling only
+  # what the visible page renders would gut the "one probe is one chart cell"
+  # invariant: fifteen seconds on another page and the charts come back either holed
+  # or, worse, with cells that lie about how much time they cover. Paging selects what
+  # is RENDERED, never what is measured.
   sb_sample_fast
   if [ "$SECONDS" -ge "$next_probe" ]; then
     sb_sample_slow
@@ -1935,5 +2162,9 @@ while :; do
   frame="$(render_frame)"
   [ -t 1 ] && printf '\033[H\033[2J'
   printf '%s\n' "$frame"
-  sleep "$INTERVAL"
+  sb_wait_key
+  if [ "$SB_PAGE_HOLD" = 0 ] && [ "${#SB_PAGES[@]}" -gt 1 ] && [ "$SECONDS" -ge "$next_page" ]; then
+    SB_PAGE=$(((SB_PAGE + 1) % ${#SB_PAGES[@]}))
+    next_page=$((SECONDS + SB_PAGE_SECS))
+  fi
 done
