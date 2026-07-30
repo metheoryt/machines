@@ -578,6 +578,31 @@ global + per-host). One bullet per fact under a topical heading.
 
 ## Repo tooling & scripts
 
+- **The status board's power + drive-temperature feature is in `96a3c69`, whose
+  message describes only the macOS Docker cask tier.** Two sessions had
+  overlapping working trees on 2026-07-30 and that commit swept up the other's
+  staged changes. Matters because one part is a **security decision that the
+  commit message does not mention**: `tier_rapl_read` widens
+  `/sys/class/powercap/intel-rapl:*/energy_uj` from `0400 root:root` to `0440
+  root:<group>` so the board can read the CPU energy counter as a non-root user.
+  The kernel restricted that file after PLATYPUS (CVE-2020-8694) recovered AES
+  and RSA keys through it. On latitude it grants no new capability — the board's
+  user is already `NOPASSWD ALL` — and it is group-scoped rather than `0444` to
+  keep that true; RAPL subdomains (`:0:0` core, `:0:1` uncore) stay `0400`.
+  `6f3cccf` carries the full reasoning. Grep for `tier_rapl_read`, not the commit
+  message, when auditing.
+- **`-n standby` does not protect the USB spinners on latitude** — of five, only
+  `sdf`'s bridge implements CHECK POWER MODE, and `sdf` is the one drive with no
+  SMART temperature at all. The four that report a temperature all answer `CHECK
+  POWER MODE not implemented, ignoring -n option`. The board gates on **APM
+  level** instead (ATA: 1-127 permit standby, 128-254 forbid it): `sdc`/`sde` at
+  128 are polled freely, `sdd` (96) and `sdg` (1, already past 639k load cycles)
+  only while they are doing IO. Don't "simplify" that back to `-n standby`.
+- **`psys` is not wall power.** The board's `power` row is the RAPL platform rail
+  — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The five
+  bus-powered USB spinners sit outside it, so real draw is well above what the row
+  says. The row prints the domain name (`psys`, or `package-0` where psys is
+  absent and the figure is ~3x smaller) precisely so it cannot be misread.
 - Orca IDE is `modules/home/orca-bin.nix`, wrapping the upstream Linux
   AppImage with `appimageTools.wrapType2`; `just update-orca`
   (`scripts/update-orca.sh`, wired into `just update`/`just upgrade`) bumps its
