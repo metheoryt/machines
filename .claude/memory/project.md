@@ -610,6 +610,11 @@ global + per-host). One bullet per fact under a topical heading.
   never `nofail`, so there is no silent-write-into-an-unmounted-mountpoint risk.
   A stale pre-move copy sits at `/mnt/immich/immich-db-backups-old-20260731` —
   deliberately moved *out* of `library/` so immich never scans it as assets.
+  Verified end-to-end at the 2026-07-31 02:00 run: dump landed in the new path
+  (`…20260731T020000-v3.1.0-pg14.19.sql.gz`, 218950716 B, `gzip -t` clean) and
+  retention pruned the oldest to hold at 14 files / ~3.1 GB. **Immich writes the
+  dumps as `root:root` 644** — a non-root copy job can read them but cannot prune
+  or rewrite, so size any mirror/rotation step accordingly.
   `.env` is gitignored (`**/.env`), so the path itself is machine-local; the
   tracked `.env.dist` still carries g513ie's `D:\` Windows paths.
 - **Immich's realtime (on-the-fly HLS) transcoding 404s for every asset ingested
