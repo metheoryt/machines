@@ -531,10 +531,24 @@ global + per-host). One bullet per fact under a topical heading.
 - **Never send `hdparm -Y` (SLEEP) to a drive in latitude's USB-SATA docks.**
   SLEEP can only be cleared by a bus/power reset, so the drive stops answering
   the bridge entirely — a `/sys/class/scsi_host/hostN/scan` rescan cannot wake
-  it (`Spinning up disk... not responding`), and on these two-bay docks it
-  wedged the *sibling* bay too. Use `-y` (STANDBY, wakes on access) when you
-  want platters stopped, and accept that recovery otherwise needs the user to
-  power-cycle the dock. Verified 2026-07-30 while ejecting the returned 6 TB.
+  it (`Spinning up disk... not responding`), and on these two-bay docks the
+  sibling bay went with it. Use `-y` (STANDBY, wakes on access) when you want
+  platters stopped, and accept that recovery otherwise needs the user to
+  power-cycle the dock. 2026-07-30: `-Y` went to **`sdg`, the HGST in dock B
+  bay 1 holding the `immich-media-2024` backup** — *not* to the returning 6 TB,
+  which correctly got `-y`. `usb 4-1: reset SuperSpeed` followed 71 s later.
+- **The docks also reset unprompted — check the journal before blaming your own
+  command.** Same day, `usb 4-1` reset at 14:23:08, 94 min before `hdparm` was
+  installed. Three-day fault count: dock B (`usb 4-1`) 4 disconnects + 2 resets,
+  worst device on the box; plus hub children `2-1.3` / `2-1.4` / `3-1.4` / `2-2`
+  dropping, and at 17:40:02 dock A and the XS SSD re-enumerated together.
+  Marginal cabling and physical knocks are a chronic fault mode here. Check with
+  `sudo journalctl -k --since today | grep -aE "usb [0-9.-]+: (reset|USB disconnect)"`.
+  Layout consequence: archive *primary* on dock A, *copy* on flakier dock B, and
+  give any long write into dock B `--partial --append-verify` so a drop resumes.
+- **`nofail` in fstab applies at boot only.** After any dock power-cycle or bus
+  drop, every affected mount needs an explicit `sudo mount <target>` — found
+  `/mnt/public` (sdc) silently unmounted this way 2026-07-30.
 - **A SCSI rescan force-spins-up every sleeping drive on that host, and re-adds
   bays you already detached.** So `echo 1 > /sys/block/<dev>/device/delete` is
   one-way only if you don't rescan afterwards; and reading SMART (`smartctl`)
@@ -548,10 +562,8 @@ global + per-host). One bullet per fact under a topical heading.
   disk, 9 snapshots of `E:\admin` from `methe-server`, newest **2026-07-02** at
   662.946 GiB. Verified openable 2026-07-30. So the archive has ~4 weeks of
   unbacked-up delta, and restoring it needs restic + the repo password, not a
-  copy. fstab mounts it `ro,nofail` at `/mnt/immich-2024-backup`, but only at
-  boot: after a dock power-cycle it needs an explicit
-  `sudo mount /mnt/immich-2024-backup`. Leaving dock B powered off silently drops
-  the 664 GB archive to a single copy.
+  copy. fstab mounts it `ro,nofail` at `/mnt/immich-2024-backup`. Leaving dock B
+  powered off silently drops the 664 GB archive to a single copy.
 - **The restic password for that repo is already tracked** — dotfiles allow-line
   `!/g513ie-prod-config/vps/backup/homeserver/pass.txt` (13 bytes), harvested off
   g513ie. `~/my/vps/backup/homeserver/pass.txt` on latitude is now a **symlink**
