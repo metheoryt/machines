@@ -1070,6 +1070,78 @@ sb_ts_parse() {
   '
 }
 
+# ── The fleet ─────────────────────────────────────────────────────────────────
+# sb_fleet_parse: fleet.json on stdin -> "name|ip|platform|hostname", one machine per
+# line, in manifest order.
+#
+# awk, not jq: the board's entire dependency list is bash, coreutils, /sys and /proc,
+# and provision/lib/fleet.sh (which does use jq) is a provisioning helper that may run
+# on a box where the board does not. It is parsed ONCE at startup — the manifest cannot
+# change while the board runs, and re-reading a five-line file every second would be a
+# fork for nothing.
+#
+# Anchored on indent: a machine opens at four spaces with the brace ENDING the line,
+# while every field sits at six with its value on the same line. That is the shape this
+# repo has always written, and the fixture test is what keeps the assumption honest.
+sb_fleet_parse() {
+  awk '
+    function lastq(s, n, a) { n = split(s, a, "\""); return (n >= 2) ? a[n - 1] : "" }
+    /^    "[^"]+": \{[ \t]*$/ { name = lastq($0); ip = ""; plat = ""; host = ""; next }
+    name == "" { next }
+    $1 == "\"platform\":" { plat = lastq($0); next }
+    $1 == "\"tailnet\":"  { ip   = lastq($0); next }
+    $1 == "\"detect\":"   { host = lastq($0); next }
+    /^    \}/ { print name "|" ip "|" plat "|" host; name = ""; next }
+  '
+}
+
+# sb_fleet_join <fleet-lines> <peer-lines> <self-ip> <tailnet-up>: the fleet page's
+# data. One line per MANIFEST member — "name|ip|platform|state|age" — then a trailing
+# "_others|<count>|<online>" for tailnet nodes that are not fleet members.
+#
+# Driven by fleet.json and NOT by the tailnet, deliberately. A member that has fallen
+# off the tailnet then renders as a ROW saying `missing`, which is the one failure the
+# peer COUNT cannot express: "5/5 peers online" is also what a fleet of six looks like
+# when the sixth never enrolled.
+#
+# The non-fleet nodes are counted on their own line rather than mixed in, so a phone
+# and a scratch WSL distro cannot flatter or spoil the fleet's own numbers.
+#
+# With the local tailnet unreadable every member is `unknown`, not `missing`: nothing
+# was learned about them, and painting five red rows for one local fault would bury the
+# one alert that is true.
+sb_fleet_join() {
+  # BOTH lists arrive on stdin, peers first, separated by a bare "--". Not `awk -v`: a
+  # variable assigned there may not contain a newline (awk rejects it outright), and
+  # both of these are multi-line.
+  printf '%s\n--\n%s\n' "${2:-}" "${1:-}" |
+    awk -v self="${3:-}" -v tsup="${4:-0}" '
+    $0 == "--" { members = 1; next }
+    $0 == "" { next }
+    members == 0 {
+      split($0, f, "|")
+      pstate[f[1]] = f[4]; page[f[1]] = f[5]; seen[f[1]] = 0
+      next
+    }
+    {
+      split($0, m, "|")
+      name = m[1]; ip = m[2]; plat = m[3]
+      age = ""
+      if (tsup != 1)        state = "unknown"
+      else if (ip == "")    state = "missing"
+      else if (ip == self)  state = "self"
+      else if (ip in pstate) { state = pstate[ip]; age = page[ip]; seen[ip] = 1 }
+      else                  state = "missing"
+      printf "%s|%s|%s|%s|%s\n", name, ip, plat, state, age
+    }
+    END {
+      others = 0; up = 0
+      if (tsup == 1) for (ip in pstate) if (!seen[ip]) { others++; if (pstate[ip] != "offline") up++ }
+      printf "_others|%d|%d||\n", others, up
+    }
+  '
+}
+
 # ── The alert strip ───────────────────────────────────────────────────────────
 # sb_alert_line <sev:text>…: the one line every page carries, whichever page is up.
 #
@@ -1445,6 +1517,9 @@ sb_reach() {
   printf 'down|'
 }
 
+SB_TIMEOUT=""
+command -v timeout >/dev/null 2>&1 && SB_TIMEOUT="timeout 5"
+
 sb_tailnet() {
   local ip
   command -v tailscale >/dev/null 2>&1 || { printf 'n/a|||\n'; return; }
@@ -1458,7 +1533,11 @@ sb_tailnet() {
   # timeout because this sits on the paint loop's slow path: the command talks to
   # tailscaled over a socket, and a wedged daemon would otherwise freeze the clock
   # next to the numbers.
-  timeout 5 tailscale status --peers 2>/dev/null | sb_ts_parse "$ip"
+  # …where `timeout` exists. Every other bound on this path (ping -W1, df on live
+  # devices only) is built into the tool being called; this one is not, and a box
+  # without coreutils' timeout must still read its tailnet rather than report it down.
+  # shellcheck disable=SC2086  # deliberately unquoted: empty means "no wrapper"
+  $SB_TIMEOUT tailscale status --peers 2>/dev/null | sb_ts_parse "$ip"
 }
 
 # sb_mounts: one line per real filesystem — "dev|mount|used_kb|total_kb|pct".
@@ -1563,6 +1642,16 @@ SB_CAP=""; SB_ST=""; SB_PW=""; SB_EN=""; SB_EF=""; SB_LIM=""; SB_SRC=""
 SB_UP=""; SB_LOAD=""; SB_FAILED=""
 SB_LAN_ST=""; SB_LAN_DEV=""; SB_LAN_IP=""; SB_LAN_GW=""
 SB_GW_ST=""; SB_GW_RTT=""; SB_NET_ST=""; SB_NET_RTT=""
+# The manifest, parsed once — it cannot change while the board runs. A board outside
+# the repo, or one whose checkout is mid-rebuild, is not an error: the fleet page then
+# says it has no manifest instead of claiming an empty fleet.
+SB_REPO="$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)"
+SB_FLEET_JSON="${STATUSBOARD_FLEET_JSON:-$SB_REPO/fleet.json}"
+SB_FLEET=""
+[ -r "$SB_FLEET_JSON" ] && SB_FLEET="$(sb_fleet_parse < "$SB_FLEET_JSON")"
+SB_FLEET_ROWS=""
+SER_PEERS=""   # "member=csv" per line — one binary online series per fleet member
+
 SB_TS_ST=""; SB_TS_IP=""; SB_TS_PEERS=""; SB_TS_TOTAL=""
 # One "ip|node|os|state|last_seen" line per tailnet peer, from the same single fork
 # that produced the counts above. Sampled but not yet rendered — the fleet page is
@@ -1626,6 +1715,32 @@ sb_sample_slow() {
     *$'\n'*) SB_TS_PEERLIST="${ts_out#*$'\n'}" ;;
     *) SB_TS_PEERLIST="" ;;
   esac
+
+  # The fleet, joined to the tailnet once per PROBE and not per paint: the manifest is
+  # fixed for the run and the peer list changed exactly when the fork above ran.
+  local f_name f_state ts_up=0
+  [ "${SB_TS_ST:-}" = up ] && ts_up=1
+  SB_FLEET_ROWS="$(sb_fleet_join "$SB_FLEET" "$SB_TS_PEERLIST" "${SB_TS_IP:-}" "$ts_up")"
+  # One binary series per member, so a box that flaps reads differently from a box that
+  # has been down all hour. A probe that learned nothing about the peers — the local
+  # tailnet unreadable — pushes a GAP, not a down mark: the chart must not blame five
+  # remote machines for one local fault.
+  while IFS='|' read -r f_name _ _ f_state _; do
+    case "$f_name" in '' | _others) continue ;; esac
+    if [ "$ts_up" = 0 ]; then
+      SER_PEERS="$(sb_series_set "$SER_PEERS" "$f_name" \
+        "$(sb_push "$(sb_series_get "$SER_PEERS" "$f_name")" '')")"
+      continue
+    fi
+    case "$f_state" in
+      self | direct | relay | idle)
+        SER_PEERS="$(sb_series_set "$SER_PEERS" "$f_name" \
+          "$(sb_push "$(sb_series_get "$SER_PEERS" "$f_name")" 1)")" ;;
+      *)
+        SER_PEERS="$(sb_series_set "$SER_PEERS" "$f_name" \
+          "$(sb_push "$(sb_series_get "$SER_PEERS" "$f_name")" x)")" ;;
+    esac
+  done <<< "$SB_FLEET_ROWS"
 
   SB_MOUNTS="$(sb_mounts)"
   SB_UNMOUNTED="$(sb_unmounted)"
@@ -1834,7 +1949,7 @@ sb_row() {
 # with the mount list and the conditional rows able to eat the rest. Rotating costs
 # nothing an unattended board misses — the alert strip is on every page precisely so
 # a hidden page cannot hide a failure.
-SB_PAGES=(system)
+SB_PAGES=(system fleet)
 # Seconds each page holds before the board rotates. Long enough to read a full frame,
 # short enough that a glance from across the room catches every page inside a minute.
 SB_PAGE_SECS="${STATUSBOARD_PAGE_SECS:-15}"
@@ -1885,7 +2000,21 @@ sb_alerts() {
   case "${SB_NET_ST:-}" in up | '') : ;; *) printf 'bad:no internet\n' ;; esac
   if [ "${SB_TS_ST:-}" = down ]; then
     printf 'bad:tailnet down\n'
+  elif [ "${SB_TS_ST:-}" = up ] && [ -n "$SB_FLEET" ]; then
+    # NAMED, not counted. "1 peer offline" sends you to the fleet page to find out
+    # which; the strip is what you read from across the room, so it says which.
+    # A member missing from the tailnet outranks one that is merely offline: offline is
+    # a box that is switched off, missing is a box that is no longer enrolled.
+    local f_name f_state f_age
+    while IFS='|' read -r f_name _ _ f_state f_age; do
+      case "$f_name" in '' | _others) continue ;; esac
+      case "$f_state" in
+        missing) printf 'bad:%s missing\n' "$f_name" ;;
+        offline) printf 'warn:%s offline%s\n' "$f_name" "${f_age:+ $f_age}" ;;
+      esac
+    done <<< "$SB_FLEET_ROWS"
   elif [ "${SB_TS_ST:-}" = up ] && [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null; then
+    # No manifest to name them by — fall back to the count.
     count=$((SB_TS_TOTAL - SB_TS_PEERS))
     printf 'warn:%s peer%s offline\n' "$count" "$([ "$count" = 1 ] || printf s)"
   fi
@@ -1903,6 +2032,57 @@ sb_alerts() {
       ;;
   esac
   [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
+  return 0
+}
+
+# sb_page_fleet: one row per manifest member, which is the point — the system page can
+# only ever say how MANY peers are up, and the question a fleet raises is WHICH.
+#
+# Every column here is free: it all comes out of the single `tailscale status` fork the
+# system page's tailnet row already pays for. Uptime, disks and converge state per
+# member need the metrics bus, and land on this page when it exists.
+sb_page_fleet() {
+  local name ip plat state age glyph col statetxt namew=4 statew=5
+  if [ -z "$SB_FLEET" ]; then
+    sb_row "$(printf '%sno fleet manifest at %s%s' "$C_DIM" "$SB_FLEET_JSON" "$C_RST")"
+    return 0
+  fi
+  # Two passes, for the same reason the disk rows take two: the columns are as wide as
+  # their widest value, which is not known until every row has been seen. Padded with
+  # printf's own %-*s rather than sb_pad — these fields carry no escapes, so there is
+  # no reason to spend a fork per field per paint on measuring them.
+  while IFS='|' read -r name _ _ state age; do
+    case "$name" in '' | _others) continue ;; esac
+    [ "${#name}" -gt "$namew" ] && namew="${#name}"
+    statetxt="$state${age:+ $age}"
+    [ "${#statetxt}" -gt "$statew" ] && statew="${#statetxt}"
+  done <<< "$SB_FLEET_ROWS"
+
+  while IFS='|' read -r name ip plat state age; do
+    [ -n "$name" ] || continue
+    if [ "$name" = _others ]; then
+      # The counts ride in the ip and platform fields on this line — see sb_fleet_join.
+      [ "${ip:-0}" -gt 0 ] 2>/dev/null || continue
+      sb_row ""
+      sb_row "$(printf '%s%s non-fleet node%s, %s online%s' "$C_DIM" "$ip" \
+        "$([ "$ip" = 1 ] || printf s)" "$plat" "$C_RST")"
+      continue
+    fi
+    case "$state" in
+      self | direct | idle) glyph=ok;   col="$C_DIM" ;;
+      # A relay works, it just works worse — the fleet is up but two boxes could not
+      # find each other, which is worth amber and is invisible in any peer count.
+      relay)                glyph=warn; col="$C_WARN" ;;
+      offline | missing)    glyph=down; col="$C_BAD" ;;
+      *)                    glyph="";   col="$C_DIM" ;;
+    esac
+    sb_row "$(printf '%-*s %s  %s%-11s%s %s%-*s%s %s%s%s' \
+      "$namew" "$name" "$(sb_status_glyph "$glyph")" \
+      "$C_DIM" "${ip:--}" "$C_RST" \
+      "$col" "$statew" "$state${age:+ $age}" "$C_RST" \
+      "$C_DIM" "${plat:--}" "$C_RST")" \
+      "$(sb_series_get "$SER_PEERS" "$name")" 1 hi-good up
+  done <<< "$SB_FLEET_ROWS"
   return 0
 }
 

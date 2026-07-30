@@ -745,6 +745,46 @@ eq "$(printf '%s\n' '100.64.0.5  ipheoryt12  fleet  iOS  offline' | sb_ts_parse 
 eq "$(printf '%s\n' '# Health check:' '#   - some warning' '100.64.0.1  hub  fleet  linux  -' \
   | sb_ts_parse 100.64.0.8 | head -1)" 'up|100.64.0.8|1|1' 'tailnet: health-check preamble is not a peer'
 
+# ── The fleet (sb_fleet_parse / sb_fleet_join) ────────────────────────────────
+# The real manifest, not a fixture: this parse is anchored on fleet.json's INDENT, so
+# the thing worth asserting is that it still matches the file the repo actually ships.
+FLEET="$(sb_fleet_parse < "$REPO/fleet.json")"
+eq "$(printf '%s\n' "$FLEET" | wc -l | tr -d ' ')" \
+   "$(grep -cE '^    "[^"]+": \{$' "$REPO/fleet.json" | tr -d ' ')" \
+   'fleet: every machine in the manifest is parsed'
+has "$FLEET" 'latitude|100.64.0.8|debian|latitude5520' 'fleet: name, tailnet IP, platform and OS hostname'
+has "$FLEET" 'hub|100.64.0.1|debian|27608' 'fleet: the VPS parses like any other member'
+# The roles array and the ssh block sit in the same machine block and are full of
+# quoted strings — neither may leak into a field.
+hasnt "$FLEET" 'base' 'fleet: the roles array is not mistaken for a field'
+hasnt "$FLEET" 'methe' 'fleet: the ssh block is not mistaken for a field'
+
+# The join is what the page renders. States, in the order they matter.
+FPEERS="$(printf '%s\n' \
+  '100.64.0.4|desktop|windows|direct|' \
+  '100.64.0.3|server|windows|offline|3d' \
+  '100.64.0.1|hub|linux|relay|' \
+  '100.64.0.9|somephone|iOS|idle|')"
+FJ="$(sb_fleet_join "$FLEET" "$FPEERS" 100.64.0.8 1)"
+has "$FJ" 'latitude|100.64.0.8|debian|self|'    'join: the box running the board is self'
+has "$FJ" 'desktop|100.64.0.4|windows|direct|'  'join: an active session is direct'
+has "$FJ" 'server|100.64.0.3|windows|offline|3d' 'join: an offline member keeps its last-seen age'
+has "$FJ" 'hub|100.64.0.1|debian|relay|'        'join: a relayed member is distinguishable from a direct one'
+# The failure a peer COUNT cannot express: air is in the manifest and not on the
+# tailnet, so it is a ROW that says so rather than a number that never mentions it.
+has "$FJ" 'air|100.64.0.7|darwin|missing|'      'join: a member absent from the tailnet is missing'
+# Non-fleet nodes are counted apart, so a phone cannot flatter the fleet's own numbers.
+has "$FJ" '_others|1|1|'                        'join: non-fleet nodes are counted separately'
+hasnt "$FJ" 'somephone'                         'join: a non-fleet node gets no row of its own'
+# Nothing was learned about the peers, so nothing is claimed about them. Five red rows
+# for one local fault would bury the single alert that is true.
+FJD="$(sb_fleet_join "$FLEET" "" "" 0)"
+eq "$(printf '%s\n' "$FJD" | grep -c 'unknown')" '5' 'join: an unreadable local tailnet makes every member unknown'
+hasnt "$FJD" 'missing' 'join: an unreadable local tailnet accuses nobody of being missing'
+eq "$(printf '%s\n' "$FJD" | grep -c '_others|0|0')" '1' 'join: and counts no strangers either'
+# No manifest is not an empty fleet.
+eq "$(sb_fleet_join "" "$FPEERS" 100.64.0.8 1 | grep -cv '^_others')" '0' 'join: no manifest yields no member rows'
+
 # ── The alert strip (sb_alert_line) ───────────────────────────────────────────
 # Escapes are stripped before comparing: whether the helpers emit colour depends on
 # whether the TEST's stdout is a terminal, so an exact-string assertion that kept them
@@ -925,7 +965,11 @@ eq "$(grep -vE '^[[:space:]]*#' "$SB" | grep -c 'tailscale status')" '1' \
 # And it is bounded. Everything else on the slow path already is (ping -W1, df on
 # live devices only); an unbounded socket call to a wedged tailscaled would freeze the
 # clock painted beside it.
-grep -q 'timeout 5 tailscale status' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
+grep -q 'SB_TIMEOUT="timeout 5"' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
+grep -q '\$SB_TIMEOUT tailscale status' "$SB"; eq "$?" '0' 'cadence: the bound is applied to the fork that needs it'
+# …and resolved, not assumed: a box with no coreutils `timeout` must still read its
+# tailnet rather than report it permanently down (which is what macOS did).
+grep -q 'command -v timeout' "$SB"; eq "$?" '0' 'cadence: a box without timeout still reads its tailnet'
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 # The page list is read out of the script rather than repeated here, so a page added
@@ -943,7 +987,21 @@ for pg in $PAGES; do
   # And every page carries the strip, because that is the whole reason rotating is safe.
   eq "$(printf '%s\n' "$POUT" | grep -cE '^(alerts|'"$(printf '%s' "$PAGES" | tr ' ' '|')"') ' | tr -d ' ')" '1' \
     "pages: $pg carries exactly one alert strip"
+  # Trailing whitespace on any page, for the same reason as on the first one: it is
+  # invisible until something diffs the frame or a terminal reflows it.
+  eq "$(printf '%s\n' "$POUT" | grep -c '[[:space:]]$' | tr -d ' ')" '0' \
+    "pages: no row on $pg ends in whitespace"
 done
+# The fleet page's whole point is naming members, not counting peers.
+FOUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$SB" --once --page fleet 2>&1)"
+for m in $(sb_fleet_parse < "$REPO/fleet.json" | cut -d'|' -f1); do
+  has "$FOUT" "$m" "fleet page: $m has a row"
+done
+# No manifest is a page that says so, not a blank page: a board running outside the
+# repo (or over a checkout mid-rebuild) must not look like a fleet of zero machines.
+NOFLEET="$(STATUSBOARD_FLEET_JSON=/nonexistent/fleet.json STATUSBOARD_COLS=120 \
+  bash "$SB" --once --page fleet 2>&1)"
+has "$NOFLEET" 'no fleet manifest' 'fleet page: a missing manifest says so'
 # An unknown page name is a usage error, not a silent fall back to page 1: --page is
 # how a test or a human asks for one specific page, and painting a different one is a
 # wrong answer that looks like a right one.
