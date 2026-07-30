@@ -357,6 +357,31 @@ sb_smart_asleep() {
     grep -qiE '"string":"Deviceisin(SLEEP|STANDBY|IDLE)mode'
 }
 
+# sb_apm_parks <smartctl -g apm output>: whether this drive may spin itself down.
+#
+# This is the gate that decides whether asking a drive for its temperature is free,
+# and it exists because `-n standby` turned out not to be able to answer. Measured on
+# latitude 2026-07-30: of five USB spinners, only sdf's bridge implements CHECK POWER
+# MODE at all — and sdf is the one drive that returns no SMART temperature anyway. The
+# four that DO report a temperature all answer `CHECK POWER MODE not implemented,
+# ignoring -n option`, so on those the flag protects nothing.
+#
+# APM level does answer it, and by specification rather than by guess: ATA defines
+# 0x01-0x7F (1-127) as the levels that PERMIT standby and 0x80-0xFE (128-254) as the
+# levels that forbid it. So a drive at 128 cannot park itself and can be polled as
+# often as we like; one at 96 or 1 can, and must be left alone unless it is already
+# spinning. That is exactly the split on this box — sdc and sde at 128, sdd at 96,
+# sdg at 1 with 639k load cycles already on it.
+#
+# Anything unparsable answers "yes, it parks". Unknown has to take the cautious branch
+# here, because the cost of being wrong is measured in the drive's remaining life.
+sb_apm_parks() {
+  local out="${1:-}" lvl
+  lvl="$(printf '%s' "$out" | sed -n 's/.*APM level is:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' | head -1)"
+  case "$lvl" in '' | *[!0-9]*) printf yes; return ;; esac
+  if [ "$lvl" -ge 128 ] && [ "$lvl" -le 254 ]; then printf no; else printf yes; fi
+}
+
 # sb_temp_cell <celsius|zzz> [rotational]: the temperature field of a disk row.
 #
 # Three outcomes, deliberately three distinct strings:
@@ -1251,6 +1276,16 @@ fi
 # bridge answers `CHECK POWER MODE not implemented, ignoring -n option`, so on that
 # drive smartctl will read — and therefore spin up — whatever the flag says. The real
 # protection is upstream, in only asking about drives that are already doing IO.
+# sb_drive_parks <disk>: `no` when the drive's APM level forbids it spinning itself
+# down, `yes` otherwise. One fork, asked once per drive per board lifetime — APM level
+# is a persistent drive setting, not a live reading.
+sb_drive_parks() {
+  local disk="${1:-}"
+  [ -n "$disk" ] || { printf yes; return; }
+  [ -x "$SB_SMARTCTL" ] || { printf yes; return; }
+  sb_apm_parks "$($SB_SUDO "$SB_SMARTCTL" -g apm -d sat "/dev/$disk" 2>/dev/null)"
+}
+
 sb_smart_temp() {
   local disk="${1:-}" out rc
   [ -n "$disk" ] || { printf ''; return; }
@@ -1367,6 +1402,9 @@ IFS='|' read -r SB_RAPL_DIR SB_RAPL_NAME <<< "$(sb_rapl_pick)"
 # rather than by mount, because temperature is a property of the drive: / and
 # /boot/efi are two filesystems on one nvme1n1 and share its figure.
 SB_TEMPS=""; SB_DISKOF=""; SB_ROTA=""; SB_TEMP_RR=0
+# Whether each drive can spin itself down, learned once from its APM level. Cached for
+# the process lifetime because it is a persistent drive setting, not a reading.
+SB_PARKS=""
 # Evaluated ONCE here, where fd 1 is the real output; see sb_cols.
 SB_ISTTY=0; [ -t 1 ] && SB_ISTTY=1
 # And which device that output is. `-ef` compares device+inode, so this asks "is fd
@@ -1553,24 +1591,24 @@ sb_sample_slow() {
   # measured on latitude. Five spinners polled every probe would spend a fifth of the
   # board's time in smartctl, so at most ONE is asked per probe, round-robin.
   #
-  # And a spinner is only ELIGIBLE while it is doing IO. This is the real protection
-  # against a monitor that wears out what it is monitoring: `-n standby` cannot
-  # provide it, because sdd's bridge reports CHECK POWER MODE not implemented and
-  # ignores the flag, so polling a parked sdd would spin it up — every probe, forever.
-  # Two of these drives are set to an APM level that parks them (sdd=96, sdg=1) and
-  # sdg has already passed 639k load cycles. An idle drive keeps its last reading,
-  # which is honest: a drive doing nothing is not changing temperature quickly.
+  # And a spinner is only asked when asking is FREE — which is either because it is
+  # already doing IO, or because its APM level forbids it parking at all (see
+  # sb_apm_parks for why the APM level and not `-n standby` is the gate). A drive that
+  # can park and is idle is left alone: waking it every probe to read a temperature
+  # would cost it exactly the wear the reading is meant to warn about, and sdg has
+  # already passed 639k load cycles. It keeps its last figure, which is honest — a
+  # drive doing nothing is not changing temperature quickly.
   for disk in $disks; do
     SB_ROTA="$(sb_series_set "$SB_ROTA" "$disk" "$(sb_rotational "$disk")")"
     cur="$(sb_hwmon_temp "$disk")"
     if [ -n "$cur" ]; then
       SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
     elif [ "$(sb_series_get "$SB_ROTA" "$disk")" = 1 ]; then
-      case " $busy " in *" $disk "*) spinners="$spinners $disk" ;; esac
+      spinners="$spinners $disk"
     fi
   done
   if [ -n "$spinners" ]; then
-    local rr
+    local rr parks
     # Word splitting is the point — $spinners is a space-joined list.
     # shellcheck disable=SC2206
     rr=($spinners)
@@ -1579,13 +1617,28 @@ sb_sample_slow() {
     [ "$SB_TEMP_RR" -lt "${#rr[@]}" ] || SB_TEMP_RR=0
     disk="${rr[$SB_TEMP_RR]}"
     SB_TEMP_RR=$((SB_TEMP_RR + 1))
-    cur="$(sb_smart_temp "$disk")"
-    [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
+    # Learned lazily, inside the round-robin slot, so the cost is one extra fork for
+    # one drive on one probe rather than a query storm for every drive at once. APM
+    # level is a persistent setting, so the answer is cached for the process lifetime.
+    parks="$(sb_series_get "$SB_PARKS" "$disk")"
+    if [ -z "$parks" ]; then
+      parks="$(sb_drive_parks "$disk")"
+      SB_PARKS="$(sb_series_set "$SB_PARKS" "$disk" "$parks")"
+    fi
+    local free=0
+    [ "$parks" = no ] && free=1
+    case " $busy " in *" $disk "*) free=1 ;; esac
+    if [ "$free" = 1 ]; then
+      cur="$(sb_smart_temp "$disk")"
+      [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
+    fi
   fi
   # shellcheck disable=SC2086
   SB_TEMPS="$(sb_series_keep "$SB_TEMPS" $disks)"
   # shellcheck disable=SC2086
   SB_ROTA="$(sb_series_keep "$SB_ROTA" $disks)"
+  # shellcheck disable=SC2086
+  SB_PARKS="$(sb_series_keep "$SB_PARKS" $disks)"
 }
 
 # ── Frame ─────────────────────────────────────────────────────────────────────

@@ -229,6 +229,29 @@ eq "$(sb_smart_temp_parse '')" '' 'temp: empty output yields nothing'
 
 # sb_smart_asleep: smartctl's exit code cannot tell these apart — measured on
 # latitude, a sleeping sdf and a nonexistent /dev/sdZZ both exited 2.
+# sb_apm_parks: the gate that decides whether polling a drive is free. ATA defines
+# 1-127 as the APM levels that PERMIT standby and 128-254 as the ones that forbid it,
+# so the boundary is a specification, not a guess.
+eq "$(sb_apm_parks 'APM level is:     128 (minimum power consumption without standby)')" no \
+  'apm: 128 forbids standby, so the drive is safe to poll'
+eq "$(sb_apm_parks 'APM level is:     254 (maximum performance)')" no \
+  'apm: 254 is the top of the no-standby band'
+eq "$(sb_apm_parks 'APM level is:     127')" yes \
+  'apm: 127 is the top of the standby-permitted band'
+eq "$(sb_apm_parks 'APM level is:     96 (intermediate level with standby)')" yes \
+  'apm: 96 permits standby, so the drive must be left alone when idle'
+eq "$(sb_apm_parks 'APM level is:     1 (minimum power consumption with standby)')" yes \
+  'apm: 1 parks aggressively'
+eq "$(sb_apm_parks 'APM level is:     255')" yes \
+  'apm: 255 is outside the no-standby band and takes the cautious branch'
+# Unknown must take the cautious branch: being wrong here is paid in drive life.
+eq "$(sb_apm_parks 'APM feature is:   Unavailable')" yes \
+  'apm: an unavailable APM feature is assumed to park'
+eq "$(sb_apm_parks 'APM feature is:   Disabled')" yes \
+  'apm: a disabled APM feature is assumed to park'
+eq "$(sb_apm_parks '')" yes 'apm: no output is assumed to park'
+eq "$(sb_apm_parks 'garbage')" yes 'apm: unparsable output is assumed to park'
+
 asleep() {
   if sb_smart_asleep "$1"; then printf yes; else printf no; fi
 }
