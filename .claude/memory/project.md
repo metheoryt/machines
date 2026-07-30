@@ -582,6 +582,48 @@ global + per-host). One bullet per fact under a topical heading.
   in dock A bay 1**, UUID `EAA6CAAEA6CA7A99`. Leaving either dock powered off drops the archive to a
   single copy. Not yet checksum-verified — the WDC source drive has 144
   UDMA_CRC_Error_Count, so an `rsync -c` pass is still owed.
+- **Backup strategy decided 2026-07-31: mirror the bulk, restic almost nothing.**
+  The axis is *can this be re-derived, and does a wrong write propagate?* — a mirror
+  covers drive death, only versions cover your own `rm`, a bad app write, or bitrot.
+  Mirror (`rsync -aHAX`): the 2024 archive, `Media/movies|torrents|tv|xxx`,
+  `ImmichMedia/library`, `music-from-g513ie`, the GoPro video, `qb`. Versions
+  genuinely needed for only ~1.5 GB: `Media/config` (jellyfin `encoding.xml`, the
+  *arr SQLite DBs) and `secrets` — at that size a dated `tar.gz` + rsync beats
+  restic, so **no restic repo is planned at all** and the old `immich-media` /
+  `immich-postgres` repos are not being recreated. Two hard constraints: **`-H` is
+  mandatory** (Media unique 523059206143 B vs 788634637218 B summed per-directory —
+  265 GB of hardlink overlap, so without `-H` the target needs 734 GiB instead of
+  487), and **never `rsync --delete` the immich library bare** — it is mutable and a
+  photo deleted in the UI propagates; use `--backup-dir=…/deleted-$(date +%F)`.
+- **Immich makes its own `pg_dumpall` backups — do not build a second mechanism.**
+  Defaults (not stored in `system-config`, so absent from the overrides row):
+  enabled, `0 02 * * *`, keep last 14. Filenames carry both versions —
+  `immich-db-backup-<ts>-v<immich>-pg<pg>.sql.gz`, ~218 MB each, ~2.9 GB for 14.
+  **Two separate mechanisms exist and must be pointed at the same place:** the UI
+  backup writes to `/data/backups` *inside `immich_server`* (i.e.
+  `UPLOAD_LOCATION/backups`), while `DB_BACKUPS_LOCATION` only mounts
+  `immich_postgres:/backups` (`homeserver/immich/compose.yml`). Changing the env var
+  alone moves nothing the UI writes. `bebf134` adds
+  `${DB_BACKUPS_LOCATION}:/data/backups` to `immich-server` so both agree; on
+  latitude it is **`/var/backups/immich-db` on the root NVMe (`nvme1n1`)**, a
+  different physical disk from the database itself (`/mnt/immich`, `nvme0n1`) and
+  never `nofail`, so there is no silent-write-into-an-unmounted-mountpoint risk.
+  A stale pre-move copy sits at `/mnt/immich/immich-db-backups-old-20260731` —
+  deliberately moved *out* of `library/` so immich never scans it as assets.
+  `.env` is gitignored (`**/.env`), so the path itself is machine-local; the
+  tracked `.env.dist` still carries g513ie's `D:\` Windows paths.
+- **Immich's hardware-accel setting lives in the DATABASE, not compose.**
+  `system_metadata` key `system-config`, `jsonb` column, path `{ffmpeg,accel}`.
+  After the migration it was still `nvenc` (the G15's RTX 3050 Ti) even though
+  `compose.yml` had been switched to `service: quicksync` — a compose commit cannot
+  carry it. Same class of trap as jellyfin's `encoding.xml`. Set to `qsv` +
+  `temporalAQ:false` 2026-07-31; old row saved at
+  `~/immich-system-config.bak-20260731-0051.json`. Note only *overrides* live in
+  that row, so an absent key means "default", not "unset". **Verify accel with a
+  real encode, not a codec list:**
+  `docker exec immich_server ffmpeg -f lavfi -i testsrc=size=1280x720:rate=30:duration=2 -c:v hevc_qsv -f null -`
+  (passed; iHD driver, VA-API 1.23.0, container runs as root so `/dev/dri` perms
+  are moot).
 - **The restic password for the homeserver repos is already tracked** (it was the
   password for the now-destroyed `immich-media-2024` too) — dotfiles allow-line
   `!/g513ie-prod-config/vps/backup/homeserver/pass.txt` (13 bytes), harvested off
