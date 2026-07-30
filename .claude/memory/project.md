@@ -612,6 +612,25 @@ global + per-host). One bullet per fact under a topical heading.
   deliberately moved *out* of `library/` so immich never scans it as assets.
   `.env` is gitignored (`**/.env`), so the path itself is machine-local; the
   tracked `.env.dist` still carries g513ie's `D:\` Windows paths.
+- **Immich's realtime (on-the-fly HLS) transcoding 404s for every asset ingested
+  before the `CreateAudioVideoTables` migration, and enabling it does not
+  backfill.** Symptom: `GET /api/assets/<id>/video/stream/main.m3u8` returns
+  `{"message":"Asset metadata is not yet ready for streaming","statusCode":404}`
+  and video simply does not load in the browser. Cause:
+  `VideoStreamRepository.getForMainPlaylist` **inner**-joins `asset_exif`,
+  `asset_video` and `asset_keyframe`; the latter two are written only by the
+  **Extract Metadata** job (`metadata.service.js`, the `keyframes`/`keyframePts`
+  fields). On latitude 2026-07-31 those tables held **4 rows against 8729 video
+  assets** — the 4 being uploads from 2026-07-03..07-12, i.e. after the feature
+  landed. `ffmpeg.realtime.enabled` defaults to **false**, so this only bites once
+  someone turns it on. Diagnosing it needs
+  `logging: {"enabled":true,"level":"debug"}` in the `system-config` row — immich
+  logs no successful requests at the default level, so an empty log proves nothing.
+  Backfilling means **Extract Metadata → All**, which re-reads every original,
+  including the whole 712 GB 2024 archive across the flaky dock-A USB bridge — do
+  it deliberately, not casually. Falling back is one flag
+  (`{ffmpeg,realtime,enabled}` → `false`); the pre-encoded `encoded_video` files
+  exist for 8715 of 8729, so playback works immediately without it.
 - **Immich's hardware-accel setting lives in the DATABASE, not compose.**
   `system_metadata` key `system-config`, `jsonb` column, path `{ffmpeg,accel}`.
   After the migration it was still `nvenc` (the G15's RTX 3050 Ti) even though
