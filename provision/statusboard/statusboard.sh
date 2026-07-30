@@ -1182,6 +1182,46 @@ sb_fleet_join() {
 }
 
 # ── The alert strip ───────────────────────────────────────────────────────────
+# The two loops below are the strip's SEVERITY POLICY — the judgement about what is worth
+# waking someone for. They take one argument each so the policy is fixture-testable;
+# sb_alerts, which has to read a dozen globals, calls them.
+
+# sb_fleet_alerts <fleet-rows>: NAMED, not counted. "1 peer offline" sends you to the
+# fleet page to find out which; the strip is what is read from across the room, so it says
+# which. Missing outranks offline: offline is a box that is switched off, missing is a box
+# that is no longer enrolled in the tailnet at all.
+sb_fleet_alerts() {
+  local name state age
+  while IFS='|' read -r name _ _ state age; do
+    case "$name" in '' | _others) continue ;; esac
+    case "$state" in
+      missing) printf 'bad:%s missing\n' "$name" ;;
+      offline) printf 'warn:%s offline%s\n' "$name" "${age:+ $age}" ;;
+    esac
+  done <<< "${1:-}"
+  return 0
+}
+
+# sb_docker_alerts <docker-rows>: this box's services ARE its containers, so the alert is
+# "immich_server exited", not "1 of 5 not running".
+#
+# Unhealthy outranks the state and is checked first: a container that is up and failing
+# its own health check is invisible in every running/total count, and `running` is exactly
+# what its state field says.
+sb_docker_alerts() {
+  local name state status
+  while IFS='|' read -r name state status _ _; do
+    [ -n "$name" ] || continue
+    case "$status" in *UNHEALTHY*) printf 'bad:%s unhealthy\n' "$name"; continue ;; esac
+    case "$state" in
+      running) ;;
+      exited | dead) printf 'bad:%s %s\n' "$name" "$state" ;;
+      *) printf 'warn:%s %s\n' "$name" "$state" ;;
+    esac
+  done <<< "${1:-}"
+  return 0
+}
+
 # sb_alert_line <sev:text>…: the one line every page carries, whichever page is up.
 #
 # It is what makes paging safe. The board's whole value is that a glance from across
@@ -1752,6 +1792,12 @@ SB_MAX_IO="${STATUSBOARD_IO_MAX:-100}"
 # container was as busy as this board can show"; scaling to all cores instead would draw
 # every service on this box as a flat line one cell high.
 SB_MAX_DKCPU=100
+# How many container rows the docker page will draw, and how wide a name may be. Both
+# are bounds on things docker does not bound: exited containers accumulate for as long as
+# compose has been running here, and `docker compose run` mints 34-character names. The
+# frame is 26 rows and the text column is what the charts get the remainder of.
+SB_DK_ROWS="${STATUSBOARD_DOCKER_ROWS:-18}"
+SB_DK_NAMEW="${STATUSBOARD_DOCKER_NAMEW:-24}"
 
 # sb_sample_fast: everything that is a file read. Runs on EVERY paint, so the
 # numbers on screen are never staler than the clock beside them.
@@ -2138,18 +2184,7 @@ sb_alerts() {
   if [ "${SB_TS_ST:-}" = down ]; then
     printf 'bad:tailnet down\n'
   elif [ "${SB_TS_ST:-}" = up ] && [ -n "$SB_FLEET" ]; then
-    # NAMED, not counted. "1 peer offline" sends you to the fleet page to find out
-    # which; the strip is what you read from across the room, so it says which.
-    # A member missing from the tailnet outranks one that is merely offline: offline is
-    # a box that is switched off, missing is a box that is no longer enrolled.
-    local f_name f_state f_age
-    while IFS='|' read -r f_name _ _ f_state f_age; do
-      case "$f_name" in '' | _others) continue ;; esac
-      case "$f_state" in
-        missing) printf 'bad:%s missing\n' "$f_name" ;;
-        offline) printf 'warn:%s offline%s\n' "$f_name" "${f_age:+ $f_age}" ;;
-      esac
-    done <<< "$SB_FLEET_ROWS"
+    sb_fleet_alerts "$SB_FLEET_ROWS"
   elif [ "${SB_TS_ST:-}" = up ] && [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null; then
     # No manifest to name them by — fall back to the count.
     count=$((SB_TS_TOTAL - SB_TS_PEERS))
@@ -2169,21 +2204,10 @@ sb_alerts() {
       ;;
   esac
   [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
-  # Containers, named for the same reason fleet members are: this box's services ARE its
-  # containers, so "immich_server exited" is the alert, not "1 of 5 not running".
   if [ "${SB_DK_ST:-}" = down ]; then
     printf 'bad:docker unreachable\n'
   elif [ "${SB_DK_ST:-}" = up ]; then
-    local d_name d_state d_status
-    while IFS='|' read -r d_name d_state d_status _ _; do
-      [ -n "$d_name" ] || continue
-      case "$d_status" in *UNHEALTHY*) printf 'bad:%s unhealthy\n' "$d_name"; continue ;; esac
-      case "$d_state" in
-        running) ;;
-        exited | dead) printf 'bad:%s %s\n' "$d_name" "$d_state" ;;
-        *) printf 'warn:%s %s\n' "$d_name" "$d_state" ;;
-      esac
-    done <<< "$SB_DOCKER"
+    sb_docker_alerts "$SB_DOCKER"
   fi
   return 0
 }
@@ -2213,29 +2237,60 @@ sb_page_docker() {
     "$SER_DKUP" "${SB_DK_TOTAL:-1}" hi-good ctr
   [ "$SB_DK_TOTAL" -gt 0 ] || return 0
   sb_row ""
-  # Two passes for the columns, as on every other page with a variable-width name.
+  # The name column is CAPPED, unlike every other page's. Container names are unbounded
+  # — `docker compose run` mints things like 5355-pure-api-app-run-4135a6842430 (34
+  # characters) — and the text column is what the charts get the remainder of. One such
+  # container would otherwise take the chart column down to nothing for every row on the
+  # page, which is the failure the six-disk "not mounted" row caused historically.
+  # Truncated for DISPLAY only: the series stays keyed by the full name, so two
+  # containers whose names share a prefix cannot end up sharing a chart.
+  local dispname phase shown=0
   while IFS='|' read -r name _ status _ _; do
     [ -n "$name" ] || continue
-    [ "${#name}" -gt "$namew" ] && namew="${#name}"
+    dispname="$name"
+    [ "${#dispname}" -gt "$SB_DK_NAMEW" ] && dispname="${dispname:0:$((SB_DK_NAMEW - 1))}>"
+    [ "${#dispname}" -gt "$namew" ] && namew="${#dispname}"
     [ "${#status}" -gt "$statw" ] && statw="${#status}"
   done <<< "$SB_DOCKER"
-  while IFS='|' read -r name state status mem pct; do
-    [ -n "$name" ] || continue
-    case "$state" in
-      running) glyph=ok;   col="$C_DIM" ;;
-      restarting | paused | created) glyph=warn; col="$C_WARN" ;;
-      *) glyph=down; col="$C_BAD" ;;
-    esac
-    # A container that is up and failing its own health check is the most useful thing
-    # this page can say, and it is invisible in any running/total count — so the status
-    # column overrides the state's colour when docker reports it unhealthy.
-    case "$status" in *UNHEALTHY*) col="$C_BAD" ;; esac
-    sb_row "$(printf '%-*s %s  %s%-*s%s %s%5s %3s%%%s' \
-      "$namew" "$name" "$(sb_status_glyph "$glyph")" \
-      "$col" "$statw" "$status" "$C_RST" \
-      "$C_DIM" "$(sb_mib "$mem")" "${pct:-0}" "$C_RST")" \
-      "$(sb_series_get "$SER_DK" "$name")" "$SB_MAX_DKCPU" flat '%cpu'
-  done <<< "$SB_DOCKER"
+
+  # Stopped containers FIRST, then running ones, and the list is capped. `docker ps -a`
+  # counts exited containers, which accumulate on a box that has been running compose
+  # for months — so the row count is unbounded in exactly the dimension the frame cannot
+  # afford. Ordering by "not running first" means the cap can only ever hide healthy
+  # containers, and the count of what it hid is printed rather than left silent.
+  for phase in stopped running; do
+    while IFS='|' read -r name state status mem pct; do
+      [ -n "$name" ] || continue
+      case "$phase:$state" in
+        stopped:running) continue ;;
+        running:running) ;;
+        running:*) continue ;;
+      esac
+      [ "$shown" -ge "$SB_DK_ROWS" ] && break 2
+      shown=$((shown + 1))
+      case "$state" in
+        running) glyph=ok;   col="$C_DIM" ;;
+        restarting | paused | created) glyph=warn; col="$C_WARN" ;;
+        *) glyph=down; col="$C_BAD" ;;
+      esac
+      # A container that is up and failing its own health check is the most useful thing
+      # this page can say, and it is invisible in any running/total count — so the status
+      # column overrides the state's colour when docker reports it unhealthy.
+      case "$status" in *UNHEALTHY*) col="$C_BAD" ;; esac
+      dispname="$name"
+      [ "${#dispname}" -gt "$SB_DK_NAMEW" ] && dispname="${dispname:0:$((SB_DK_NAMEW - 1))}>"
+      sb_row "$(printf '%-*s %s  %s%-*s%s %s%5s %3s%%%s' \
+        "$namew" "$dispname" "$(sb_status_glyph "$glyph")" \
+        "$col" "$statw" "$status" "$C_RST" \
+        "$C_DIM" "$(sb_mib "$mem")" "${pct:-0}" "$C_RST")" \
+        "$(sb_series_get "$SER_DK" "$name")" "$SB_MAX_DKCPU" flat '%cpu'
+    done <<< "$SB_DOCKER"
+  done
+  if [ "$SB_DK_TOTAL" -gt "$shown" ]; then
+    # Not "all running": with more stopped containers than the cap, the hidden ones are
+    # stopped too. The count is what is honest without a second pass to classify them.
+    sb_row "$(printf '%s+%s more not shown%s' "$C_DIM" $((SB_DK_TOTAL - shown)) "$C_RST")"
+  fi
   return 0
 }
 
@@ -2355,7 +2410,7 @@ sb_page_system() {
   load1="$(awk '{ printf "%d", $1 * 100 }' /proc/loadavg 2>/dev/null)"
   [ -n "$load1" ] && load_col="$(sb_hi_colour "$load1" $((SB_NCPU * 100)) $((SB_NCPU * 200)))"
   sb_row "$(printf 'uptime    %s%s%s   load %s%s%s' "$C_DIM" "$(sb_secs_to_hm "$SB_UP")" "$C_RST" \
-    "$load_col" "$SB_LOAD" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100)) hi-bad load
+    "$load_col" "${SB_LOAD:-n/a}" "$C_RST")" "$SER_LOAD" $((SB_NCPU * 100)) hi-bad load
   sb_row ""
 
   # Two passes over the mount list: the bar lengths are relative to the LARGEST disk

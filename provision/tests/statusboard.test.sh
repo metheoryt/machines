@@ -843,6 +843,39 @@ has "$(plain "$(STATUSBOARD_RAMP=ascii sb_alert_line 'bad:a' 'bad:b')")" 'a | b'
 has "$(plain "$(STATUSBOARD_RAMP=height sb_alert_line 'bad:a' 'bad:b')")" 'a · b' \
   'strip: everything else gets the middle dot'
 
+# ── Severity policy (sb_fleet_alerts / sb_docker_alerts) ──────────────────────
+# What is worth waking someone for. Both take one argument precisely so this judgement is
+# testable — the strip's other half, sb_alerts, has to read a dozen globals.
+FA="$(sb_fleet_alerts "$(printf '%s\n' \
+  'latitude|100.64.0.8|debian|self|' \
+  'desktop|100.64.0.4|windows|direct|' \
+  'server|100.64.0.3|windows|offline|3d' \
+  'hub|100.64.0.1|debian|missing|' \
+  '_others|2|1||')")"
+# Missing outranks offline: offline is a box that is switched off, missing is a box that is
+# no longer enrolled at all.
+has "$FA" 'bad:hub missing'        'severity: a member off the tailnet is bad'
+has "$FA" 'warn:server offline 3d' 'severity: a member that is merely off is a warning, with its age'
+hasnt "$FA" 'latitude'             'severity: the board does not alert about itself'
+hasnt "$FA" 'desktop'              'severity: a healthy member is not an alert'
+hasnt "$FA" '_others'              'severity: non-fleet nodes never alert'
+eq "$(sb_fleet_alerts '')" ''      'severity: no fleet rows, no alerts'
+
+DA="$(sb_docker_alerts "$(printf '%s\n' \
+  'immich_server|running|up 2h healthy|916M|3' \
+  'immich_redis|running|up 5m UNHEALTHY|32M|0' \
+  'jellyfin|exited|exited (0) 5m||' \
+  'immich_db|restarting|restarting (1) 3s||' \
+  'old_thing|created|created||')")"
+# A container that is up and failing its own health check is invisible in any
+# running/total count, and its STATE field says `running` — so the status is checked first.
+has "$DA" 'bad:immich_redis unhealthy' 'severity: unhealthy outranks a running state'
+has "$DA" 'bad:jellyfin exited'        'severity: an exited service is bad'
+has "$DA" 'warn:immich_db restarting'  'severity: a restart loop is a warning, not yet a failure'
+has "$DA" 'warn:old_thing created'     'severity: a created-but-never-started container is a warning'
+hasnt "$DA" 'immich_server'            'severity: a healthy container is not an alert'
+eq "$(sb_docker_alerts '')" ''         'severity: no containers, no alerts'
+
 # ── Page tabs ─────────────────────────────────────────────────────────────────
 # The VISIBLE width must not depend on which page is active — only the colour moves —
 # or the alert text beside the tabs shifts every time the board rotates.
@@ -1008,25 +1041,42 @@ grep -q 'command -v timeout' "$SB"; eq "$?" '0' 'cadence: a box without timeout 
 # in step N is exercised by these assertions without touching this file.
 PAGES="$(grep -oE '^SB_PAGES=\([^)]*\)' "$SB" | sed -E 's/^SB_PAGES=\(//; s/\)$//')"
 [ -n "$PAGES" ]; eq "$?" '0' 'pages: the script declares a page list'
-for pg in $PAGES; do
-  POUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$SB" --once --page "$pg" 2>&1)"; prc=$?
-  eq "$prc" '0' "pages: --once --page $pg exits 0"
-  # Every page pays the same width rule. A page whose rows are one cell too wide wraps,
-  # and a wrapped row makes the whole repainting frame walk up the screen — which is
-  # invisible in a test that only ever renders page 1.
-  eq "$(printf '%s\n' "$POUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
-    "pages: no row on $pg is wider than the terminal"
-  # And every page carries the strip, because that is the whole reason rotating is safe.
-  # The strip's left field is the whole tab list, which is why this matches the pages
-  # joined by spaces rather than any single page name — the docker page has a `docker`
-  # ROW of its own, and matching one name at a time counted that as a second strip.
-  eq "$(printf '%s\n' "$POUT" | grep -cE "^(alerts|$PAGES) " | tr -d ' ')" '1' \
-    "pages: $pg carries exactly one alert strip"
-  # Trailing whitespace on any page, for the same reason as on the first one: it is
-  # invisible until something diffs the frame or a terminal reflows it.
-  eq "$(printf '%s\n' "$POUT" | grep -c '[[:space:]]$' | tr -d ' ')" '0' \
-    "pages: no row on $pg ends in whitespace"
+# Three widths, not one: 146 is the kiosk's real pane (cage -> foot -> tmux, measured on
+# latitude), 120 is the tmux window over SSH, and 80 is narrow enough that the chart column
+# collapses entirely — a different print path for every row on every page.
+for pgw in 146 120 80; do
+  for pg in $PAGES; do
+    POUT="$(STATUSBOARD_COLS=$pgw STATUSBOARD_RAMP=ascii bash "$SB" --once --page "$pg" 2>&1)"; prc=$?
+    eq "$prc" '0' "pages: --once --page $pg exits 0 at ${pgw}c"
+    # Every page pays the same width rule. A page whose rows are one cell too wide wraps,
+    # and a wrapped row makes the whole repainting frame walk up the screen — which is
+    # invisible in a test that only ever renders page 1.
+    #
+    # The docker page is why the widths are a loop: container names are unbounded, and one
+    # `docker compose run` name (34 characters, seen on the mac) is enough to push the text
+    # column past a narrow frame.
+    eq "$(printf '%s\n' "$POUT" | awk -v w="$pgw" '{ if (length($0) > w) c++ } END { printf "%d", c+0 }')" '0' \
+      "pages: no row on $pg is wider than ${pgw}c"
+    # And every page carries the strip, because that is the whole reason rotating is safe.
+    # The strip's left field is the whole tab list, which is why this matches the pages
+    # joined by spaces rather than any single page name — the docker page has a `docker`
+    # ROW of its own, and matching one name at a time counted that as a second strip.
+    eq "$(printf '%s\n' "$POUT" | grep -cE "^(alerts|$PAGES) " | tr -d ' ')" '1' \
+      "pages: $pg carries exactly one alert strip at ${pgw}c"
+    # Trailing whitespace on any page, for the same reason as on the first one: it is
+    # invisible until something diffs the frame or a terminal reflows it.
+    eq "$(printf '%s\n' "$POUT" | grep -c '[[:space:]]$' | tr -d ' ')" '0' \
+      "pages: no row on $pg ends in whitespace at ${pgw}c"
+  done
 done
+# Both docker bounds must stay wired: container rows are capped because `docker ps -a`
+# counts exited containers, which accumulate for as long as compose has been running here,
+# and the name column is capped because `docker compose run` mints unbounded names. Neither
+# bound comes from docker.
+grep -q 'SB_DK_ROWS="\${STATUSBOARD_DOCKER_ROWS:-18}"' "$SB"; eq "$?" '0' 'pages: the container list is capped'
+grep -q 'shown" -ge "\$SB_DK_ROWS" \] && break 2' "$SB"; eq "$?" '0' 'pages: and the cap is enforced in the emitter'
+grep -q 'more not shown' "$SB"; eq "$?" '0' 'pages: a truncated container list says so'
+grep -q 'SB_DK_NAMEW="\${STATUSBOARD_DOCKER_NAMEW:-24}"' "$SB"; eq "$?" '0' 'pages: the container name column is capped'
 # The fleet page's whole point is naming members, not counting peers.
 FOUT="$(STATUSBOARD_COLS=120 STATUSBOARD_RAMP=ascii bash "$SB" --once --page fleet 2>&1)"
 for m in $(sb_fleet_parse < "$REPO/fleet.json" | cut -d'|' -f1); do
