@@ -543,11 +543,26 @@ global + per-host). One bullet per fact under a topical heading.
   never `smartctl`. Note sysfs `model` is space-padded, so `grep -q` it rather
   than comparing with `[ = ]`.
 - **Dock B bay 1 (HGST HTS541010A9E680 / `JD100ACC2V5ZVK`, UUID
-  `6C16E54216E50DC0`) holds the only second copy of `/mnt/immich-2024`** —
-  `backup-homeserver/immich-media-2024`, 698 GB. fstab mounts it `ro,nofail` at
-  `/mnt/immich-2024-backup`, but only at boot: after a dock power-cycle it needs
-  an explicit `sudo mount /mnt/immich-2024-backup`. Leaving dock B powered off
-  silently drops the 664 GB archive to a single copy.
+  `6C16E54216E50DC0`) holds the only second copy of `/mnt/immich-2024`** — and it
+  is a **restic repo**, not a file-level copy: `immich-media-2024`, 651 GB on
+  disk, 9 snapshots of `E:\admin` from `methe-server`, newest **2026-07-02** at
+  662.946 GiB. Verified openable 2026-07-30. So the archive has ~4 weeks of
+  unbacked-up delta, and restoring it needs restic + the repo password, not a
+  copy. fstab mounts it `ro,nofail` at `/mnt/immich-2024-backup`, but only at
+  boot: after a dock power-cycle it needs an explicit
+  `sudo mount /mnt/immich-2024-backup`. Leaving dock B powered off silently drops
+  the 664 GB archive to a single copy.
+- **The restic password for that repo is already tracked** — dotfiles allow-line
+  `!/g513ie-prod-config/vps/backup/homeserver/pass.txt` (13 bytes), harvested off
+  g513ie. `~/my/vps/backup/homeserver/pass.txt` on latitude is now a **symlink**
+  at it, so the live path resticprofile reads (`RESTIC_PASSWORD_FILE: "pass.txt"`,
+  relative to the config dir) and the version-controlled copy are one byte-source.
+  Don't create a second copy — the vps repo gitignores `**/pass.txt`, and
+  `~/.gitignore` line 122 says explicitly not to track two.
+- **On a read-only restic repo, always pass `--no-lock`.** `restic snapshots`
+  against `/mnt/immich-2024-backup` (mounted `ro`) hung >15 min with no output and
+  no error, because it could not create its lock file; `--no-lock` returns in
+  seconds. Same for `cat config`.
 
 ## Repo tooling & scripts
 
