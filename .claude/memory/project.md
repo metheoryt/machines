@@ -692,6 +692,19 @@ global + per-host). One bullet per fact under a topical heading.
   past 639k load cycles) only while they are doing IO. Don't "simplify" that back
   to `-n standby`. Letters in the original note were reboot-unstable, so the board
   must re-derive APM per device at runtime, never from a hardcoded letter.
+- **The board is PAGED, and its binding constraint is rows, not CPU.** `SB_PAGES`
+  (`system fleet docker`) rotates every `STATUSBOARD_PAGE_SECS` (15); a page is a
+  `sb_page_<name>` function plus a word in that list, and `--page <name>` renders
+  one (unknown name exits 2, which is what lets the tests loop over the set). The
+  **system page is 26 lines into a 27-row pane** with today's 8 mounts and both
+  conditional rows — one spare. A 9th mount overflows, and a wrapped row makes the
+  whole repainting frame walk up the screen. Every page carries the one-line alert
+  strip because a hidden page cannot report a fault; do NOT "improve" that to
+  holding on the failing page, since a flapping box would then never show anything
+  else. Two traps the code comments name: `read -t` for keypresses must be guarded
+  on `[ -t 0 ]` (stdin closed makes it a 100%-CPU spin on the kiosk), and sampling
+  stays unconditional in the loop — sampling only the visible page would put holes
+  in every chart, or cells that lie about their duration.
 - **`psys` is not wall power.** The board's `power` row is the RAPL platform rail
   — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The five
   bus-powered USB spinners sit outside it, so real draw is well above what the row
