@@ -548,7 +548,19 @@ global + per-host). One bullet per fact under a topical heading.
   give any long write into dock B `--partial --append-verify` so a drop resumes.
 - **`nofail` in fstab applies at boot only.** After any dock power-cycle or bus
   drop, every affected mount needs an explicit `sudo mount <target>` — found
-  `/mnt/public` (sdc) silently unmounted this way 2026-07-30.
+  `/mnt/public` silently unmounted this way 2026-07-30.
+- **Every `/dev/sdX` letter on latitude reshuffles across a reboot — treat any
+  letter written down anywhere in this file as point-in-time only.** The
+  2026-07-31 00:03 reboot moved all five external drives at once:
+  `/mnt/immich-2024` sdd2→sdc2, `/mnt/immich-2024-backup` sdg2→sdb2,
+  `/mnt/immich-backup` sde2→sdd2, `/mnt/public` sdc1→sdg1, `/mnt/xs` sdf3→sda3.
+  `sdd` therefore names a *different physical drive* before and after. Five
+  bus-powered USB spinners plus a card reader race to enumerate, so ordering is
+  not stable. Identify a drive by **UUID** (mounts), **bridge serial** in
+  `/dev/disk/by-id/usb-*` (dock membership: `6702002103E1` = dock A,
+  `670200210032` = dock B; suffix `-0:0` is bay 1, `-0:1` bay 2), or drive model
+  — never a letter. Also note **USB port paths are not stable either**: dock A was
+  `usb 4-2` and dock B `usb 4-1` after this boot, having previously been on host2.
 - **A SCSI rescan force-spins-up every sleeping drive on that host, and re-adds
   bays you already detached.** So `echo 1 > /sys/block/<dev>/device/delete` is
   one-way only if you don't rescan afterwards; and reading SMART (`smartctl`)
@@ -566,10 +578,10 @@ global + per-host). One bullet per fact under a topical heading.
   newest 2026-07-02) was deliberately destroyed by that reformat — the plain copy
   replaced it so recovery needs no password and is browsable. Copy verified
   byte-exact: **711832525257 bytes / 20456 files**, identical per-year across all
-  19 dirs (1970, 2007-2024). Source stays `ntfs3,ro` on `sdd2`
-  (`EAA6CAAEA6CA7A99`). Leaving either dock powered off drops the archive to a
-  single copy. Not yet checksum-verified — `sdd` has 144 UDMA CRC errors, so an
-  `rsync -c` pass is still owed.
+  19 dirs (1970, 2007-2024). Source stays `ntfs3,ro`: the **WDC WD10 SPZX-21Z10T0
+  in dock A bay 1**, UUID `EAA6CAAEA6CA7A99`. Leaving either dock powered off drops the archive to a
+  single copy. Not yet checksum-verified — the WDC source drive has 144
+  UDMA_CRC_Error_Count, so an `rsync -c` pass is still owed.
 - **The restic password for the homeserver repos is already tracked** (it was the
   password for the now-destroyed `immich-media-2024` too) — dotfiles allow-line
   `!/g513ie-prod-config/vps/backup/homeserver/pass.txt` (13 bytes), harvested off
@@ -602,14 +614,26 @@ global + per-host). One bullet per fact under a topical heading.
   `sdf`'s bridge implements CHECK POWER MODE, and `sdf` is the one drive with no
   SMART temperature at all. The four that report a temperature all answer `CHECK
   POWER MODE not implemented, ignoring -n option`. The board gates on **APM
-  level** instead (ATA: 1-127 permit standby, 128-254 forbid it): `sdc`/`sde` at
-  128 are polled freely, `sdd` (96) and `sdg` (1, already past 639k load cycles)
-  only while they are doing IO. Don't "simplify" that back to `-n standby`.
+  level** instead (ATA: 1-127 permit standby, 128-254 forbid it): the two drives at
+  128 are polled freely, and the two low-APM ones (96, and the HGST at 1 — already
+  past 639k load cycles) only while they are doing IO. Don't "simplify" that back
+  to `-n standby`. Letters in the original note were reboot-unstable, so the board
+  must re-derive APM per device at runtime, never from a hardcoded letter.
 - **`psys` is not wall power.** The board's `power` row is the RAPL platform rail
   — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The five
   bus-powered USB spinners sit outside it, so real draw is well above what the row
   says. The row prints the domain name (`psys`, or `package-0` where psys is
   absent and the figure is ~3x smaller) precisely so it cannot be misread.
+- **Never capture `btop` to a file — it never stops writing.** Measuring btop's
+  minimum row count during statusboard-gui work left `bash -c 'btop
+  >/tmp/btop-N.log 2>&1'` orphaned on latitude: with no terminal it exits
+  nothing, redraws forever, and each frame is a full-screen ANSI dump. One such
+  process reached **1.68 GB in 30 hours** (found 2026-07-31, killed), on `/tmp`
+  which is a 12G tmpfs here — so it consumes RAM, not the root disk, and no
+  logrotate or tmpfiles rule touches it. Nothing in the repo does this; it is an
+  interactive-probing trap. To measure btop's layout use a sized pty
+  (`tmux new-session -d -x <cols> -y <rows>` then `capture-pane -p`), which ends
+  when the session does.
 - Orca IDE is `modules/home/orca-bin.nix`, wrapping the upstream Linux
   AppImage with `appimageTools.wrapType2`; `just update-orca`
   (`scripts/update-orca.sh`, wired into `just update`/`just upgrade`) bumps its
