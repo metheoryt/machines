@@ -528,6 +528,26 @@ global + per-host). One bullet per fact under a topical heading.
   latitude5520 into a private repo "someday" (stated 2026-07-07) — not urgent,
   no mechanism chosen yet (chezmoi/stow/plain git all unexplored as of this
   writing).
+- **Never send `hdparm -Y` (SLEEP) to a drive in latitude's USB-SATA docks.**
+  SLEEP can only be cleared by a bus/power reset, so the drive stops answering
+  the bridge entirely — a `/sys/class/scsi_host/hostN/scan` rescan cannot wake
+  it (`Spinning up disk... not responding`), and on these two-bay docks it
+  wedged the *sibling* bay too. Use `-y` (STANDBY, wakes on access) when you
+  want platters stopped, and accept that recovery otherwise needs the user to
+  power-cycle the dock. Verified 2026-07-30 while ejecting the returned 6 TB.
+- **A SCSI rescan force-spins-up every sleeping drive on that host, and re-adds
+  bays you already detached.** So `echo 1 > /sys/block/<dev>/device/delete` is
+  one-way only if you don't rescan afterwards; and reading SMART (`smartctl`)
+  wakes a parked drive. To assert a device's identity *without* waking it, read
+  `/sys/block/<dev>/device/{model,vendor}` plus `lsblk -dn -o SERIAL,WWN` —
+  never `smartctl`. Note sysfs `model` is space-padded, so `grep -q` it rather
+  than comparing with `[ = ]`.
+- **Dock B bay 1 (HGST HTS541010A9E680 / `JD100ACC2V5ZVK`, UUID
+  `6C16E54216E50DC0`) holds the only second copy of `/mnt/immich-2024`** —
+  `backup-homeserver/immich-media-2024`, 698 GB. fstab mounts it `ro,nofail` at
+  `/mnt/immich-2024-backup`, but only at boot: after a dock power-cycle it needs
+  an explicit `sudo mount /mnt/immich-2024-backup`. Leaving dock B powered off
+  silently drops the 664 GB archive to a single copy.
 
 ## Repo tooling & scripts
 
