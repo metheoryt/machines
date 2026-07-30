@@ -707,6 +707,42 @@ fi
 
 unset STATUSBOARD_RAMP
 
+# ── The tailnet (sb_ts_parse) ─────────────────────────────────────────────────
+# Fixtures are real `tailscale status --peers` lines, trailing padding included —
+# that padding is why the counter this replaced was wrong, so a test that trims it
+# would test the wrong text.
+TS_FIX="$(printf '%s\n' \
+  '100.64.0.7  air               fleet  macOS    -                                            ' \
+  '100.64.0.6  desktop-ubuntu26  fleet  linux    -                                            ' \
+  '100.64.0.4  desktop           fleet  windows  active; direct 192.168.8.145:41641, tx 4 rx 1' \
+  '100.64.0.1  hub               fleet  linux    -                                            ' \
+  '100.64.0.5  ipheoryt12        fleet  iOS      offline, last seen 1d ago                    ' \
+  '100.64.0.8  latitude          fleet  linux    active; relay "fra", tx 137496 rx 129592      ' \
+  '100.64.0.3  server            fleet  windows  -                                            ')"
+TS_OUT="$(printf '%s\n' "$TS_FIX" | sb_ts_parse 100.64.0.8)"
+
+# Six peers, five up: idle ("-") is ONLINE, only the iOS node is down, and self is
+# neither counted nor listed.
+eq "$(printf '%s\n' "$TS_OUT" | head -1)" 'up|100.64.0.8|5|6' 'tailnet: summary is self, online, total'
+eq "$(printf '%s\n' "$TS_OUT" | grep -c '^100\.')" '6' 'tailnet: one line per peer'
+hasnt "$TS_OUT" '|latitude|' 'tailnet: self is not one of its own peers'
+# The three connection shapes, and the OS column carried through for the fleet page.
+has "$TS_OUT" '100.64.0.4|desktop|windows|direct|' 'tailnet: an active direct session'
+has "$TS_OUT" '100.64.0.1|hub|linux|idle|' 'tailnet: "-" is idle, not offline'
+has "$TS_OUT" '100.64.0.5|ipheoryt12|iOS|offline|1d' 'tailnet: offline carries its last-seen age'
+# A relayed peer is up, and DERP-vs-direct is a distinction the board should keep:
+# the fleet still works over a relay, it just works worse.
+TS_RELAY="$(printf '%s\n' '100.64.0.9  air  fleet  macOS  active; relay "fra", tx 1 rx 2' | sb_ts_parse 100.64.0.8)"
+has "$TS_RELAY" '|air|macOS|relay|' 'tailnet: a relayed peer is up, and says so'
+eq "$(printf '%s\n' "$TS_RELAY" | head -1)" 'up|100.64.0.8|1|1' 'tailnet: a relayed peer counts as online'
+# Degradations. None of these may produce a summary the caller cannot read: the row
+# renders from field 3 and 4 under `set -u`, so "no output" must still be "0 of 0".
+eq "$(printf '' | sb_ts_parse 100.64.0.8)" 'up|100.64.0.8|0|0' 'tailnet: no input is 0 of 0, not empty'
+eq "$(printf '%s\n' '100.64.0.5  ipheoryt12  fleet  iOS  offline' | sb_ts_parse 100.64.0.8 | head -1)" \
+  'up|100.64.0.8|0|1' 'tailnet: offline with no last-seen still parses'
+eq "$(printf '%s\n' '# Health check:' '#   - some warning' '100.64.0.1  hub  fleet  linux  -' \
+  | sb_ts_parse 100.64.0.8 | head -1)" 'up|100.64.0.8|1|1' 'tailnet: health-check preamble is not a peer'
+
 # ── The script itself ─────────────────────────────────────────────────────────
 bash -n "$REPO/provision/statusboard/statusboard.sh"; eq "$?" '0' 'script: syntax is valid'
 # The unit text is only materialised under --install (root), so assert on the
@@ -833,6 +869,18 @@ sample_ln="$(grep -nE '^  sb_sample_fast$' "$SB" | tail -1 | cut -d: -f1)"
 frame_ln="$(grep -nE '^  frame="\$\(render_frame\)"$' "$SB" | head -1 | cut -d: -f1)"
 [ -n "$sample_ln" ] && [ -n "$frame_ln" ] && [ "$sample_ln" -lt "$frame_ln" ]
 eq "$?" '0' 'cadence: sampling happens in the main shell, before the frame subshell'
+
+# The tailnet costs ONE fork per probe. It used to cost two — one counting peers, one
+# counting the online ones — and the second bought nothing even before the per-peer
+# parse existed.
+# Comment lines stripped first — the rewrite's rationale names the command more often
+# than the code runs it, and counting prose would make this assert nothing.
+eq "$(grep -vE '^[[:space:]]*#' "$SB" | grep -c 'tailscale status')" '1' \
+  'cadence: the tailnet is one fork per probe'
+# And it is bounded. Everything else on the slow path already is (ping -W1, df on
+# live devices only); an unbounded socket call to a wedged tailscaled would freeze the
+# clock painted beside it.
+grep -q 'timeout 5 tailscale status' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
 
 # --bigfont must stay out of --install: that path has already broken the console
 # once, and a font change is an unrelated risk to fold into it.

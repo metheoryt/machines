@@ -1005,6 +1005,55 @@ sb_chart_width() {
   printf '%s' "$w"
 }
 
+# sb_ts_parse: `tailscale status` text on stdin, this node's own tailnet IP as $1 —
+# out comes the summary line and then one line per peer. It lives up here, above the
+# LIB_ONLY gate and away from sb_tailnet which calls it, for the reason every other
+# parser in this section does: the fork is what needs a tailnet, the parse does not,
+# and the parse is the half that can be wrong.
+#
+# Line 1 is the summary: "up|<self-ip>|<online>|<total>". Lines 2..N are one peer
+# each: "ip|node|os|state|last_seen". Summary FIRST so the caller still reads it with
+# a plain `read -r` and the peer lines are whatever follows.
+#
+# The second column is the NODE name — `latitude`, `desktop`, `server` — which is
+# exactly what fleet.json is keyed by. `--json` looks like the more honest source and
+# is the worse one: its HostName is the OS hostname (g614jv, g513ie), which joins to
+# nothing, and it would want jq on a board whose every other parser is awk.
+#
+# `state` is direct / relay / idle / offline, and **idle counts as ONLINE**.
+# `tailscale status` prints "-" for a node it currently holds no session with, which
+# is the normal resting state of a quiet fleet; the counter this replaces read that as
+# down. It only ever agreed with reality because the line is space-padded, so its
+# ` -$` anchor never actually matched.
+#
+# Self is excluded from both counts. It was included before, which is why the row
+# could say 6/7 while all six peers were up.
+sb_ts_parse() {
+  awk -v self="${1:-}" '
+    $1 !~ /^100\./ { next }
+    $1 == self { next }
+    {
+      age = ""
+      if ($5 ~ /^offline/) {
+        state = "offline"
+        if (index($0, "last seen")) {
+          age = $0
+          sub(/^.*last seen /, "", age)
+          sub(/ ago[[:space:]]*$/, "", age)
+        }
+      } else if ($5 == "active;") {
+        state = ($6 == "direct" ? "direct" : "relay")
+      } else {
+        state = "idle"
+      }
+      n++
+      if (state != "offline") up++
+      rows = rows sprintf("%s|%s|%s|%s|%s\n", $1, $2, $4, state, age)
+    }
+    END { printf "up|%s|%d|%d\n%s", self, up + 0, n + 0, rows }
+  '
+}
+
 [ "${STATUSBOARD_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
 # ── Install / uninstall ───────────────────────────────────────────────────────
@@ -1321,14 +1370,19 @@ sb_reach() {
 }
 
 sb_tailnet() {
-  local ip peers total
-  command -v tailscale >/dev/null 2>&1 || { printf 'n/a|||'; return; }
+  local ip
+  command -v tailscale >/dev/null 2>&1 || { printf 'n/a|||\n'; return; }
   ip="$(tailscale ip -4 2>/dev/null | head -1)"
-  [ -n "$ip" ] || { printf 'down|||'; return; }
-  # `tailscale status` without --json: one line per peer, no jq dependency.
-  total="$(tailscale status --peers 2>/dev/null | grep -cE '^100\.')"
-  peers="$(tailscale status --peers 2>/dev/null | grep -E '^100\.' | grep -cvE ' offline| -$')"
-  printf 'up|%s|%s|%s' "$ip" "${peers:-0}" "${total:-0}"
+  [ -n "$ip" ] || { printf 'down|||\n'; return; }
+  # ONE fork for the whole tailnet. This ran `tailscale status` TWICE — once counting
+  # peers, once counting the online ones — and one parse yields both counts plus every
+  # per-peer field, so the second fork was buying nothing even before the fleet page
+  # needed the details.
+  #
+  # timeout because this sits on the paint loop's slow path: the command talks to
+  # tailscaled over a socket, and a wedged daemon would otherwise freeze the clock
+  # next to the numbers.
+  timeout 5 tailscale status --peers 2>/dev/null | sb_ts_parse "$ip"
 }
 
 # sb_mounts: one line per real filesystem — "dev|mount|used_kb|total_kb|pct".
@@ -1434,6 +1488,12 @@ SB_UP=""; SB_LOAD=""; SB_FAILED=""
 SB_LAN_ST=""; SB_LAN_DEV=""; SB_LAN_IP=""; SB_LAN_GW=""
 SB_GW_ST=""; SB_GW_RTT=""; SB_NET_ST=""; SB_NET_RTT=""
 SB_TS_ST=""; SB_TS_IP=""; SB_TS_PEERS=""; SB_TS_TOTAL=""
+# One "ip|node|os|state|last_seen" line per tailnet peer, from the same single fork
+# that produced the counts above. Sampled but not yet rendered — the fleet page is
+# what reads it, and the parse landed first so the format could be checked against a
+# real tailnet before anything depended on it.
+# shellcheck disable=SC2034
+SB_TS_PEERLIST=""
 SB_NCPU="$(nproc 2>/dev/null || printf 1)"
 
 # Fixed chart ceilings. 65W is this box's brick, so the 15W port that browned it
@@ -1471,7 +1531,7 @@ sb_sample_fast() {
 # and `systemctl --failed`. Runs at the PROBE cadence and also drives the charts,
 # so one probe is one chart cell.
 sb_sample_slow() {
-  local w
+  local w ts_out
   local IFS='|'
   read -r SB_LAN_ST SB_LAN_DEV SB_LAN_IP SB_LAN_GW <<< "$(sb_lan)"
   SB_GW_ST=""; SB_GW_RTT=""
@@ -1479,8 +1539,16 @@ sb_sample_slow() {
     read -r SB_GW_ST SB_GW_RTT <<< "$(sb_reach "$SB_LAN_GW")"
   fi
   read -r SB_NET_ST SB_NET_RTT <<< "$(sb_reach 1.1.1.1)"
-  read -r SB_TS_ST SB_TS_IP SB_TS_PEERS SB_TS_TOTAL <<< "$(sb_tailnet)"
+  # Multi-line now: summary first, then the peers. `read -r` takes the summary and the
+  # rest is split off with parameter expansion rather than `tail -n +2`, because the
+  # point of the rewrite was to stop forking here.
+  ts_out="$(sb_tailnet)"
+  read -r SB_TS_ST SB_TS_IP SB_TS_PEERS SB_TS_TOTAL <<< "$ts_out"
   unset IFS
+  case "$ts_out" in
+    *$'\n'*) SB_TS_PEERLIST="${ts_out#*$'\n'}" ;;
+    *) SB_TS_PEERLIST="" ;;
+  esac
 
   SB_MOUNTS="$(sb_mounts)"
   SB_UNMOUNTED="$(sb_unmounted)"
