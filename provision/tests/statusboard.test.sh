@@ -745,6 +745,31 @@ eq "$(printf '%s\n' '100.64.0.5  ipheoryt12  fleet  iOS  offline' | sb_ts_parse 
 eq "$(printf '%s\n' '# Health check:' '#   - some warning' '100.64.0.1  hub  fleet  linux  -' \
   | sb_ts_parse 100.64.0.8 | head -1)" 'up|100.64.0.8|1|1' 'tailnet: health-check preamble is not a peer'
 
+# ── Containers (sb_mib / sb_dk_short) ─────────────────────────────────────────
+# MiB, because GiB rounds every container on this box to 0 or 1.
+eq "$(sb_mib 967135232)" '922M'  'mib: a container under a gibibyte reads in MiB'
+eq "$(sb_mib 1073741824)" '1.0G' 'mib: a gibibyte switches unit'
+eq "$(sb_mib 3221225472)" '3.0G' 'mib: and keeps one decimal above it'
+eq "$(sb_mib 0)" '0M'            'mib: zero is a reading, not an absence'
+# A stopped container has no cgroup, so the file is missing rather than zero.
+eq "$(sb_mib '')" 'n/a'          'mib: no cgroup is n/a, not 0'
+eq "$(sb_mib junk)" 'n/a'        'mib: non-numeric is n/a'
+
+# docker's status prose is up to 26 characters of which four carry information, and the
+# frame's binding constraint is width.
+eq "$(sb_dk_short 'Up 20 minutes (healthy)')" 'up 20m healthy' 'dk: minutes and a health note'
+eq "$(sb_dk_short 'Up About an hour (healthy)')" 'up 1h healthy' 'dk: "About an hour" is 1h'
+eq "$(sb_dk_short 'Up 2 hours')" 'up 2h' 'dk: no health check, no note'
+eq "$(sb_dk_short 'Up 3 weeks')" 'up 3w' 'dk: weeks'
+eq "$(sb_dk_short 'Exited (0) 5 minutes ago')" 'exited (0) 5m' 'dk: the exit code is kept, the "ago" is not'
+eq "$(sb_dk_short 'Restarting (1) 3 seconds ago')" 'restarting (1) 3s' 'dk: a restart loop keeps its code'
+eq "$(sb_dk_short 'Created')" 'created' 'dk: a created container has no age yet'
+# UPPERCASE deliberately: a container that is up and failing its own health check is the
+# most useful thing the page can say, and it is invisible in any running/total count.
+eq "$(sb_dk_short 'Up 5 minutes (unhealthy)')" 'up 5m UNHEALTHY' 'dk: unhealthy is shouted'
+eq "$(sb_dk_short 'Up 5 seconds (health: starting)')" 'up 5s starting' 'dk: a health check still warming up'
+eq "$(sb_dk_short '')" '' 'dk: no status is not an error'
+
 # ── The fleet (sb_fleet_parse / sb_fleet_join) ────────────────────────────────
 # The real manifest, not a fixture: this parse is anchored on fleet.json's INDENT, so
 # the thing worth asserting is that it still matches the file the repo actually ships.
@@ -913,7 +938,14 @@ bat_len="$(printf '%s\n' "$OUT" | awk '/^battery /{ print length($0); exit }')"
   || fail "layout: lan should be uncharted (lan=$lan_len charted=$bat_len)"
 # The legend is a per-row COLUMN at the right edge, not a footer: one chart column
 # carrying six metrics has to say which is which where the eye already is.
-has "$OUT" ' peers' 'layout: the tailnet chart is labelled'
+# The tailnet row counts the FLEET where there is a manifest to define one, and raw
+# tailnet peers only where there is not — so the chart's label names which. Counting
+# peers meant a sleeping phone sat the row permanently amber, and a warning colour that
+# is always on says nothing.
+has "$OUT" ' fleet' 'layout: the tailnet chart is labelled for the fleet it counts'
+NOFLEET_OUT="$(STATUSBOARD_FLEET_JSON=/nonexistent/fleet.json STATUSBOARD_COLS=120 \
+  STATUSBOARD_RAMP=ascii bash "$REPO/provision/statusboard/statusboard.sh" --once 2>&1)"
+has "$NOFLEET_OUT" ' peers' 'layout: with no manifest it falls back to counting peers'
 has "$OUT" ' MB/s'  'layout: the disk charts are labelled'
 has "$OUT" ' load'  'layout: the load chart is labelled'
 has "$OUT" ' ms'    'layout: the latency charts are labelled'
@@ -965,8 +997,8 @@ eq "$(grep -vE '^[[:space:]]*#' "$SB" | grep -c 'tailscale status')" '1' \
 # And it is bounded. Everything else on the slow path already is (ping -W1, df on
 # live devices only); an unbounded socket call to a wedged tailscaled would freeze the
 # clock painted beside it.
-grep -q 'SB_TIMEOUT="timeout 5"' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
-grep -q '\$SB_TIMEOUT tailscale status' "$SB"; eq "$?" '0' 'cadence: the bound is applied to the fork that needs it'
+grep -q 'sb_bounded 5 tailscale status' "$SB"; eq "$?" '0' 'cadence: the tailnet fork cannot hang the paint loop'
+grep -q 'sb_bounded 2 docker ps' "$SB"; eq "$?" '0' 'cadence: nor can the docker fork'
 # …and resolved, not assumed: a box with no coreutils `timeout` must still read its
 # tailnet rather than report it permanently down (which is what macOS did).
 grep -q 'command -v timeout' "$SB"; eq "$?" '0' 'cadence: a box without timeout still reads its tailnet'
@@ -985,7 +1017,10 @@ for pg in $PAGES; do
   eq "$(printf '%s\n' "$POUT" | awk '{ if (length($0) > 120) c++ } END { printf "%d", c+0 }')" '0' \
     "pages: no row on $pg is wider than the terminal"
   # And every page carries the strip, because that is the whole reason rotating is safe.
-  eq "$(printf '%s\n' "$POUT" | grep -cE '^(alerts|'"$(printf '%s' "$PAGES" | tr ' ' '|')"') ' | tr -d ' ')" '1' \
+  # The strip's left field is the whole tab list, which is why this matches the pages
+  # joined by spaces rather than any single page name — the docker page has a `docker`
+  # ROW of its own, and matching one name at a time counted that as a second strip.
+  eq "$(printf '%s\n' "$POUT" | grep -cE "^(alerts|$PAGES) " | tr -d ' ')" '1' \
     "pages: $pg carries exactly one alert strip"
   # Trailing whitespace on any page, for the same reason as on the first one: it is
   # invisible until something diffs the frame or a terminal reflows it.

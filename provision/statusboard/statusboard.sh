@@ -1070,6 +1070,45 @@ sb_ts_parse() {
   '
 }
 
+# ── Docker ────────────────────────────────────────────────────────────────────
+# sb_mib <bytes>: a container's memory, in the unit a container is actually sized in.
+# GiB would round every one of them to 0 or 1; MiB up to a gibibyte and then one
+# decimal of GiB keeps the whole range readable in four characters.
+sb_mib() {
+  local b="${1:-}"
+  case "$b" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
+  awk -v b="$b" 'BEGIN {
+    if (b >= 1073741824) printf "%.1fG", b / 1073741824
+    else printf "%dM", b / 1048576
+  }'
+}
+
+# sb_dk_short <status>: docker's own status prose, compressed to fit a row.
+#
+# "Up About an hour (healthy)" is 26 characters of which four carry information, and
+# the frame's binding constraint is width. Shortened at SAMPLE time, once per probe per
+# container, rather than per paint.
+#
+# The health note is kept: a container that is up and failing its own health check is
+# the single most useful thing this page can tell you, and it is invisible in any
+# up/total count.
+sb_dk_short() {
+  printf '%s' "${1:-}" | awk '{
+    s = $0
+    sub(/^Up /, "up ", s); sub(/^Exited /, "exited ", s)
+    sub(/^Restarting /, "restarting ", s); sub(/^Created/, "created", s)
+    sub(/^Paused/, "paused", s); sub(/^Dead/, "dead", s)
+    gsub(/About an hour/, "1h", s); gsub(/About a minute/, "1m", s)
+    gsub(/ seconds?/, "s", s); gsub(/ minutes?/, "m", s); gsub(/ hours?/, "h", s)
+    gsub(/ days?/, "d", s); gsub(/ weeks?/, "w", s); gsub(/ months?/, "mo", s)
+    gsub(/ years?/, "y", s)
+    sub(/ ago$/, "", s)
+    gsub(/\(healthy\)/, "healthy", s); gsub(/\(unhealthy\)/, "UNHEALTHY", s)
+    gsub(/\(health: starting\)/, "starting", s)
+    print s
+  }'
+}
+
 # ── The fleet ─────────────────────────────────────────────────────────────────
 # sb_fleet_parse: fleet.json on stdin -> "name|ip|platform|hostname", one machine per
 # line, in manifest order.
@@ -1517,8 +1556,23 @@ sb_reach() {
   printf 'down|'
 }
 
-SB_TIMEOUT=""
-command -v timeout >/dev/null 2>&1 && SB_TIMEOUT="timeout 5"
+# sb_bounded <seconds> <command…>: run a slow-path fork with a ceiling on it.
+#
+# Everything else on that path is bounded by the tool itself (ping -W1, df over live
+# devices only). These are not: `tailscale status` and `docker ps` both talk to a
+# daemon over a unix socket, and a wedged daemon blocks forever — which would freeze
+# the clock painted right next to the numbers.
+#
+# Resolved, not assumed: a box with no coreutils `timeout` runs the command unbounded
+# rather than reporting the reading permanently missing (which is what macOS did while
+# the tailnet parse was being written).
+SB_TIMEOUT_BIN=""
+command -v timeout >/dev/null 2>&1 && SB_TIMEOUT_BIN=timeout
+sb_bounded() {
+  local secs="${1:-5}"
+  shift
+  if [ -n "$SB_TIMEOUT_BIN" ]; then "$SB_TIMEOUT_BIN" "$secs" "$@"; else "$@"; fi
+}
 
 sb_tailnet() {
   local ip
@@ -1533,11 +1587,7 @@ sb_tailnet() {
   # timeout because this sits on the paint loop's slow path: the command talks to
   # tailscaled over a socket, and a wedged daemon would otherwise freeze the clock
   # next to the numbers.
-  # …where `timeout` exists. Every other bound on this path (ping -W1, df on live
-  # devices only) is built into the tool being called; this one is not, and a box
-  # without coreutils' timeout must still read its tailnet rather than report it down.
-  # shellcheck disable=SC2086  # deliberately unquoted: empty means "no wrapper"
-  $SB_TIMEOUT tailscale status --peers 2>/dev/null | sb_ts_parse "$ip"
+  sb_bounded 5 tailscale status --peers 2>/dev/null | sb_ts_parse "$ip"
 }
 
 # sb_mounts: one line per real filesystem — "dev|mount|used_kb|total_kb|pct".
@@ -1554,6 +1604,24 @@ sb_tailnet() {
 # The test is whether the backing device node still exists. That is the cheapest
 # question with an unambiguous answer — stat()ing the mount point itself would block
 # on a dead NFS mount, and reading it would spin up a sleeping disk on every probe.
+# sb_docker: the local containers, one line each — "name|state|status|full-id".
+#
+# `docker ps -a`, not `docker ps`: without -a a crashed container leaves BOTH the
+# numerator and the denominator, so four of four read "up" while one was dead. -a still
+# cannot see a service that was `compose down`'d — nothing that does not exist can be
+# counted missing, and reconstructing the expected set from compose files is a different
+# feature with a different failure mode.
+#
+# --no-trunc because the cgroup path is keyed by the FULL container id, and that is
+# where the per-container CPU and memory come from.
+#
+# Two seconds, not five: this is asked every probe, and dockerd is likelier to be
+# mid-restart than tailscaled. No sudo — the board's user is in the docker group.
+sb_docker() {
+  sb_bounded 2 docker ps -a --no-trunc \
+    --format '{{.Names}}|{{.State}}|{{.Status}}|{{.ID}}' 2>/dev/null
+}
+
 sb_mounts() {
   local dev mnt used total pct state
   df -P -k 2>/dev/null | awk 'NR > 1 && $1 ~ /^\/dev\// && $1 !~ /^\/dev\/(loop|ram)/ {
@@ -1650,7 +1718,16 @@ SB_FLEET_JSON="${STATUSBOARD_FLEET_JSON:-$SB_REPO/fleet.json}"
 SB_FLEET=""
 [ -r "$SB_FLEET_JSON" ] && SB_FLEET="$(sb_fleet_parse < "$SB_FLEET_JSON")"
 SB_FLEET_ROWS=""
+SB_FLEET_UP=0; SB_FLEET_TOTAL=0; SB_FLEET_OTHERS=0
 SER_PEERS=""   # "member=csv" per line — one binary online series per fleet member
+
+# Containers. SB_DK_ST is n/a (no docker on this box) / down (daemon unreachable) / up.
+SB_DOCKER=""; SB_DK_ST="n/a"; SB_DK_UP=0; SB_DK_TOTAL=0
+# CPU% is a DELTA of a cumulative counter, so — like the disk throughput and the RAPL
+# energy — the previous reading and the moment it was taken must outlive the frame.
+SB_DK_PREV=""; SB_DK_T=0
+SER_DK=""      # "container=csv" per line — CPU% of one core
+SER_DKUP=""    # how many containers were running
 
 SB_TS_ST=""; SB_TS_IP=""; SB_TS_PEERS=""; SB_TS_TOTAL=""
 # One "ip|node|os|state|last_seen" line per tailnet peer, from the same single fork
@@ -1671,6 +1748,10 @@ SB_MAX_NET=2000  # tenths of a ms: 200ms
 # them, which are the disks worth watching; the NVMe will clip during a big copy and
 # that is the honest reading of "this disk was as busy as this board can show".
 SB_MAX_IO="${STATUSBOARD_IO_MAX:-100}"
+# One core. A container busier than a core clips, which is the honest reading of "this
+# container was as busy as this board can show"; scaling to all cores instead would draw
+# every service on this box as a flat line one cell high.
+SB_MAX_DKCPU=100
 
 # sb_sample_fast: everything that is a file read. Runs on EVERY paint, so the
 # numbers on screen are never staler than the clock beside them.
@@ -1718,15 +1799,20 @@ sb_sample_slow() {
 
   # The fleet, joined to the tailnet once per PROBE and not per paint: the manifest is
   # fixed for the run and the peer list changed exactly when the fork above ran.
-  local f_name f_state ts_up=0
+  local f_name f_f2 f_state ts_up=0
   [ "${SB_TS_ST:-}" = up ] && ts_up=1
   SB_FLEET_ROWS="$(sb_fleet_join "$SB_FLEET" "$SB_TS_PEERLIST" "${SB_TS_IP:-}" "$ts_up")"
   # One binary series per member, so a box that flaps reads differently from a box that
   # has been down all hour. A probe that learned nothing about the peers — the local
   # tailnet unreadable — pushes a GAP, not a down mark: the chart must not blame five
   # remote machines for one local fault.
-  while IFS='|' read -r f_name _ _ f_state _; do
-    case "$f_name" in '' | _others) continue ;; esac
+  SB_FLEET_UP=0; SB_FLEET_TOTAL=0; SB_FLEET_OTHERS=0
+  while IFS='|' read -r f_name f_f2 _ f_state _; do
+    # The trailing line carries the non-fleet counts, not a member — see sb_fleet_join.
+    if [ "$f_name" = _others ]; then SB_FLEET_OTHERS="${f_f2:-0}"; continue; fi
+    [ -n "$f_name" ] || continue
+    SB_FLEET_TOTAL=$((SB_FLEET_TOTAL + 1))
+    case "$f_state" in self | direct | relay | idle) SB_FLEET_UP=$((SB_FLEET_UP + 1)) ;; esac
     if [ "$ts_up" = 0 ]; then
       SER_PEERS="$(sb_series_set "$SER_PEERS" "$f_name" \
         "$(sb_push "$(sb_series_get "$SER_PEERS" "$f_name")" '')")"
@@ -1741,6 +1827,52 @@ sb_sample_slow() {
           "$(sb_push "$(sb_series_get "$SER_PEERS" "$f_name")" x)")" ;;
     esac
   done <<< "$SB_FLEET_ROWS"
+
+  # Containers. The LIST is one bounded fork; the per-container numbers are plain file
+  # reads off cgroup v2, which is why `docker stats` is not here — that is a second
+  # daemon round-trip, streaming, for figures already sitting in /sys.
+  local dk_out dk_rc dk_name dk_state dk_status dk_id dk_scope dk_mem dk_usec dk_prev
+  local dk_pct dk_el
+  SB_DOCKER=""; SB_DK_UP=0; SB_DK_TOTAL=0
+  if ! command -v docker >/dev/null 2>&1; then
+    SB_DK_ST=n/a
+  else
+    dk_out="$(sb_docker)"; dk_rc=$?
+    # A dead daemon and an empty machine both print nothing, so the EXIT CODE is what
+    # separates them. Without it "docker is down" would render as "0 containers", which
+    # is what a box with nothing deployed looks like.
+    if [ "$dk_rc" = 0 ]; then SB_DK_ST=up; else SB_DK_ST=down; fi
+    dk_el=$((SECONDS - SB_DK_T)); [ "$dk_el" -gt 0 ] || dk_el=1
+    if [ "$SB_DK_ST" = up ]; then
+      while IFS='|' read -r dk_name dk_state dk_status dk_id; do
+        [ -n "$dk_name" ] || continue
+        SB_DK_TOTAL=$((SB_DK_TOTAL + 1))
+        [ "$dk_state" = running ] && SB_DK_UP=$((SB_DK_UP + 1))
+        dk_scope="/sys/fs/cgroup/system.slice/docker-$dk_id.scope"
+        dk_mem="$(_read "$dk_scope/memory.current")"
+        dk_usec="$(awk '/^usage_usec/ { print $2; exit }' "$dk_scope/cpu.stat" 2>/dev/null)"
+        dk_pct=""
+        dk_prev="$(sb_series_get "$SB_DK_PREV" "$dk_name")"
+        # Percent of ONE core, so a container pinning a core reads 100 whatever the box
+        # has. usage_usec over an interval in seconds: delta / (elapsed x 10^4).
+        if [ -n "$dk_usec" ] && [ -n "$dk_prev" ]; then
+          dk_pct="$(awk -v a="$dk_prev" -v b="$dk_usec" -v el="$dk_el" \
+            'BEGIN { d = b - a; if (d < 0) d = 0; printf "%d", d / (el * 10000) }')"
+        fi
+        [ -n "$dk_usec" ] && SB_DK_PREV="$(sb_series_set "$SB_DK_PREV" "$dk_name" "$dk_usec")"
+        SER_DK="$(sb_series_set "$SER_DK" "$dk_name" \
+          "$(sb_push "$(sb_series_get "$SER_DK" "$dk_name")" "$dk_pct")")"
+        SB_DOCKER="$SB_DOCKER$dk_name|$dk_state|$(sb_dk_short "$dk_status")|$dk_mem|$dk_pct
+"
+      done <<< "$dk_out"
+    fi
+    SB_DK_T=$SECONDS
+  fi
+  case "$SB_DK_ST" in
+    up) SER_DKUP="$(sb_push "$SER_DKUP" "$SB_DK_UP")" ;;
+    down) SER_DKUP="$(sb_push "$SER_DKUP" x)" ;;
+    *) SER_DKUP="$(sb_push "$SER_DKUP" '')" ;;
+  esac
 
   SB_MOUNTS="$(sb_mounts)"
   SB_UNMOUNTED="$(sb_unmounted)"
@@ -1766,8 +1898,13 @@ sb_sample_slow() {
   else
     SER_NET="$(sb_push "$SER_NET" x)"
   fi
+  # Charted against the FLEET, not the tailnet, wherever a manifest exists: a sleeping
+  # phone is a tailnet peer going offline and it is not news, so counting it left the
+  # row permanently amber — which is how a warning colour stops meaning anything.
   case "${SB_TS_ST:-}" in
-    up) SER_TS="$(sb_push "$SER_TS" "$SB_TS_PEERS")" ;;
+    up)
+      if [ -n "$SB_FLEET" ]; then SER_TS="$(sb_push "$SER_TS" "$SB_FLEET_UP")"
+      else SER_TS="$(sb_push "$SER_TS" "$SB_TS_PEERS")"; fi ;;
     down) SER_TS="$(sb_push "$SER_TS" x)" ;;
     *) SER_TS="$(sb_push "$SER_TS" '')" ;;
   esac
@@ -1949,7 +2086,7 @@ sb_row() {
 # with the mount list and the conditional rows able to eat the rest. Rotating costs
 # nothing an unattended board misses — the alert strip is on every page precisely so
 # a hidden page cannot hide a failure.
-SB_PAGES=(system fleet)
+SB_PAGES=(system fleet docker)
 # Seconds each page holds before the board rotates. Long enough to read a full frame,
 # short enough that a glance from across the room catches every page inside a minute.
 SB_PAGE_SECS="${STATUSBOARD_PAGE_SECS:-15}"
@@ -2032,6 +2169,73 @@ sb_alerts() {
       ;;
   esac
   [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
+  # Containers, named for the same reason fleet members are: this box's services ARE its
+  # containers, so "immich_server exited" is the alert, not "1 of 5 not running".
+  if [ "${SB_DK_ST:-}" = down ]; then
+    printf 'bad:docker unreachable\n'
+  elif [ "${SB_DK_ST:-}" = up ]; then
+    local d_name d_state d_status
+    while IFS='|' read -r d_name d_state d_status _ _; do
+      [ -n "$d_name" ] || continue
+      case "$d_status" in *UNHEALTHY*) printf 'bad:%s unhealthy\n' "$d_name"; continue ;; esac
+      case "$d_state" in
+        running) ;;
+        exited | dead) printf 'bad:%s %s\n' "$d_name" "$d_state" ;;
+        *) printf 'warn:%s %s\n' "$d_name" "$d_state" ;;
+      esac
+    done <<< "$SB_DOCKER"
+  fi
+  return 0
+}
+
+# sb_page_docker: the container stacks, one row each. This box runs its services as
+# compose stacks, so "is the box up" and "are the services up" are different questions
+# and the second one needs the rows.
+#
+# Local docker only. Reaching the Windows members' Docker Desktop needs the metrics bus;
+# this page needs nothing that is not already on this machine, which is why it lands
+# before the bus rather than behind it.
+sb_page_docker() {
+  local name state status mem pct glyph col up_col namew=4 statw=6
+  case "$SB_DK_ST" in
+    n/a)
+      sb_row "$(printf '%sno docker on this box%s' "$C_DIM" "$C_RST")"
+      return 0 ;;
+    down)
+      sb_row "$(printf 'docker   %s  %sdaemon unreachable%s' "$(sb_status_glyph down)" \
+        "$C_BAD" "$C_RST")" "$SER_DKUP" 1 hi-good ctr
+      return 0 ;;
+  esac
+  up_col="$C_DIM"
+  [ "$SB_DK_UP" -lt "$SB_DK_TOTAL" ] && up_col="$C_WARN"
+  sb_row "$(printf 'docker   %s  %s%s/%s running%s' "$(sb_status_glyph up)" \
+    "$up_col" "$SB_DK_UP" "$SB_DK_TOTAL" "$C_RST")" \
+    "$SER_DKUP" "${SB_DK_TOTAL:-1}" hi-good ctr
+  [ "$SB_DK_TOTAL" -gt 0 ] || return 0
+  sb_row ""
+  # Two passes for the columns, as on every other page with a variable-width name.
+  while IFS='|' read -r name _ status _ _; do
+    [ -n "$name" ] || continue
+    [ "${#name}" -gt "$namew" ] && namew="${#name}"
+    [ "${#status}" -gt "$statw" ] && statw="${#status}"
+  done <<< "$SB_DOCKER"
+  while IFS='|' read -r name state status mem pct; do
+    [ -n "$name" ] || continue
+    case "$state" in
+      running) glyph=ok;   col="$C_DIM" ;;
+      restarting | paused | created) glyph=warn; col="$C_WARN" ;;
+      *) glyph=down; col="$C_BAD" ;;
+    esac
+    # A container that is up and failing its own health check is the most useful thing
+    # this page can say, and it is invisible in any running/total count — so the status
+    # column overrides the state's colour when docker reports it unhealthy.
+    case "$status" in *UNHEALTHY*) col="$C_BAD" ;; esac
+    sb_row "$(printf '%-*s %s  %s%-*s%s %s%5s %3s%%%s' \
+      "$namew" "$name" "$(sb_status_glyph "$glyph")" \
+      "$col" "$statw" "$status" "$C_RST" \
+      "$C_DIM" "$(sb_mib "$mem")" "${pct:-0}" "$C_RST")" \
+      "$(sb_series_get "$SER_DK" "$name")" "$SB_MAX_DKCPU" flat '%cpu'
+  done <<< "$SB_DOCKER"
   return 0
 }
 
@@ -2122,11 +2326,24 @@ sb_page_system() {
     # up" and a dip means peers dropped — not just "some number of peers".
     # A missing peer is the bad number here, so the count carries the colour: amber
     # while any peer is down, dim only when the whole fleet is up.
-    local ts_col="$C_DIM"
-    [ "${SB_TS_PEERS:-0}" -lt "${SB_TS_TOTAL:-0}" ] 2>/dev/null && ts_col="$C_WARN"
-    sb_row "$(printf 'tailnet  %s  %s%s  %s%s/%s peers online%s' "$(sb_status_glyph up)" \
-      "$C_DIM" "$SB_TS_IP" "$ts_col" "$SB_TS_PEERS" "$SB_TS_TOTAL" "$C_RST")" \
-      "$SER_TS" "${SB_TS_TOTAL:-1}" hi-good peers
+    # Counted over the FLEET where there is a manifest, and over raw tailnet peers only
+    # where there is not. The tailnet also carries a phone and a scratch WSL distro, and
+    # counting those meant the row sat amber whenever a phone was asleep — a warning
+    # colour that is always on is a warning colour that says nothing. The strangers are
+    # still shown, dim, because they are not nothing either.
+    local ts_col="$C_DIM" ts_up ts_tot ts_what="peers" ts_extra=""
+    if [ -n "$SB_FLEET" ]; then
+      ts_up="$SB_FLEET_UP"; ts_tot="$SB_FLEET_TOTAL"; ts_what="fleet"
+      [ "${SB_FLEET_OTHERS:-0}" -gt 0 ] 2>/dev/null &&
+        ts_extra="$(printf '  %s+%s other%s%s' "$C_DIM" "$SB_FLEET_OTHERS" \
+          "$([ "$SB_FLEET_OTHERS" = 1 ] || printf s)" "$C_RST")"
+    else
+      ts_up="$SB_TS_PEERS"; ts_tot="$SB_TS_TOTAL"
+    fi
+    [ "${ts_up:-0}" -lt "${ts_tot:-0}" ] 2>/dev/null && ts_col="$C_WARN"
+    sb_row "$(printf 'tailnet  %s  %s%s  %s%s/%s %s online%s%s' "$(sb_status_glyph up)" \
+      "$C_DIM" "$SB_TS_IP" "$ts_col" "$ts_up" "$ts_tot" "$ts_what" "$C_RST" "$ts_extra")" \
+      "$SER_TS" "${ts_tot:-1}" hi-good "$ts_what"
   else
     sb_row "$(printf 'tailnet  %s' "$(sb_status_glyph "$SB_TS_ST")")" "$SER_TS" 1 hi-good peers
   fi
