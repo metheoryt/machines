@@ -59,11 +59,13 @@ which a human approves before anything is written.
   helper `../lib/fleet-dispatch.sh` (`fd_run`/`fd_probe`), so a `platform:
   windows` member (whose ssh lands in PowerShell) runs against the
   **Windows-native** clone via Git Bash instead of landing in the WSL
-  default-distro bash. Self-declared WSL distros are **separate** fleet hosts,
-  not reached through their Windows parent's dispatch: for each Windows member,
-  `fd_wsl_hosts` enumerates its distros (`wsl -l -q`), reads each distro's
-  `~/machines/fleet.local.json`, and harvests any `fleet:true` distro directly
-  at `<nickname>.gg.ez` as a plain linux host (same seed/distill/pull path). Raw
+  default-distro bash. Self-declared WSL distros are **separate** fleet hosts:
+  for each Windows member, `fd_wsl_hosts` enumerates its distros (`wsl -l -q`)
+  and reads each distro's `~/machines/fleet.local.json`. A `fleet:true` distro
+  with `dispatch:direct` (at most one per Windows host) is harvested directly
+  at `<nickname>.gg.ez` as a plain linux host; every other `fleet:true` distro
+  is `dispatch:parent` and IS reached through its Windows parent's dispatch,
+  as `wsl.exe -d <distro>` (same seed/distill/pull path either way). Raw
   transcripts never leave their machine. No fleet aliases configured → silently
   local-only.
 - `distill.py` reads only lines beyond each session's watermark

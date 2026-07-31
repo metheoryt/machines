@@ -429,20 +429,26 @@ Chain (each step already documented above; idempotent, safe to re-run):
    `provision/fleet-authorized-keys` into `~/.ssh/authorized_keys`
    (inbound fleet SSH trust, idempotent).
 4. `fleet-local.sh --nickname <nickname>` — writes the gitignored
-   `fleet.local.json` self-declaration (`{nickname, fleet:true, platform}`) at
-   the repo root.
+   `fleet.local.json` self-declaration (`{nickname, fleet:true, platform,
+   dispatch}`) at the repo root. `--no-tailscale` (step 1 skipped) makes
+   `provision-wsl.sh` pass `--dispatch parent` here automatically — no
+   separate manual step.
+5. `wsl-fixes.sh` — wslopen + binfmt watchdog.
 
-`<nickname>` is both the tailnet node name and the `fleet.local.json`
-nickname — the same string a Windows parent's `wsl -l -q` + `fleet.local.json`
-read reports back.
+`<nickname>` is the `fleet.local.json` nickname always, and the tailnet node
+name only for a `dispatch:direct` distro (at most one per Windows host — WSL2
+distros share one network namespace). A `dispatch:parent` distro has no node
+of its own and is reached through its Windows parent instead.
 
 **Discovery is automatic, no `fleet.json` edit needed.** `/ship`
 (`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) both source the shared
 `agents/plugin/skills/lib/fleet-dispatch.sh` helper, which — for every Windows
 `fleet.json` member — enumerates its WSL distros (`wsl -l -q`) and reads each
 one's `$HOME/machines/fleet.local.json`; any distro with `.self.fleet == true`
-is pulled directly at `<nickname>.gg.ez`. A distro that ran `provision-wsl`
-is reachable on the very next `/ship` or kb-refresh run. (This WSL-discovery
-path is implemented but not yet exercised end-to-end on a live box; the
-Windows-native dispatch path in `fleet-dispatch.sh` — reaching `desktop`/
-`server`'s own `C:\Users\<winuser>\machines` clone — has been.)
+is pulled: directly at `<nickname>.gg.ez` if `dispatch:direct`, or as
+`wsl.exe -d <distro>` through its Windows parent if `dispatch:parent`. A
+distro that ran `provision-wsl` is reachable on the very next `/ship` or
+kb-refresh run. (This WSL-discovery path is implemented but not yet exercised
+end-to-end on a live box; the Windows-native dispatch path in
+`fleet-dispatch.sh` — reaching `desktop`/`server`'s own
+`C:\Users\<winuser>\machines` clone — has been.)

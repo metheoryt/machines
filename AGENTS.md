@@ -115,12 +115,15 @@ survives only as the VPS's obfuscated VPN for RU relatives).
 
 Self-declared WSL hosts are first-class fleet hosts that never appear in
 `fleet.json`: each carries a gitignored `fleet.local.json`
-(`{nickname, fleet:true, platform}`), written by `provision/fleet-local.sh` as
-the last step of `just provision-wsl <nickname>` (chain: `tailscale-wsl.sh →
-ssh-wsl.sh → linux.sh → fleet-local.sh`). Its Windows parent discovers it
-live via `wsl -l -q` + reading each distro's `fleet.local.json`, and reaches
-it directly at `<nickname>.gg.ez` (its own tailnet node) — not through a
-`fleet.json` entry. The shared dispatch primitive
+(`{nickname, fleet:true, platform, dispatch}`), written by
+`provision/fleet-local.sh` as step 4 of `just provision-wsl <nickname>` (chain:
+`tailscale-wsl.sh → ssh-wsl.sh → linux.sh → fleet-local.sh → wsl-fixes.sh`).
+Its Windows parent discovers it live via `wsl -l -q` + reading each distro's
+`fleet.local.json`. Only a `dispatch:direct` distro (the one that owns the
+tailnet node, at most one per Windows host — WSL2 distros share one network
+namespace) is reached directly at `<nickname>.gg.ez`; every other distro is
+`dispatch:parent`, reached as `wsl.exe -d <distro>` through its Windows
+parent — not through a `fleet.json` entry either way. The shared dispatch primitive
 `agents/plugin/skills/lib/fleet-dispatch.sh` (`fd_probe`/`fd_run`/
 `fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and kb-refresh's
 `fleet-gather.sh`; it also handles the Windows-native members (`desktop`,

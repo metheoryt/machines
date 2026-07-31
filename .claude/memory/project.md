@@ -156,9 +156,11 @@ global + per-host). One bullet per fact under a topical heading.
   `$HOME/machines` clone: Windows-native members (`desktop`, `server`) via Git
   Bash dispatched through PowerShell's call operator (live-verified
   2026-07-22), and self-declared WSL hosts — never in `fleet.json` — via
-  `wsl -l -q` + each distro's gitignored `fleet.local.json`, reached at
-  `<nickname>.gg.ez` (implemented; WSL-discovery not yet live-verified
-  end-to-end). The old `/mnt/c` cross-filesystem root was REMOVED — `machines`
+  `wsl -l -q` + each distro's gitignored `fleet.local.json`. Only the
+  `dispatch:direct` distro (at most one per Windows host) is reached at
+  `<nickname>.gg.ez`; every other distro is `dispatch:parent`, reached as
+  `wsl.exe -d <distro>` through its Windows parent (implemented; WSL-discovery
+  not yet live-verified end-to-end). The old `/mnt/c` cross-filesystem root was REMOVED — `machines`
   is now located canonical-path-first (`$HOME/machines`), root-scan fallback
   second. Half-provision a WSL host with `just provision-wsl <nickname>`.
 

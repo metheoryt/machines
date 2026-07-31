@@ -332,14 +332,14 @@ ssh desktop "wsl.exe -d desktop-pure -- bash -lc \
 
 Expected: four steps run (`ssh-wsl.sh`, `linux.sh`, `fleet-local.sh`, `wsl-fixes.sh`), and the closing line reads `No tailnet node of its own — reached through its Windows parent.`
 
-- [ ] **Step 6: Set the dispatch mode to `parent`**
+- [ ] **Step 6: Verify the dispatch mode is `parent`**
 
-`provision-wsl.sh` writes `dispatch=direct` by default. This distro has no node:
+`provision-wsl.sh --no-tailscale` now passes `--dispatch parent` to
+`fleet-local.sh` itself, so Step 5 already wrote it — no separate manual step
+needed. Confirm:
 
 ```bash
-ssh desktop "wsl.exe -d desktop-pure -- bash -lc \
-  'bash ~/machines/provision/fleet-local.sh --nickname desktop-pure \
-     --dispatch parent --repo ~/machines && jq . ~/machines/fleet.local.json'"
+ssh desktop "wsl.exe -d desktop-pure -- bash -lc 'jq . ~/machines/fleet.local.json'"
 ```
 
 Expected: `dispatch: "parent"`.
