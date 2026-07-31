@@ -29,6 +29,14 @@
 # space holds and releases indefinitely. The alert strip is on every page, so a page
 # you are not looking at cannot hide a fault.
 #
+# The disk block names PHYSICAL BAYS rather than `sdb`, derived from sysfs topology and
+# renamed by an optional per-host map — provision/statusboard/disks.<hostname>.conf,
+# where <hostname> is the OS hostname (`latitude5520`), not the logical fleet name
+# (`latitude`): this file is read by `hostname`, which knows only the former.
+# or STATUSBOARD_DISKMAP. That file is also where a drive is declared `transient`, i.e.
+# expected to be unplugged, so its loss is not reported as a fault. A box without one
+# gets derived tags (`u4-2:1`), which are unfamiliar but never wrong.
+#
 # --install takes over tty1 and leaves gettys on tty2..tty6, so a console login
 # is still one Alt-F2 away. That trade is deliberate: a dashboard you have to
 # remember to start is a dashboard you never see.
@@ -424,6 +432,15 @@ sb_temp_cell() {
   else
     col="$(sb_hi_colour "$c" 50 55)"
   fi
+  # A reading below the warn threshold is GOOD NEWS, and it now says so in green.
+  # sb_hi_colour answers C_DIM there — the same non-colour as `-` and `zzz` — so a drive
+  # sitting at 38C was indistinguishable at a glance from one that could not be read at
+  # all, and a block of seven dim numbers said nothing about which of them were even
+  # readings (asked for 2026-08-01). The thresholds themselves are untouched.
+  #
+  # Only the numeric branch reaches this: both non-readings returned above, so `zzz` and
+  # `-` keep the quiet styling that means "no measurement here".
+  [ "$col" = "$C_DIM" ] && col="$C_OK"
   printf '%s%3sC%s' "$col" "$c" "$C_RST"
 }
 
@@ -833,6 +850,147 @@ sb_kb_to_gib() {
 SB_DISK_PATHW=23   # fits /mnt/immich-2024-backup, the longest on this box
 SB_DISK_BARW=20    # the widest a bar can get — the size of the LARGEST disk
 SB_DISK_BAYW=9     # fits nvme0n1, and nvme1n1p3 for a row that has lost its drive
+
+# ── Physical bays ─────────────────────────────────────────────────────────────
+# `sdb` is not an answer to "which disk is that". Those letters are handed out in
+# discovery order, so they move when the docks power up in a different order, and they
+# name nothing physical — which is the whole question in front of five identical 2.5"
+# spinners spread over three docks (asked for 2026-08-01).
+#
+# So the block names the SLOT, derived from sysfs topology and renameable per host.
+# Two layers, because each answers a different half:
+#
+#   derived tag    u4-2:1   never wrong, needs no configuration
+#   mapped label   dockB1   what the person standing in the room calls it
+#
+# The tag is stable in the parts that are physical: the port path (`-2`, `-1.4`) is
+# where the cable goes and the LUN is which bay of a multi-bay bridge. The BUS index
+# (`4-`) is xHCI enumeration order — stable in practice on one machine with one kernel,
+# but not a promise. That is exactly why the label is a RENAME of a derived tag and not
+# a hand-written path: if a bus index ever shifts, the board falls back to a tag that is
+# merely unfamiliar, never to a label that is wrong.
+
+# sb_bay_tag_parse <sysfs device path>: the physical-slot tag, or empty.
+#
+# Fed from /sys/block/<disk>/device, NOT from /dev/disk/by-path. That tree carries TWO
+# symlinks per USB device on this box (`...-usb-0:2:1.0-scsi-...` and
+# `...-usbv3-0:2:1.0-scsi-...`), so a first-match-wins scan of it looks deterministic
+# and is not. One readlink has exactly one answer — the same mechanism sb_disk_of uses.
+#
+# Walks from the deepest component OUTWARD, so a drive's own hop beats the hub above
+# it: sdg lives at `.../usb2/2-1/2-1.4/2-1.4:1.0/...` and its slot is 2-1.4, not the
+# 2-1 hub. Interface components (`2-1.4:1.0`) are skipped by carrying a colon; the SCSI
+# address is the four-field one (`2:0:0:1`), which `target2:0:0` cannot be mistaken for
+# because it neither has four fields nor starts with a digit.
+#
+# The LUN is always printed, even the usual 0. Whether a bridge has a second bay is not
+# knowable without scanning its siblings, and `u4-2:0` beside `u4-2:1` is precisely the
+# fact a two-bay dock needs to be able to state.
+sb_bay_tag_parse() {
+  local p="${1:-}" parts=() i c hop="" scsi="" ata="" lun=0
+  [ -n "$p" ] || { printf ''; return; }
+  # An NVMe drive has no bay to name — it is in an M.2 socket nobody hot-swaps — and
+  # the controller name is already its stable identity.
+  case "$p" in */nvme/nvme[0-9]*) printf '%s' "${p##*/}"; return ;; esac
+  IFS=/ read -r -a parts <<< "$p"
+  for ((i = ${#parts[@]} - 1; i >= 0; i--)); do
+    c="${parts[i]}"
+    case "$c" in
+      *:*:*:*) [ -n "$scsi" ] || case "$c" in [0-9]*) scsi="$c" ;; esac ;;
+      *:*) : ;;
+      [0-9]*-[0-9]*) [ -n "$hop" ] || hop="$c" ;;
+      ata[0-9]*) [ -n "$ata" ] || ata="$c" ;;
+    esac
+  done
+  [ -n "$scsi" ] && lun="${scsi##*:}"
+  case "$lun" in '' | *[!0-9]*) lun=0 ;; esac
+  # A bus this parser does not know (virtio on the VPS, mmc, anything future) yields
+  # nothing rather than a guess, and the caller falls back to the device name — which
+  # is what the board showed before bays existed.
+  if [ -n "$hop" ]; then printf 'u%s:%s' "$hop" "$lun"
+  elif [ -n "$ata" ]; then printf '%s:%s' "$ata" "$lun"
+  else printf ''
+  fi
+}
+
+# sb_diskmap_parse <directive> <file contents>: the "key=value" store for one
+# directive of the per-host disk map.
+#
+# Two directives, one shape, so both stores are readable by sb_series_get like every
+# other flat store here:
+#
+#   bay u4-2:1 dockB1   ->  u4-2:1=dockB1
+#   transient /mnt/xs   ->  /mnt/xs=1
+#
+# Unknown directives are ignored rather than rejected: the map is hand-edited on a box
+# with no screen but this one, and a typo must cost a missing label, not a board that
+# will not start.
+sb_diskmap_parse() {
+  local want="${1:-}" body="${2:-}"
+  printf '%s\n' "$body" | awk -v want="$want" '
+    { sub(/#.*/, "") }
+    $1 == want && NF >= 2 { print $2 "=" (NF >= 3 ? $3 : 1) }'
+}
+
+# sb_transient <mountpoint> <transient map>: true when this filesystem's disk is
+# EXPECTED to come and go, so its loss is not an event.
+sb_transient() {
+  [ -n "$(sb_series_get "${2:-}" "${1:-}")" ]
+}
+
+# sb_bay_label <tag> <bay map> [fallback]: what the bay column prints.
+#
+# Truncated to SB_DISK_BAYW on purpose. The disk block pads every row to the widest
+# one and the chart column starts after it, so one over-long label would move the
+# charts for its own row only — a misaligned block is worse than a clipped name, and
+# the map is the place to shorten it.
+sb_bay_label() {
+  local tag="${1:-}" map="${2:-}" fb="${3:-}" lab=""
+  [ -n "$tag" ] && lab="$(sb_series_get "$map" "$tag")"
+  [ -n "$lab" ] || lab="${tag:-$fb}"
+  [ "${#lab}" -gt "$SB_DISK_BAYW" ] && lab="${lab:0:SB_DISK_BAYW}"
+  printf '%s' "$lab"
+}
+
+# sb_inflight_busy <contents of /sys/block/X/inflight>: 1 when the kernel still has
+# requests outstanding to this drive.
+#
+# The two fields are reads and writes in flight. Either one nonzero means pulling the
+# cable now loses data, which is the only thing standing between "nothing is mounted"
+# and "safe to unplug".
+sb_inflight_busy() {
+  local a="" b=""
+  read -r a b <<< "${1:-}"
+  case "$a" in '' | *[!0-9]*) printf 0; return ;; esac
+  case "$b" in '' | *[!0-9]*) b=0 ;; esac
+  if [ $((a + b)) -gt 0 ]; then printf 1; else printf 0; fi
+}
+
+# sb_unmounted_parse <lsblk -rno NAME,TYPE,SIZE,MOUNTPOINT output>: "name|size" per
+# connected disk that has nothing mounted off it.
+#
+# ZERO-SIZE disks are not disks. This box carries a two-slot card reader (`SD/MMC` and
+# `Micro SD/M2`, one serial between them), and the kernel presents both slots as
+# block devices whether or not a card is in them — so the board permanently warned
+# about two 0B "unmounted disks" that were empty slots (2026-08-01). Filtering on size
+# rather than on the model name generalises correctly: put a card in and it acquires a
+# size, at which point it IS a disk and being told about it is the point.
+#
+# A disk counts as mounted if ANY of its partitions has a mount point; [SWAP] and the
+# EFI partition count, so the root disk never appears here.
+sb_unmounted_parse() {
+  printf '%s\n' "${1:-}" | awk '
+    $2 == "disk" { disks[++n] = $1; size[$1] = $3; next }
+    { if (NF >= 4 && $4 != "") { for (d in size) if (index($1, d) == 1) used[d] = 1 } }
+    END {
+      for (i = 1; i <= n; i++) {
+        d = disks[i]
+        if (d in used) continue
+        if (size[d] == "0B" || size[d] == "0" || size[d] == "") continue
+        print d "|" size[d]
+      }
+    }'
+}
 
 # sb_disk_bar <pct> <total_kb> <max_total_kb> <maxw>: a meter whose LENGTH is the
 # disk's capacity and whose FILL is how much of that is used.
@@ -1539,6 +1697,21 @@ sb_disk_of() {
   basename "$l"
 }
 
+# sb_bay_tag <disk>: the physical-slot tag of a whole-disk device, or empty. One
+# readlink, no fork — cheap enough to resolve per drive on the slow path, and resolved
+# there rather than in the frame because a subshell cannot cache it.
+sb_bay_tag() {
+  local d="${1:-}" l
+  [ -n "$d" ] || { printf ''; return; }
+  l="$(readlink -f "/sys/block/$d/device" 2>/dev/null)" || { printf ''; return; }
+  sb_bay_tag_parse "$l"
+}
+
+# sb_disk_busy <disk>: 1 when the kernel has IO outstanding to the drive.
+sb_disk_busy() {
+  sb_inflight_busy "$(_read "/sys/block/${1:-}/inflight")"
+}
+
 # sb_rotational <disk>: 1 for a spinner, 0 for flash, 1 when unknown.
 #
 # Defaults to spinner because that is the assumption with the safer consequences: it
@@ -1741,23 +1914,36 @@ sb_mounts() {
   done
 }
 
-# sb_unmounted: connected disks with nothing mounted off them — the whole point of
-# listing them is that a headless box gives no other sign a dock came back empty.
-# A disk counts as mounted if ANY of its partitions has a mount point; [SWAP] and
-# the EFI partition count, so the root disk never shows up here.
+# sb_unmounted: the display fragment for connected disks with nothing mounted off
+# them — the whole point of listing them is that a headless box gives no other sign a
+# dock came back empty.
+#
+# Each one is named by its BAY and carries a verdict, because "sde 0B" answered neither
+# question a person walking up to the stack has: which of these boxes is it, and can I
+# pull the cable (asked for 2026-08-01). `safe` means nothing is mounted off the drive
+# and the kernel has no request outstanding to it; `busy` means something is still
+# reading it — a badblocks run, a copy to a partition that was never mounted, smartctl
+# mid-scan — and pulling it now would be the destructive kind of surprise.
+#
+# Formatted HERE and not in the frame: it takes a readlink and a sysfs read per drive,
+# and everything on the paint path is supposed to be a string lookup.
+#
+# Still ONE row for all of them. Six unmounted disks used to squeeze the chart column
+# for every other row in the frame, so this list stays a single line whose length is
+# not allowed to matter (it is charted by nothing) and is capped at four drives — past
+# that, the count is the information.
 sb_unmounted() {
+  local line d size tag out="" n=0 extra=0
   command -v lsblk >/dev/null 2>&1 || return 0
-  lsblk -rno NAME,TYPE,SIZE,MOUNTPOINT 2>/dev/null | awk '
-    $2 == "disk" { disks[++n] = $1; size[$1] = $3; next }
-    { if (NF >= 4 && $4 != "") { for (d in size) if (index($1, d) == 1) used[d] = 1 } }
-    END {
-      out = ""
-      for (i = 1; i <= n; i++) {
-        d = disks[i]
-        if (!(d in used)) out = out (out == "" ? "" : "  ") d " " size[d]
-      }
-      print out
-    }'
+  while IFS='|' read -r d size; do
+    [ -n "$d" ] || continue
+    n=$((n + 1))
+    if [ "$n" -gt 4 ]; then extra=$((extra + 1)); continue; fi
+    tag="$(sb_bay_label "$(sb_bay_tag "$d")" "$SB_BAYMAP" "$d")"
+    out="$out${out:+  }$tag $size $([ "$(sb_disk_busy "$d")" = 1 ] && printf busy || printf safe)"
+  done <<< "$(sb_unmounted_parse "$(lsblk -rno NAME,TYPE,SIZE,MOUNTPOINT 2>/dev/null)")"
+  [ "$extra" -gt 0 ] && out="$out  +$extra more"
+  printf '%s' "$out"
 }
 
 # ── Sampling ──────────────────────────────────────────────────────────────────
@@ -1823,6 +2009,23 @@ SB_FLEET=""
 [ -r "$SB_FLEET_JSON" ] && SB_FLEET="$(sb_fleet_parse < "$SB_FLEET_JSON")"
 SB_FLEET_ROWS=""
 SB_FLEET_UP=0; SB_FLEET_TOTAL=0; SB_FLEET_OTHERS=0
+
+# The disk map, parsed once for the same reason: which dock is which cannot change
+# while the board runs, and the frame is a subshell.
+#
+# PER HOST, and named by hostname rather than by fleet nickname: the script is shared
+# by every member and the arrangement of docks on a desk is not. A box with no map file
+# is the normal case — it gets derived tags, which are honest, just unfamiliar.
+SB_DISKMAP="${STATUSBOARD_DISKMAP:-$SB_REPO/provision/statusboard/disks.$(hostname 2>/dev/null).conf}"
+SB_BAYMAP=""      # "tag=label" — the bay column's names
+SB_TRANSIENT=""   # "mountpoint=1" — mounts whose disk is EXPECTED to come and go
+if [ -r "$SB_DISKMAP" ]; then
+  SB_DISKMAP_BODY="$(cat "$SB_DISKMAP" 2>/dev/null)"
+  SB_BAYMAP="$(sb_diskmap_parse bay "$SB_DISKMAP_BODY")"
+  SB_TRANSIENT="$(sb_diskmap_parse transient "$SB_DISKMAP_BODY")"
+  unset SB_DISKMAP_BODY
+fi
+SB_BAYS=""        # "disk=label" — resolved once per drive, read per row by the frame
 SER_PEERS=""   # "member=csv" per line — one binary online series per fleet member
 
 # Containers. SB_DK_ST is n/a (no docker on this box) / down (daemon unreachable) / up.
@@ -2107,6 +2310,11 @@ sb_sample_slow() {
   # drive doing nothing is not changing temperature quickly.
   for disk in $disks; do
     SB_ROTA="$(sb_series_set "$SB_ROTA" "$disk" "$(sb_rotational "$disk")")"
+    # The bay, resolved once per drive and kept: sysfs topology does not change under a
+    # device that stays plugged in, and a drive that is REPLUGGED comes back as a
+    # different node, so the stale entry is unreachable rather than wrong.
+    [ -n "$(sb_series_get "$SB_BAYS" "$disk")" ] || SB_BAYS="$(sb_series_set "$SB_BAYS" "$disk" \
+      "$(sb_bay_label "$(sb_bay_tag "$disk")" "$SB_BAYMAP" "$disk")")"
     cur="$(sb_hwmon_temp "$disk")"
     if [ -n "$cur" ]; then
       SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
@@ -2244,6 +2452,10 @@ sb_alerts() {
   count=0
   while IFS='|' read -r dev mnt _ total pct state; do
     [ -n "$mnt" ] || continue
+    # A transient mount's disk going away is the expected end of its day, and the disk
+    # block already drops that row — counting it here would leave the strip shouting
+    # about a row nobody can see.
+    if [ "${state:-ok}" != ok ] && sb_transient "$mnt" "$SB_TRANSIENT"; then continue; fi
     [ "${state:-ok}" = ok ] || { count=$((count + 1)); continue; }
     case "$pct" in '' | *[!0-9]*) continue ;; esac
     if [ "$pct" -ge 95 ]; then printf 'bad:%s %s%% full\n' "$mnt" "$pct"
@@ -2495,9 +2707,19 @@ sb_page_system() {
     [ "$d_state" = ok ] || continue
     [ "$d_total" -gt "$d_max" ] && d_max="$d_total"
   done <<< "$SB_MOUNTS"
-  local d_state d_disk d_prev="" d_cont
+  local d_state d_disk d_prev="" d_cont d_bay
   while IFS='|' read -r d_dev d_mnt _ d_total d_pct d_state; do
     [ -n "$d_mnt" ] || continue
+    # A TRANSIENT mount that has lost its disk is dropped, not mourned. df goes on
+    # reporting an unplugged filesystem forever, and for a drive that is SUPPOSED to
+    # come and go — the XS2000 that travels — the `!! gone !!` row was a permanent
+    # alarm about the normal state of affairs (asked for 2026-08-01). Keyed by mount
+    # point because it is the only key left: a vanished device resolves to no drive, so
+    # neither the bay nor the tag exists to match on.
+    #
+    # Only the gone row. A transient disk that is plugged in and merely unmounted still
+    # gets listed, with its eject verdict — that case is useful, not noise.
+    if [ "${d_state:-ok}" != ok ] && sb_transient "$d_mnt" "$SB_TRANSIENT"; then continue; fi
     # Both lookups are keyed by DRIVE, not by mount: temperature belongs to the
     # hardware, so every filesystem on one disk shows the same figure.
     d_disk="$(sb_series_get "$SB_DISKOF" "$d_mnt")"
@@ -2508,9 +2730,14 @@ sb_page_system() {
     d_cont=0
     [ -n "$d_disk" ] && [ "$d_disk" = "$d_prev" ] && d_cont=1
     d_prev="$d_disk"
+    # The BAY, not the kernel's letter for it. Resolved in the slow path and looked up
+    # here by drive; a drive with no label falls back to its own name, which is what the
+    # column held before bays existed.
+    d_bay="$(sb_series_get "$SB_BAYS" "$d_disk")"
+    [ -n "$d_bay" ] || d_bay="$d_disk"
     sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}" \
       "$(sb_series_get "$SB_TEMPS" "$d_disk")" "$(sb_series_get "$SB_ROTA" "$d_disk")" \
-      "$d_disk" "$d_cont")" \
+      "$d_bay" "$d_cont")" \
       "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat MB/s
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
