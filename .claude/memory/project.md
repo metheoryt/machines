@@ -553,7 +553,8 @@ global + per-host). One bullet per fact under a topical heading.
   letter written down anywhere in this file as point-in-time only.** The
   2026-07-31 00:03 reboot moved all five external drives at once:
   `/mnt/immich-2024` sdd2→sdc2, `/mnt/immich-2024-backup` sdg2→sdb2,
-  `/mnt/immich-backup` sde2→sdd2, `/mnt/public` sdc1→sdg1, `/mnt/xs` sdf3→sda3.
+  `/mnt/immich-backup` sde2→sdd2 (that mount is now `/mnt/immich-mirror`),
+  `/mnt/public` sdc1→sdg1, `/mnt/xs` sdf3→sda3.
   `sdd` therefore names a *different physical drive* before and after. Five
   bus-powered USB spinners plus a card reader race to enumerate, so ordering is
   not stable. Identify a drive by **UUID** (mounts), **bridge serial** in
@@ -580,8 +581,61 @@ global + per-host). One bullet per fact under a topical heading.
   byte-exact: **711832525257 bytes / 20456 files**, identical per-year across all
   19 dirs (1970, 2007-2024). Source stays `ntfs3,ro`: the **WDC WD10 SPZX-21Z10T0
   in dock A bay 1**, UUID `EAA6CAAEA6CA7A99`. Leaving either dock powered off drops the archive to a
-  single copy. Not yet checksum-verified — the WDC source drive has 144
-  UDMA_CRC_Error_Count, so an `rsync -c` pass is still owed.
+  single copy. **Checksum-verified 2026-07-31 06:56: `rsync -rn -c` over all
+  712 GB / 20456 files reported zero differing files.** So the WDC's 144
+  `UDMA_CRC_Error_Count` never corrupted any stored data — those are
+  bridge/cable-link events, not media errors. Both drives also passed
+  `smartctl -t long` the same morning (`Extended offline / Completed without
+  error` at 28835 h WDC, 27853 h HGST) with `Reallocated_Sector_Ct`,
+  `Current_Pending_Sector` and `Offline_Uncorrectable` all 0 and zero bus faults
+  across the 4-hour scan. Reading verifies but does not refresh magnetization —
+  for that the only real answer is a periodic re-copy.
+- **`/mnt/immich-backup` no longer exists. Dock A bay 2 (ST1000LM024 /
+  `6702002103E1-0:1`) was reformatted ntfs3 → ext4 on 2026-07-31 14:30 and is now
+  `/mnt/immich-mirror`** — label `immich-mirror`, **UUID
+  `a7d7b61e-94b1-4673-af71-81152061199f`** (old NTFS `9CCED7D2CED7A2B6` gone),
+  fstab `defaults,noatime,nofail,x-systemd.device-timeout=60`, 916 GiB usable
+  (`mkfs.ext4 -m 0`). It holds `rsync -aHAX` of all of `/mnt/immich` (~731 GiB
+  deduped) plus `var-backups/immich-db`. Excluded from the mirror:
+  `ImmichMedia/postgres` (**never rsync live PGDATA — the copy looks like a backup
+  and is unrestorable**; the `/var/backups/immich-db` dumps are the DB backup) and
+  `lost+found`. Drive SMART is old but clean: PASSED, 0 reallocated / 0 pending /
+  0 offline-uncorrectable / 0 CRC, 25396 h, Start_Stop 7707, Load_Cycle 344694.
+- **Corrections to earlier notes about what lived on that drive — all four were
+  wrong and each one would have driven a bad decision.** (1) `stage-nvme` (735 G)
+  was **not** a backup of the immich library: it was `movies` + `torrents`, proven
+  byte-identical to `/mnt/immich/Media/{movies,torrents}` (same 100 + 534 files,
+  same 266826269121 + 521808368097 bytes). It ballooned to 735 G on NTFS only
+  because the copy lost the hardlinks that make the same content 487 GiB on ext4 —
+  direct proof that `-H` is load-bearing. (2) **The immich library was never
+  single-copy: `~/immich-stage` (244 G) on `nvme1n1p3` (root) is a full second copy
+  on a *different physical NVMe* from `/mnt/immich` (`nvme0n1p1`).** latitude has
+  two NVMes — 931.5 G data + 476.9 G root — so an on-box second copy is a real
+  second device, not a false one. (3) **g513ie has only `C:` (953 G, ~428 G used).
+  There is no `G:` or `H:` — those were the external drives now plugged into
+  latitude, so g513ie is NOT a fallback for anything.** The "most recent 2026-07-02
+  backup on g513ie" was in fact the `backup-homeserver` restic repo on this very
+  drive. (4) `/mnt/public` is **not** fully redundant: the overnight job copied only
+  `qb`, leaving `restic-repos` (69 G) and `G614JV-Ubuntu-24.04.tar` (9.9 G)
+  uncopied. `restic-repos` holds two `me-g614jv` repos — `laptop-music` (14
+  snapshots of `C:\Users\methe\Music\PicardedMusic`, 65 GiB) and `wsl` (19
+  snapshots of `/home/me`, 8.7 GiB); both need `sudo -E restic` because ntfs3's
+  `uid=1000` mapping does not reach their subdirs.
+- **The `backup-homeserver` restic repos: pgdump history kept, media history
+  deliberately discarded (2026-07-31).** `immich-postgres` (474 M, 16 snapshots of
+  `C:\pgdump.sql` to 2026-07-07) was copied to
+  `/mnt/immich-2024-backup/restic-history/immich-postgres` and verified readable
+  before the reformat. `immich-media` (158 G, 16 snapshots of
+  `D:\ImmichMedia\library\library` ~151 GiB, newest 2026-07-05) was **destroyed** —
+  no room to relocate it, and its content is superseded by two current full copies.
+  What is gone is *version history* for photos between 06-20 and 07-05, i.e. the
+  ability to recover something deleted in that window. Accepted knowingly.
+- **`/mnt/xs` cannot be remounted read-write in place**: `mount -o remount,rw`
+  fails with `ntfs3: Couldn't remount rw because journal is not replayed. Please
+  umount/remount instead` — a dirty `$LogFile` from an unclean Windows shutdown. It
+  needs a full `umount` + `mount -o rw`. `/dev/sda` is a **Ventoy stick**: `sda1`
+  253.8 G exfat `Boot`, `sda2` 32 M `VTOYEFI`, `sda3` 700 G ntfs `data` → `/mnt/xs`
+  (550 G free). No unallocated space to carve an ext4 partition from.
 - **Backup strategy decided 2026-07-31: mirror the bulk, restic almost nothing.**
   The axis is *can this be re-derived, and does a wrong write propagate?* — a mirror
   covers drive death, only versions cover your own `rm`, a bad app write, or bitrot.
@@ -693,7 +747,7 @@ global + per-host). One bullet per fact under a topical heading.
   to `-n standby`. Letters in the original note were reboot-unstable, so the board
   must re-derive APM per device at runtime, never from a hardcoded letter.
 - **The board is PAGED, and its binding constraint is rows, not CPU.** `SB_PAGES`
-  (`system fleet docker`) rotates every `STATUSBOARD_PAGE_SECS` (15); a page is a
+  (`system fleet docker`) rotates every `STATUSBOARD_PAGE_SECS` (**5**); a page is a
   `sb_page_<name>` function plus a word in that list, and `--page <name>` renders
   one (unknown name exits 2, which is what lets the tests loop over the set). The
   **system page is 26 lines into a 27-row pane** with today's 8 mounts and both
@@ -705,6 +759,35 @@ global + per-host). One bullet per fact under a topical heading.
   on `[ -t 0 ]` (stdin closed makes it a 100%-CPU spin on the kiosk), and sampling
   stays unconditional in the loop — sampling only the visible page would put holes
   in every chart, or cells that lie about their duration.
+- **Keyboard paging DWELLS, it does not hold** (2026-07-31). Arrow keys / `n` `p` /
+  `1..9` set a `STATUSBOARD_PAGE_MANUAL_SECS` (60) deadline and the rotation resumes
+  by itself; only **space** holds indefinitely. Manual selection used to set
+  `SB_PAGE_HOLD=1`, which killed the rotation for the rest of the session. And an
+  arrow key is THREE bytes (`ESC [ C`): read one byte per loop iteration, its second
+  byte is a bare `[` — the old "previous page" binding — so both arrows paged
+  BACKWARDS and each press stopped the board. The ESC tail is drained in the same
+  `sb_wait_key` call (`read -t 0.05 -n 2`), and `O`-form sequences are handled for
+  tmux/ssh. The read needs **`IFS= read`**: without it the SPACE key is word-split
+  away and arrives empty, so the hold had never worked at all — invisible because
+  every other binding is a non-whitespace character. Verified live by driving the
+  board through a pty (`script -q -c … /dev/null` with a `( sleep 3; printf " " )`
+  pipeline) and counting page markers per frame — the only way to test the key path,
+  since it needs `[ -t 0 ]`.
+- **A bash signal handler RESUMES the script when it returns.** `trap cleanup EXIT
+  INT TERM` therefore never stopped the board: it restored the cursor and went back
+  to painting, so every `systemctl stop/restart statusboard` sat out the 90s stop
+  timeout and ended in a SIGKILL (measured on latitude 2026-07-31, fixed with
+  `trap 'cleanup; exit 0' INT TERM HUP`). Any long-running loop script in this repo
+  needs the `exit` in the handler, not just the tidy-up.
+- **The disk block is grouped by physical drive, and the bay leads each row.**
+  `sb_mounts` emits its lines ORDERED (root's drive first, then by drive, then by
+  mount), which is what lets the block group by ADJACENCY — the second filesystem of
+  a bay prints `╰` instead of repeating the name. The sort key strips the partition
+  suffix textually (`sub(/p?[0-9]+$/…)`), deliberately NOT `sb_disk_of`: that is a
+  readlink per mount and this is only ordering; the DISPLAYED bay still comes from
+  sysfs via `SB_DISKOF`. The bay column REPLACED the trailing device column rather
+  than joining it — every text column comes out of the chart width — and a `gone`
+  row shows its partition node there, since a vanished device has no drive to name.
 - **`psys` is not wall power.** The board's `power` row is the RAPL platform rail
   — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The five
   bus-powered USB spinners sit outside it, so real draw is well above what the row
