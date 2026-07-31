@@ -1,7 +1,20 @@
 # Move pure work repos to desktop; air becomes a thin Orca client
 
 **Date:** 2026-07-31
-**Status:** approved, execution started
+**Status:** Phases A and D done; Phase B is the user's; teardown gated
+
+## Progress
+
+- **Phase A — done.** `pure/backend-api/.claude/memory/project.md` promoted from
+  the `air` branch to dotfiles `main` (`f8fabab..f308bfc`). `main` now holds the
+  219-line version; `main` merged back down into `air`, tree clean.
+  Desktop-ubuntu26 inherits it on its next sync tick.
+- **Phase D — done** for the two repo-level session dirs. 8 transcripts
+  (`backend-api` 3, `claude-plugins` 5) copied to desktop under rewritten slugs,
+  all 8 verified as parseable JSON on arrival. The 7 Orca-worktree session dirs
+  remain on air, awaiting the user's fresh worktree names.
+- **Phase B — the user's**, not started here.
+- **Teardown — blocked** on the cutover gate below.
 
 ## Goal
 
@@ -153,6 +166,12 @@ Session directories are path-keyed, so copying requires a slug rewrite:
 Seven Orca-worktree session dirs (~25 MB, 19 transcripts) are **held on air**.
 Their slugs depend on worktree paths that do not exist yet; they get re-keyed and
 copied once the user names their fresh worktrees, or dropped on request.
+
+Within each transcript, only the `"cwd":` field values are rewritten
+`/Users/me` → `/home/me`. The remaining `/Users/me` references live in tool
+output and message bodies; those are historical record and rewriting them would
+falsify the transcript. In the `backend-api` dir that split was 301 `cwd` fields
+against 430 total occurrences.
 
 Note that `~/.claude/projects/<slug>/` is deliberately untracked and
 machine-local — this is a one-off copy, not something that will keep syncing.
