@@ -257,6 +257,26 @@ behavior breaks. Enable Developer Mode and re-run `bootstrap.sh`.
   generated artefacts are machine-local and never committed — gortex owns them.
 - **Idempotent.** Re-running bootstrap skips the wiring when the profile is
   already wired; `GORTEX_REWIRE=1` forces a refresh (e.g. after an upgrade).
+- **Hooks are merged into `settings.json` afterwards** (`gortex_merge_hooks`).
+  `gortex install` writes them to the profile's `settings.local.json`, and
+  **Claude Code does not read a user-scope `settings.local.json` at all** —
+  probed 2026-07-31: a marker hook and an `env` entry placed in
+  `~/.claude/settings.local.json` neither fired nor applied, while the identical
+  hook in `~/.claude/settings.json` did. Only `settings.json` is user scope; the
+  `.local.json` variant is a *project*-scope thing. Until this step existed, no
+  gortex hook had ever run on this fleet. The merge copies (never moves — a
+  rewire rewrites `settings.local.json`, and the "already wired" marker greps
+  it), appends only what is missing, preserves order, and runs on **every**
+  bootstrap, because `copy_managed` re-seeds `settings.json` whenever the
+  committed baseline changes and would otherwise drop the hooks.
+- **Note that this is a live behaviour change.** The default gortex posture is
+  `--hook-mode deny`: the `PreToolUse` hook blocks `Read` / `Grep` / `Glob`
+  against *indexed* source and redirects you to the graph tools. That is the
+  documented intent (see the global `CLAUDE.md` rule block), but it only started
+  actually happening once the hooks reached a file Claude Code reads. To soften
+  it, re-wire with `GORTEX_REWIRE=1` after changing `--hook-mode` (`enrich`
+  never denies), or drop the `PreToolUse` entry from the profile's
+  `settings.json`.
 - **No daemon-start step** — `gortex mcp` (from `.mcp.json`) brings the daemon
   up per session automatically.
 

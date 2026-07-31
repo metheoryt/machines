@@ -351,9 +351,72 @@ link_entries_into() {
   done
 }
 
+# gortex_merge_hooks <profile-dir>: copy the hooks gortex installed into that
+# profile's settings.local.json over into its settings.json.
+#
+# `gortex install` writes its Claude Code hooks to <profile>/settings.local.json,
+# where Claude Code never reads them. Probed 2026-07-31: a marker hook and an
+# `env` entry placed in ~/.claude/settings.local.json neither fired nor applied,
+# while the identical hook in ~/.claude/settings.json did. User scope is
+# settings.json only — the `.local.json` variant exists at PROJECT scope. So the
+# hooks gortex installs are inert exactly where it puts them, and had never once
+# run on this fleet.
+#
+# COPY, never move. `gortex install` rewrites settings.local.json on each rewire,
+# and ensure_gortex_wired's "already wired" marker greps that same file.
+#
+# Runs on EVERY bootstrap, not only when wiring happens: copy_managed re-seeds
+# settings.json from the committed baseline whenever that baseline changes, which
+# drops the merged hooks. Re-merging here restores them within the same run.
+#
+# Append-only and order-preserving — hook order is observable, and Orca injects
+# its own blocks into settings.json that must survive untouched.
+gortex_merge_hooks() {
+  local dir="${1:-$CLAUDE_DIR}" src dst tmp
+  src="$dir/settings.local.json"
+  dst="$dir/settings.json"
+  [ -f "$src" ] || return 0
+  grep -q gortex "$src" 2>/dev/null || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '  ! jq not found — gortex hooks stay inert in %s\n' "$src"
+    return 0
+  fi
+  if [ ! -f "$dst" ]; then
+    printf '  ! no %s to merge into — skipping gortex hooks\n' "$dst"
+    return 0
+  fi
+  tmp="$(mktemp "$dst.XXXXXX")" || return 0
+  if ! jq -s '
+        .[0] as $dst | .[1] as $src
+        | ($dst.hooks // {}) as $d | ($src.hooks // {}) as $s
+        | $dst
+        | .hooks = (reduce ($s | keys_unsorted[]) as $k ($d;
+            .[$k] = ((.[$k] // [])
+                     + [ $s[$k][] | select(. as $e | (($d[$k] // []) | any(. == $e)) | not) ])))
+      ' "$dst" "$src" >"$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    printf '  ✗ could not merge gortex hooks into %s\n' "$dst"
+    return 0
+  fi
+  # Compare canonically: jq reformats, so a byte compare would report a diff on
+  # every run even when the hook set is already identical.
+  if [ "$(jq -S -c . "$tmp" 2>/dev/null)" = "$(jq -S -c . "$dst" 2>/dev/null)" ]; then
+    rm -f "$tmp"
+    printf '  = gortex hooks already merged into %s\n' "$dst"
+    return 0
+  fi
+  if [ -n "${DRY_RUN:-}" ]; then
+    rm -f "$tmp"
+    printf '  ~ would merge gortex hooks into %s\n' "$dst"
+    return 0
+  fi
+  chmod 644 "$tmp" 2>/dev/null || true
+  mv "$tmp" "$dst" && printf '  + merged gortex hooks into %s\n' "$dst"
+}
+
 # Lib-only mode: `BOOTSTRAP_LIB_ONLY=1 . bootstrap.sh` loads the helper functions
-# (link / copy_managed / hash_file / …) without running the profile bootstrap —
-# used by tests/bootstrap.test.sh to exercise copy_managed in isolation.
+# (link / copy_managed / hash_file / gortex_merge_hooks / …) without running the
+# profile bootstrap — used by tests/bootstrap.test.sh to exercise them in isolation.
 if [ -n "${BOOTSTRAP_LIB_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
 
 printf 'Bootstrapping Claude config\n  repo:  %s\n  live:  %s\n\n' "$SRC_DIR" "$CLAUDE_DIR"
@@ -521,6 +584,10 @@ ensure_gortex_wired() {
 printf '\nGortex\n'
 ensure_gortex_binary
 ensure_gortex_wired
+# Unconditional, and deliberately outside ensure_gortex_wired's early returns:
+# the hooks need re-merging after any settings.json re-seed, not only when
+# wiring ran. See gortex_merge_hooks for why the merge is needed at all.
+gortex_merge_hooks "$CLAUDE_DIR"
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
 # (merge / rebase / checkout) re-link without a manual bootstrap run. core.hooksPath

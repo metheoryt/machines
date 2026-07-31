@@ -180,6 +180,70 @@ else
   echo "skip - worktree cases (git worktree add failed)"
 fi
 
+# Case 9: gortex_merge_hooks — copies the hooks gortex writes into a profile's
+# settings.local.json (where Claude Code never reads them) into its settings.json
+# (where it does). Reuses the lib-only sourcing from Case 3.
+#
+# The contract is narrow on purpose: append-only, order-preserving, idempotent,
+# and it must never disturb a key it did not add — Orca injects its own hook
+# blocks into settings.json, and losing those is the failure this must not cause.
+if command -v jq >/dev/null 2>&1; then
+  g="$tmp/gx"; mkdir -p "$g"
+  cat > "$g/settings.local.json" <<'JSON'
+{"hooks":{"PreToolUse":[{"matcher":"Read","hooks":[{"type":"command","command":"gortex hook"}]}],
+          "PreCompact":[{"hooks":[{"type":"command","command":"gortex hook"}]}]}}
+JSON
+  cat > "$g/settings.json" <<'JSON'
+{"model":"opus",
+ "hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"orca hook"}]}],
+          "SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}
+JSON
+
+  # (a) DRY_RUN plans the merge and writes nothing.
+  before="$(cat "$g/settings.json")"
+  out9a="$(DRY_RUN=1 gortex_merge_hooks "$g")"
+  check "gortex_merge_hooks announces the merge under DRY_RUN" \
+    'printf "%s" "$out9a" | grep -q "would merge gortex hooks"'
+  check "gortex_merge_hooks writes nothing under DRY_RUN" \
+    '[ "$(cat "$g/settings.json")" = "$before" ]'
+
+  # (b) the real merge: gortex entries arrive, pre-existing ones stay put.
+  gortex_merge_hooks "$g" >/dev/null
+  check "gortex PreToolUse entry is merged in" \
+    '[ "$(jq "[.hooks.PreToolUse[].hooks[].command] | index(\"gortex hook\")" "$g/settings.json")" != "null" ]'
+  check "a hook event only gortex had is created" \
+    '[ "$(jq -r ".hooks.PreCompact[0].hooks[0].command" "$g/settings.json")" = "gortex hook" ]'
+  check "the pre-existing entry in that event survives" \
+    '[ "$(jq -r ".hooks.PreToolUse[0].hooks[0].command" "$g/settings.json")" = "orca hook" ]'
+  check "an event gortex never touched is untouched" \
+    '[ "$(jq -r ".hooks.SessionStart[0].hooks[0].command" "$g/settings.json")" = "echo hi" ]'
+  check "non-hook settings survive the merge" \
+    '[ "$(jq -r .model "$g/settings.json")" = "opus" ]'
+
+  # (c) idempotent — a second run is a no-op, and says so rather than rewriting.
+  snap="$(jq -S -c . "$g/settings.json")"
+  out9c="$(gortex_merge_hooks "$g")"
+  check "second merge reports already-merged" \
+    'printf "%s" "$out9c" | grep -q "already merged"'
+  check "second merge changes nothing" '[ "$(jq -S -c . "$g/settings.json")" = "$snap" ]'
+
+  # (d) a settings.local.json without gortex in it is not a merge source. This is
+  # the guard against hoovering an unrelated local file into the managed one.
+  h="$tmp/gx-nogortex"; mkdir -p "$h"
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"something-else"}]}]}}\n' > "$h/settings.local.json"
+  printf '{"model":"opus"}\n' > "$h/settings.json"
+  gortex_merge_hooks "$h" >/dev/null
+  check "a non-gortex settings.local.json is left alone" \
+    '[ "$(jq -r ".hooks // \"none\"" "$h/settings.json")" = "none" ]'
+
+  # (e) no settings.local.json at all → silent no-op, not an error.
+  i="$tmp/gx-empty"; mkdir -p "$i"; printf '{}\n' > "$i/settings.json"
+  out9e="$(gortex_merge_hooks "$i")"; rc9e=$?
+  check "missing settings.local.json is a silent no-op" '[ -z "$out9e" ] && [ "$rc9e" -eq 0 ]'
+else
+  echo "skip - gortex_merge_hooks cases (jq not installed)"
+fi
+
 # Two assertions the cases above don't make. The first pins that a refusal is a
 # refusal: an early `exit 1` that still emitted link output would mean the guard
 # fired after doing damage. The second is the over-fire guard — if the probe ever
