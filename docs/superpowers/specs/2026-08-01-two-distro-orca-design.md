@@ -161,9 +161,14 @@ repos out frees nothing:
 | `~/my` | 1.2 G |
 | `~/pure` | **100 M** |
 
-`Ubuntu-24.04` is 13 G used, 33 G free. The 23 G `~/.hermes` is flagged as an
-observation only — cleaning it is a separate decision, deliberately not folded
-into this project.
+`Ubuntu-24.04` is 13 G used, 33 G free.
+
+**`~/.hermes` (23 G) stays put and is not a cleanup candidate** — it is the live
+Hermes agent's state, running on `desktop-wsl` (`hermes` listening on `:9119`).
+It is named here only so a future session does not read "92% full" and go looking
+for something to delete. The disk pressure is a standing condition of
+`desktop-wsl`, not a problem this project solves; `wsl --manage desktop-wsl
+--resize` remains available, and C: has 1.17 TB free.
 
 C: has 1.17 TB free and `.wslconfig` sets `defaultVhdSize=52428800000` with
 `sparseVhd=true`, so a third VHD is affordable.
@@ -439,7 +444,7 @@ block for key material stays exactly as it is.
 | `desktop-wsl` stopped ⇒ `desktop-pure` unreachable from `air` | it owns the VM's only `tailscaled`; it hosts the personal daemon and stays running, but the dependency is real |
 | WSL interop dies at runtime, breaking `claude auth login` | binfmt watchdog in Phase 0; out-of-band recovery via `ssh desktop "wsl.exe -d <distro> -u root -- systemctl restart systemd-binfmt"` |
 | A repo missed during re-registration vanishes from the Orca UI | enumerate the Windows-runtime registry before Phase 4 and check it off |
-| `desktop-wsl` root at 92% | the move frees nothing (`~/.hermes` 23 G, `~/.cache` 12 G) — separate cleanup call, deliberately not folded in |
+| `desktop-wsl` root at 92% | the move frees nothing; `~/.hermes` (23 G) is the live Hermes agent and stays. Standing condition, not solved here — `wsl --manage --resize` available |
 | Port collision from a third daemon in the shared netns | ports are allocated centrally in this spec's table; extend it, never pick ad hoc |
 | Parent-routing dispatch regression in `/ship` and kb-refresh | `fd_wsl_hosts` now returns two nicknames; dispatch tests updated in Phase 3 |
 
@@ -450,5 +455,53 @@ block for key material stays exactly as it is.
   VM, and the personal distro happens to be its owner.
 - **`Ubuntu-24.04` stays** on disk, stopped, holding an older work checkout. The
   2026-07-31 spec slated it for retirement; retiring it would reclaim a 48 GB VHD
-  and is a separate call.
+  and is a separate call. **Archive `~/exactly` before retiring it** — see below.
 - **Dispatch is asymmetric** between the two distros, justified in §2.
+
+## Prerequisite for retiring `Ubuntu-24.04`: archive `~/exactly`
+
+Not part of this project's phases — a gate on the *separate* decision to retire
+the distro. Recorded here because the measurement was done while scoping this
+work and would otherwise be lost.
+
+`~/exactly` is 218 MB holding three `github.com/exactly-ai/*` checkouts:
+
+| repo | size | state |
+|---|---|---|
+| `decs` | 764 K | clean, 0 unpushed, no stash, branch `maxim/uv` |
+| `durer` | 1.9 M | clean, 0 unpushed, no stash, branch `main` |
+| `travolta` | 215 M | clean, 0 unpushed, **1 stash**, branch `main` |
+
+Measured, not assumed:
+
+- **No `.venv`, `venv`, `node_modules`, `site-packages`, `__pycache__`, `.tox`
+  anywhere under `~/exactly`.** The "without venvs" exclusion removes nothing
+  that exists.
+- No branch lacks an upstream, and `git log --branches --not --remotes` is empty
+  in all three — every commit is on a remote.
+- `travolta`'s bulk is `data/` (75 MB) and `fonts/` (18 MB), both **tracked** and
+  pushed. `.idea` is gitignored. No untracked non-ignored files in any of the
+  three.
+
+**The only content that exists nowhere but that disk is one stash** —
+`travolta` `stash@{0}`, `WIP on maxim/plan-upgrade`, 5 files, +64/−111 under
+`durer_backend/`. Stashes never leave the machine they are made on.
+
+Archive as a plain tarball of `~/exactly` (218 MB, cheap). A tarball preserves
+`.git/refs/stash` and its reflog, so it captures the stash without any special
+handling — no separate patch export needed. Everything else in it is
+reproducible by cloning from `exactly-ai`, so the tarball is belt-and-braces plus
+the gitignored `.idea` project configs.
+
+Destination is C: or the storage pool, **never a tracked path** in this repo or
+the dotfiles repo. Verify the stash survives the round trip before the VHD is
+deleted:
+
+```console
+git -C <extracted>/travolta stash list   # must show WIP on maxim/plan-upgrade
+```
+
+Side note for the generalization: `exactly-ai` is a **third** GitHub org, distinct
+from both the personal and Pure accounts. If that work resumes it gets its own
+distro — `desktop-exactly` — joining via parent routing like `desktop-pure`, per
+§2.
