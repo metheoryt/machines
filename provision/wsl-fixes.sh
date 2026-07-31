@@ -21,7 +21,7 @@
 #      binfmt.d is applied, which is why the live flags always read `P` and
 #      never the conf's `PF`. The verified recovery is
 #      `systemctl restart systemd-binfmt`, so the watchdog does exactly that.
-set -u
+set -euo pipefail
 
 info() { printf '\033[0;36m▸ %s\033[0m\n' "$*"; }
 ok()   { printf '\033[0;32m  ✓ %s\033[0m\n' "$*"; }

@@ -43,8 +43,13 @@ fd_probe() {
     wsl)
       local parent distro
       read -r parent distro < <(_fd_wsl_split "$alias")
+      # Double-quote $distro: this string is parsed by a remote shell that is
+      # PowerShell (per _fd_win_call, the parent is always platform:windows) —
+      # double quotes group arguments in both PowerShell and cmd.exe, single
+      # quotes only in PowerShell — so a distro name containing a space (WSL
+      # permits it, e.g. "Docker Desktop") still reaches wsl.exe -d as one arg.
       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$parent" \
-        "wsl.exe -d $distro -- bash -c true" </dev/null 2>/dev/null ;;
+        "wsl.exe -d \"$distro\" -- bash -c true" </dev/null 2>/dev/null ;;
     *)       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -c true </dev/null 2>/dev/null ;;
   esac
 }
@@ -64,11 +69,14 @@ fd_run() {
     wsl)
       # No tailnet node of its own: reach it as `wsl.exe -d <distro>` through
       # the Windows parent. Same shape fd_wsl_hosts already uses to discover it.
+      # $distro is double-quoted for the same reason as in fd_probe above: the
+      # parent's shell is PowerShell, and double quotes group arguments there
+      # (and in cmd.exe) so a space in the distro name stays one argument.
       read -r parent distro < <(_fd_wsl_split "$alias")
       q="-s --"
       for a in "$@"; do q="$q \"$a\""; done
       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$parent" \
-        "wsl.exe -d $distro -- bash $q" 2>/dev/null
+        "wsl.exe -d \"$distro\" -- bash $q" 2>/dev/null
       ;;
     *)
       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s -- "$@" 2>/dev/null
@@ -99,8 +107,11 @@ fd_wsl_hosts() {
   printf '%s\n' "$distros" | while IFS= read -r d; do
     d="$(printf '%s' "$d" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
     [ -n "$d" ] || continue
+    # Double-quote $d for the same reason as fd_probe/fd_run's wsl branches:
+    # the remote shell here is PowerShell, where double quotes (unlike single
+    # quotes) group arguments, so a distro name with a space survives intact.
     marker="$($SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" \
-      "wsl.exe -d $d -- bash -lc 'cat \$HOME/machines/fleet.local.json 2>/dev/null'" </dev/null 2>/dev/null \
+      "wsl.exe -d \"$d\" -- bash -lc 'cat \$HOME/machines/fleet.local.json 2>/dev/null'" </dev/null 2>/dev/null \
       | tr -d '\000\r')"
     [ -n "$marker" ] || continue
     printf '%s' "$marker" | jq -e '.self.fleet == true' >/dev/null 2>&1 || continue

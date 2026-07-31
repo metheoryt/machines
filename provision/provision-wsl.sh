@@ -54,8 +54,14 @@ provision_wsl_main() {
     info "$i/$total $step…"
     case "$step" in
       tailscale-wsl.sh) bash "$REPO/provision/$step" --hostname "$nick" ;;
-      fleet-local.sh)   bash "$REPO/provision/$step" --nickname "$nick" \
-                             --platform linux --repo "$REPO" ;;
+      fleet-local.sh)
+        if [ "$no_tailscale" = 1 ]; then
+          bash "$REPO/provision/$step" --nickname "$nick" \
+               --platform linux --dispatch parent --repo "$REPO"
+        else
+          bash "$REPO/provision/$step" --nickname "$nick" \
+               --platform linux --repo "$REPO"
+        fi ;;
       *)                bash "$REPO/provision/$step" ;;
     esac || die "$step failed"
   done
