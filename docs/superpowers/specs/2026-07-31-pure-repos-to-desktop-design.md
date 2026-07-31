@@ -1,7 +1,7 @@
 # Move pure work repos to desktop; air becomes a thin Orca client
 
 **Date:** 2026-07-31
-**Status:** Phases A and D done; Phase B is the user's; teardown gated
+**Status:** complete — all phases done, air torn down 2026-07-31
 
 ## Progress
 
@@ -23,7 +23,33 @@
   itself on desktop (`/home/me/machines` → `-home-me-machines`,
   `/home/me/my/buton` → `-home-me-my-buton`). The hand-built
   `-home-me-pure-backend-api` matches, and its 3 transcripts are in place.
-- **Teardown — blocked** on the cutover gate below.
+- **Teardown — done.** User confirmed the stack runs on desktop. Removed on air:
+  6 worktrees, `/Users/me/pure`, the 7 orphaned Orca-worktree session dirs, and
+  11.4 GB of inactive Docker images + build cache. 14 orphaned volumes
+  (323 MB) were left — `docker system prune` does not touch volumes, and
+  removing them was outside the stated plan.
+- **Local branches — dropped**, on the user's call after review. Verified first:
+  `epic/CFT-4382_payment-webhook-databus` and `metheoryt/agenda` had **0** unique
+  non-merge commits (the "ahead 16" was purely local integration merges). The two
+  `[gone]` branches carried 44 unique commits, but both were squash-merged
+  (PR #4256 and #4282 — the latter is `3316c52cd`, the tip of develop in the
+  fresh clone), so only review-iteration history was lost, never shipped content.
+
+### Teardown gotcha — `rm -rf` hit a dotfiles-tracked file
+
+`rm -rf /Users/me/pure` deleted `pure/backend-api/.claude/memory/project.md` —
+the file promoted to `main` in Phase A an hour earlier. The bare repo's work-tree
+*is* `$HOME`, so tracked paths live inside project checkouts rather than beside
+them, and nothing errors: `dotfiles status` just shows a lone ` D`.
+
+Left alone, the sync timer's `add -u` would have staged the deletion, committed
+it to the `air` branch, and put air in permanent drift against `main` on a
+*shared* path — and the next `/dotfiles-promote` would have offered to propagate
+that delete fleet-wide, stripping the file from desktop, the one box that now
+needs it. Recovered with `dotfiles checkout --`; tree clean, zero drift.
+
+**Check `dotfiles status` after any `rm -rf` under `$HOME`.** Recorded in global
+memory.
 
 ## Side effect: dotfiles promote (2026-07-31)
 
