@@ -420,10 +420,10 @@ provision *ARGS:
 # <nickname> = tailnet node name (also its fleet.local.json nickname). Run from
 # inside the distro. Relative path (not {{flake_dir}}) — same Windows-path reason
 # as agent-bootstrap/provision.
-[group('fleet')]
-[doc('Provision THIS WSL distro as a self-declaring fleet host')]
-provision-wsl nickname:
-    bash provision/provision-wsl.sh {{nickname}}
+[group('provision')]
+[doc('Provision THIS WSL distro as a self-declared fleet host (add --no-tailscale for a second distro)')]
+provision-wsl nickname *args:
+    bash provision/provision-wsl.sh {{nickname}} {{args}}
 
 # <machine> is a darwin member of fleet.json (e.g. `air`) — an argument rather
 # than detected, because stage 1 is what SETS the hostname. One sudo prompt up

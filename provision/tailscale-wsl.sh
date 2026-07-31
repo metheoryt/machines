@@ -5,8 +5,17 @@
 # at its OWN 100.64.x.y — independent of the Windows host's own Tailscale.
 # Pairs with provision/ssh-wsl.sh.
 #
-# Model: one tailscaled PER distro (NOT host mirrored-networking), so N distros
-# on one Windows host each get a distinct identity with no port juggling.
+# Model: ONE tailscaled for the whole WSL2 utility VM. Distros do NOT get
+# separate network namespaces — proven 2026-08-01: Ubuntu-26.04 and Ubuntu-24.04
+# report the same /proc/self/ns/net inode, and each `ss -ltn` lists the other's
+# listeners. So exactly one distro per Windows host runs tailscaled and owns
+# tailscale0; every other distro shares that node's IP and must pick distinct
+# ports. Run this script on the node-owning distro ONLY; provision the rest with
+# `provision-wsl.sh <nickname> --no-tailscale`.
+#
+# (An earlier version of this comment claimed one tailscaled per distro "with no
+# port juggling". That was false — the script had only ever been run with a
+# single distro present.)
 # Inbound arrives via the VPS DERP relay (region 999) through WSL's default
 # NAT — no port forwarding, no .wslconfig change.
 #
