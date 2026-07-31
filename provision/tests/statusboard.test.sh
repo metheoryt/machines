@@ -293,21 +293,29 @@ eq "$(strip "$(sb_temp_cell 47 1)")" ' 47C' \
 # assertion vacuously true against an empty needle. So the palette is swapped for
 # legible markers for the duration of this block, and restored afterwards.
 T_WARN_SAVE="$C_WARN"; T_BAD_SAVE="$C_BAD"; T_DIM_SAVE="$C_DIM"; T_RST_SAVE="$C_RST"
-C_WARN='<warn>'; C_BAD='<bad>'; C_DIM='<dim>'; C_RST='<rst>'
+T_OK_SAVE="$C_OK"
+C_WARN='<warn>'; C_BAD='<bad>'; C_DIM='<dim>'; C_RST='<rst>'; C_OK='<ok>'
 has   "$(sb_temp_cell 52 1)" '<warn>' 'temp: 52C warns on a spinner'
 hasnt "$(sb_temp_cell 52 0)" '<warn>' 'temp: 52C is unremarkable on an SSD'
 has   "$(sb_temp_cell 58 1)" '<bad>'  'temp: 58C is bad on a spinner'
 hasnt "$(sb_temp_cell 58 0)" '<bad>'  'temp: 58C is not yet bad on an SSD'
 has   "$(sb_temp_cell 72 0)" '<warn>' 'temp: 72C warns on an SSD'
 has   "$(sb_temp_cell 82 0)" '<bad>'  'temp: 82C is bad on an SSD'
-has   "$(sb_temp_cell 30 1)" '<dim>'  'temp: a cool drive stays quiet'
+# A READING below the warn threshold is painted, and the two non-readings are not:
+# that is the whole distinction the dim-everything version could not draw, and a block
+# of seven quiet numbers could not say which of them were measurements at all.
+has   "$(sb_temp_cell 30 1)" '<ok>'   'temp: a cool drive reads as healthy, not as unknown'
+has   "$(sb_temp_cell 45 0)" '<ok>'   'temp: an SSD below its warn threshold is healthy too'
 has   "$(sb_temp_cell zzz)"  '<dim>'  'temp: a parked drive stays quiet'
 has   "$(sb_temp_cell '')"   '<dim>'  'temp: an unreadable drive stays quiet'
+hasnt "$(sb_temp_cell zzz)"  '<ok>'   'temp: parked is not a clean bill of health'
+hasnt "$(sb_temp_cell '')"   '<ok>'   'temp: unreadable is not a clean bill of health'
 # An unknown rotational flag must take the spinner thresholds: it is the assumption
 # whose consequences are safer, and the disk row passes an empty string for a mount
 # whose drive could not be resolved.
 has   "$(sb_temp_cell 52 '')" '<warn>' 'temp: unknown rotation warns like a spinner'
 C_WARN="$T_WARN_SAVE"; C_BAD="$T_BAD_SAVE"; C_DIM="$T_DIM_SAVE"; C_RST="$T_RST_SAVE"
+C_OK="$T_OK_SAVE"
 
 # ── Time charts ───────────────────────────────────────────────────────────────
 # The chart column is the reason the frame is now laid out in two passes, so the
@@ -696,6 +704,95 @@ hasnt "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732)" 'gone' \
 # a bay anyway must not override that.
 has "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732 gone '' 1 sdb)" 'sdb1' \
   'gone mount: the bay column falls back to the partition node'
+
+# ── Physical bays ─────────────────────────────────────────────────────────────
+# Real sysfs paths from latitude, captured 2026-08-01. The point of every one of them
+# is that the DRIVE'S OWN hop wins: sdg hangs off port 4 of a hub on 2-1, and the slot
+# is the hub port, not the hub.
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:14.0/usb4/4-1/4-1:1.0/host0/target0:0:0/0:0:0:0)" \
+   'u4-1:0' 'bay: a single-bay dock is its port and LUN 0'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:14.0/usb4/4-2/4-2:1.0/host2/target2:0:0/2:0:0:0)" \
+   'u4-2:0' 'bay: the first bay of a two-bay dock'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:14.0/usb4/4-2/4-2:1.0/host2/target2:0:0/2:0:0:1)" \
+   'u4-2:1' 'bay: the second bay of the SAME bridge differs only in the LUN'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:0d.0/usb2/2-1/2-1.4/2-1.4:1.0/host4/target4:0:0/4:0:0:0)" \
+   'u2-1.4:0' 'bay: a drive behind a hub names the hub PORT, not the hub'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:0d.0/usb2/2-2/2-2:1.0/host1/target1:0:0/1:0:0:0)" \
+   'u2-2:0' 'bay: a drive plugged straight into the machine'
+# NVMe has no bay anyone hot-swaps, and the controller name is already stable.
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:06.0/0000:01:00.0/nvme/nvme0)" \
+   'nvme0' 'bay: an NVMe controller is its own name'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:1d.0/0000:73:00.0/nvme/nvme1)" \
+   'nvme1' 'bay: the second NVMe is not confused with the first'
+# `target2:0:0` has three fields and starts with a letter; `4-2:1.0` carries a colon.
+# Both sit on the path of every USB disk, and mistaking either for the SCSI address or
+# the port would put the wrong number in every label.
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:1f.2/ata3/host2/target2:0:0/2:0:0:0)" \
+   'ata3:0' 'bay: a plain SATA disk falls back to its ata link'
+eq "$(sb_bay_tag_parse /sys/devices/pci0000:00/0000:00:07.0/virtio3/block/vda)" '' \
+   'bay: a bus this parser does not know yields nothing, not a guess'
+eq "$(sb_bay_tag_parse '')" '' 'bay: no path is not an error'
+
+# The map is a rename LAYER over those tags: an unmapped drive shows the tag, and a
+# drive whose tag could not be derived shows the fallback the caller passes.
+BM="$(sb_diskmap_parse bay "$(printf '%s\n' \
+  '# the two-bay dock on the left' \
+  'bay u4-2:0  dockB0' \
+  'bay u4-2:1  dockB1   trailing junk' \
+  'transient /mnt/xs' \
+  'nonsense line' \
+  'bay u2-2:0  waaaaaaaaaaaytoolong')")"
+eq "$(sb_bay_label u4-2:1 "$BM" sdd)" 'dockB1' 'bay: a mapped tag shows its label'
+eq "$(sb_bay_label u4-1:0 "$BM" sdb)" 'u4-1:0' 'bay: an unmapped tag shows the tag itself'
+eq "$(sb_bay_label '' "$BM" sdb)"     'sdb'    'bay: no tag falls back to the device name'
+# Clipped, not allowed to run long: the disk block pads every row to the widest one and
+# the chart column starts after it, so one long label would move the charts for its row.
+BM_LAB="$(sb_bay_label u2-2:0 "$BM" sda)"
+eq "${#BM_LAB}" "$SB_DISK_BAYW" 'bay: an over-long label is clipped to the column width'
+# A typo must cost a label, never the board: unknown directives are ignored.
+eq "$(sb_bay_label u9-9:9 "$BM" sdz)" 'u9-9:9' 'bay: a nonsense line maps nothing'
+
+# transient: keyed by MOUNT POINT, because a vanished device resolves to no drive and
+# the mount point is the only key left to recognise it by.
+TM="$(sb_diskmap_parse transient "$(printf '%s\n' 'transient /mnt/xs' 'bay u4-1:0 dockA')")"
+transient() { if sb_transient "$1" "$TM"; then printf yes; else printf no; fi; }
+eq "$(transient /mnt/xs)"  yes 'transient: the declared mount is transient'
+eq "$(transient /mnt/immich)" no 'transient: an undeclared mount is not'
+eq "$(transient /mnt)"     no  'transient: a PREFIX of the declared mount is not it'
+eq "$(transient '')"       no  'transient: an empty mount is not transient'
+eq "$(sb_diskmap_parse bay "$TM")" '' 'diskmap: directives do not leak into each other'
+
+# Eject safety: two fields, reads and writes in flight. Either one nonzero means
+# pulling the cable now loses data, which is the only thing between "nothing is
+# mounted" and "safe to unplug".
+eq "$(sb_inflight_busy '       0        0')" '0' 'eject: an idle drive is safe'
+eq "$(sb_inflight_busy '       1        0')" '1' 'eject: a read in flight is busy'
+eq "$(sb_inflight_busy '       0       12')" '1' 'eject: a write in flight is busy'
+eq "$(sb_inflight_busy '')" '0' 'eject: an unreadable node is not called busy'
+eq "$(sb_inflight_busy 'junk')" '0' 'eject: nonsense is not called busy'
+
+# A ZERO-SIZE disk is an empty card-reader slot, not a disk. This box carries a
+# two-slot reader whose nodes exist whether or not a card is in them, so the board
+# warned permanently about two "unmounted disks" that were empty slots (2026-08-01).
+# The fixture is real `lsblk -rno NAME,TYPE,SIZE,MOUNTPOINT` output.
+LSB="$(printf '%s\n' \
+  'sda disk 931.5G' \
+  'sda1 part 931.4G /mnt/immich-2024' \
+  'sdb disk 298.1G' \
+  'sdb1 part 298.1G' \
+  'sde disk 0B' \
+  'sdf disk 0B' \
+  'nvme0n1 disk 476.9G' \
+  'nvme0n1p1 part 461.1G /')"
+eq "$(sb_unmounted_parse "$LSB")" 'sdb|298.1G' 'unmounted: only the disk with nothing mounted'
+hasnt "$(sb_unmounted_parse "$LSB")" 'sde' 'unmounted: an empty card slot is not an unmounted disk'
+hasnt "$(sb_unmounted_parse "$LSB")" 'sdf' 'unmounted: neither is the second slot'
+hasnt "$(sb_unmounted_parse "$LSB")" 'nvme0n1' 'unmounted: the root disk is mounted through a partition'
+# Put a card in and it acquires a size — at which point it IS a disk and being told
+# about it is the entire point of the row.
+has "$(sb_unmounted_parse "$(printf '%s\n' 'sde disk 29.7G')")" 'sde|29.7G' \
+  'unmounted: a slot with a card in it counts again'
+eq "$(sb_unmounted_parse '')" '' 'unmounted: no input is not an error'
 
 # sb_mounts must decide liveness by the DEVICE NODE. stat()ing the mount point would
 # block on a dead NFS mount and reading it would spin up a sleeping disk every probe.

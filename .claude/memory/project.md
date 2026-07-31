@@ -942,6 +942,49 @@ global + per-host). One bullet per fact under a topical heading.
   board through a pty (`script -q -c … /dev/null` with a `( sleep 3; printf " " )`
   pipeline) and counting page markers per frame — the only way to test the key path,
   since it needs `[ -t 0 ]`.
+- **The disk block names BAYS, not `sdX`** (2026-08-01). Kernel letters are handed
+  out in discovery order and name nothing physical, which is useless in front of five
+  identical 2.5" spinners in three docks. Two layers: `sb_bay_tag_parse` derives a tag
+  from `readlink -f /sys/block/<d>/device` — `u<bus>-<port>:<lun>` for USB, the
+  controller name for NVMe — and a per-host map (`provision/statusboard/disks.<hostname>.conf`,
+  `STATUSBOARD_DISKMAP` overrides) renames tags to what the docks are called in the
+  room. Derived from `/sys/block/*/device`, never `/dev/disk/by-path`: that tree has
+  TWO symlinks per USB device here (`-usb-` and `-usbv3-`), so scanning it only looks
+  deterministic. The port path and LUN are physical; the BUS index is xHCI enumeration
+  order, which is why the map renames a derived tag instead of hand-writing paths.
+  latitude's storage, as mapped 2026-08-01: **two identical UGREEN CM198 docks** —
+  dual-bay 2.5"/3.5" SATA-to-USB3, externally powered, each ONE bridge with two LUNs —
+  are `dockA0`/`dockA1` (`u4-1:0`, sdb; bay 1 empty) and `dockB0`/`dockB1` (`u4-2:0`
+  sdc, `u4-2:1` sdd). `usbcXS` (`u2-2:0`, the portable XS2000) is a USB-C port with no
+  adapter; `hubSATA` (`u2-1.4:0`, sdg) is the other USB-C port into a PD hub into a
+  SATA-USB3 adapter, so the hub is 2-1 and the adapter sits on its port 4. A dock bridge
+  reports only POPULATED LUNs — nothing appears at `u4-1:1` until a disk goes in — which
+  is the opposite of the card reader (`u2-1.3:0/1`, on the same hub), whose two slots
+  exist as 0B nodes with no card in them.
+- **A 0B disk is an empty card slot, not a disk** (2026-08-01). latitude carries a
+  two-slot reader (`SD/MMC` + `Micro SD/M2`, one serial, `sde`/`sdf`) whose block nodes
+  exist with no card in them, so the board permanently warned `disks unmounted` about
+  two empty slots. `sb_unmounted_parse` drops zero-size disks — filtering on SIZE, not
+  on the model name, so a card that IS inserted acquires a size and counts again. Do
+  not switch that `lsblk` call to `-b`: the same field is what the row prints, and
+  `298.1G` would become raw bytes.
+- **`transient <mount>` in the disk map: a disk that is SUPPOSED to leave** (2026-08-01).
+  df keeps reporting an unplugged filesystem forever, so the portable XS2000 sat on the
+  board as a permanent `!! gone !!` row plus a `bad:1 mount gone` alert describing its
+  normal state. A transient mount's gone row is dropped in BOTH places (the disk block
+  and `sb_alerts`, which would otherwise shout about a row nobody can see). Keyed by
+  MOUNT POINT because it is the only key left — a vanished device resolves to no drive,
+  so neither bay nor tag exists to match on. Only the gone row: plugged-in-but-unmounted
+  still lists, with its eject verdict.
+- **The unmounted row carries a verdict, and temps below warn are GREEN** (2026-08-01).
+  `safe` = nothing mounted off the drive and `/sys/block/<d>/inflight` all zero; `busy`
+  = a request still outstanding, so pulling the cable loses data. The row stays ONE
+  line (capped at four drives, then `+N more`) because six unmounted disks once squeezed
+  the chart column for every other row. And `sb_temp_cell` now paints a reading below
+  the warn threshold `C_OK`: `sb_hi_colour` answers `C_DIM` there, the same non-colour
+  as `-` and `zzz`, so a drive at 38C looked identical to one that could not be read.
+  Thresholds unchanged (50/55 spinner, 70/80 flash) — only the below-warn band gained a
+  colour, and `zzz`/`-` deliberately did not.
 - **The paint OVERWRITES; it must never erase first** (2026-07-31). `printf
   '\033[H\033[2J'` as its own write(2) before the frame left the pane genuinely
   blank for an instant, tmux flushed that blank downstream on its own event-loop
