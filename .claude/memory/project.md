@@ -648,17 +648,34 @@ global + per-host). One bullet per fact under a topical heading.
   needs a full `umount` + `mount -o rw`. `/dev/sda` is a **Ventoy stick**: `sda1`
   253.8 G exfat `Boot`, `sda2` 32 M `VTOYEFI`, `sda3` 700 G ntfs `data` → `/mnt/xs`
   (550 G free). No unallocated space to carve an ext4 partition from.
-- **`/mnt/public` (ST320LT020, 320 GB, old UUID `6C28DD2C28DCF654`) is being
-  reformatted ntfs3 → ext4 label `spare320` at `/mnt/spare320`**, chained behind the
-  mirror by `~/public-reformat.sh` (refuses to start unless `mirror-build.log`
-  contains `MIRROR OK`). Everything on it was cleared first: `qb` 60 G verified on
-  the HGST; `Настя Стас GoPro` 40 G copied to `/mnt/immich-mirror/staging/` by the
-  same script *before* the reformat; `restic-repos` 69 G and
+- **`/mnt/public` is gone. The ST320LT020 (320 GB) was reformatted ntfs3 → ext4 at
+  18:17 on 2026-07-31 and is now `/mnt/spare320`** — label `spare320`, **UUID
+  `3a78fd88-deb0-4c1a-a576-14abd0631d57`** (old NTFS `6C28DD2C28DCF654` gone),
+  293 GiB, **empty and unassigned**. Everything on it was cleared first: `qb` 60 G
+  verified on the HGST (1749 files / 63900157812 bytes both sides); `Настя Стас
+  GoPro` 40 G copied to `/mnt/immich-mirror/staging/` and verified (162 files /
+  41905063663 bytes) *before* the reformat; `restic-repos` 69 G and
   `G614JV-Ubuntu-24.04.tar` 9.9 G deleted on the user's instruction; `secrets`
   deleted (copies remain on `/mnt/xs`). Its by-id path carries a **fake bridge
   serial** (`usb-ATA_ST320LT020-9YG14_0123456789ABCDE-0:0`) — a cheap enclosure that
   doesn't pass the real serial through, so guard on the UUID too, not the by-id path
   alone.
+- **The mirror completed and verified 2026-07-31.** `rsync -aHAX` finished 17:10
+  `rc=0` after 2h40m at ~68 MB/s. The three checks that matter: **68932 files in
+  source and 68932 on the mirror, 0 missing and 0 extra** (full-tree file-level
+  equality); every one of the 10 tracked directories byte-equal; and **`Media`
+  deduped to 488G on the destination rather than 735G**, which is the proof `-H`
+  actually preserved the hardlinks. The only DIFF was `Media/config` — 6 jellyfin
+  resized-image cache JPEGs plus 3 Android-TV client upload logs written *during* the
+  copy, src>dst with nothing extra on the destination. A delta `rsync` of that one
+  directory (11 files, 7.9 MB) cleared it. **Chasing byte-exactness on `Media/config`
+  is futile while jellyfin runs** — verify it by *which* files differ, not by the
+  byte total. Note the guard worked as designed: `public-reformat2.sh` refused to
+  touch `/mnt/public` on the DIFF verdict and had to be re-released by hand after
+  re-verification, which is the correct failure direction.
+- **Both job logs are root-owned** (the scripts run under `sudo`), so appending a
+  hand-adjudicated verdict needs `sudo tee -a` — a plain `>>` fails with *Permission
+  denied* and the relaunched job silently re-reads the stale verdict.
 - **The `laptop-music` restic repo was verified fully redundant before deletion**:
   zero of its 11904 entries are missing from
   `/mnt/xs/music-from-g513ie/PicardedMusic` (13665 entries), and all 1169 artist
@@ -779,6 +796,24 @@ global + per-host). One bullet per fact under a topical heading.
   `md5sum` of the private file (`aa9d26646442` = the live ED25519, `006d1b05cef6` =
   the retired RSA) — `ssh-keygen -lf -` does **not** read stdin, so pipe-to-
   fingerprint silently returns nothing and every key looks "ENCRYPTED_OR_UNREADABLE".
+- **`backup.ps1` copies desktop's SSH private keys on purpose, and that rationale is
+  now obsolete.** It was written by Claude for the July clean reinstall, *before the
+  fleet key exchange existed* — restoring the old private key was how outbound access
+  survived a wipe. It no longer needs to: `provision/fleet-authorized-keys` is a
+  **tracked repo file that already carries desktop's pubkey** `fFZUwTp9…`, so a fresh
+  install can `ssh-keygen`, replace that one line, push, and every fleet box picks the
+  new key up through its own provisioning (`windows.ps1:252-268` writes it into
+  `administrators_authorized_keys`). The capture points: **`backup.ps1:119`**
+  (`Copy-Item "C:\Users\methe\.ssh\*"` → `secrets\`), the **generic dotfile sweep at
+  `backup.ps1:144`** (`.ssh` is a `.*` dir and is not in the `$blocklist`, so it
+  lands in `home\.ssh`), the **WSL tar at `backup.ps1:105`** (`.ssh .gnupg
+  .gitconfig` per distro), and **`backup.ps1:228`** (`netsh wlan export profile
+  key=clear` → cleartext PSKs). `restore.ps1:139` restores `.ssh` from **`home\.ssh`,
+  not from `secrets\`** — so line 119's loose copy is redundant even for restore.
+  The script's stated reason is "GPG keys are unrecoverable", which is legitimate in
+  principle but did not apply: the captured `.gnupg` had a **32-byte empty
+  `pubring.kbx`**. `backup.ps1:278` also advises making the second copy of `secrets`
+  "off this SSD (server / **email**)" — emailing private keys.
 - **Do not back up SSH private keys at all.** Correct recovery is regenerate +
   re-authorize (one minute); every copy is pure added exposure. Decision 2026-07-31:
   **not rotating** `fFZU…` despite four plaintext copies — the drives never left the
