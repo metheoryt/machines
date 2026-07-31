@@ -95,12 +95,76 @@ mock_ssh_wsl() {
 }
 SSH="mock_ssh_wsl"
 got="$(fd_wsl_hosts desktop windows)"
-[ "$got" = "desktop-ubuntu26" ] && pass "fd_wsl_hosts opt-in only" || die "fd_wsl_hosts -> '$got'"
+[ "$got" = $'desktop-ubuntu26\tdesktop-ubuntu26.gg.ez\tlinux' ] && pass "fd_wsl_hosts opt-in only" || die "fd_wsl_hosts -> '$got'"
 # non-windows returns nothing
 got="$(fd_wsl_hosts latitude nixos)"
 [ -z "$got" ] && pass "fd_wsl_hosts skips non-windows" || die "fd_wsl_hosts non-windows -> '$got'"
 got="$(fd_wsl_hosts air darwin)"
 [ -z "$got" ] && pass "fd_wsl_hosts skips darwin" || die "fd_wsl_hosts darwin -> '$got'"
+SSH="mock_ssh"   # restore for any later cases
+
+# ── parent-routed WSL dispatch (spec 2026-08-01) ──────────────────────────────
+# A distro with no tailnet node is reached as `wsl.exe -d <distro>` through its
+# Windows parent. The mechanism is the one fd_wsl_hosts already uses to discover
+# distros, verified end to end on 2026-08-01.
+
+: > "$LOG"
+fd_probe 'desktop:desktop-pure' wsl && pass "probe wsl ok" || die "probe wsl failed"
+grep -q $'desktop\twsl.exe -d desktop-pure -- bash -c true' "$LOG" \
+  && pass "probe wsl targets the parent with wsl.exe -d" \
+  || die "probe wsl argv: $(cat "$LOG")"
+
+# fd_run must pipe the script through and pass positional args after `--`.
+out="$(printf 'echo hi\n' | fd_run 'desktop:desktop-pure' wsl ALPHA BETA)"
+case "$out" in
+  *'wsl.exe -d desktop-pure -- bash -s -- "ALPHA" "BETA"'*)
+    pass "run wsl builds wsl.exe -d … bash -s -- args" ;;
+  *) die "run wsl remote cmd: $out" ;;
+esac
+case "$out" in
+  *'||echo hi'*) pass "run wsl round-trips stdin" ;;
+  *) die "run wsl stdin lost: $out" ;;
+esac
+
+# ── fd_wsl_hosts emits nickname/target/platform ───────────────────────────────
+mock_ssh_dispatch() {
+  while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
+  local alias="$1"; shift
+  local remote="$*"
+  case "$remote" in
+    *'wsl.exe -l -q'*) printf 'desktop-wsl\ndesktop-pure\n' ;;
+    *desktop-wsl*)  printf '{"self":{"nickname":"desktop-wsl","fleet":true,"platform":"linux","dispatch":"direct"}}\n' ;;
+    *desktop-pure*) printf '{"self":{"nickname":"desktop-pure","fleet":true,"platform":"linux","dispatch":"parent"}}\n' ;;
+  esac
+}
+SSH="mock_ssh_dispatch"
+MAGICDNS_SUFFIX="gg.ez"
+
+rows="$(fd_wsl_hosts desktop windows)"
+
+echo "$rows" | grep -q $'^desktop-wsl\tdesktop-wsl.gg.ez\tlinux$' \
+  && pass "direct distro → tailnet FQDN, platform linux" \
+  || die "direct row wrong: $rows"
+
+echo "$rows" | grep -q $'^desktop-pure\tdesktop:desktop-pure\twsl$' \
+  && pass "parent distro → parent:distro, platform wsl" \
+  || die "parent row wrong: $rows"
+
+# A file with no dispatch key predates the field and must behave as before.
+mock_ssh_legacy() {
+  while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
+  local alias="$1"; shift
+  case "$*" in
+    *'wsl.exe -l -q'*) printf 'legacy-distro\n' ;;
+    *) printf '{"self":{"nickname":"legacy-distro","fleet":true,"platform":"linux"}}\n' ;;
+  esac
+}
+SSH="mock_ssh_legacy"
+rows="$(fd_wsl_hosts desktop windows)"
+echo "$rows" | grep -q $'^legacy-distro\tlegacy-distro.gg.ez\tlinux$' \
+  && pass "missing dispatch key defaults to direct" \
+  || die "legacy row wrong: $rows"
+
 SSH="mock_ssh"   # restore for any later cases
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
