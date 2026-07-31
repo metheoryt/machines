@@ -662,8 +662,12 @@ global + per-host). One bullet per fact under a topical heading.
 - **The `laptop-music` restic repo was verified fully redundant before deletion**:
   zero of its 11904 entries are missing from
   `/mnt/xs/music-from-g513ie/PicardedMusic` (13665 entries), and all 1169 artist
-  dirs are present. **But `PicardedMusic` is GONE from desktop** (checked live) — so
-  `/mnt/xs` is now the only place it exists. Do not wipe that Ventoy stick casually.
+  dirs are present. **`PicardedMusic` is GONE from desktop** (checked live) — that is
+  **deliberate**: as of 2026-07-31 latitude is where the music collection lives, and
+  the plan is to reorganize it with **airdrome**, serve it with **navidrome**, and
+  mirror it onto a backup disk. Until that mirror exists, `/mnt/xs` +
+  `~/staging/music` are its only two copies and that Ventoy stick is load-bearing,
+  not scratch.
   Related: 19 of the 22 harvested WiFi profiles carry `<protected>false</protected>`
   plaintext PSKs, and desktop still has 20 live WLAN profiles covering all but
   `ipheoryt`, `J.Epstein` and `IDNET_41_RP` — a phone hotspot, an open network, and
@@ -790,7 +794,18 @@ global + per-host). One bullet per fact under a topical heading.
   `kolesa.private.pem`, `connectum.pem`); `Downloads/Telegram Desktop/` holds a
   **third party's** SSH keypair (`kalistudy@sb-a901301`, plus a 1675-byte
   `BEGIN RSA PRIVATE KEY`) received over Telegram, authorized nowhere on this fleet.
-  Not this fleet's exposure, but it is someone's.
+  Not this fleet's exposure, but it is someone's. Those all still sit on `/mnt/xs`
+  itself (ntfs3 `ro`); only the propagated duplicates were removed.
+- **`/mnt/immich-2024-backup/from-xs/backup` is deliberately NOT a faithful copy of
+  `/mnt/xs/backup` any more.** Removed 2026-07-31: `secrets/` + `home/.ssh/` (live
+  private keys) and `OneDrive/` 3.7 G — the latter because OneDrive is cloud-backed
+  (verified live: `C:\Users\methe\OneDrive` on desktop, 3.8 GB / 13711 files, sync
+  process running), and it carried the Apple Pay keys with it. 63 G → 59 G. Same
+  cloud-backed argument applies to `GoogleDrive/` 5.8 G, and `wsl/` 20 G is the same
+  superseded g614jv WSL as the deleted restic repo — both are obvious next
+  deletions but were not authorized. Remainder: `Downloads` 30 G, `wsl` 20 G,
+  `GoogleDrive` 5.8 G, `home` 2.7 G, `repos` 843 M, plus `inventory`, `logs`,
+  `Obsidian`, `windows-reinstall-runbook.md`.
 - **When globbing paths with spaces, quote or use `-print0`.** An unquoted
   `$(find …)` split `Downloads/Telegram Desktop/id_rsa.pub` into two words and
   silently produced empty fingerprints for exactly the files that mattered most.
