@@ -601,6 +601,18 @@ global + per-host). One bullet per fact under a topical heading.
   and is unrestorable**; the `/var/backups/immich-db` dumps are the DB backup) and
   `lost+found`. Drive SMART is old but clean: PASSED, 0 reallocated / 0 pending /
   0 offline-uncorrectable / 0 CRC, 25396 h, Start_Stop 7707, Load_Cycle 344694.
+  Two caveats on the mirrored content: **`Media/config` (514 M) contains jellyfin's
+  and the *arr apps' live SQLite while those containers run**, so the mirrored copy
+  is the same torn-copy class as PGDATA — treat it as best-effort, not restorable
+  (jellyfin rebuilds its library, so it isn't worth stopping containers for). And
+  **`/mnt/immich-mirror/staging/` (the GoPro second copy) is NOT in the mirror's
+  source tree** — any future refresh run with `--delete` would remove it, so such a
+  run needs `--exclude=/staging/`.
+  The mirror's own verification compares against a **live** immich after a ~3 h
+  rsync, so a couple of files landing mid-run can print `MIRROR HAS DIFFS`
+  benignly. Benign = DIFFs confined to `library`/`thumbs`/`encoded-video` with
+  src > dst and every `Media/*` OK; real = dst > src, any `Media/*` mismatch, or a
+  large byte gap. On benign, re-run the same `rsync -aHAX` as a delta and re-verify.
 - **Corrections to earlier notes about what lived on that drive — all four were
   wrong and each one would have driven a bad decision.** (1) `stage-nvme` (735 G)
   was **not** a backup of the immich library: it was `movies` + `torrents`, proven
