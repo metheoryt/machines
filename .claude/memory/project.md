@@ -840,6 +840,18 @@ global + per-host). One bullet per fact under a topical heading.
   From latitude all three of `id_metheoryt`, `id_cyphy671` and `id_ed25519`
   authenticate to GitHub as **`metheoryt`**, so a plain `git@github.com` remote works
   without any alias — the `githubcyphy` alias is genuinely absent here.
+- **A stash is the thing most likely to be silently lost when a repo backup is
+  deleted, and it disguises itself as commits.** `git rev-list --all --not --remotes`
+  counts **3** objects per stash (the stash commit plus its index and
+  untracked-files parents), so one stash reads as "3 unpushed commits" —
+  that is exactly what `repos/vasya` showed. Stashes are also **per-clone**: the
+  live checkout on another machine has its own (empty) stash list, so "the repo
+  exists on desktop" never covers them. `repos/vasya`'s single stash
+  (`.mcp.json` +12/−1, `pyrightconfig.json` +10/−3, "sdd-pre-reminders … restore
+  after feature", on a branch not even checked out locally) existed nowhere else and
+  was pushed 2026-07-31 as `wip/stash-sdd-pre-reminders` (`112c9cf`). Check
+  `git stash list` explicitly before deleting any repo copy — `qaz-law` and `nix`
+  had none.
 - **When globbing paths with spaces, quote or use `-print0`.** An unquoted
   `$(find …)` split `Downloads/Telegram Desktop/id_rsa.pub` into two words and
   silently produced empty fingerprints for exactly the files that mattered most.
