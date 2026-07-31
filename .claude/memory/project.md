@@ -811,6 +811,35 @@ global + per-host). One bullet per fact under a topical heading.
   (received files, not re-derivable — still holds the third party's SSH key),
   `home` 2.7 G, `repos` 843 M, plus `inventory`, `logs`, `Obsidian`,
   `windows-reinstall-runbook.md`.
+- **`repos/airdrome`'s unpushed work was rescued to GitHub 2026-07-31 — it existed
+  nowhere else.** The branch `playlist-editing-tools` (6 commits: PlaylistMerge
+  tombstone model, `merge_playlists` fold/tombstone/delete, `dedup_members`,
+  `--same-name` sweep) was contained in no remote ref, and the repo was **missing
+  from desktop entirely**. Remote `main` had only the design commit `ef148b8`, two
+  commits behind the fork point. Pushed as `playlist-editing-tools` plus two
+  orphaned stashes (whose branches no longer existed) as `wip/stash-go-cmd` and
+  `wip/stash-refactor` — `git push origin "stash@{N}:refs/heads/<name>"` preserves a
+  stash, which is otherwise unpushable and invisible to every "is it on the remote?"
+  check. Verified after: every local branch and both stashes report 0 unique.
+- **`repos/qaz-law` is superseded, not unpushed work.** Its remote moved to
+  `github.com:metheoryt/qaz-code` (was `githubcyphy:cyphy671/qaz-code`), so the
+  backup's stale `refs/remotes/origin/*` made it *look* like 19 unpushed commits.
+  Against the live remote, `main` is a plain ancestor (28 commits behind, remote
+  active today) and `feature/sync-dashboard`'s 19 commits are all `+` — but remote
+  main carries `ff846ea feat: sync command rich terminal dashboard`, i.e. the
+  feature landed reimplemented. Superseded earlier attempt, safe to drop.
+- **Two git-forensics traps that produced wrong answers here.** (1) `git log
+  --branches --not --remotes` measures against whatever stale `refs/remotes/*` the
+  copy carries — worthless on a backup that has not fetched since. Always
+  `git fetch <real-url> "+refs/heads/*:refs/remotes/probe/*"` first and compare
+  against `probe/*`. (2) **The first `git status` on a freshly rsynced repo reports
+  spurious modifications** — `rsync -rlt` preserves mtimes but not permissions, so
+  the index stat-cache mismatches until that first run refreshes it. It reported 85 /
+  19 / 47 dirty files across these repos; the true count was 0 in every one. Run
+  `git status` twice, or `git diff --stat` to confirm content actually differs.
+  From latitude all three of `id_metheoryt`, `id_cyphy671` and `id_ed25519`
+  authenticate to GitHub as **`metheoryt`**, so a plain `git@github.com` remote works
+  without any alias — the `githubcyphy` alias is genuinely absent here.
 - **When globbing paths with spaces, quote or use `-print0`.** An unquoted
   `$(find …)` split `Downloads/Telegram Desktop/id_rsa.pub` into two words and
   silently produced empty fingerprints for exactly the files that mattered most.
