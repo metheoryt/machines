@@ -13,8 +13,34 @@
   (`backend-api` 3, `claude-plugins` 5) copied to desktop under rewritten slugs,
   all 8 verified as parseable JSON on arrival. The 7 Orca-worktree session dirs
   remain on air, awaiting the user's fresh worktree names.
-- **Phase B — the user's**, not started here.
+- **Phase B — done by the user.** All 4 repos cloned into
+  `/home/me/pure` and registered with Orca's Windows runtime at
+  `\\wsl.localhost\Ubuntu-26.04\home\me\pure\…`, worktree setup/teardown
+  configured for each. Note the Orca registry is per-runtime: `orca repo list`
+  from a WSL shell returns empty: it must be queried from the Windows side.
+- **Session slug convention — verified.** The harness derives the project dir as
+  a literal path-to-dashes transform, confirmed against 7 dirs it generated
+  itself on desktop (`/home/me/machines` → `-home-me-machines`,
+  `/home/me/my/buton` → `-home-me-my-buton`). The hand-built
+  `-home-me-pure-backend-api` matches, and its 3 transcripts are in place.
 - **Teardown — blocked** on the cutover gate below.
+
+## Side effect: dotfiles promote (2026-07-31)
+
+With air's work winding down, its drifted shared paths were surveyed and
+promoted to dotfiles `main` (`f308bfc..244e37e`):
+
+| path | change |
+|---|---|
+| `.claude/statusline-command.sh` | +7/−1 — `timeout` is GNU coreutils and absent on stock macOS, where it exits 127 and the empty output reads as "daemon down", showing a false ✗. Falls back to `gtimeout`, then bare. |
+| `.claude/memory/global.md` | +32 — local-path plugin marketplaces snapshot rather than live-link; `sentry.thepure.team` is public while Teleport still needs the VPN |
+| `.claude/memory/personality/practices.md` | +23 — "Proportion" section |
+| `.claude/memory/personality/tone.md` | +5 — never cite commit SHAs in human-facing output |
+
+Deliberately **not** promoted: `.gitconfig`, `.ssh/config`,
+`.claude/host-memory.md` (host-local by design), and the `.gitignore` drift,
+which consists entirely of the allow-lines for those three. air now shows zero
+drift against `main`.
 
 ## Goal
 
