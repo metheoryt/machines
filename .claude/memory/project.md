@@ -636,6 +636,26 @@ global + per-host). One bullet per fact under a topical heading.
   needs a full `umount` + `mount -o rw`. `/dev/sda` is a **Ventoy stick**: `sda1`
   253.8 G exfat `Boot`, `sda2` 32 M `VTOYEFI`, `sda3` 700 G ntfs `data` → `/mnt/xs`
   (550 G free). No unallocated space to carve an ext4 partition from.
+- **`/mnt/public` (ST320LT020, 320 GB, old UUID `6C28DD2C28DCF654`) is being
+  reformatted ntfs3 → ext4 label `spare320` at `/mnt/spare320`**, chained behind the
+  mirror by `~/public-reformat.sh` (refuses to start unless `mirror-build.log`
+  contains `MIRROR OK`). Everything on it was cleared first: `qb` 60 G verified on
+  the HGST; `Настя Стас GoPro` 40 G copied to `/mnt/immich-mirror/staging/` by the
+  same script *before* the reformat; `restic-repos` 69 G and
+  `G614JV-Ubuntu-24.04.tar` 9.9 G deleted on the user's instruction; `secrets`
+  deleted (copies remain on `/mnt/xs`). Its by-id path carries a **fake bridge
+  serial** (`usb-ATA_ST320LT020-9YG14_0123456789ABCDE-0:0`) — a cheap enclosure that
+  doesn't pass the real serial through, so guard on the UUID too, not the by-id path
+  alone.
+- **The `laptop-music` restic repo was verified fully redundant before deletion**:
+  zero of its 11904 entries are missing from
+  `/mnt/xs/music-from-g513ie/PicardedMusic` (13665 entries), and all 1169 artist
+  dirs are present. **But `PicardedMusic` is GONE from desktop** (checked live) — so
+  `/mnt/xs` is now the only place it exists. Do not wipe that Ventoy stick casually.
+  Related: 19 of the 22 harvested WiFi profiles carry `<protected>false</protected>`
+  plaintext PSKs, and desktop still has 20 live WLAN profiles covering all but
+  `ipheoryt`, `J.Epstein` and `IDNET_41_RP` — a phone hotspot, an open network, and
+  a repeater of a PSK already held. Nothing of value was unique to that backup.
 - **Backup strategy decided 2026-07-31: mirror the bulk, restic almost nothing.**
   The axis is *can this be re-derived, and does a wrong write propagate?* — a mirror
   covers drive death, only versions cover your own `rm`, a bad app write, or bitrot.
@@ -721,6 +741,47 @@ global + per-host). One bullet per fact under a topical heading.
   against `/mnt/immich-2024-backup` (mounted `ro`) hung >15 min with no output and
   no error, because it could not create its lock file; `--no-lock` returns in
   seconds. Same for `cat config`.
+
+## SSH key hygiene (audited 2026-07-31)
+
+- **desktop's live SSH identity is `SHA256:fFZUwTp9Ye4HukFntyjVplkAJxczc7GWz6ssWlcyg40`
+  (`methe@me-g614jv`, ED25519).** Its `~/.ssh/config` pins `id_ed25519` for *every*
+  host block — `githubcyphy`, `cyphy-hub`, `homeserver`, `latitude`, `air`,
+  `desktop`, `server`, `hub`, `*.gg.ez` — and `Host *` sets no `IdentityFile`. That
+  key is authorized on **latitude and hub**. Never revoke it while desktop is in
+  service.
+- **`SHA256:gA8eWbg6MwUFjg6IX135LEFKJ9nYHzM52nBDfojDI/o` (`methe@DESKTOP-4PQ6V6B`,
+  RSA 3072) was retired from hub 2026-07-31** — 9 keys → 8, backup at
+  `hub:~/.ssh/authorized_keys.bak-retire-rsa-20260731`. It was authorized only on
+  hub and referenced by no ssh-config block. `desktop → hub` and `desktop →
+  latitude` verified working after removal. Its private half still sits in
+  `desktop:~/.ssh/id_rsa`, deliberately left alone: inert now that nothing
+  authorizes it, and an unknown non-fleet host might still.
+- **`/mnt/public/secrets` was never "a Windows-reinstall leftover" — it is a backup
+  of desktop's LIVE private keys**, and the same pair also sits at
+  `/mnt/xs/backup/secrets/` and `/mnt/xs/backup/home/.ssh/`. Group copies by
+  `md5sum` of the private file (`aa9d26646442` = the live ED25519, `006d1b05cef6` =
+  the retired RSA) — `ssh-keygen -lf -` does **not** read stdin, so pipe-to-
+  fingerprint silently returns nothing and every key looks "ENCRYPTED_OR_UNREADABLE".
+- **Do not back up SSH private keys at all.** Correct recovery is regenerate +
+  re-authorize (one minute); every copy is pure added exposure. Decision 2026-07-31:
+  **not rotating** `fFZU…` despite four plaintext copies — the drives never left the
+  apartment and were never handed to anyone. Delete the copies instead.
+- **Lesson, learned the hard way: inspect a tree for credentials BEFORE rsyncing it
+  to another drive.** The overnight `/mnt/xs/backup` → `/mnt/immich-2024-backup`
+  copy propagated desktop's private keys onto the archive drive. Deleted
+  2026-07-31 (`from-xs/backup/secrets`, `from-xs/backup/home/.ssh`).
+- **`/mnt/xs/backup` holds 48 credential-shaped files** and is a Windows user-profile
+  backup, so assume more. Notable: `OneDrive/Documents/PycharmProjects/card-
+  processing/instance/keys/` has **Apple Pay merchant private keys**
+  (`applePayProcessing.key.pem`, `applePayMerchantID.key.pem`, `merchant_id.pem.key`,
+  `kolesa.private.pem`, `connectum.pem`); `Downloads/Telegram Desktop/` holds a
+  **third party's** SSH keypair (`kalistudy@sb-a901301`, plus a 1675-byte
+  `BEGIN RSA PRIVATE KEY`) received over Telegram, authorized nowhere on this fleet.
+  Not this fleet's exposure, but it is someone's.
+- **When globbing paths with spaces, quote or use `-print0`.** An unquoted
+  `$(find …)` split `Downloads/Telegram Desktop/id_rsa.pub` into two words and
+  silently produced empty fingerprints for exactly the files that mattered most.
 
 ## Repo tooling & scripts
 
