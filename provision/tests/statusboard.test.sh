@@ -555,14 +555,41 @@ eq "$(STATUSBOARD_RAMP=ascii sb_disk_bar 50 1000 1000 10)" '[#####.....]' 'disk 
 
 OUT="$(sb_disk_row nvme1n1p3 / 474794016 1)"
 has "$OUT" '/'          'disk row: shows the mount point'
-has "$OUT" 'nvme1n1p3'  'disk row: shows the device'
+has "$OUT" 'nvme1n1p3'  'disk row: with no bay given, the device names the row'
 has "$OUT" '1%'         'disk row: shows the percentage'
 has "$OUT" '453G'       'disk row: shows the total in GB'
 has "$OUT" '[░'         'disk row: has a horizontal bar'
 # The used figure is deliberately gone: the bar says how full, the total says how
 # big, and a third number in GB said neither for the widest field in the block.
 hasnt "$OUT" '2G'       'disk row: does NOT show the used figure'
-hasnt "$OUT" ' / '      'disk row: no used/total pair remains'
+hasnt "$OUT" 'G / '     'disk row: no used/total pair remains'
+
+# ── The bay column ────────────────────────────────────────────────────────────
+# Which physical drive a filesystem sits on is the one thing the mount point cannot
+# say: /mnt/immich and /mnt/immich-2024 are two drives and / and /boot/efi are one.
+OUT="$(sb_disk_row nvme1n1p3 / 474794016 90 474794016 ok 38 0 nvme1n1)"
+has "$OUT" 'nvme1n1' 'disk row: the bay leads the row'
+# The bay REPLACES the trailing device column — the partition node was the same fact
+# one column finer, and those columns come out of the charts.
+hasnt "$OUT" 'nvme1n1p3' 'disk row: a named bay drops the partition node'
+# A second filesystem on the same drive says so with a marker instead of repeating the
+# name, which is what makes the block read as drives rather than as a flat list.
+OUT="$(sb_disk_row nvme1n1p1 /boot/efi 973952 1 474794016 ok 38 0 nvme1n1 1)"
+hasnt "$OUT" 'nvme1n1 ' 'disk row: a continuation row does not repeat the bay'
+has "$OUT" '╰'          'disk row: a continuation row is marked'
+has "$(STATUSBOARD_RAMP=ascii sb_disk_row nvme1n1p1 /boot/efi 9 1 9 ok 38 0 nvme1n1 1)" '`' \
+   'disk row: a VT gets an ASCII continuation marker'
+# Every one of those shapes has to end at the same column: the block pads to its widest
+# row, so a bay field of varying width would move the chart column per row.
+eq "$(sb_vislen "$(sb_disk_row nvme1n1p3 / 474794016 90 474794016 ok 38 0 nvme1n1)")" \
+   "$(sb_vislen "$(sb_disk_row nvme1n1p1 /boot/efi 973952 1 474794016 ok 38 0 nvme1n1 1)")" \
+   'disk row: a continuation row is exactly as wide as the row it continues'
+eq "$(sb_vislen "$(sb_disk_row sdg1 /mnt/public 312568828 60 474794016 ok 39 1 sdg)")" \
+   "$(sb_vislen "$(sb_disk_row nvme1n1p3 / 474794016 90 474794016 ok 38 0 nvme1n1)")" \
+   'disk row: a short bay name is padded to the long one'
+eq "$(sb_vislen "$(sb_disk_row nvme1n1p3 / 474794016 90 474794016 ok 38 0)")" \
+   "$(sb_vislen "$(sb_disk_row nvme1n1p3 / 474794016 90 474794016 ok 38 0 nvme1n1)")" \
+   'disk row: the device fallback is as wide as a named bay'
 # A deep mount point must not widen the text column for every other row.
 OUT="$(sb_disk_row sdc2 /mnt/media/library/photos/2024/raw 200 50)"
 has "$OUT" '<'          'disk row: an over-long mount point is truncated tail-first'
@@ -664,6 +691,11 @@ eq "$(sb_vislen "$OUT")" \
 # Default is live, so every existing caller and test keeps its old meaning.
 hasnt "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732)" 'gone' \
   'gone mount: omitting the state means live'
+# A vanished device has no drive to name — sb_disk_of cannot resolve a node that is
+# gone — so the bay column carries the PARTITION node, the only identity left. Passing
+# a bay anyway must not override that.
+has "$(sb_disk_row sdb1 /mnt/public 312568828 60 976628732 gone '' 1 sdb)" 'sdb1' \
+  'gone mount: the bay column falls back to the partition node'
 
 # sb_mounts must decide liveness by the DEVICE NODE. stat()ing the mount point would
 # block on a dead NFS mount and reading it would spin up a sleeping disk every probe.
@@ -671,6 +703,12 @@ MSRC="$(awk '/^sb_mounts\(\)/,/^}/' "$REPO/provision/statusboard/statusboard.sh"
 has "$MSRC" '[ -b "/dev/$dev" ]' 'mounts: liveness is the block device node existing'
 has "$MSRC" 'state=gone'         'mounts: emits a gone state'
 hasnt "$MSRC" 'stat '            'mounts: does not stat the mount point'
+# The list is ORDERED by drive, which is the whole basis of the grouping in the disk
+# block: adjacency is only sound if the rows of one bay arrive together. Root's drive
+# leads, because / is the row on this board most likely to be read first.
+has "$MSRC" 'sort -t$'"'"'\t'"'"' -k1,1n -k2,2 -k3,3' 'mounts: output is sorted by drive, then mount'
+has "$MSRC" 'if (mnt == "/") root = disk' 'mounts: the ROOT DRIVE is what ranks first'
+has "$MSRC" 'sub(/p?[0-9]+$/, "", disk)' 'mounts: the sort key strips the partition suffix'
 
 # The per-mount series store. An associative array would keep stale keys after an
 # unplug; a flat string is prunable and testable.
@@ -1099,7 +1137,50 @@ eq "$?" '2' 'pages: an unknown --page name exits 2'
 # sleeps exactly as it did before pages existed.
 grep -q 'if \[ ! -t 0 \]; then sleep "\$INTERVAL"' "$SB"
 eq "$?" '0' 'pages: no keyboard means sleep, not a busy read'
-grep -q 'read -r -t "\$INTERVAL" -n 1 key' "$SB"; eq "$?" '0' 'pages: a keypress is acted on without waiting out the interval'
+grep -q 'IFS= read -r -s -t "\$INTERVAL" -n 1 key' "$SB"; eq "$?" '0' 'pages: a keypress is acted on without waiting out the interval'
+# Without IFS= the SPACE key is word-split away and arrives as an empty string, so the
+# hold did nothing whatsoever — measured 2026-07-31, and invisible until then because
+# every other binding is a non-whitespace character.
+grep -q 'IFS= read' "$SB"; eq "$?" '0' 'keys: space survives the read instead of being word-split away'
+
+# ── Arrow keys and the dwell ──────────────────────────────────────────────────
+# An arrow is ESC [ C — THREE bytes. Read one byte per iteration they arrive as three
+# keystrokes and the second is a bare `[`, which meant "previous page": that is why
+# both arrows paged backwards and why pressing one killed the rotation for good
+# (2026-07-31). The tail must be drained inside the same call.
+grep -qF 'if [ "$key" = $'"'"'\033'"'"' ]' "$SB"
+eq "$?" '0' 'keys: an escape sequence is recognised as one keystroke'
+grep -qF 'read -r -s -t 0.05 -n 2 rest' "$SB"
+eq "$?" '0' 'keys: the two bytes after ESC are drained in the same call'
+grep -q "'\[C' | 'OC'" "$SB"; eq "$?" '0' 'keys: right arrow, in both cursor modes'
+grep -q "'\[D' | 'OD'" "$SB"; eq "$?" '0' 'keys: left arrow, in both cursor modes'
+# The rotation must resume by itself: a manual pick DWELLS, it does not hold forever.
+# Space remains the explicit indefinite hold.
+grep -q 'SB_PAGE_SECS="\${STATUSBOARD_PAGE_SECS:-5}"' "$SB"
+eq "$?" '0' 'pages: the rotation is five seconds a page'
+grep -q 'SB_PAGE_MANUAL_SECS="\${STATUSBOARD_PAGE_MANUAL_SECS:-60}"' "$SB"
+eq "$?" '0' 'pages: a hand-picked page dwells for a minute'
+# A bash signal handler resumes the script when it returns, so a trap that only tidies
+# up does not STOP anything: the board outlived SIGTERM indefinitely (measured on
+# latitude 2026-07-31) and every systemctl stop paid the 90s timeout and a SIGKILL.
+grep -qF "trap 'cleanup; exit 0' INT TERM HUP" "$SB"
+eq "$?" '0' 'signals: the board exits on a signal instead of resuming'
+DSRC="$(awk '/^sb_page_dwell\(\)/,/^}/' "$SB")"
+has "$DSRC" 'SB_PAGE_HOLD=0' 'dwell: picking a page clears any indefinite hold'
+has "$DSRC" 'next_page=$((SECONDS + SB_PAGE_MANUAL_SECS))' 'dwell: and arms the one-minute deadline'
+# Nothing on the keyboard may set an indefinite hold except space. A stray
+# `SB_PAGE_HOLD=1` in the key handler is the old bug.
+KSRC="$(awk '/^sb_wait_key\(\)/,/^}/' "$SB")"
+has "$KSRC" 'SB_PAGE_HOLD=$((1 - SB_PAGE_HOLD))' 'keys: space toggles the indefinite hold'
+hasnt "$KSRC" 'SB_PAGE_HOLD=1' 'keys: and nothing else sets one — a pick dwells, it does not hold'
+# The wrap arithmetic, which is the one testable piece of the keyboard path: a bare
+# (i - 1) % n is NEGATIVE in bash, which indexes the array from the end.
+eq "$(sb_page_advance 0 1 3)"  '1' 'advance: forward'
+eq "$(sb_page_advance 2 1 3)"  '0' 'advance: forward wraps'
+eq "$(sb_page_advance 0 -1 3)" '2' 'advance: backward wraps rather than going negative'
+eq "$(sb_page_advance 1 -1 3)" '0' 'advance: backward'
+eq "$(sb_page_advance 0 1 1)"  '0' 'advance: a single page stays put'
+eq "$(sb_page_advance junk junk junk)" '0' 'advance: garbage degrades rather than erroring'
 # Paging selects what is RENDERED, never what is measured: sampling stays unconditional
 # in the loop, or fifteen seconds on another page comes back as a hole in every chart.
 sample_ln="$(grep -nE '^  sb_sample_slow$' "$SB" | tail -1 | cut -d: -f1)"

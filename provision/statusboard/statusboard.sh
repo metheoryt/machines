@@ -22,10 +22,12 @@
 #   sudo bash statusboard.sh --uninstall
 #   sudo bash statusboard.sh --bigfont  # double the console font (16x32) on every VT
 #
-# The board ROTATES through its pages every STATUSBOARD_PAGE_SECS (default 15): the
+# The board ROTATES through its pages every STATUSBOARD_PAGE_SECS (default 5): the
 # frame fits 26 rows and the fleet does not fit beside the disks. With a keyboard
-# attached, 1..9 pick a page, n/p step, and space holds and releases the rotation. The
-# alert strip is on every page, so a page you are not looking at cannot hide a fault.
+# attached, the arrow keys (or n/p, or 1..9) pick a page and DWELL on it for
+# STATUSBOARD_PAGE_MANUAL_SECS (default 60) before the rotation resumes by itself;
+# space holds and releases indefinitely. The alert strip is on every page, so a page
+# you are not looking at cannot hide a fault.
 #
 # --install takes over tty1 and leaves gettys on tty2..tty6, so a console login
 # is still one Alt-F2 away. That trade is deliberate: a dashboard you have to
@@ -830,6 +832,7 @@ sb_kb_to_gib() {
 # have to agree on them.
 SB_DISK_PATHW=23   # fits /mnt/immich-2024-backup, the longest on this box
 SB_DISK_BARW=20    # the widest a bar can get — the size of the LARGEST disk
+SB_DISK_BAYW=9     # fits nvme0n1, and nvme1n1p3 for a row that has lost its drive
 
 # sb_disk_bar <pct> <total_kb> <max_total_kb> <maxw>: a meter whose LENGTH is the
 # disk's capacity and whose FILL is how much of that is used.
@@ -871,12 +874,28 @@ sb_disk_bar() {
   printf '[%s]%s' "$out" "$pad"
 }
 
-# sb_disk_row <dev> <mount> <total_kb> <pct> [max_total_kb] [state] [temp_c] [rota]:
-# one filesystem.
+# sb_disk_row <dev> <mount> <total_kb> <pct> [max_total_kb] [state] [temp_c] [rota]
+#             [bay] [continuation]: one filesystem.
 #
 # The used figure is gone on purpose: the bar already carries "how full", the total
 # carries "how big", and a third number saying the same thing in GB was the widest
 # field in the block for the least information in it.
+#
+# The row LEADS with the bay — the physical drive the filesystem sits on — because
+# "which disk is that" is the question the mount point cannot answer: /mnt/immich and
+# /mnt/immich-2024 are two drives, / and /boot/efi are one, and nothing in the names
+# says so. It replaces the trailing device column rather than joining it: the partition
+# node was the same fact one level finer, and the columns it cost came out of the
+# charts, which are what the board is for.
+#
+# Rows arrive grouped by drive (see sb_mounts), so a CONTINUATION row — the second and
+# later filesystems of one bay — prints a marker instead of repeating the name. The
+# field is padded either way: every row in the block has to end at the same column or
+# the chart column moves per row.
+#
+# A row whose device has VANISHED shows the partition node here instead. It has no
+# drive to name — sb_disk_of cannot resolve a device that is gone — and the node is
+# then the only identity the row has left.
 #
 # The bar is coloured by FREE space, so it greens down as the disk fills — the
 # inverse of the battery row, where a high number is the healthy one.
@@ -887,8 +906,8 @@ sb_disk_bar() {
 # that appeared only on some rows would break the alignment of every row.
 sb_disk_row() {
   local dev="${1:-}" mnt="${2:-}" total="${3:-}" pct="${4:-}" maxtotal="${5:-}" state="${6:-ok}"
-  local temp="${7:-}" rota="${8:-1}"
-  local col free=100 bar
+  local temp="${7:-}" rota="${8:-1}" bay="${9:-}" cont="${10:-0}"
+  local col free=100 bar bayf mark='╰'
   case "$pct" in '' | *[!0-9]*) pct=0 ;; esac
   # Long mount points are shown tail-first behind a <: every row pads to the widest
   # one, so a single deep path would push the chart column off the screen for all of
@@ -897,6 +916,17 @@ sb_disk_row() {
   free=$((100 - pct))
   col="$(sb_pct_colour "$free" 20 10)"
   bar="$(sb_disk_bar "$pct" "$total" "$maxtotal" "$SB_DISK_BARW")"
+  [ "$(sb_ramp_name)" = ascii ] && mark='`'
+  if [ "$state" != ok ]; then
+    # The node, not a drive: see the header. Dim like every other stale figure on the row.
+    bayf="$C_DIM$(sb_pad "${dev:-?}" "$SB_DISK_BAYW")$C_RST"
+  elif [ "$cont" = 1 ]; then
+    bayf="$C_DIM$(sb_pad "  $mark" "$SB_DISK_BAYW")$C_RST"
+  else
+    # Falls back to the device when the drive could not be resolved: an unnamed bay
+    # would leave the row with no hardware identity at all.
+    bayf="$(sb_pad "${bay:-${dev:-?}}" "$SB_DISK_BAYW")"
+  fi
   if [ "$state" != ok ]; then
     # Everything df still reports about a vanished disk is a memory, so the row says
     # so where the bar was and dims the stale figures rather than dropping them —
@@ -906,20 +936,18 @@ sb_disk_row() {
     # A vanished disk has no temperature and no prospect of one, but it keeps the
     # column: the block pads to the widest row, so dropping a field here would shift
     # the chart column for every OTHER row in the frame.
-    printf '%-*s %s%s%s %s%3s%%  %5sG%s  %s  %s%s%s' \
-      "$SB_DISK_PATHW" "${mnt:-?}" \
+    printf '%s %-*s %s%s%s %s%3s%%  %5sG%s  %s' \
+      "$bayf" "$SB_DISK_PATHW" "${mnt:-?}" \
       "$C_BAD" "$bar" "$C_RST" \
       "$C_DIM" "$pct" "$(sb_kb_to_gib "$total")" "$C_RST" \
-      "$(sb_temp_cell '' "$rota")" \
-      "$C_DIM" "${dev:-?}" "$C_RST"
+      "$(sb_temp_cell '' "$rota")"
     return
   fi
-  printf '%-*s %s%s %3s%%%s  %5sG  %s  %s%s%s' \
-    "$SB_DISK_PATHW" "${mnt:-?}" \
+  printf '%s %-*s %s%s %3s%%%s  %5sG  %s' \
+    "$bayf" "$SB_DISK_PATHW" "${mnt:-?}" \
     "$col" "$bar" "$pct" "$C_RST" \
     "$(sb_kb_to_gib "$total")" \
-    "$(sb_temp_cell "$temp" "$rota")" \
-    "$C_DIM" "${dev:-?}" "$C_RST"
+    "$(sb_temp_cell "$temp" "$rota")"
 }
 
 # Per-disk history cannot use an associative array keyed by mount point: mounts come
@@ -1279,6 +1307,20 @@ sb_page_tabs() {
     i=$((i + 1))
   done
   printf '%s' "$out"
+}
+
+# sb_page_advance <index> <step> <count>: the next page index, wrapping in BOTH
+# directions. Its own function because the modulo is the part that is easy to get
+# wrong — a bare (i - 1) % n is negative in bash, which indexes an array from the end
+# and paints a page nobody asked for — and because it is the only piece of the
+# keyboard path that can be tested without a terminal.
+sb_page_advance() {
+  local i="${1:-0}" s="${2:-1}" n="${3:-1}"
+  case "$i" in '' | *[!0-9]*) i=0 ;; esac
+  case "$n" in '' | *[!0-9]*) n=1 ;; esac
+  [ "$n" -ge 1 ] || n=1
+  case "$s" in -[0-9]* | [0-9]*) ;; *) s=1 ;; esac
+  printf '%s' "$(((((i + s) % n) + n) % n))"
 }
 
 [ "${STATUSBOARD_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
@@ -1662,6 +1704,18 @@ sb_docker() {
     --format '{{.Names}}|{{.State}}|{{.Status}}|{{.ID}}' 2>/dev/null
 }
 
+#
+# The output is ORDERED: the root disk's filesystems first, then the rest by drive,
+# and by mount point within a drive. Every consumer iterates this list, so ordering it
+# once here is what lets the disk block group its rows by physical drive — / and
+# /boot/efi are adjacent because they are on one nvme, not because df happened to
+# print them that way.
+#
+# The grouping key is the device name with its partition suffix stripped, which is a
+# TEXTUAL approximation of sb_disk_of and deliberately not a call to it: the real
+# answer is a readlink per mount and this is sort order, not data. The displayed drive
+# still comes from sysfs (SB_DISKOF). Worst case the approximation disagrees and a
+# group is split — a cosmetic miss, not a wrong number.
 sb_mounts() {
   local dev mnt used total pct state
   df -P -k 2>/dev/null | awk 'NR > 1 && $1 ~ /^\/dev\// && $1 !~ /^\/dev\/(loop|ram)/ {
@@ -1669,8 +1723,18 @@ sb_mounts() {
     mnt = $6
     for (i = 7; i <= NF; i++) mnt = mnt " " $i      # mount points may contain spaces
     pct = $5; sub(/%$/, "", pct)
-    printf "%s|%s|%s|%s|%s\n", dev, mnt, $3, $2, pct
-  }' | while IFS='|' read -r dev mnt used total pct; do
+    disk = dev; sub(/p?[0-9]+$/, "", disk)
+    if (mnt == "/") root = disk
+    n++; d[n] = disk; m[n] = mnt
+    line[n] = dev "|" mnt "|" $3 "|" $2 "|" pct
+  }
+  END {
+    # Rank 0 is the WHOLE root drive, not just / itself: ranking the one row would
+    # sort /boot/efi away from the / it shares a disk with and break the group.
+    for (i = 1; i <= n; i++)
+      printf "%d\t%s\t%s\t%s\n", (d[i] == root ? 0 : 1), d[i], m[i], line[i]
+  }' | sort -t$'\t' -k1,1n -k2,2 -k3,3 | cut -f4- \
+  | while IFS='|' read -r dev mnt used total pct; do
     state=ok
     [ -b "/dev/$dev" ] || state=gone
     printf '%s|%s|%s|%s|%s|%s\n' "$dev" "$mnt" "$used" "$total" "$pct" "$state"
@@ -2133,11 +2197,19 @@ sb_row() {
 # nothing an unattended board misses — the alert strip is on every page precisely so
 # a hidden page cannot hide a failure.
 SB_PAGES=(system fleet docker)
-# Seconds each page holds before the board rotates. Long enough to read a full frame,
-# short enough that a glance from across the room catches every page inside a minute.
-SB_PAGE_SECS="${STATUSBOARD_PAGE_SECS:-15}"
+# Seconds each page holds before the board rotates. Five, so a glance from across the
+# room catches every page in fifteen seconds rather than in three quarters of a
+# minute: nothing on a page needs longer than that to READ — the numbers that need
+# study are the charts, and every chart keeps accumulating while its page is hidden.
+SB_PAGE_SECS="${STATUSBOARD_PAGE_SECS:-5}"
+# And how long a page picked BY HAND holds before the rotation takes over again. A
+# keypress means "I want to look at this one", which a five-second rotation would
+# override almost immediately; a minute is long enough to actually study a page and
+# short enough that a board left alone at the keyboard goes back to cycling on its
+# own. It is a DWELL, not a hold — see sb_page_dwell.
+SB_PAGE_MANUAL_SECS="${STATUSBOARD_PAGE_MANUAL_SECS:-60}"
 SB_PAGE=0        # index into SB_PAGES — which page is on screen
-SB_PAGE_HOLD=0   # 1 while a keypress has paused the rotation
+SB_PAGE_HOLD=0   # 1 while space has paused the rotation indefinitely
 next_page=0      # $SECONDS at which the next rotation is due
 
 # --page (and --once --page) pick a starting page BY NAME. Resolved here rather than
@@ -2423,14 +2495,22 @@ sb_page_system() {
     [ "$d_state" = ok ] || continue
     [ "$d_total" -gt "$d_max" ] && d_max="$d_total"
   done <<< "$SB_MOUNTS"
-  local d_state d_disk
+  local d_state d_disk d_prev="" d_cont
   while IFS='|' read -r d_dev d_mnt _ d_total d_pct d_state; do
     [ -n "$d_mnt" ] || continue
     # Both lookups are keyed by DRIVE, not by mount: temperature belongs to the
     # hardware, so every filesystem on one disk shows the same figure.
     d_disk="$(sb_series_get "$SB_DISKOF" "$d_mnt")"
+    # Grouping is by ADJACENCY, which is sound only because sb_mounts orders its
+    # output by drive — the second filesystem of a bay is always the row after the
+    # first. An empty drive (a vanished mount) never continues a group: it has no bay
+    # to belong to, and it prints its own device node instead.
+    d_cont=0
+    [ -n "$d_disk" ] && [ "$d_disk" = "$d_prev" ] && d_cont=1
+    d_prev="$d_disk"
     sb_row "$(sb_disk_row "$d_dev" "$d_mnt" "$d_total" "$d_pct" "$d_max" "${d_state:-ok}" \
-      "$(sb_series_get "$SB_TEMPS" "$d_disk")" "$(sb_series_get "$SB_ROTA" "$d_disk")")" \
+      "$(sb_series_get "$SB_TEMPS" "$d_disk")" "$(sb_series_get "$SB_ROTA" "$d_disk")" \
+      "$d_disk" "$d_cont")" \
       "$(sb_series_get "$SER_DISKS" "$d_mnt")" "$SB_MAX_IO" flat MB/s
   done <<< "$SB_MOUNTS"
   # A dock that came back with nothing mounted is otherwise invisible on a headless
@@ -2555,7 +2635,14 @@ fi
 # mid-frame on an unattended screen looks like a hung box.
 [ -t 1 ] && printf '\033[?25l'
 cleanup() { [ -t 1 ] && printf '\033[?25h\033[?7h'; }
-trap cleanup EXIT INT TERM
+# A bash signal handler RESUMES the script when it returns, so `trap cleanup TERM` did
+# not stop the board — it restored the cursor and went back to painting. Measured
+# 2026-07-31: the loop outlived a SIGTERM indefinitely, which means every `systemctl
+# stop/restart statusboard` sat out the 90s stop timeout and then took a SIGKILL. The
+# signal traps have to exit. EXIT keeps its own cleanup for every other way out; the
+# two run back to back on a signal, which costs nothing — both sequences are idempotent.
+trap cleanup EXIT
+trap 'cleanup; exit 0' INT TERM HUP
 
 # sb_wait_key: the pacing between paints, and the keyboard, in one call. `read -t` is
 # the sleep, so a keypress is acted on the moment it arrives rather than up to
@@ -2566,26 +2653,61 @@ trap cleanup EXIT INT TERM
 # unattended kiosk into a 100%-CPU spin loop. A board with no keyboard sleeps exactly
 # as it did before pages existed.
 #
-# Manual selection HOLDS: picking a page means you want to look at it, and rotating
-# away from it four seconds later is the opposite of the request. Space releases.
+# Manual selection DWELLS rather than holding forever: picking a page means you want
+# to look at it, and rotating away from it five seconds later is the opposite of the
+# request — but a board whose rotation a passing keypress killed permanently is a board
+# showing one page until someone remembers to press space. So a keypress buys
+# SB_PAGE_MANUAL_SECS on the chosen page and then the rotation resumes by itself.
+# Space is the explicit indefinite hold, and it still exists for exactly that.
+#
+# sb_page_dwell: land on a page by hand. Clears any hold, because "show me page 3" is
+# also "stop being frozen on page 1".
+sb_page_dwell() {
+  SB_PAGE_HOLD=0
+  next_page=$((SECONDS + SB_PAGE_MANUAL_SECS))
+}
+
+sb_page_step() {
+  SB_PAGE="$(sb_page_advance "$SB_PAGE" "${1:-1}" "${#SB_PAGES[@]}")"
+  sb_page_dwell
+}
+
 sb_wait_key() {
-  local key="" idx
+  local key="" rest="" idx
   if [ ! -t 0 ]; then sleep "$INTERVAL"; return 0; fi
-  read -r -t "$INTERVAL" -n 1 key 2>/dev/null || true
+  # IFS= , or the SPACE key is word-split away and `key` comes back empty — which is
+  # why the hold silently did nothing at all before 2026-07-31. Every other binding
+  # worked, so the bug was invisible until the arrow keys were fixed and the hold was
+  # the only key left to check.
+  IFS= read -r -s -t "$INTERVAL" -n 1 key 2>/dev/null || true
   [ -n "$key" ] || return 0
+  # An arrow key is not a key, it is three bytes — ESC [ C. Read one byte at a time
+  # they arrive as three separate iterations, and the SECOND of them is a bare `[`,
+  # which used to mean "previous page": that is why both arrows paged BACKWARDS and
+  # why pressing one killed the rotation (2026-07-31). The tail is drained HERE, in
+  # the same call, so the sequence is consumed as the one keystroke it is. The 50ms
+  # is generous for bytes already in the tty buffer and short enough that a bare ESC
+  # does not visibly stall the frame. `O` is the application-cursor form, which is
+  # what a board run inside tmux or over ssh sees.
+  if [ "$key" = $'\033' ]; then
+    read -r -s -t 0.05 -n 2 rest 2>/dev/null || true
+    case "$rest" in
+      '[C' | 'OC' | '[B' | 'OB') sb_page_step 1 ;;
+      '[D' | 'OD' | '[A' | 'OA') sb_page_step -1 ;;
+    esac
+    return 0
+  fi
   case "$key" in
     ' ')
       SB_PAGE_HOLD=$((1 - SB_PAGE_HOLD))
       # Releasing a hold restarts the dwell, so the page you were reading does not
       # flip away the instant you let go of it.
       [ "$SB_PAGE_HOLD" = 0 ] && next_page=$((SECONDS + SB_PAGE_SECS)) ;;
-    n | N | ']')
-      SB_PAGE=$(((SB_PAGE + 1) % ${#SB_PAGES[@]})); SB_PAGE_HOLD=1 ;;
-    p | P | '[')
-      SB_PAGE=$(((SB_PAGE - 1 + ${#SB_PAGES[@]}) % ${#SB_PAGES[@]})); SB_PAGE_HOLD=1 ;;
+    n | N | ']') sb_page_step 1 ;;
+    p | P | '[') sb_page_step -1 ;;
     [1-9])
       idx=$((key - 1))
-      [ "$idx" -lt "${#SB_PAGES[@]}" ] && { SB_PAGE="$idx"; SB_PAGE_HOLD=1; } ;;
+      [ "$idx" -lt "${#SB_PAGES[@]}" ] && { SB_PAGE="$idx"; sb_page_dwell; } ;;
   esac
   return 0
 }
