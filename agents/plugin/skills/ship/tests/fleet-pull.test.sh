@@ -249,7 +249,7 @@ mock_ssh() {
   local remote="$*"
   case "$remote" in
     *"-l -q"*) printf 'wsl-desktop\r\n'; return 0 ;;
-    *"wsl.exe -d wsl-desktop"*) printf '{"self":{"nickname":"wsl-desktop","fleet":true,"platform":"linux"}}'; return 0 ;;
+    *'wsl.exe -d "wsl-desktop"'*) printf '{"self":{"nickname":"wsl-desktop","fleet":true,"platform":"linux"}}'; return 0 ;;
   esac
   # Reachability probe: remote command CONTAINS `-c true` (both `bash -c true`
   # and the windows PowerShell `... bash.exe" -c true }` fragment contain it).

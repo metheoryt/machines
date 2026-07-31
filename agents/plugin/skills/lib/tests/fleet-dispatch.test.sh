@@ -107,18 +107,22 @@ SSH="mock_ssh"   # restore for any later cases
 # A distro with no tailnet node is reached as `wsl.exe -d <distro>` through its
 # Windows parent. The mechanism is the one fd_wsl_hosts already uses to discover
 # distros, verified end to end on 2026-08-01.
+#
+# nickname and distro name differ throughout these tests on purpose: fd_run
+# feeds the DISTRO name into wsl.exe -d, and a fixture that reuses the same
+# string for both cannot catch a nickname/distro-name mix-up.
 
 : > "$LOG"
-fd_probe 'desktop:desktop-pure' wsl && pass "probe wsl ok" || die "probe wsl failed"
-grep -q $'desktop\twsl.exe -d desktop-pure -- bash -c true' "$LOG" \
-  && pass "probe wsl targets the parent with wsl.exe -d" \
+fd_probe 'desktop:Ubuntu-Pure' wsl && pass "probe wsl ok" || die "probe wsl failed"
+grep -q $'desktop\twsl.exe -d "Ubuntu-Pure" -- bash -c true' "$LOG" \
+  && pass 'probe wsl targets the parent with wsl.exe -d "<distro>"' \
   || die "probe wsl argv: $(cat "$LOG")"
 
 # fd_run must pipe the script through and pass positional args after `--`.
-out="$(printf 'echo hi\n' | fd_run 'desktop:desktop-pure' wsl ALPHA BETA)"
+out="$(printf 'echo hi\n' | fd_run 'desktop:Ubuntu-Pure' wsl ALPHA BETA)"
 case "$out" in
-  *'wsl.exe -d desktop-pure -- bash -s -- "ALPHA" "BETA"'*)
-    pass "run wsl builds wsl.exe -d … bash -s -- args" ;;
+  *'wsl.exe -d "Ubuntu-Pure" -- bash -s -- "ALPHA" "BETA"'*)
+    pass 'run wsl builds wsl.exe -d "<distro>" … bash -s -- args' ;;
   *) die "run wsl remote cmd: $out" ;;
 esac
 case "$out" in
@@ -126,15 +130,37 @@ case "$out" in
   *) die "run wsl stdin lost: $out" ;;
 esac
 
+# A distro name containing a space (Windows permits it, e.g. "Docker Desktop")
+# must survive as ONE argument to wsl.exe -d — the property the double-quoting
+# fix (2026-08-01) guards against regressing.
+: > "$LOG"
+fd_probe 'desktop:Docker Desktop' wsl && pass "probe wsl (spaced distro) ok" \
+  || die "probe wsl (spaced distro) failed"
+grep -q $'desktop\twsl.exe -d "Docker Desktop" -- bash -c true' "$LOG" \
+  && pass "probe wsl keeps a spaced distro name as one argument" \
+  || die "probe wsl (spaced distro) argv: $(cat "$LOG")"
+
+out="$(printf 'echo hi\n' | fd_run 'desktop:Docker Desktop' wsl ALPHA)"
+case "$out" in
+  *'wsl.exe -d "Docker Desktop" -- bash -s -- "ALPHA"'*)
+    pass "run wsl (spaced distro) keeps distro name as one argument" ;;
+  *) die "run wsl (spaced distro) remote cmd: $out" ;;
+esac
+
 # ── fd_wsl_hosts emits nickname/target/platform ───────────────────────────────
+# The parent-routed distro's nickname ("desktop-pure") and its actual WSL
+# distro name ("Ubuntu-Pure") are deliberately DIFFERENT strings here: fd_run
+# feeds the distro name into wsl.exe -d, and the two identifiers are set
+# independently in reality, so a fixture that reuses one string for both can't
+# catch a <alias>:<nickname> vs <alias>:<distro-name> mix-up.
 mock_ssh_dispatch() {
   while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
   local alias="$1"; shift
   local remote="$*"
   case "$remote" in
-    *'wsl.exe -l -q'*) printf 'desktop-wsl\ndesktop-pure\n' ;;
+    *'wsl.exe -l -q'*) printf 'desktop-wsl\nUbuntu-Pure\n' ;;
     *desktop-wsl*)  printf '{"self":{"nickname":"desktop-wsl","fleet":true,"platform":"linux","dispatch":"direct"}}\n' ;;
-    *desktop-pure*) printf '{"self":{"nickname":"desktop-pure","fleet":true,"platform":"linux","dispatch":"parent"}}\n' ;;
+    *Ubuntu-Pure*) printf '{"self":{"nickname":"desktop-pure","fleet":true,"platform":"linux","dispatch":"parent"}}\n' ;;
   esac
 }
 SSH="mock_ssh_dispatch"
@@ -146,9 +172,39 @@ echo "$rows" | grep -q $'^desktop-wsl\tdesktop-wsl.gg.ez\tlinux$' \
   && pass "direct distro → tailnet FQDN, platform linux" \
   || die "direct row wrong: $rows"
 
-echo "$rows" | grep -q $'^desktop-pure\tdesktop:desktop-pure\twsl$' \
-  && pass "parent distro → parent:distro, platform wsl" \
+echo "$rows" | grep -q $'^desktop-pure\tdesktop:Ubuntu-Pure\twsl$' \
+  && pass "parent distro → parent:DISTRO-name (not nickname), platform wsl" \
   || die "parent row wrong: $rows"
+
+# The property that actually matters: the spaced-name fix must hold end to
+# end, fd_wsl_hosts's target round-tripped through fd_run's wsl branch, not
+# just in an isolated fd_probe/fd_run call.
+mock_ssh_spaced() {
+  while [ $# -gt 0 ]; do case "$1" in -o) shift 2;; *) break;; esac; done
+  local alias="$1"; shift
+  local remote="$*"
+  case "$remote" in
+    *'wsl.exe -l -q'*) printf 'Docker Desktop\n' ;;
+    *'fleet.local.json'*)
+      printf '{"self":{"nickname":"desktop-docker","fleet":true,"platform":"linux","dispatch":"parent"}}\n' ;;
+    *)
+      local in; in="$(cat)"
+      printf '%s||%s\n' "$remote" "$in" ;;
+  esac
+}
+SSH="mock_ssh_spaced"
+rows="$(fd_wsl_hosts desktop windows)"
+echo "$rows" | grep -q $'^desktop-docker\tdesktop:Docker Desktop\twsl$' \
+  && pass "fd_wsl_hosts: spaced distro name in parent target" \
+  || die "fd_wsl_hosts spaced-distro row wrong: $rows"
+
+target="$(printf '%s' "$rows" | cut -f2)"
+out="$(printf 'echo hi\n' | fd_run "$target" wsl)"
+case "$out" in
+  *'wsl.exe -d "Docker Desktop" -- bash -s --'*)
+    pass "fd_wsl_hosts → fd_run: spaced distro name survives round trip" ;;
+  *) die "fd_wsl_hosts → fd_run round trip: $out" ;;
+esac
 
 # A file with no dispatch key predates the field and must behave as before.
 mock_ssh_legacy() {

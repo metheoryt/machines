@@ -21,8 +21,8 @@ bash -n "$ASSET" 2>/dev/null && pass "wslopen parses" || die "wslopen has a synt
 # case this exists for.
 grep -q 'iconv -f UTF-8 -t UTF-16LE' "$ASSET" && pass "wslopen encodes UTF-16LE" \
   || die "wslopen must pipe through iconv UTF-16LE"
-grep -q 'EncodedCommand' "$ASSET" && pass "wslopen uses -EncodedCommand" \
-  || die "wslopen must use powershell -EncodedCommand"
+grep -qE '\$powershell".*-EncodedCommand "\$encoded"' "$ASSET" && pass "wslopen uses -EncodedCommand" \
+  || die "wslopen must invoke \$powershell with -EncodedCommand \"\$encoded\" (not merely mention the word)"
 
 # URL schemes must pass through untouched; only real paths get wslpath'd.
 grep -q 'http://\* | https://\*' "$ASSET" && pass "wslopen passes URLs through" \
@@ -55,6 +55,13 @@ esac
 case "$svc" in
   *"Type=oneshot"*) pass "watchdog service is oneshot" ;;
   *) die "watchdog service must be Type=oneshot" ;;
+esac
+
+# It must be GATED on the binfmt entry actually being absent — without this,
+# the "restart systemd-binfmt" action above fires unconditionally every 60s.
+case "$svc" in
+  *"ConditionPathExists=!$WSL_FIXES_BINFMT_PATH"*) pass "watchdog is gated on ConditionPathExists=!<path>" ;;
+  *) die "watchdog service must set ConditionPathExists=!$WSL_FIXES_BINFMT_PATH" ;;
 esac
 
 # It must NOT reintroduce the inert binfmt.d conf approach.

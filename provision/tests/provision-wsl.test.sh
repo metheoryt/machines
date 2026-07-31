@@ -42,4 +42,39 @@ else
   pass "tailscale-wsl.sh header corrected"
 fi
 
+# --no-tailscale must imply dispatch=parent on the fleet-local.sh invocation:
+# no tailnet node of its own is the same fact as "reach it through the parent".
+REPO_REAL="$REPO"
+STEP_LOG="$(mktemp)"
+FAKES="$(mktemp -d)"
+mkdir -p "$FAKES/provision"
+for s in tailscale-wsl.sh ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh; do
+  cat > "$FAKES/provision/$s" <<EOF
+#!/usr/bin/env bash
+printf '%s\t%s\n' "$s" "\$*" >> "$STEP_LOG"
+exit 0
+EOF
+  chmod +x "$FAKES/provision/$s"
+done
+
+REPO="$FAKES"
+: > "$STEP_LOG"
+provision_wsl_main mynick --no-tailscale
+line="$(grep '^fleet-local.sh' "$STEP_LOG")"
+case "$line" in
+  *"--dispatch parent"*) pass "--no-tailscale passes --dispatch parent to fleet-local.sh" ;;
+  *) die "--no-tailscale must pass --dispatch parent to fleet-local.sh: got '$line'" ;;
+esac
+
+: > "$STEP_LOG"
+provision_wsl_main mynick
+line="$(grep '^fleet-local.sh' "$STEP_LOG")"
+case "$line" in
+  *"--dispatch"*) die "default (tailnet) run must NOT pass --dispatch: got '$line'" ;;
+  *) pass "default (tailnet) run omits --dispatch" ;;
+esac
+
+REPO="$REPO_REAL"
+rm -rf "$FAKES" "$STEP_LOG"
+
 exit "$fail"
