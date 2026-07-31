@@ -75,24 +75,31 @@ migration, not fleet machinery.
 
 ## Phases
 
-### Phase A — rescue the untracked project memory (blocking)
+### Phase A — promote the newer project memory to `main`
 
 `~/pure/backend-api/.claude/memory/project.md` is gitignored in backend-api and
 is instead tracked in the private dotfiles repo at its real `$HOME` path.
 
-- dotfiles `main` holds a **136-line** version; that is what desktop-ubuntu26
-  has checked out, clean.
-- air's on-disk copy is **219 lines** and is **untracked on air** — the path was
-  never allow-listed in air's `.gitignore`.
+- air's copy is **219 lines**, tracked, committed as `7e4c462`, working tree
+  clean, and pushed to `origin/air`.
+- dotfiles `main` holds a **136-line** version — that is what desktop-ubuntu26
+  has checked out.
 - Verified: air's copy is a **strict superset** — zero lines present in `main`
   are absent from it.
 
-So ~83 lines of backend-api project memory exist only on air's disk, in no git
-anywhere, and `rm -rf /Users/me/pure` would destroy them.
+The content is therefore **not at risk** from teardown; it lives on
+`origin/air`. What is wrong is only that `main` is stale, so desktop-ubuntu26
+would keep working from 136 lines after the move.
 
-Action: allow-list the path on air, commit air's copy, `/dotfiles-promote` to
-`main`. Desktop-ubuntu26 inherits it on its next pull — dotfiles' work-tree *is*
-`$HOME`, so there is no copy step. **This must land before any deletion.**
+Action: `/dotfiles-promote` the path from the `air` branch to `main`.
+Desktop-ubuntu26 inherits it on its next pull — dotfiles' work-tree *is* `$HOME`,
+so there is no copy or apply step.
+
+*(An earlier draft called this an untracked file at risk of destruction. That was
+a measurement error: `git ls-files` was run from `~/machines`, so the relative
+path resolved under `machines/` and reported the file as unknown to git. Re-run
+from `$HOME` it is plainly tracked. Recorded here because the same mistake is
+easy to repeat with a bare-repo work-tree.)*
 
 ### Phase B — repo import (user)
 
@@ -170,7 +177,7 @@ Teardown, in order:
 
 | Risk | Mitigation |
 |---|---|
-| Untracked 219-line `project.md` destroyed by teardown | Phase A blocks teardown |
+| desktop keeps the stale 136-line `project.md` after the move | Phase A promotes air's 219-line superset to `main` |
 | Local-only branches lost with `rm -rf` | Enumerated above; user decides before the gate |
 | desktop sleeps mid-session | AC standby verified `never`; lid action unverified — check if continuity ever breaks |
 | Ubuntu-26.04 disk pressure (4.2 GB free) | Monitor; `wsl --manage --resize` available, C: has 1.17 TB |
