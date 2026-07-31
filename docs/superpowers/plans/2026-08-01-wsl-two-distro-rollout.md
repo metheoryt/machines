@@ -82,7 +82,27 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --short
 
 Expected: empty. If not, stop and resolve — Task 9 depends on being able to spot a lone ` D` against a clean baseline.
 
-- [ ] **Step 5: Checkpoint**
+- [ ] **Step 5: Settle two capability questions now, not mid-task**
+
+Both decide the *shape* of a later task, so answering them here avoids a stall.
+
+```bash
+# Does this WSL support naming a distro at install time? Decides Task 4 Step 1's
+# branch: rootfs --import vs `--install --name`.
+ssh desktop "wsl.exe --install --help" 2>&1 | tr -d '\0' | grep -i -- '--name' \
+  || echo "NO --name support → Task 4 must use the rootfs --import path"
+```
+
+The second question needs the Linux Orca binary, which does not exist yet — record it as owed and answer it in Task 6 Step 2:
+
+> **Owed:** does the Linux runtime have an `orca repo add` CLI verb? The 07-31
+> spec establishes only that `orca repo list` exists (it returned empty from a
+> WSL shell, which is what proved the registry is per-runtime). If `add` is not
+> a CLI verb, Task 7 becomes a UI operation against fourteen repos and its shape
+> changes materially. Check `orca --help` and `orca repo --help` immediately
+> after the AppImage is installed.
+
+- [ ] **Step 6: Checkpoint**
 
 Show the user the repo registry and confirm it looks complete before proceeding. Nothing has changed yet; this is the last free stopping point.
 
@@ -452,6 +472,15 @@ orca --version
 
 Expected: `1.4.162` or the version the user chose. Get the URL from Orca's own download page; do not guess it.
 
+Now answer the question Task 1 Step 5 left owed — Task 7's shape depends on it:
+
+```bash
+orca --help 2>&1 | head -30
+orca repo --help 2>&1 | head -20
+```
+
+If `orca repo add` exists, Task 7 runs as written. If it does not, Task 7 becomes a UI operation against fourteen repos — say so at that task's checkpoint rather than improvising a CLI that isn't there.
+
 - [ ] **Step 3: Start `orca serve` by hand once, on `desktop-wsl`**
 
 Confirm it binds before wrapping it in a unit.
@@ -648,9 +677,34 @@ Paths stay identical, so every Claude session slug is byte-identical and no `cwd
 
 Close every Orca pane and Claude session touching `~/pure` on `desktop-wsl`. This plan is executed from a worktree inside that distro; moving repos out from under a live session corrupts nothing but confuses everything.
 
+- [ ] **Step 2a: Smoke-test the binary pipe first**
+
+The verified dispatch test round-tripped a *text* script on stdin. A tar stream through `ssh` → `wsl.exe` → `tar` adds a hop that has not been exercised, and `wsl.exe` has a history of mangling binary stdin. A silent truncation here costs the actual work repos, so prove the channel on a throwaway payload:
+
+```bash
+dd if=/dev/urandom of=/tmp/pipe-probe bs=1M count=8 2>/dev/null
+sum_local=$(sha256sum < /tmp/pipe-probe)
+sum_remote=$(tar -C /tmp -cf - pipe-probe \
+  | ssh desktop "wsl.exe -d desktop-pure -- bash -lc \
+      'tar -C /tmp -xf - && sha256sum < /tmp/pipe-probe'")
+echo "local:  $sum_local"
+echo "remote: $sum_remote"
+```
+
+Expected: identical hashes. If they differ, or the remote `tar` errors, **do not proceed with Step 2** — stage through a file on `/mnt/c` instead, which avoids the pipe entirely:
+
+```bash
+tar -C /home/me -czf /mnt/c/wsl-images/pure-move.tgz \
+  pure orca/workspaces/backend-api orca/workspaces/claude-plugins
+ssh desktop "wsl.exe -d desktop-pure -- bash -lc \
+  'tar -C /home/me -xzf /mnt/c/wsl-images/pure-move.tgz'"
+```
+
+Clean up `/tmp/pipe-probe` on both sides, and the staging tarball afterward — it contains work repo contents.
+
 - [ ] **Step 2: Copy the working trees verbatim**
 
-Copying rather than re-cloning preserves local branches, stashes, and untracked files. `desktop-pure` has no sshd, so push from `desktop-wsl` through the parent is not available — use a tar stream through the Windows parent instead:
+Copying rather than re-cloning preserves local branches, stashes, and untracked files. `desktop-pure` has no sshd, so push from `desktop-wsl` through the parent is not available — use a tar stream through the Windows parent instead (only if Step 2a's hashes matched):
 
 ```bash
 tar -C /home/me -cf - pure orca/workspaces/backend-api orca/workspaces/claude-plugins \

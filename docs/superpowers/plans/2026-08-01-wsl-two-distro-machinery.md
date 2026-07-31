@@ -849,17 +849,35 @@ fd_probe() {
 }
 ```
 
-Add the matching case to `fd_run`:
+Replace the whole of `fd_run` — the `wsl)` case must land **before** the `*)` catch-all or it is dead code:
 
 ```bash
+# fd_run <alias> <platform> [arg...] — pipe the script on THIS function's stdin
+# to the member's bash with positional args ($1..). Echoes remote stdout.
+fd_run() {
+  local alias="$1" platform="$2"; shift 2
+  local q a parent distro
+  case "$platform" in
+    windows)
+      # `--` ends bash option parsing so the args become $1.. (not options).
+      q="-s --"
+      for a in "$@"; do q="$q \"$a\""; done
+      $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" "$(_fd_win_call "$q")" 2>/dev/null
+      ;;
     wsl)
-      local parent distro q a
+      # No tailnet node of its own: reach it as `wsl.exe -d <distro>` through
+      # the Windows parent. Same shape fd_wsl_hosts already uses to discover it.
       read -r parent distro < <(_fd_wsl_split "$alias")
       q="-s --"
       for a in "$@"; do q="$q \"$a\""; done
       $SSH -o ConnectTimeout=5 -o BatchMode=yes "$parent" \
         "wsl.exe -d $distro -- bash $q" 2>/dev/null
       ;;
+    *)
+      $SSH -o ConnectTimeout=5 -o BatchMode=yes "$alias" bash -s -- "$@" 2>/dev/null
+      ;;
+  esac
+}
 ```
 
 Replace the body of `fd_wsl_hosts` so it emits the triple:
