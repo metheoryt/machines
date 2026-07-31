@@ -800,12 +800,17 @@ global + per-host). One bullet per fact under a topical heading.
   `/mnt/xs/backup` any more.** Removed 2026-07-31: `secrets/` + `home/.ssh/` (live
   private keys) and `OneDrive/` 3.7 G — the latter because OneDrive is cloud-backed
   (verified live: `C:\Users\methe\OneDrive` on desktop, 3.8 GB / 13711 files, sync
-  process running), and it carried the Apple Pay keys with it. 63 G → 59 G. Same
-  cloud-backed argument applies to `GoogleDrive/` 5.8 G, and `wsl/` 20 G is the same
-  superseded g614jv WSL as the deleted restic repo — both are obvious next
-  deletions but were not authorized. Remainder: `Downloads` 30 G, `wsl` 20 G,
-  `GoogleDrive` 5.8 G, `home` 2.7 G, `repos` 843 M, plus `inventory`, `logs`,
-  `Obsidian`, `windows-reinstall-runbook.md`.
+  process running), and it carried the Apple Pay keys with it. Then `GoogleDrive/`
+  5.8 G (desktop has `C:\Users\methe\GoogleDrive` and the tree is full of `.gsheet`
+  pointer files, so the real content is cloud-side — though **no Drive sync process
+  was running on desktop** at the time of checking) and `wsl/` 20 G (a single
+  `Ubuntu-24.04.tar`, 20853483520 B, while desktop still has **Ubuntu-24.04
+  installed** alongside the running Ubuntu-26.04 — the live distro outlives the
+  export). **63 G → 34 G**; archive drive free went 122 G → 151 G. All of it still
+  present on `/mnt/xs/backup`, which was never touched. Remainder: `Downloads` 30 G
+  (received files, not re-derivable — still holds the third party's SSH key),
+  `home` 2.7 G, `repos` 843 M, plus `inventory`, `logs`, `Obsidian`,
+  `windows-reinstall-runbook.md`.
 - **When globbing paths with spaces, quote or use `-print0`.** An unquoted
   `$(find …)` split `Downloads/Telegram Desktop/id_rsa.pub` into two words and
   silently produced empty fingerprints for exactly the files that mattered most.
