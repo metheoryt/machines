@@ -373,5 +373,22 @@ got="$(run_member prio linux "$tgt_prio")"
 printf '%s' "$REMOTE_SCRIPT" | grep -q '/mnt/c' \
   && die "REMOTE_SCRIPT still references /mnt/c" || pass "no /mnt/c root in REMOTE_SCRIPT"
 
+# ── WSL rows are consumed as nickname/target/platform (spec 2026-08-01) ───────
+# fleet-pull must pass the TARGET (not the nickname) to run_member, and must not
+# append the MagicDNS suffix itself — fd_wsl_hosts already resolved it.
+SRC="$SCRIPT"
+
+grep -q 'IFS=.*read -r w wtarget wplat' "$SRC" \
+  && pass "fleet-pull reads the TSV triple" \
+  || die "fleet-pull must read nickname/target/platform from fd_wsl_hosts"
+
+grep -q 'run_member "\$wtarget" "\$wplat"' "$SRC" \
+  && pass "fleet-pull dispatches on target+platform" \
+  || die "fleet-pull must pass target and platform to run_member"
+
+grep -q 'MAGICDNS_SUFFIX' "$SRC" \
+  && die "fleet-pull must no longer append MAGICDNS_SUFFIX — fd_wsl_hosts does it" \
+  || pass "fleet-pull no longer appends the MagicDNS suffix"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

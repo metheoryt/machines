@@ -194,20 +194,16 @@ main() {
     harvest_host "$alias" "$platform" "$hostid" "$user" "$out" "$state" "${matches[@]}"
 
     # WSL guests of a windows member: each self-declared (fleet.local.json
-    # `.self.fleet == true`) distro is harvested as a plain `linux` platform
-    # target over its tailnet nickname, reusing the same harvest_host body.
-    # (No self-exclusion here per Task 10 brief — a WSL nickname and this box's
-    # fleet detect.hostname live in different namespaces, so a comparison would
-    # never meaningfully fire; mirror fleet-pull.sh's exact check instead if
-    # that ever becomes a real topology.) Note: if the windows member above was
-    # unreachable, this still issues its own probe (wsl.exe -l -q) against the
-    # same dead box — a wasted timeout, not a correctness issue.
+    # `.self.fleet == true`) distro is harvested with the target and platform
+    # fd_wsl_hosts resolved for it — a tailnet FQDN for the node-owning distro,
+    # or `<parent>:<distro>` on platform `wsl` for every other one. Do NOT
+    # append MAGICDNS_SUFFIX here; fd_wsl_hosts already did where it applies.
     if [ "$platform" = windows ]; then
-      local nick wsl_hostid
-      while IFS= read -r nick; do
+      local nick ntarget nplat wsl_hostid
+      while IFS=$'\t' read -r nick ntarget nplat; do
         [ -n "$nick" ] || continue
         wsl_hostid="$(local_host_id "$FLEET_JSON" "$nick")"
-        harvest_host "$nick${MAGICDNS_SUFFIX:+.$MAGICDNS_SUFFIX}" linux "$wsl_hostid" "" \
+        harvest_host "$ntarget" "$nplat" "$wsl_hostid" "" \
           "$out" "$state" "${matches[@]}"
       done < <(fd_wsl_hosts "$alias" "$platform")
     fi

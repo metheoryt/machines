@@ -14,9 +14,6 @@ SSH="${SSH:-ssh}"
 # shellcheck source=../lib/fleet-dispatch.sh
 . "$SCRIPT_DIR/../lib/fleet-dispatch.sh"
 
-# Headscale MagicDNS suffix for reaching discovered WSL hosts by nickname.
-MAGICDNS_SUFFIX="${MAGICDNS_SUFFIX:-gg.ez}"
-
 # Canonicalize a git remote URL to host/owner/repo (lowercase host, no
 # scheme/user/.git) so scp-form and https forms of the same repo compare equal.
 normalize_url() {
@@ -131,11 +128,11 @@ main() {
     plat="${plat:-linux}"
     printf '%-10s %s\n' "$m" "$(run_member "$m" "$plat" "$target")"
     if [ "$plat" = windows ]; then
-      local w
-      while IFS= read -r w; do
+      local w wtarget wplat
+      while IFS=$'\t' read -r w wtarget wplat; do
         [ -n "$w" ] || continue
         [ "$w" = "$self" ] && continue
-        printf '%-10s %s\n' "$w" "$(run_member "$w${MAGICDNS_SUFFIX:+.$MAGICDNS_SUFFIX}" linux "$target")"
+        printf '%-10s %s\n' "$w" "$(run_member "$wtarget" "$wplat" "$target")"
       done < <(fd_wsl_hosts "$m" "$plat")
     fi
   done < <(jq -r '.machines | to_entries[] | [.key, (.value.platform // "linux")] | @tsv' "$FLEET_JSON" 2>/dev/null)
