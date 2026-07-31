@@ -2734,8 +2734,29 @@ while :; do
   # Build the frame into a variable, then paint in one write: rendering straight to
   # the tty makes the display visibly tear on a slow VT.
   frame="$(render_frame)"
-  [ -t 1 ] && printf '\033[H\033[2J'
-  printf '%s\n' "$frame"
+  if [ -t 1 ]; then
+    # Home and OVERWRITE — never erase-then-draw. `\033[H\033[2J` was its own write(2),
+    # so between the erase and the frame the pane genuinely HELD NOTHING, and tmux
+    # processes-and-flushes per event-loop wake: it pushed that empty pane downstream as
+    # its own redraw, and foot presented it whenever its refresh landed in the gap.
+    # Reported 2026-07-31 as a blink every 2-5s on a 1s paint loop — irregular because
+    # only the presentation timing was racy, and NOT tied to a page rotation because
+    # every paint carried the same gap. (The frame itself is small enough to arrive in
+    # one read — measured 3708 bytes for the system page at 146 columns — so the tearing
+    # was the erase, not the frame's size.)
+    #
+    # Erasing each line as it is overwritten (EL) and the screen's tail after the last
+    # one (ED, which also clears the rest of the short final line) leaves no instant at
+    # which anything is blank, so there is nothing to present: a redraw landing
+    # mid-write now shows the PREVIOUS frame's pixels rather than black ones. ED is also
+    # what lets a 26-row page hand over to an 11-row one without leftovers.
+    #
+    # No trailing newline: the cursor parks on the last row instead of one below it,
+    # which cannot scroll the frame. It is hidden anyway.
+    printf '\033[H%s\033[J' "${frame//$'\n'/$'\033[K'$'\n'}"
+  else
+    printf '%s\n' "$frame"
+  fi
   sb_wait_key
   if [ "$SB_PAGE_HOLD" = 0 ] && [ "${#SB_PAGES[@]}" -gt 1 ] && [ "$SECONDS" -ge "$next_page" ]; then
     SB_PAGE=$(((SB_PAGE + 1) % ${#SB_PAGES[@]}))

@@ -942,6 +942,19 @@ global + per-host). One bullet per fact under a topical heading.
   board through a pty (`script -q -c … /dev/null` with a `( sleep 3; printf " " )`
   pipeline) and counting page markers per frame — the only way to test the key path,
   since it needs `[ -t 0 ]`.
+- **The paint OVERWRITES; it must never erase first** (2026-07-31). `printf
+  '\033[H\033[2J'` as its own write(2) before the frame left the pane genuinely
+  blank for an instant, tmux flushed that blank downstream on its own event-loop
+  wake, and foot presented it whenever a refresh landed in the gap — read as a blink
+  every 2-5s on a 1s loop, irregular and NOT aligned to a page rotation (every paint
+  carried the same gap). It was not a size problem: the frame is one read, 3708 bytes
+  for the system page at 146 columns. Now one write: `\033[H`, the frame with a
+  `\033[K` (EL) before every newline, and a trailing `\033[J` (ED) — no blank state
+  exists to present, a torn read shows the PREVIOUS frame, and ED is also what lets
+  the 26-row system page hand over to an 11-row one without leftovers. The trailing
+  newline went too, so the cursor parks on the last row and cannot scroll the frame.
+  A test asserts `[2J` appears on no code line, since reintroducing it breaks nothing
+  else.
 - **A bash signal handler RESUMES the script when it returns.** `trap cleanup EXIT
   INT TERM` therefore never stopped the board: it restored the cursor and went back
   to painting, so every `systemctl stop/restart statusboard` sat out the 90s stop

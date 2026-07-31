@@ -1165,6 +1165,18 @@ eq "$?" '0' 'pages: a hand-picked page dwells for a minute'
 # latitude 2026-07-31) and every systemctl stop paid the 90s timeout and a SIGKILL.
 grep -qF "trap 'cleanup; exit 0' INT TERM HUP" "$SB"
 eq "$?" '0' 'signals: the board exits on a signal instead of resuming'
+# The paint must OVERWRITE, never erase-then-draw: `\033[2J` as its own write left the
+# pane momentarily blank, and tmux flushed that blank downstream — a blink every 2-5s on
+# a 1s loop (reported 2026-07-31). Both directions are asserted, because reintroducing
+# the clear would bring the blink back without failing anything else.
+grep -qF "printf '\\033[H%s\\033[J'" "$SB"
+eq "$?" '0' 'paint: home, overwrite each line, erase only the tail'
+grep -qF "\\033[K" "$SB"
+eq "$?" '0' 'paint: every overwritten line erases to end of line'
+# Comments are stripped first: the paint block deliberately QUOTES the old clear while
+# explaining why it went, and that mention must not read as a reintroduction.
+grep -vE '^[[:space:]]*#' "$SB" | grep -qF '\033[2J'
+eq "$?" '1' 'paint: no code clears the whole screen before drawing'
 DSRC="$(awk '/^sb_page_dwell\(\)/,/^}/' "$SB")"
 has "$DSRC" 'SB_PAGE_HOLD=0' 'dwell: picking a page clears any indefinite hold'
 has "$DSRC" 'next_page=$((SECONDS + SB_PAGE_MANUAL_SECS))' 'dwell: and arms the one-minute deadline'
