@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Open a URL or file with the default Windows handler, from inside WSL.
+# Stand-in for wslview / xdg-open, which Ubuntu 26.04 no longer packages
+# (wslu was dropped from the archive).
+#
+# Installed as wslopen, with xdg-open and wslview symlinked to it, so tools
+# that shell out to either name work. Needs WSL interop (binfmt WSLInterop).
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "usage: $(basename "$0") <url|path>" >&2
+  exit 2
+fi
+
+target=$1
+case "$target" in
+  http://* | https://* | mailto:* | ms-* ) ;;
+  *) target=$(wslpath -w -- "$target" 2>/dev/null || printf '%s' "$target") ;;
+esac
+
+powershell=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+if [ ! -x "$powershell" ]; then
+  powershell=$(command -v powershell.exe 2>/dev/null) || {
+    echo "$(basename "$0"): powershell.exe not found — is WSL interop enabled?" >&2
+    exit 1
+  }
+fi
+
+# Single-quoted PowerShell literal: the only escape needed is doubling quotes.
+# Encoding the whole command sidesteps cmd/PowerShell mangling of & ? = in URLs.
+escaped=${target//\'/\'\'}
+# ProgressPreference off, or PowerShell spews a CLIXML progress record on stderr
+# that lands in the output buffer of whatever called us.
+encoded=$(printf '%s' "\$ProgressPreference='SilentlyContinue'; Start-Process -FilePath '$escaped'" \
+  | iconv -f UTF-8 -t UTF-16LE | base64 -w0)
+
+exec "$powershell" -NoProfile -NonInteractive -EncodedCommand "$encoded"
