@@ -1,8 +1,19 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+This file provides guidance to Claude Code and other agents working in this
+repository. The repo-root `CLAUDE.md` is a **symlink to this file** — edit
+`AGENTS.md`, never create a second real file at the `CLAUDE.md` path.
 
 ## Repository Overview
+
+> **Fleet migration in flight (as of 2026-08-01).** Plans:
+> `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`
+> and `2026-07-28-latitude-wipe-harvest.md` (status: open). `air` becomes the
+> primary dev box; latitude converts to the always-on services host with NixOS
+> slated for retirement (`fleet.json` already declares it `platform: debian`,
+> `profile: server` — commits `380cb55`, `0aa4eb9`); the G15 (`server`) is being
+> drained and retired. The machine descriptions below are the pre-migration
+> state — verify the live OS/role before acting on them.
 
 Config, provisioning, and data-backup for a small machine fleet — NixOS *and*
 Windows:
@@ -15,6 +26,9 @@ Windows:
   (renamed from `methe-server` 2026-07-20 — the model code; see the
   hostname-normalization spec). Runs the cyphy.kz service platform
 - **latitude5520** — Dell Latitude 5520, Intel Tiger Lake, NixOS hostname `latitude5520`
+- **air** — MacBook, `platform: darwin`, tailnet `100.64.0.7`, roles `base,
+  ssh-server, agents, dotfiles, repos`. Provisioned with `just provision-mac air`
+  plus the dotfiles role; the Nix build/switch recipes below do **not** apply to it.
 - **hub** — Debian VPS at `cyphy.kz` (tailnet `100.64.0.1`), a first-class
   `fleet.json` member (roles `base, ssh-server, agents, dotfiles,
   backup-client`); runs the Headscale control server + the AmneziaWG VPN hub.
@@ -32,7 +46,13 @@ platform). Machine here, services there.
 
 ## Common Commands
 
-All commands run from repo root. System-modifying commands require `sudo` (via `nixos-rebuild`).
+All commands run from repo root. `just --list` is the full menu (~45 recipes).
+System-modifying commands require `sudo` (via `nixos-rebuild`).
+
+**The build/dev recipes below are NixOS-only** — `build`, `switch`, `boot`,
+`test`, `check`, `quick`, `iso`, `vm`, `upgrade` all fail on `air` (darwin) and
+on the Windows boxes, which have no Nix. See the fleet/provisioning block for
+what those hosts run instead.
 
 ```bash
 # Validate syntax quickly (no build)
@@ -68,6 +88,38 @@ just shell
 just clean
 ```
 
+### Fleet / provisioning (every platform)
+
+```bash
+# Role front door — flag syntax; a bare positional exits 2
+just provision --machine <machine> --dry-run
+just provision --machine <machine> --apply
+
+just provision-mac <machine>            # provision THIS Mac end to end
+just provision-wsl <nickname>           # self-declare THIS WSL distro
+                                        #   (--no-tailscale for a second distro)
+
+just agent-bootstrap                    # link ~/.claude + ~/.codex
+just agent-bootstrap-profile <postfix>  # provision ~/.claude-<postfix>
+just hermes-bootstrap                   # link ~/.hermes
+just gortex-setup                       # wire per-profile gortex (NixOS only)
+
+just update-gortex | update-orca | update-rustdesk   # bump pinned out-of-tree pkgs
+```
+
+### Tests
+
+Plain bash scripts — **no recipe runs them**, and `just test` is
+`nixos-rebuild test`, not the suite.
+
+```bash
+bash provision/tests/roles.test.sh      # one file; prints ALL PASS, nonzero on failure
+
+# whole suite
+for t in provision/tests/*.test.sh provision/*.test.sh \
+         agents/tests/*.test.sh scripts/converge.test.sh; do bash "$t"; done
+```
+
 ## Architecture
 
 ### Flake structure (`flake.nix`)
@@ -77,6 +129,13 @@ just clean
 - **`specialArgs`** passes `inputs`, `system`, `nixpkgs-stable` into all modules
 - **Formatter:** alejandra
 - **Dev shell:** nixfmt, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
+- **Outputs:** `nixosConfigurations.latitude` **and** `.latitude5520` — the same
+  system bound twice, so `nixos-rebuild --flake .#$(hostname)` and `converge.sh`
+  can resolve by OS hostname; plus `homeConfigurations."me@latitude"` and
+  `checks` for both.
+- **`pylspFixOverlay`** pins python-lsp-server to fork `metheoryt@e4ee218`
+  (upstream PR #715 — the `pylsp_definitions` crash gortex hits constantly).
+  Delete the overlay once nixpkgs ships the fix.
 
 ### Module structure (`modules/`)
 
@@ -98,11 +157,23 @@ Each module is self-contained (options + config + services). Modules don't impor
 | `programs/development.nix` | nix-ld, Docker (auto-start + auto-prune), Python 3.13 + uv, dev tools (git, gh, jq, ripgrep, ast-grep, fd, bat, etc.), direnv + nix-direnv, Fish + Zsh |
 | `home/me.nix` | Home Manager for user `me`: packages, git config, Fish aliases/functions, Starship prompt, Ghostty config, GNOME dconf settings, fastfetch |
 | `home/ssh.nix` | SSH client config generated from fleet.json |
-|| `home/claude.nix` | Claude Code profile bootstrap wiring |
-|| `hermes/` | Hermes Agent version-controlled config — `config.yaml`, `skills/`; `bootstrap.sh` links into `~/.hermes/`. Its `memories/` is an **empty, unfilled slot** — the agent-config handover did not fill it |
+| `home/claude.nix` | Claude Code profile bootstrap wiring |
 | `home/orca-bin.nix` | Orca IDE AppImage wrapper |
 | `home/rustdesk-bin.nix` | RustDesk client wrapper |
 | `home/rustdesk-config.nix` | RustDesk server key + known-peer IDs |
+
+### Other top-level directories
+
+None of these are Nix modules — they are the non-NixOS half of the repo.
+
+| Dir | What it is |
+|---|---|
+| `provision/` | Cross-platform provisioner — `provision.{sh,ps1}` role front door, `roles/*.{sh,ps1}` executors, `lib/` manifest readers (`fleet.sh`, `Fleet.psm1`, `tiers.sh`), `linux.sh`/`macos.sh` tier drivers, `statusboard/`, `tests/`. See `provision/README.md`. |
+| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
+| `hermes/` | Hermes Agent config — `config.yaml`, `skills/`; `bootstrap.sh` links it into `~/.hermes/`. Its `memories/` is an **empty, unfilled slot** — the agent-config handover did not fill it. |
+| `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `quick-check.sh` (the `just quick` gate), the `update-*.sh` version bumpers. |
+| `pkgs/` | Pinned out-of-tree packages (e.g. `gortex.nix`). |
+| `install-media/` | Shared Win11 install media. |
 
 ### Fleet networking / tailnet architecture
 
