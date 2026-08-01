@@ -6,116 +6,204 @@ the "where to head next" companion. For any item worth real work, run
 `superpowers:brainstorming` → `writing-plans` and drop the plan under
 `docs/superpowers/plans/`.
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-08-01 — rewritten after the latitude-server migration. The
+previous revision (2026-07-14) had gone materially wrong: retired node names,
+latitude at the wrong tailnet IP, and done items still open. If you find
+yourself copying an unchecked box forward without re-verifying it, stop — that
+is how the last revision rotted._
 
 ## Where we are now
 
-Fleet transport is **Headscale** (self-hosted Tailscale) end-to-end; AmneziaWG is
-retained on the VPS **only for relatives**. Control plane at `https://cc.cyphy.kz`
-+ embedded DERP.
+Transport is **Headscale** (self-hosted, `cc.cyphy.kz`, MagicDNS `gg.ez`);
+AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 
-| Node | Tailnet IP | State |
-|---|---|---|
-| vps-test | `100.64.0.1` | hub + embedded DERP; also runs the AWG relatives-hub (`10.0.0.1`) |
-| latitude | `100.64.0.2` | tailnet-only (mesh removed from repo) |
-| homeserver | `100.64.0.3` | services on tailnet; mesh removed from repo; VPS↔it direct @ ~5ms |
-| g614jv | `100.64.0.4` | tailnet + Windows sshd; AWG tunnel runs locally (not repo-provisioned) |
+| Node | Tailnet IP | Platform | State |
+|---|---|---|---|
+| `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
+| `server` | `100.64.0.3` | Windows 11 (`g513ie`) | **draining** — services moved to latitude, containers stopped, retirement pending |
+| `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
+| `air` | `100.64.0.7` | macOS | **primary dev box** |
+| `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
 
-Networking note: the fleet spans **two separate LANs**. Same-LAN pairs get direct
-P2P (~3ms); cross-LAN pairs relay through our own DERP (expected and accepted —
-this is why **UPnP/router port-mapping is NOT on the backlog**).
+`desktop-wsl` (`100.64.0.6`) is a self-declared WSL host: no `fleet.json` entry,
+a gitignored `fleet.local.json` instead.
 
-## Now — finish what the migration started
+Two separate LANs. Same-LAN pairs get direct P2P (~3ms); cross-LAN pairs relay
+through our own DERP — expected and accepted, which is why **UPnP/router
+port-mapping is not on this backlog**.
 
-- [x] **Fleet-wide SSH-over-tailnet — CODE COMPLETE 2026-07-14** (branch
-  `feat/ssh-over-tailnet`; spec+plan `docs/superpowers/{specs,plans}/2026-07-14-fleet-ssh-over-tailnet-and-hosts*`).
-  Chose: add a parallel `fleet.json` `tailnet.ip` (kept `mesh.ip` for AWG), move the
-  whole SSH story onto raw `100.64.0.x` (not MagicDNS), hub stays on `cyphy.kz`.
-  `modules/home/ssh.nix` repointed. **Also added fleet-wide name resolution** (see
-  below). **Real-box apply PENDING** (runbook in the plan): `nix flake check` +
-  `nixos-rebuild switch` on latitude5520, then verify `ssh homeserver`.
-- [x] **Fleet-wide name resolution (hosts file) — CODE COMPLETE 2026-07-14** (same
-  branch). NixOS `modules/system/fleet-hosts.nix` generates `networking.hosts` from
-  `fleet.json`; a new cross-platform `hosts` provisioner role (`provision/roles/hosts.{sh,ps1}`)
-  writes a marker-delimited managed block into the system hosts file on Windows/Debian
-  (no-op on NixOS). So `ping homeserver`/`curl homeserver:8001` resolve fleet-wide with
-  no DNS resolver. **Real-box apply PENDING:** `hosts` role apply on vps (root) +
-  g614jv/homeserver (admin pwsh).
-- [x] **2026-07-17 — AWG mesh retired from the repo.** SSH re-homed onto the tailnet
-  via `fleet.sshServer` (NixOS) + converged `windows.ps1` firewall. Deleted:
-  `mesh-vpn.nix`, mesh params, `fleet.json` mesh blocks, provisioner mesh
-  roles/libs. Kept: the AmneziaVPN client + the VPS AWG VPN server.
-- [ ] **Restart immich + navidrome** on the homeserver — they were down during the
-  cutover; confirm they serve over the tailnet like the rest. (Operational, quick.)
-- [ ] **Drop g614jv's AWG.** It runs AWG beside Tailscale; its services already work
-  over the tailnet. Remove once nothing depends on its `10.0.0.6` (then remove the
-  `me-g614jv` peer on the VPS hub).
+**There is no Nix host left in the fleet** (verified live 2026-08-01). Read the
+P1 item before touching anything under `modules/`.
 
-## Next — make it repeatable (provisioner)
+---
 
-- [ ] **Codify the `ssh-server` role executor.** Currently unimplemented. Windows:
-  `dism.exe /Online /Add-Capability /CapabilityName:OpenSSH.Server~~~~0.0.1.0`
-  (NOT `Add-WindowsCapability` — it throws "Class not registered" under PS7),
-  enable the firewall rule for all profiles, seed
-  `C:\ProgramData\ssh\administrators_authorized_keys` for admin users, set the
-  default shell. NixOS: `services.openssh`. (Gotchas captured in project memory.)
-- [ ] **Declarative Windows Tailscale provisioning.** Fold `winget install
-  Tailscale.Tailscale` + `tailscale up --login-server https://cc.cyphy.kz --authkey
-  <key>` into the `ssh-server` role (or a dedicated tailscale role) so enrolling
-  a box isn't manual. Mint a short-lived key per enrollment and expire it after
-  (`headscale preauthkeys expire --id <n> --force`).
-- [ ] **Zero-touch WSL tailnet enrollment (design approved 2026-07-16).** Extend
-  `provision/tailscale-wsl.sh` (already shipped, currently env-key + manual) so a
-  WSL distro re-enrolls hands-free. Note: the *fleet itself* is manual today —
-  `services.tailscale.enable` on latitude, then a hand-pasted `tailscale up
-  --authkey` after switch (`hosts/latitude/nixos/configuration.nix:89`) — so
-  there's nothing more-automated to inherit; this builds the automation the fleet
-  lacks (the NixOS `authKeyFile` pattern, hand-rolled). **Approved design:**
-  (a) key source precedence `--authkey-file <path>` → `$HEADSCALE_AUTHKEY` → an
-  already-persisted `/etc/headscale/authkey`; persist the resolved key to
-  `/etc/headscale/authkey` `root:root 0600`; add `provision/secrets/` to
-  `.gitignore` for a local stash. (b) install a systemd **system** oneshot
-  `/etc/systemd/system/tailscale-autoconnect.service` — `After/Wants=tailscaled`,
-  `ConditionPathExists=/etc/headscale/authkey`, `Type=oneshot RemainAfterExit=true`,
-  `ExecStart=/bin/sh -c 'tailscale status --peers=false >/dev/null 2>&1 || tailscale
-  up --login-server https://cc.cyphy.kz --authkey "$(cat /etc/headscale/authkey)"
-  --hostname wsl-<distro>'`, `WantedBy=multi-user.target`; hostname baked at install
-  (system units don't see `$WSL_DISTRO_NAME`). Runs as root → no interactive sudo at
-  boot; idempotent (key consumed only on first enroll, state persists in
-  `/var/lib/tailscale`). One-time `sudo` to install is the only interactive step.
-  **Accepted tradeoff:** a reusable pre-auth key sits root-readable on disk;
-  mitigation = use a key with an expiry and rotate in Headscale. Update
-  spec/plan/README (`docs/superpowers/specs/2026-07-15-orca-serve-wsl-design.md`,
-  `docs/superpowers/plans/2026-07-15-orca-serve-wsl.md`) to match. Straight to `main`.
-- [ ] **Headscale ACLs.** The tailnet is default-open. Scope access (who can reach
-  which node/port) before it widens — relatives never join this tailnet, but least
-  privilege across our own boxes is cheap now.
+## P0 — Backups are dead. Fix this first.
 
-## Later — reproducibility & backups (older parked)
+Nothing has been backed up anywhere in the fleet since **2026-07-19**. This is
+the only item on the list where waiting costs something irreversible.
 
-- [ ] **VPS base-machine reproducibility.** Bring a fresh cloud VM to the VPS
-  baseline reproducibly. Blocked on the `base` / `ssh-server` / `backup-client`
-  role executors being unimplemented. Services stay the `vps` repo's `setup-*.sh`.
-  (See project memory "VPS base-machine reproducibility".)
-- [ ] **Truly-offsite backups.** Everything ultimately lands on the homeserver
-  (its own immich backups + REST target) — one location loses primary + all
-  backups. Fix is cheap: the dock drives are already removable → periodic manual
-  rotation of one drive off-site. No new infra needed.
-- [ ] **Back up latitude5520.** No dedicated backup today; only what home-manager
-  declares is "backed up" (via git). User wants it in a private repo "someday" —
-  mechanism not chosen (chezmoi/stow/plain git).
+- [ ] **Re-establish a backup path for the immich data on latitude.**
+  Evidence gathered 2026-08-01:
+  - The three `immich-*` scheduled tasks on `server` last ran **2026-07-19** and
+    returned `0x8007010B` — *"the directory name is invalid."* They target
+    `G:\` / `H:\`, drives that moved during the migration. They are still
+    `State: Ready` and still have a `NextRunTime`, so the schedule **looks
+    healthy and is not**.
+  - `restic-server` on `server` has been `Exited (0)` for 3 days.
+  - `latitude` has restic installed at `/usr/bin/restic` but **no repo on any
+    mount, no timer, and no container**. `hub` has no restic at all.
+  - Net: last good backup predates 2026-07-19.
+  Sub-steps: decide where `backup-hub` lives (see P2 — same decision from the
+  other end) → stand the repo up → retarget
+  `vps/backup/homeserver/profiles.yaml` off `G:\`/`H:\` → **disable the three
+  dead tasks on `server`** so a failing schedule stops reading as a live one.
 
-## Housekeeping
+- [ ] **Put a systemd timer on `hosts/latitude/debian/mirror-refresh.sh`.**
+  Small, and worth doing before the item above lands. Right now the fleet's only
+  live redundancy is a manual rsync that depends on someone remembering to run
+  it. A user timer alongside `fleet-selfpull` / `dotfiles-sync` /
+  `git-autofetch` is the whole job.
 
-- [ ] **Drop `pylspFixOverlay` from `flake.nix`** once python-lsp/python-lsp-server
-  PR #715 ships in a nixpkgs release. Tracking:
-  https://github.com/python-lsp/python-lsp-server/pull/715
+- [ ] **Decide what the mirror does with the deleted `Media/` tree.**
+  `/mnt/immich-mirror` is 287G against `/mnt/immich`'s 249G; the difference is
+  the `Media/` tree deleted from the source on 2026-08-01, plus `staging/` and
+  `var-backups/`. `--delete` is **off by design** (see the script header), so
+  the mirror will never drop it on its own. Prune deliberately or accept it as a
+  last-resort copy — but write down which.
 
-## Done (2026-07-13, this rollout)
+- [ ] **Truly-offsite backups.** Everything lands in one apartment: primary and
+  every copy. The dock drives are already removable, so the fix needs no new
+  infrastructure — just periodic manual rotation of one drive off-site.
 
-- Headscale live on the VPS (0.29.2 + embedded DERP, `cc.cyphy.kz`).
-- Probe passed; latitude cut over; homeserver cut over (Caddy → `100.64.0.3`,
-  AWG spoke removed, no regression — direct path verified).
-- g614jv enrolled + Windows sshd set up and reachable over the tailnet.
-- vps convention docs updated to the tailnet reality; reusable pre-auth keys
-  revoked. Plans/results under `docs/superpowers/`.
+---
+
+## P1 — Decide the flake's fate. It blocks everything under `modules/`.
+
+- [ ] **Delete or archive the NixOS tree.** No Nix host remains, yet `flake.nix`
+  still builds `latitude5520` — a machine that no longer exists. The carcass is
+  ~10.1k lines across `flake.nix`, `flake.lock`, 18 `modules/*.nix`,
+  `hosts/latitude/nixos/`, and `pkgs/`.
+  **The consequence that matters is not the line count:** roughly twenty
+  `justfile` recipes target it and cannot run on any box in the fleet —
+  including **`just quick`, the validation gate AGENTS.md documents**. There is
+  currently no gate at all (see P4 for what's left of one).
+  Suggested shape: `git tag nixos-final` before deleting. It costs nothing and
+  permanently answers "how did we do X under NixOS." Then prune the dead recipes
+  and rewrite the AGENTS.md build section.
+  This also retires the `pylspFixOverlay` item that used to live under
+  Housekeeping — it goes with the flake, not separately.
+
+---
+
+## P2 — Finish the `server` (g513ie) decommission.
+
+Coupled to P0: `backup-hub` is declared on `server` in `fleet.json` and exists
+nowhere else, so backups cannot be fixed without deciding where it goes, and the
+decommission cannot finish without the same decision. Do them together.
+
+- [ ] Move the `backup-hub` role to `latitude`.
+- [ ] Repoint the six Caddy routes still aimed at the dead `100.64.0.3`:
+  `speed` (2282), `tug` (9412), `jfin` (8096), `seerr` (5055), navidrome (4533),
+  and the layer4 `:2222`. **`jfin` republishes Jellyfin publicly — needs an
+  explicit go, not a silent repoint.**
+- [ ] Remove `server` from `fleet.json` and drop `methe@server` from
+  `provision/fleet-authorized-keys`. Not before the two above: it is still
+  reachable and still holds the only copies of things.
+- [ ] Archive or delete `hosts/server/windows/`.
+
+---
+
+## P3 — latitude's SSH story has no generator.
+
+- [ ] **`tier_fleet_ssh` is darwin-only.** With `modules/home/ssh.nix` dead,
+  nothing generates latitude's outbound `~/.ssh/config`. It is unmanaged and
+  drifting. The failure mode is silent rather than loud: latitude has **no
+  GitHub account block at all**, so a `cyphy671` repo cloned there would fall
+  back to default identity resolution and quietly offer the wrong key.
+- [ ] **The `ssh-server` role executor is still an unimplemented stub** — it
+  prints "not yet implemented (skipped)", as do `base` and `backup-client`.
+  (`provision/roles/` holds only `agents`, `dotfiles`, `repos`.) The capability
+  exists three separate hand-rolled ways — the now-dead NixOS module,
+  `windows.ps1` step 6, and `tier_ssh_trust` for POSIX tier boxes — which is why
+  AGENTS.md reads as though the role is done. It is not, and with the NixOS
+  module gone latitude's sshd has no generator either. Windows gotchas for
+  whoever implements it are in project memory.
+
+---
+
+## P4 — Green the test suite. It is now the only gate.
+
+- [ ] **Three failures, all pre-existing** — they reproduce at HEAD in a clean
+  worktree and are *not* fallout from the fleet-ssh work:
+  `provision/tests/provision-wsl.test.sh`,
+  `agents/tests/orca-profile-harvest.test.sh`,
+  `agents/tests/orca-profile-link.test.sh`.
+  With the Nix gate gone the bash suite is all the validation the repo has, and
+  a red suite gives no signal at all. Whole suite:
+  ```bash
+  for t in provision/tests/*.test.sh provision/*.test.sh \
+           agents/tests/*.test.sh scripts/converge.test.sh; do bash "$t"; done
+  ```
+- [ ] **No recipe runs the suite.** `just test` is `nixos-rebuild test` and dies
+  with the flake. Give the bash suite a recipe as part of P1.
+
+---
+
+## P5 — Documentation drift.
+
+- [ ] **`AGENTS.md`** still leads its Common Commands with Nix, and its
+  "Fleet migration in flight" banner predates the migration finishing.
+- [ ] **`.claude/memory/project.md` ~359–368** still discusses `latitude5520`
+  NixOS builds as live facts.
+- [ ] **45 plans under `docs/superpowers/plans/`, none marked done.** Their
+  checkboxes are unchecked even where fully executed, so the directory cannot be
+  read as a backlog — worth a status line at the top of each, or at least of the
+  two migration plans that are effectively complete.
+
+---
+
+## P6 — Housekeeping.
+
+- [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
+  desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh
+  config pins `id_fleet`. Removing it is a real revocation, not a cleanup.
+  Needs a deliberate decision.
+- [ ] **latitude's migration debris**: 21M `~/immich-migration/` plus six
+  `*.log` (`overnight.log` alone is 3.2M).
+- [ ] **Rotate the leaked Anthropic API key and Telegram bot token.** Blocks
+  bringing telegrind and embedthat back up. Hermes credentials were never
+  revoked at source either.
+- [ ] **Headscale ACLs.** The tailnet is default-open. Relatives never join it,
+  but least privilege across our own boxes is cheap now and annoying later.
+- [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its
+  services already work over the tailnet. Remove once nothing depends on
+  `10.0.0.6`, then drop the peer on hub.
+- [ ] Enumerate `xs-keepers/home`'s ~20 config dirs; unbundle
+  `qaz-code-feature-sync-dashboard.bundle`; decide
+  `windows-reinstall-runbook.md`'s fate; confirm immich still has "Hardware
+  decoding" ticked.
+
+---
+
+## Done
+
+**2026-08-01 — latitude-server migration.** latitude reinstalled as Debian 13
+and took over the services role: immich, servarr, speedtest, tugtainer live and
+healthy. `/mnt/immich/Media` deleted after a four-way guard (526 GiB reclaimed,
+nvme0 86% → 28%); 30G reclaimed on spare320. Fleet SSH made **authoritative** —
+`provision/fleet-authorized-keys` is now rewritten as a managed span rather than
+appended to, so deletions actually revoke and renames actually propagate; keys
+renamed to logical fleet names on all five boxes; hub's dead `methe@lat5520`
+pruned. Two recurring latitude scripts tracked under `hosts/latitude/debian/`;
+16 one-off migration scripts deleted after harvesting their measurement rules
+into `docs/2026-07-drive-migration-log.md`.
+
+**2026-07-17 — AWG mesh retired from the repo.** SSH re-homed onto the tailnet.
+Deleted `mesh-vpn.nix`, mesh params, `fleet.json` mesh blocks, and the
+provisioner mesh roles/libs. Kept the AmneziaVPN client and the VPS AWG server.
+
+**2026-07-14 — fleet-wide SSH over tailnet + name resolution.** `fleet.json`
+gained `tailnet.ip`; the whole SSH story moved onto `100.64.0.x`.
+
+**2026-07-13 — Headscale rollout.** 0.29.2 + embedded DERP on the VPS; every
+node cut over; reusable pre-auth keys revoked afterwards.
