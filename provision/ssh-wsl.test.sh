@@ -56,12 +56,21 @@ if command -v jq >/dev/null 2>&1; then
   # 4 blocks now: latitude, server, hub, and the trailing *.gg.ez wildcard.
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  IdentityFile ~/.ssh/id_fleet$')" = 4 ] || fail 'render: every block (incl. wildcard) has IdentityFile'
   [ "$(printf '%s\n' "$RENDERED" | grep -c '^  StrictHostKeyChecking accept-new$')" = 4 ] || fail 'render: every block (incl. wildcard) has StrictHostKeyChecking'
-  echo "$RENDERED" | grep -q '^Host latitude$' || fail 'render: latitude block present'
+  echo "$RENDERED" | grep -q '^Host latitude latitude\.gg\.ez$' || fail 'render: latitude block present'
+  # Every per-host block matches the bare name AND the MagicDNS FQDN. Without the
+  # alias the FQDN fell through to the `Host *.gg.ez` catch-all's `User me`, so
+  # `ssh desktop.gg.ez` / `server.gg.ez` / `hub.gg.ez` went out as the wrong user
+  # and were refused while the bare name worked.
+  echo "$RENDERED" | grep -q '^Host server server\.gg\.ez$' || fail 'render: server block aliases its FQDN'
+  echo "$RENDERED" | grep -q '^Host hub hub\.gg\.ez$'       || fail 'render: hub block aliases its FQDN'
+  # The wildcard is the only remaining bare `Host *.gg.ez` — every other block
+  # carries a two-token pattern, so no member can fall through to it.
+  [ "$(printf '%s\n' "$RENDERED" | grep -cE '^Host [^ ]+$')" = 1 ] || fail 'render: only the wildcard is a single-pattern Host line'
   # A member with no ssh.user must carry an EXPLICIT `User me` — this is the
   # assertion that inverted on 2026-07-29. Relying on ssh's fallback to the local
   # username is only correct where that username happens to be `me`.
-  LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude$/{f=1} f&&/^$/{exit} f{print}')"
-  EXPECTED_LAT='Host latitude
+  LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude /{f=1} f&&/^$/{exit} f{print}')"
+  EXPECTED_LAT='Host latitude latitude.gg.ez
   User me
   IdentityFile ~/.ssh/id_fleet
   StrictHostKeyChecking accept-new'

@@ -66,7 +66,11 @@ function Render-FleetSshConfig {
         if ($m.PSObject.Properties.Name -contains 'ssh') { $sshNode = $m.ssh }
 
         $lines = New-Object System.Collections.Generic.List[string]
-        $lines.Add("Host $name")
+        # Bare name AND MagicDNS FQDN, matching ssh-wsl.sh (2026-08-01). A
+        # bare-name-only block let `ssh server.gg.ez` fall through to the
+        # trailing *.gg.ez catch-all's `User me` and be refused, while
+        # `ssh server` worked — the two spellings must behave identically.
+        $lines.Add("Host $name $name.gg.ez")
 
         if ($sshNode -and ($sshNode.PSObject.Properties.Name -contains 'host') -and $sshNode.host) {
             $lines.Add("  HostName $($sshNode.host)")
@@ -138,7 +142,12 @@ if ($SelfTest) {
 
     $r = Render-FleetSshConfig -FleetJson $fixture -IdentityFile '~/.ssh/id_ed25519'
 
-    T ($r -match '(?m)^Host latitude$')                  'latitude block present'
+    T ($r -match '(?m)^Host latitude latitude\.gg\.ez$') 'latitude block present, aliasing its FQDN'
+    T ($r -match '(?m)^Host server server\.gg\.ez$')     'server block aliases its FQDN'
+    T ($r -match '(?m)^Host hub hub\.gg\.ez$')           'hub block aliases its FQDN'
+    # Only the wildcard may be a single-pattern Host line; anything else falling
+    # through to it would pick up the wrong `User me`.
+    T ((([regex]::Matches($r, '(?m)^Host [^ ]+$')).Count) -eq 1) 'only the wildcard is a single-pattern Host line'
     T ($r -match '(?m)^  HostName cyphy\.kz$')           'hub gets HostName'
     T ((([regex]::Matches($r, '(?m)^  HostName ')).Count) -eq 1) 'only the hub gets a HostName'
     # The regression this file exists for: a member with no ssh.user must still

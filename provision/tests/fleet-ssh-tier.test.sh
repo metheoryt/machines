@@ -43,13 +43,16 @@ cfg="$(cat "$CFG" 2>/dev/null || true)"
 has "$out" 'ENROLLMENT NEEDED' "warns that the new key needs enrolling"
 
 # Every fleet member gets a block, generated from fleet.json — including `air`
-# itself and, critically, the hosts the Mac needs to reach.
+# itself and, critically, the hosts the Mac needs to reach. Each block matches
+# the bare name AND the MagicDNS FQDN: without the second pattern the FQDN form
+# fell through to the `Host *.gg.ez` catch-all's `User me` and was refused on the
+# members whose user is methe/debian.
 for h in air latitude desktop server hub; do
-  has "$cfg" "^Host ${h}\$" "config has a Host block for ${h}"
+  has "$cfg" "^Host ${h} ${h}\.gg\.ez\$" "config has a Host block for ${h} + its FQDN"
 done
 
 # Mirrors modules/home/ssh.nix: HostName only for hub, User only when != me.
-has "$cfg" '^Host hub$'                  "hub block present"
+has "$cfg" '^Host hub hub\.gg\.ez$'      "hub block present"
 has "$cfg" '^  HostName cyphy\.kz$'      "hub carries its ssh.host HostName"
 has "$cfg" '^  User debian$'             "hub carries User debian"
 has "$cfg" '^  User methe$'              "windows members carry User methe"
@@ -69,9 +72,9 @@ perm="$(stat -c '%a' "$CFG" 2>/dev/null || stat -f '%Lp' "$CFG" 2>/dev/null)"
 # Idempotent: a second run must not duplicate the block or re-warn about the key.
 out2="$(run_tier)"
 cfg2="$(cat "$CFG")"
-[ "$(printf '%s\n' "$cfg2" | grep -c '^Host latitude$')" = 1 ] \
+[ "$(printf '%s\n' "$cfg2" | grep -c '^Host latitude latitude\.gg\.ez$')" = 1 ] \
   && pass "re-run does not duplicate the fleet block" \
-  || die "re-run duplicated blocks: $(printf '%s\n' "$cfg2" | grep -c '^Host latitude$') latitude blocks"
+  || die "re-run duplicated blocks: $(printf '%s\n' "$cfg2" | grep -c '^Host latitude latitude\.gg\.ez$') latitude blocks"
 printf '%s\n' "$out2" | grep -q 'ENROLLMENT NEEDED' \
   && die "re-run re-warned about enrollment despite an existing key" \
   || pass "re-run reuses the existing key silently"
@@ -84,7 +87,7 @@ printf '%s\n' "$out2" | grep -q 'ENROLLMENT NEEDED' \
 run_tier >/dev/null
 cfg3="$(cat "$CFG")"
 has "$cfg3" '^Host cyphy671\.github\.com$' "a foreign ssh_accounts block survives a re-run"
-has "$cfg3" '^Host latitude$'     "the fleet block is still present alongside it"
+has "$cfg3" '^Host latitude latitude\.gg\.ez$'     "the fleet block is still present alongside it"
 [ "$(printf '%s\n' "$cfg3" | grep -c '^Host cyphy671\.github\.com$')" = 1 ] \
   && pass "the foreign block is not duplicated" \
   || die "foreign block duplicated"

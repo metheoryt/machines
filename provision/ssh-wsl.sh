@@ -81,10 +81,21 @@ ssh_wsl_sanitize() {
 # one line per block and cannot be wrong.
 # (modules/home/ssh.nix carried the same rule and is now moot: latitude was the
 # last NixOS host, retired 2026-07-29.)
+#
+# Each block matches BOTH the bare name and the MagicDNS FQDN
+# (`Host desktop desktop.gg.ez`) as of 2026-08-01. Bare-name-only blocks let the
+# FQDN form fall through to the trailing `Host *.gg.ez` catch-all, which hard-
+# codes `User me` — so `ssh desktop.gg.ez` / `server.gg.ez` went out as me@ to
+# boxes whose user is `methe`, and `hub.gg.ez` as me@ instead of debian@, all
+# failing with `Permission denied (publickey)` while the bare name worked.
+# Everything resolvable prints the FQDN (tailscale status, MagicDNS, known_hosts),
+# so the two forms have to behave identically. The wildcard stays last and keeps
+# `User me`: it now only catches self-declared WSL hosts, which are absent from
+# fleet.json and always run as `me`.
 ssh_wsl_render_config() {
   jq -r '
     ( [ .machines | to_entries[] |
-      ( [ "Host " + .key ]
+      ( [ "Host " + .key + " " + .key + ".gg.ez" ]
         + ( if (.value.ssh.host // null) != null then [ "  HostName " + .value.ssh.host ] else [] end )
         + [ "  User " + (.value.ssh.user // "me") ]
         + [ "  IdentityFile ~/.ssh/id_fleet", "  StrictHostKeyChecking accept-new" ]
