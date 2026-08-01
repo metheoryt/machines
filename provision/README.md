@@ -31,7 +31,12 @@ minutes, or keep running indefinitely.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
   `pkgs/gortex.nix`), `claude` (native installer, no Node.js),
   `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
-  `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`. Shell hooks are
+  `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`, `nodejs`. That last
+  one is for the **agent config, not the toolchain**: a Claude Code plugin may
+  ship JS hooks, which are invoked as a bare `node …` and fail at every session
+  start on a box with no node. Nothing in the provisioner itself uses it, so it
+  is best-effort — and the lean `hub` profile, which skips the dev tier
+  entirely, deliberately still has none. Shell hooks are
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
   installed). Per-box SSH keys + `~/.ssh/config` + per-account commit identity
   for the declared GitHub accounts (see **Multi-account SSH** below).
@@ -228,6 +233,7 @@ Idempotent — re-run any time.
 | Scheduling | systemd user timer, cron fallback | **launchd** LaunchAgents |
 | Shell hooks | `~/.bashrc` (+ fish) | `~/.zshrc` **and** `~/.bashrc` (+ fish) |
 | `gortex` | `gortex_linux_amd64`, x86_64 only | `gortex_darwin_arm64` / `_amd64` |
+| Node.js | `nodejs` (apt), `node` symlinked if the distro ships only `nodejs` | `node` (brew), real name already |
 
 Everything else — the synced agent config, git identity, the agent CLIs,
 multi-account SSH, inbound fleet SSH trust — is the *same tier body* running on
