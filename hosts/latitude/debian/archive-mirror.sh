@@ -124,7 +124,12 @@ FLAGS=(-rlt --no-perms --no-owner --no-group --modify-window=1
        --partial --partial-dir=.rsync-partial
        --human-readable --info=stats2
        --exclude=/lost+found/ --exclude=.rsync-partial/)
-[ "$MODE" = go ] && FLAGS+=(--info=progress2)
+# progress2 ONLY on a terminal. It repaints one line with \r, which is what you
+# want when watching and useless in a file: under the first nohup'd run it wrote
+# 124 KB in the first minute and left a log no one can read. stats2 above already
+# prints the summary that matters to a log, and systemd captures stdout, so a
+# timer-driven run must not set this.
+[ "$MODE" = go ] && [ -t 1 ] && FLAGS+=(--info=progress2)
 
 mkdir -p "$DST" 2>/dev/null || sudo mkdir -p "$DST"
 
