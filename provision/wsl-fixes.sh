@@ -13,9 +13,14 @@
 #      `claude auth login --claudeai` falls back to a URL nobody sees and hangs
 #      for the full 180s LOGIN_TIMEOUT_MS.
 #
-#   2. A binfmt watchdog. WSL interop is intermittently lost at runtime
-#      (observed 2026-07-31 and 2026-08-01; cause unidentified; starting a
-#      second distro was tested and ruled out). The obvious fix — dropping
+#   2. A binfmt watchdog. WSL interop is lost at runtime whenever ANOTHER distro
+#      in the same WSL2 utility VM is shut down GRACEFULLY: binfmt_misc is shared
+#      VM-wide, each distro's /init registers WSLInterop at boot, and a graceful
+#      systemd shutdown unregisters it for every distro at once. Reproduced
+#      2026-08-01 with `wsl -d <other> -u root -- systemctl poweroff`. An abrupt
+#      `wsl --terminate` does NOT trigger it (no systemd shutdown runs), which is
+#      why an earlier terminate-then-restart test wrongly cleared this — the
+#      restart re-registered the handler before the check. The obvious fix — dropping
 #      `:WSLInterop:M::MZ::/init:PF` into /usr/lib/binfmt.d/ — is INERT: WSL's
 #      own systemd-binfmt ExecStartPost unregisters and re-registers *after*
 #      binfmt.d is applied, which is why the live flags always read `P` and

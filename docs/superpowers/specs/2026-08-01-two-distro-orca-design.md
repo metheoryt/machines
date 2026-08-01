@@ -127,16 +127,46 @@ But interop **does** die at runtime. It was lost mid-session on 2026-08-01 in
 `cannot execute binary file: Exec format error`) while the conf file was in
 place, and the user hit the same failure on 2026-07-31. `journalctl -u
 systemd-binfmt` shows the unit had not run since boot, so nothing in the boot
-path removed it. Cause unidentified.
+path removed it.
 
-Explicitly **tested and ruled out**: starting a second distro does not cause it.
+**Root cause — identified and reproduced 2026-08-01.** A **graceful systemd
+shutdown of any other distro** in the WSL2 utility VM unregisters `WSLInterop`
+for **every** running distro. `binfmt_misc` is shared VM-wide, the same way the
+network namespace is; each distro's `/init` registers the handler at boot, and a
+graceful shutdown tears it down globally on the way out.
+
+An abrupt `wsl --terminate` does **not** do this — it kills the distro without
+running systemd shutdown. That distinction is why an earlier test came back
+negative and this was first recorded as "cause unidentified, starting a second
+distro ruled out": that test used `wsl -t` and then *restarted* the distro, and
+the restart re-registered the handler before the check ran.
+
+Reproduction, from `Ubuntu-26.04`, with `Ubuntu-24.04` as the other distro:
 
 | step | 26.04 state |
 |---|---|
 | baseline | `WSLInterop` PRESENT |
-| after `wsl -t Ubuntu-24.04` | PRESENT |
-| after starting `Ubuntu-24.04` | PRESENT |
-| +5 s | PRESENT |
+| start `Ubuntu-24.04` | PRESENT |
+| `wsl --terminate Ubuntu-24.04` (abrupt) | PRESENT |
+| start `Ubuntu-24.04` again | PRESENT |
+| `wsl -d Ubuntu-24.04 -u root -- systemctl poweroff` (graceful) | **ABSENT** |
+| +6 s | **ABSENT** |
+
+The journal signature is decisive. Every historical death is preceded by
+`Received SIGTERM from PID 1 (systemd-shutdow)` from another distro's journald
+(a second `systemd-journald[NN]` PID, plus that distro's VHD showing as
+`EXT4-fs (sdX): unmounting filesystem`). The abrupt-terminate test produces the
+VHD unmount with **no** `systemd-shutdow` line — and interop survives.
+
+**Consequence for this project: the two-distro topology makes this routine, not
+rare.** Today it fires only when `Ubuntu-24.04` happens to be shut down
+gracefully. With `desktop-wsl` and `desktop-pure` both in daily use, either one
+shutting down cleanly silently breaks interop in the other — and `orca serve`
+keeps running, so nothing announces it. The watchdog is therefore not optional
+belt-and-braces; it is the mechanism that makes the topology viable, and it must
+be installed on **both** distros. `wsl --shutdown` (all distros at once) is
+harmless by comparison: everything goes down together and each `/init`
+re-registers on next boot.
 
 Recovery is verified: `systemctl restart systemd-binfmt` restores it. When local
 interop is the thing that is dead, drive it out-of-band:

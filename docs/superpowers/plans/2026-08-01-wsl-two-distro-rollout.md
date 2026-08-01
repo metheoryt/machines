@@ -154,6 +154,37 @@ cat /proc/sys/fs/binfmt_misc/WSLInterop
 
 Expected after the sleep: the entry is back, `interpreter /init`, `flags: P`. If it does not return, check `systemctl status wsl-binfmt-watchdog.timer` and `journalctl -u wsl-binfmt-watchdog.service` before continuing — every later task assumes interop is durable.
 
+- [ ] **Step 4b: Verify against the REAL trigger, not just the synthetic one**
+
+Step 4 unregisters the handler by hand. This step reproduces the actual
+production failure — a graceful systemd shutdown of another distro — which is
+what will happen routinely once two distros are in daily use. Run it from the
+distro you just installed the watchdog on, using any other distro as the victim
+(`Ubuntu-24.04` while it still exists):
+
+```bash
+OTHER=Ubuntu-24.04
+ls /proc/sys/fs/binfmt_misc/WSLInterop            # expect: present
+wsl.exe -d "$OTHER" -- true                        # make sure it is running
+wsl.exe -d "$OTHER" -u root -- systemctl poweroff  # GRACEFUL — this is the trigger
+sleep 8
+ls /proc/sys/fs/binfmt_misc/WSLInterop 2>&1        # expect: No such file or directory
+sleep 75
+cat /proc/sys/fs/binfmt_misc/WSLInterop            # expect: back, flags: P
+```
+
+Note `wsl --terminate "$OTHER"` will NOT reproduce this — it kills the distro
+without running systemd shutdown, so the handler survives. The graceful
+`systemctl poweroff` is the whole point.
+
+**If interop does not come back and you have lost local interop**, you cannot
+run `wsl.exe` to fix it and `sudo` needs a TTY. Recover out of band, from the
+Windows side, which needs neither:
+
+```bash
+ssh desktop 'wsl.exe -d <this-distro> -u root -- systemctl restart systemd-binfmt'
+```
+
 - [ ] **Step 5: Checkpoint**
 
 Report both verifications to the user. This is the first task that changed a live box.

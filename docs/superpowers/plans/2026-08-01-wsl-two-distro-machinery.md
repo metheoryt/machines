@@ -159,7 +159,9 @@ not an option — dropped from the Ubuntu 26.04 archive."
 
 The binfmt half replaces a fix that looks right and is inert. `/usr/lib/binfmt.d/WSLInterop.conf` does nothing: WSL 2.7.10's `systemd-binfmt` carries an injected `ExecStartPost` that unregisters and re-registers WSLInterop *after* `systemd-binfmt` applies `binfmt.d/*.conf`. Proof — the conf declares flags `PF`, the live registration always reads `flags: P`.
 
-Interop still dies at runtime (observed 2026-07-31 and 2026-08-01), cause unidentified, and starting a second distro was tested and ruled out. Recovery is `systemctl restart systemd-binfmt`, verified. So the fix is a watchdog, not a config file.
+Interop still dies at runtime (observed 2026-07-31 and 2026-08-01). Recovery is `systemctl restart systemd-binfmt`, verified. So the fix is a watchdog, not a config file.
+
+> **Root cause, found after this plan was executed (2026-08-01).** A graceful systemd shutdown of *any other* distro in the same WSL2 utility VM unregisters `WSLInterop` for every running distro — `binfmt_misc` is shared VM-wide. An abrupt `wsl --terminate` does not (no systemd shutdown runs), which is why an earlier terminate-then-restart test wrongly cleared it. This does not change the fix — the watchdog is still correct — but it means the two-distro topology triggers this routinely rather than rarely, so the watchdog must be installed on **both** distros. See the spec for the reproduction and journal signature.
 
 **Files:**
 - Create: `provision/wsl-fixes.sh`
@@ -254,9 +256,14 @@ Create `provision/wsl-fixes.sh`:
 #      `claude auth login --claudeai` falls back to a URL nobody sees and hangs
 #      for the full 180s LOGIN_TIMEOUT_MS.
 #
-#   2. A binfmt watchdog. WSL interop is intermittently lost at runtime
-#      (observed 2026-07-31 and 2026-08-01; cause unidentified; starting a
-#      second distro was tested and ruled out). The obvious fix — dropping
+#   2. A binfmt watchdog. WSL interop is lost at runtime whenever ANOTHER distro
+#      in the same WSL2 utility VM is shut down GRACEFULLY: binfmt_misc is shared
+#      VM-wide, each distro's /init registers WSLInterop at boot, and a graceful
+#      systemd shutdown unregisters it for every distro at once. Reproduced
+#      2026-08-01 with `wsl -d <other> -u root -- systemctl poweroff`. An abrupt
+#      `wsl --terminate` does NOT trigger it (no systemd shutdown runs), which is
+#      why an earlier terminate-then-restart test wrongly cleared this — the
+#      restart re-registered the handler before the check. The obvious fix — dropping
 #      `:WSLInterop:M::MZ::/init:PF` into /usr/lib/binfmt.d/ — is INERT: WSL's
 #      own systemd-binfmt ExecStartPost unregisters and re-registers *after*
 #      binfmt.d is applied, which is why the live flags always read `P` and
