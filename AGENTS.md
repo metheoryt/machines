@@ -33,9 +33,10 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   is done (`docs/fleet-roadmap.md` P2). It is **not** retired hardware: still
   powered on and on the tailnet. Forgejo, which used to be the stated reason to
   keep it intact, was **wiped 2026-08-01** after inspection found zero
-  repositories — it was never used. It is still **not disposable**, though:
-  `telegrind_pgdata` and two large anonymous volumes on it are unverified
-  (`docs/fleet-roadmap.md` P2). **Reach it as `methe@server.gg.ez`, naming the
+  repositories — it was never used. Its Docker state was audited 2026-08-01 and holds
+  **nothing unique** — every remaining volume is either duplicated on latitude or a
+  `CACHEDIR.TAG`-marked virtualenv. What still gates a wipe is `C:`: it is the only
+  drive left, ~430 GB in use, and unreviewed (`docs/fleet-roadmap.md` P2). **Reach it as `methe@server.gg.ez`, naming the
   user**: bare
   `ssh server.gg.ez` works from air only until `tier_fleet_ssh` next rewrites its
   span and drops the member block, after which the FQDN hits the `Host *.gg.ez`

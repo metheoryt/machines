@@ -157,12 +157,25 @@ global + per-host). One bullet per fact under a topical heading.
     (there were two: `forgejo_forgejo_data`, the one actually mounted because
     compose prefixes the project name, and an 8K `forgejo_data` stub). No old data
     exists to restore — start fresh if git hosting is ever wanted again.
-  - **The box is still NOT disposable.** Forgejo was the blocker that had been
-    *identified*, not a verified complete list. Unverified as of the wipe:
-    `telegrind_pgdata` (54.8M — telegrind is blocked on the leaked bot token, so
-    this may be the only copy) and two anonymous volumes at 6.7G/7.1G (probably
-    the old immich data latitude now serves, unconfirmed). `immich_model-cache`
-    (6.1G) is regenerable. Check those three before wiping or returning it.
+  - **Its Docker state holds nothing unique — checked 2026-08-01.**
+    `telegrind_pgdata` is a duplicate: the migration spec §19.3 exported it as a
+    raw tar (safe because the container had `Exited (0)`, a clean shutdown, so the
+    data dir is self-consistent — a stronger guarantee than a dump comparison, and
+    it meant no write ever happened on g513ie), sha256-identical on three hosts,
+    restored to latitude. Verified there: 987 files, `PG_VERSION` 15, `base/` +
+    `pg_wal/` present. All **four** anonymous volumes (7.1G, 6.7G, 43M, 37M) are
+    Python virtualenvs carrying `CACHEDIR.TAG` + `pyvenv.cfg` — self-declared
+    disposable, `uv sync`-reproducible, mostly CUDA/torch wheels.
+    `telegrind_pgdata`, `embedthat_redis_data` and `tugtainer_tugtainer_data` are
+    all confirmed present on latitude.
+  - **What gates a wipe is `C:`, not Docker.** Only `C:` is still attached — 953 GB,
+    523.5 GB free, so **~430 GB used**, of which Docker is ~20 GB. The other ~410 GB
+    (user profile, checkouts, downloads) is unreviewed. Every external drive already
+    moved to latitude, which is why the bind-mounted arr configs are gone rather
+    than pending.
+  - **`CACHEDIR.TAG` is the cheap check worth remembering.** Tooling that writes it
+    is telling you the directory is disposable; testing for it beat reasoning about
+    contents and correctly cleared 14 GB here in one command.
   - **Reach it as `methe@server.gg.ez` — NAME THE USER.** Removing the manifest
     entry removes the `Host server server.gg.ez` block (`User methe`) from every
     generated `~/.ssh/config` at that box's next provision run, after which the

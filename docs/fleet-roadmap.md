@@ -20,7 +20,7 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet. Forgejo wiped; `telegrind_pgdata` + two large anonymous volumes still unverified, so not yet disposable. Reach it as `methe@server.gg.ez` |
+| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet. **Docker state now holds nothing unique** (forgejo wiped; every other volume duplicated on latitude or a regenerable venv). Only `C:` attached, ~430 GB used and unreviewed — that is what gates a wipe. Reach it as `methe@server.gg.ez` |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
@@ -263,17 +263,33 @@ Nix ever returns. Leave them.
   against the repo's own records — and a direct consequence of P5: 45 plans with
   nothing marked done, so nobody reads them for current state. Cheap here; the
   same gap on a destructive step would not be.
-- **This removes the reason to keep `server` intact that was written here, but it
-  does NOT make the box wipeable.** Forgejo was the blocker that had been
-  *identified*, not a proven complete list — the original note said "the only
-  copies of some things", plural. Still unverified, from the volume listing taken
-  during the wipe: **`telegrind_pgdata` (54.8M)** — telegrind is itself blocked on
-  the leaked bot token (P6), so its database may be the only copy of whatever it
-  holds — and **two anonymous volumes at 6.7G and 7.1G**, most likely the old
-  immich postgres/library data that latitude now serves, but not confirmed.
-  `immich_model-cache` (6.1G) is regenerable and does not matter.
-  - [ ] Verify those three before wiping or returning `server`. Until then the
-    box is "no longer a fleet member, still not disposable".
+- [x] **All three flagged volumes checked 2026-08-01 — none is a unique copy, and
+  server's Docker state now holds nothing that matters.** The repo's own spec had
+  already answered both, and both were re-verified live rather than taken on trust:
+  - **`telegrind_pgdata` is a duplicate.** `§19.3` of the migration spec records it
+    exported as a raw tar (safe because `telegrind-postgres-1` had `Exited (0)`, a
+    clean shutdown, so the data dir is self-consistent) with **sha256 identical on
+    all three hosts** and restored onto latitude. Verified: latitude's volume holds
+    987 files / 54.8 M, `PG_VERSION` 15, with `base/` and `pg_wal/` present — a real
+    cluster matching the spec's count, not an empty shell.
+  - **The two 7 GB anonymous volumes are Python virtualenvs**, and so are the two
+    smaller ones (43 M, 37 M) that were also unidentified. All four carry a
+    **`CACHEDIR.TAG`** plus `pyvenv.cfg` — tooling declaring its own directory
+    disposable — and are `uv sync`-reproducible, four-fifths CUDA and torch wheels.
+  - Every named volume that mattered is confirmed on latitude:
+    `telegrind_pgdata`, `embedthat_redis_data`, `tugtainer_tugtainer_data` (plus
+    `immich_pgdata` and the regenerable `immich_model-cache`). The
+    `jellyseerr-data` pair were both stale even on server — jellyseerr's config was
+    a **bind mount**, not a volume, which is the finding that reframed the whole
+    migration.
+- [ ] **What is actually left to decide is `C:`, not Docker.** `server` now has
+  **only `C:` attached** — 953 GB with 523.5 GB free, so **~430 GB in use**. Every
+  external drive (D:/E:/G:/H:) already physically moved to latitude, which is also
+  why the bind-mounted arr configs are gone from the box rather than pending. Docker
+  accounts for roughly 20 GB of that 430 GB, so the remaining ~410 GB is the user
+  profile, checkouts and downloads and has **not** been reviewed. That is the
+  question to answer before wiping or returning the machine — and it is a
+  filesystem review, not a volume audit.
 
 - [ ] The `server` **profile** name survives the `server` **machine** — latitude
   uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
