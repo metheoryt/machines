@@ -18,12 +18,11 @@ global + per-host). One bullet per fact under a topical heading.
   `machines` owns the machines, `~/my/vps` owns the services, and the boundary is
   exactly where a fact gets hunted in the wrong repo. On 2026-08-01 four
   already-written answers were re-derived from scratch and two came out wrong
-  first — the fourth was `vps`'s `.claude/memory/project.md` correctly recording
-  that the leaked-credential rotation gates telegrind's bring-up on *security*
-  grounds (never start a bot on a token a third party has seen) while the
-  Windows-only deploy path is what blocks it *mechanically*. `machines`'s roadmap
-  had collapsed those into one claim and the correction nearly collapsed them the
-  other way. See `docs/fleet-roadmap.md` P5 for all four.
+  first — the fourth was `vps`'s `.claude/memory/project.md` holding the nuance
+  that `machines`'s roadmap had flattened, about what blocked telegrind's
+  bring-up. (That specific split went away hours later when the user closed the
+  rotation question; the lookup failure is the durable part, not the example.)
+  See `docs/fleet-roadmap.md` P5.
 - **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
   globs every `*.test.sh` in the repo — 28 suites — and exits nonzero on failure.
   **It is GREEN as of 2026-08-01; keep it that way.** A red suite gives no signal,
@@ -1595,6 +1594,26 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   hermes step. The 980M install on desktop (`%LOCALAPPDATA%\hermes`, plus a user
   PATH entry) was a manual one, removed by hand. So "wipe it from provisioning"
   and "delete it from the fleet" are genuinely two jobs here, not one.
+
+## Credential decisions (do not re-raise)
+
+- **The leaked telegrind credentials are NOT being rotated — user decision,
+  2026-08-01: _"let's not rotate anything, there's no risk."_** `BOT_TOKEN`,
+  `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `POSTGRES_PASSWORD` reached one agent
+  transcript on air via `docker inspect --format '{{.Config.Env}}'`; all four were
+  measured still-live and still-matching at the time of the decision, so it is
+  closed by decision rather than by action. The values stay as they are.
+  Second instance of this call in the same week — see the `fFZU…` entry — and the
+  shape is the same: the user is judging *reachability*, not disputing that the
+  value was exposed. Full basis in `docs/fleet-roadmap.md` P6.
+- **The standing rule survives the decision:** use `{{.Config.Image}}` alone, never
+  `{{.Config.Env}}`, when inspecting a container. Not rotating a leaked value is a
+  judgement about that value; leaking the next one is a separate mistake.
+- **Nothing about a credential gates telegrind or embedthat any more.** A
+  "rotate first" step was written into `docs/fleet-roadmap.md`,
+  `vps/.claude/memory/project.md` and `vps/homeserver/DEPLOYING-A-REPO.md` before
+  the decision, and was removed from all three rather than reordered. Do not
+  reintroduce it.
 
 ## latitude storage layout (settled 2026-08-01)
 

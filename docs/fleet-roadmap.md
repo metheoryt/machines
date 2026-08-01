@@ -385,51 +385,48 @@ be diffed against a remembered failure count.
   Needs a deliberate decision.
 - [ ] **latitude's migration debris**: 21M `~/immich-migration/` plus six
   `*.log` (`overnight.log` alone is 3.2M).
-- [ ] **Rotate three leaked credentials. Do this before starting either bot, and
-  note it is not what stops them starting** (the item after next is).
-  `docker inspect --format
-  '{{.Config.Env}}'` on the telegrind container printed `BOT_TOKEN`,
-  `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `POSTGRES_PASSWORD` into a session
-  transcript on `air` — `~/.claude/projects/…/*.jsonl`, plaintext, still on
-  disk. Use `{{.Config.Image}}` alone in future. Each value is one line of
-  `latitude:~/my/vps/homeserver/telegrind/.env.prod` (0600), so replacing it is
-  a one-line edit once the new value exists. All three need a browser:
-  - `ANTHROPIC_API_KEY` — console.anthropic.com: revoke, create, replace.
-  - `BOT_TOKEN` — BotFather `/revoke` on the telegrind bot, then `/token`.
-  - `GOOGLE_API_KEY` — aistudio.google.com/apikey: delete, create.
+- [x] **The leaked telegrind credentials stay as they are — DECIDED 2026-08-01,
+  do not re-raise.** *"let's not rotate anything, there's no risk."* Closed by
+  decision, not by action: the values below are still live and still in the
+  transcript. Recorded with the facts that were on the table, so the decision can
+  be revisited on new information rather than re-argued on the same information.
 
-  **`POSTGRES_PASSWORD` is deliberately excluded.** It never leaves latitude's
-  docker network, and it is baked into the existing `telegrind_pgdata` cluster —
-  so rotating it means an `ALTER ROLE` inside a container that is currently down,
-  plus a coupled edit to the `DATABASE_URL` two lines above it in the same file.
-  Real risk of leaving the DB unopenable, no exposure reduced.
+  What leaked: `docker inspect --format '{{.Config.Env}}'` on the telegrind
+  container printed `BOT_TOKEN`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and
+  `POSTGRES_PASSWORD` into a session transcript on `air`. **Use
+  `{{.Config.Image}}` alone in future** — that part is a standing rule, unaffected
+  by the decision.
 
-  **Still open and still needed, measured rather than assumed (2026-08-01).** Each
-  live value in `.env.prod` was tested for a byte-identical match anywhere under
-  `~/.claude/projects/` on air. All four telegrind values match, so nothing has
-  been rotated yet and the file is still the leaked file. **embedthat's `BOT_TOKEN`
-  is clean** — it appears in no transcript, so it needs no rotation; an earlier
-  draft of this item said rotate it anyway on cost asymmetry, which the test made
-  unnecessary. Re-run that comparison before rotating, in case you got there first.
+  The exposure, measured rather than assumed: each live value in
+  `latitude:~/my/vps/homeserver/telegrind/.env.prod` (0600) was tested for a
+  byte-identical match under `~/.claude/projects/` on air. All four match, in
+  **exactly one file** — one session transcript. `~/.claude/projects/` is
+  path-keyed, machine-local and deliberately untracked, so the values are not in
+  git, not on a shared host and not on another box. What did leave air is the API
+  round-trip: they were sent to Anthropic as prompt context. **embedthat's
+  `BOT_TOKEN` matches no transcript** and was never affected either way.
 
-  **Size the exposure honestly, because it changes the urgency.** The values are in
-  exactly one file — this session's own transcript on air — and
-  `~/.claude/projects/` is path-keyed, machine-local and deliberately untracked, so
-  they are not in git, not on a shared host, and not on another box. What did leave
-  the machine is the API round-trip: they were sent to Anthropic as prompt context.
-  So this is not "a third party is holding your bot token", but it is not nothing
-  either, and the plaintext file is a standing local copy until rotation makes it
-  inert. Rotation is the fix; deleting the transcript is not, since it does not
-  reach anything already transmitted.
-- [ ] **Hermes' credentials — a different job, not this one.** They were deleted
-  from disk on 2026-08-01 *without* being revoked at source, so unlike the three
-  above there is no local copy to replace: it is revoke-blind-at-the-console and
-  nothing to edit afterwards. Inventory in project memory.
-- [ ] **Port the poll-deploy engine to Linux — the *other* half of the telegrind
-  and embedthat blockage.** The rotation above is a real gate, but only on the
-  security side: it says do not *start* the bots yet. It is not what stops them
-  starting. Four separate things do, verified 2026-08-01, and `vps`'s own
-  `.claude/memory/project.md` had already recorded the shape of this:
+  If it is ever revisited, the mechanics are: each value is one line of that
+  `.env.prod`, so replacing one is a one-line edit — `ANTHROPIC_API_KEY` at
+  console.anthropic.com, `BOT_TOKEN` via BotFather `/revoke` then `/token`,
+  `GOOGLE_API_KEY` at aistudio.google.com/apikey. `POSTGRES_PASSWORD` would stay
+  excluded regardless: it never leaves latitude's docker network and is baked into
+  the existing `telegrind_pgdata` cluster, so rotating it costs an `ALTER ROLE`
+  plus a coupled `DATABASE_URL` edit for no exposure reduction.
+
+  **This closes the leaked set only.** The Hermes entry below is a different
+  situation — credentials abandoned without revocation rather than leaked, with no
+  local copy left to replace — and was not part of this decision.
+- [ ] **Hermes' credentials — a different situation, and still open.** Deleted from
+  disk on 2026-08-01 *without* being revoked at source. Where the telegrind values
+  above are known, local, and left in place by decision, these are the inverse: no
+  local copy survives, so there is nothing to edit and nothing to inspect — only a
+  blind revoke at each console, or a deliberate choice to leave them live upstream.
+  Inventory in project memory.
+- [ ] **Bring telegrind and embedthat back up, then decide about the deploy loop.**
+  Both are down. With rotation closed by decision there is **no security gate left**
+  — nothing is waiting on a credential, so the path is clear. What actually stops
+  them, verified 2026-08-01:
   - The engine is **PowerShell on a Windows Scheduled Task** — `vps`'s
     `homeserver/deploy-repos.ps1`, `register-repos-deploy.ps1`, `repos.psd1`, task
     `repos-deploy` every 3 minutes. None of it runs on Debian. latitude has no
@@ -451,9 +448,9 @@ be diffed against a remembered failure count.
     telegrind crash-loops on a *freshly recreated* pgdata (alembic has no version
     seed) — a bring-up must reuse this volume, never `down -v`.
 
-  Order: rotate → clone both `src/` → place the GCP key → start each stack by
-  hand once → then decide whether to port the loop to a systemd timer. Porting is
-  a separate decision; the bots run fine without it, they just never self-update.
+  Order: clone both `src/` → place the GCP key → start each stack by hand once →
+  then decide whether to port the loop to a systemd timer. Porting is a separate
+  decision; the bots run fine without it, they just never self-update.
 - [ ] **Headscale ACLs.** The tailnet is default-open. Relatives never join it,
   but least privilege across our own boxes is cheap now and annoying later.
 - [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its
