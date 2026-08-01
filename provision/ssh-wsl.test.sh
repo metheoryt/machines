@@ -22,12 +22,12 @@ eq "$(ssh_wsl_sanitize 'Ubuntu-26.04')"     'ubuntu-26-04'   'sanitize dotted'
 eq "$(ssh_wsl_sanitize 'My_Cool Distro!!')" 'my-cool-distro' 'sanitize punctuation'
 
 # ── ssh_wsl_stamp_pub (no double/blank comment regardless of input comment) ───
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY' 'me@wsl-desktop')" \
-   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: no embedded comment → stamp once'
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old@comment' 'me@wsl-desktop')" \
-   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: strip embedded comment (no doubling)'
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@wsl-desktop')" \
-   'ssh-ed25519 AAAABODY me@wsl-desktop' 'stamp_pub: strip multi-word comment'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY' 'me@desktop-wsl')" \
+   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: no embedded comment → stamp once'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old@comment' 'me@desktop-wsl')" \
+   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: strip embedded comment (no doubling)'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@desktop-wsl')" \
+   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: strip multi-word comment'
 
 # ── ssh_wsl_render_config (needs jq) ──────────────────────────────────────────
 if command -v jq >/dev/null 2>&1; then
@@ -148,27 +148,74 @@ printf '%s\n' 'ssh-ed25519 AAAABODYONE a-totally-different-comment' > "$tmp"
 ssh_wsl_key_present 'AAAABODYONE' "$tmp" || fail 'key_present: comment differs, body same → 0'
 ssh_wsl_key_present 'AAAABODYONE' /nonexistent/file && fail 'key_present: unreadable file → nonzero'
 
-# ── ssh_wsl_merge_authorized_keys (union by key body; idempotent) ─────────────
-FLEET='ssh-ed25519 AAAABODYONE me-nixos-latitude
+# ── ssh_wsl_merge_authorized_keys (authoritative managed span) ────────────────
+eq "$TRUST_MARKER_BEGIN" '# >>> fleet-trust (managed by machines) >>>' 'trust marker begin exact'
+eq "$TRUST_MARKER_END"   '# <<< fleet-trust <<<'                       'trust marker end exact'
+
+FLEET='ssh-ed25519 AAAABODYONE me@latitude
 ssh-ed25519 AAAABODYTWO methe@server
-ssh-ed25519 AAAABODYSELF me@wsl-desktop'
-# Empty existing → exactly the fleet keys, no leading blank line injected.
-eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET")" "$FLEET" 'merge_ak: empty existing → fleet keys verbatim'
-# Idempotent — merge∘merge == merge (the property that discriminates a correct union).
+ssh-ed25519 AAAABODYSELF me@desktop-wsl'
+# Empty existing → the fleet keys wrapped in exactly one marked span.
+eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET")" \
+   "$TRUST_MARKER_BEGIN
+$FLEET
+$TRUST_MARKER_END" 'merge_ak: empty existing → fleet keys inside one span'
+# Idempotent — merge∘merge == merge. The span must not nest or accrete markers.
 M="$(ssh_wsl_merge_authorized_keys '' "$FLEET")"
 eq "$(ssh_wsl_merge_authorized_keys "$M" "$FLEET")" "$M" 'merge_ak: idempotent'
-# Foreign (non-fleet) key preserved; each fleet key appended exactly once.
+[ "$(printf '%s\n' "$(ssh_wsl_merge_authorized_keys "$M" "$FLEET")" | grep -cF '>>> fleet-trust')" = 1 ] \
+  || fail 'merge_ak: exactly one begin marker after re-merge'
+
+# Foreign (non-fleet) key preserved OUTSIDE the span; fleet key present once.
 M3="$(ssh_wsl_merge_authorized_keys 'ssh-ed25519 AAAAMYOWNKEY me@laptop' "$FLEET")"
 echo "$M3" | grep -q '^ssh-ed25519 AAAAMYOWNKEY me@laptop$' || fail 'merge_ak: foreign key preserved'
-[ "$(printf '%s\n' "$M3" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: fleet key appended exactly once'
-# Same body already present under a DIFFERENT comment → not re-added (body-keyed).
-M4="$(ssh_wsl_merge_authorized_keys 'ssh-ed25519 AAAABODYONE a-different-comment' "$FLEET")"
-[ "$(printf '%s\n' "$M4" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: existing body not duplicated on differing comment'
-echo "$M4" | grep -q 'AAAABODYTWO' || fail 'merge_ak: other fleet keys still added'
+[ "$(printf '%s\n' "$M3" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: fleet key present exactly once'
+# ...and the foreign key must sit BEFORE the span, i.e. outside management.
+[ "$(printf '%s\n' "$M3" | grep -n 'AAAAMYOWNKEY' | cut -d: -f1)" \
+  -lt "$(printf '%s\n' "$M3" | grep -nF '>>> fleet-trust' | cut -d: -f1)" ] \
+  || fail 'merge_ak: foreign key must land outside the managed span'
+
+# REVOCATION — the whole point. A key that is no longer in the fleet input and
+# lives INSIDE the span is dropped. Append-only merging could never do this.
+SHRUNK='ssh-ed25519 AAAABODYONE me@latitude'
+M5="$(ssh_wsl_merge_authorized_keys "$M" "$SHRUNK")"
+echo "$M5" | grep -q 'AAAABODYTWO'  && fail 'merge_ak: removed fleet key must be revoked from the span'
+echo "$M5" | grep -q 'AAAABODYONE'  || fail 'merge_ak: surviving fleet key kept'
+
+# RENAME — same body, new comment. The span carries the fleet-side comment, so a
+# rename in fleet-authorized-keys reaches the box. (Body-keyed appending could
+# not: the body already matched, so nothing was ever rewritten.)
+RENAMED='ssh-ed25519 AAAABODYONE me@latitude-renamed'
+M6="$(ssh_wsl_merge_authorized_keys "$M" "$RENAMED")"
+echo "$M6" | grep -q '^ssh-ed25519 AAAABODYONE me@latitude-renamed$' || fail 'merge_ak: renamed comment propagates'
+[ "$(printf '%s\n' "$M6" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: rename must not duplicate the key'
+
+# ABSORB — the migration path off the old append-only layout. A fleet key sitting
+# UNMANAGED outside the span is pulled inside rather than duplicated; otherwise
+# the stray copy would keep granting access after the span revoked it.
+M7="$(ssh_wsl_merge_authorized_keys 'ssh-ed25519 AAAABODYONE an-old-stale-comment' "$FLEET")"
+[ "$(printf '%s\n' "$M7" | grep -c 'AAAABODYONE')" = 1 ] || fail 'merge_ak: pre-existing fleet key absorbed, not duplicated'
+echo "$M7" | grep -q 'an-old-stale-comment' && fail 'merge_ak: absorbed key must take the fleet-side comment'
+[ "$(printf '%s\n' "$M7" | grep -n 'AAAABODYONE' | cut -d: -f1)" \
+  -gt "$(printf '%s\n' "$M7" | grep -nF '>>> fleet-trust' | cut -d: -f1)" ] \
+  || fail 'merge_ak: absorbed key must end up inside the span'
+
+# REFUSE — no key lines in the fleet input → nonzero, no output. Writing an empty
+# span here would revoke every fleet key and lock the box out.
+ssh_wsl_merge_authorized_keys "$M" ''                 && fail 'merge_ak: empty fleet input → nonzero'
+ssh_wsl_merge_authorized_keys "$M" '# only a comment' && fail 'merge_ak: comment-only fleet input → nonzero'
+eq "$(ssh_wsl_merge_authorized_keys "$M" '' || true)" '' 'merge_ak: refusal emits nothing'
+
 # Blank lines + #-comments in the fleet input are skipped.
 FLEET_C='# a header comment
 
-ssh-ed25519 AAAABODYONE me-nixos-latitude'
-eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET_C")" 'ssh-ed25519 AAAABODYONE me-nixos-latitude' 'merge_ak: fleet comments + blanks dropped'
+ssh-ed25519 AAAABODYONE me@latitude'
+eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET_C")" \
+   "$TRUST_MARKER_BEGIN
+ssh-ed25519 AAAABODYONE me@latitude
+$TRUST_MARKER_END" 'merge_ak: fleet comments + blanks dropped'
+# An existing #-comment outside the span is content, not noise — keep it.
+M8="$(ssh_wsl_merge_authorized_keys '# my own note' "$FLEET")"
+echo "$M8" | grep -q '^# my own note$' || fail 'merge_ak: foreign comment preserved'
 
 echo "PASS: ssh-wsl.test.sh"

@@ -1051,7 +1051,12 @@ tier_fleet_ssh() {
   local key="$HOME/.ssh/id_fleet"
   if [ -e "$key" ]; then
     ok "fleet key ~/.ssh/id_fleet exists"
-  elif ssh-keygen -t ed25519 -f "$key" -C "me@$(uname -n)" -N "" >/dev/null 2>&1; then
+  # Comment is the LOGICAL fleet name, not `uname -n`: fleet-authorized-keys is
+  # keyed that way because OS hostnames churn (see its header) and a Mac's can be
+  # whatever DHCP last said. ssh_wsl_host_label came in with the source above.
+  elif ssh-keygen -t ed25519 -f "$key" \
+       -C "me@$(ssh_wsl_host_label "$(cat "$fleet_json")" "$(uname -n)")" \
+       -N "" >/dev/null 2>&1; then
     ok "generated ~/.ssh/id_fleet"
     warn "ENROLLMENT NEEDED: append the line below to provision/fleet-authorized-keys, commit, and pull on the other members — until then no fleet box will accept this one:"
     printf '      %s\n' "$(cat "${key}.pub")" >&2
@@ -1373,31 +1378,51 @@ UNIT
 # ── BEST-EFFORT: inbound fleet SSH trust (ssh-server role) ────────────────────
 # Merge provision/fleet-authorized-keys into ~/.ssh/authorized_keys so this box
 # accepts inbound fleet logins (mirrors ssh-server.nix keyFiles / windows.ps1
-# step 6 / ssh-wsl.sh step 4). Snapshot copy — re-run after a new member joins.
-# Idempotent by key body. sshd itself is configured by ssh-wsl.sh (key-only);
-# here we only ensure the authorized_keys trust so a bare linux.sh re-run keeps it.
+# step 6 / ssh-wsl.sh step 4). Snapshot copy — re-run after a member joins OR
+# LEAVES: the span is rewritten from fleet-authorized-keys each run, so a removed
+# key is revoked here too (it used to only ever be appended). sshd itself is
+# configured by ssh-wsl.sh (key-only); here we only ensure the authorized_keys
+# trust so a bare linux.sh re-run keeps it.
 tier_ssh_trust() {
   info "Ensuring inbound fleet SSH trust…"
   MESH_KEYS="$REPO/provision/fleet-authorized-keys"
+  local helper="$REPO/provision/ssh-wsl.sh"
   if [ ! -f "$MESH_KEYS" ]; then
     warn "provision/fleet-authorized-keys not found — skipped inbound fleet trust"
+    return 0
+  fi
+  if [ ! -f "$helper" ]; then
+    warn "provision/ssh-wsl.sh not found — skipped inbound fleet trust"
+    return 0
+  fi
+
+  mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+  local authk="$HOME/.ssh/authorized_keys" existing="" merged rc=0
+  [ -f "$authk" ] && existing="$(cat "$authk")"
+
+  # Sourced in a SUBSHELL on purpose. ssh-wsl.sh is a script, not a library: at
+  # top level it runs `set -u` and defines its own info/ok/warn/die/have, which
+  # would silently replace ours for every tier that runs after this one.
+  # tier_fleet_ssh sources it in-process and gets away with it only because it is
+  # darwin-only and near the end of that list. A subshell gets the one function
+  # we want with none of the blast radius.
+  merged="$(
+    SSH_WSL_LIB_ONLY=1 . "$helper" >/dev/null 2>&1
+    ssh_wsl_merge_authorized_keys "$existing" "$(cat "$MESH_KEYS")"
+  )" || rc=$?
+
+  # Nonzero = the merge refused (no key lines in fleet-authorized-keys) OR the
+  # helper would not source. Either way we have no trustworthy span to write, and
+  # writing a wrong one locks the fleet out of this box — so leave it alone.
+  if [ "$rc" -ne 0 ]; then
+    warn "could not build the fleet trust span (empty fleet-authorized-keys, or ssh-wsl.sh unreadable) — left $authk untouched"
+  elif [ "$merged" = "$existing" ]; then
+    ok "authorized_keys already trusts the fleet"
   else
-    mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
-    AUTHK="$HOME/.ssh/authorized_keys"
-    tmp_ak="$(mktemp)"
-    # keep existing lines; append each fleet key whose body (2nd field) is absent.
-    awk '
-      function blank(s){ return s ~ /^[[:space:]]*$/ }
-      FNR==NR { if (blank($0)) next; print; if ($1 !~ /^#/ && $2 != "") have[$2]=1; next }
-      blank($0) || $1 ~ /^#/ { next }
-      $2 != "" && !($2 in have) { print; have[$2]=1 }
-    ' "$AUTHK" "$MESH_KEYS" 2>/dev/null > "$tmp_ak" || cat "$MESH_KEYS" > "$tmp_ak"
-    if [ -f "$AUTHK" ] && cmp -s "$tmp_ak" "$AUTHK"; then
-      ok "authorized_keys already trusts the fleet"
-    else
-      install -m600 "$tmp_ak" "$AUTHK"
-      ok "installed fleet keys → $AUTHK (inbound trust)"
-    fi
+    local tmp_ak; tmp_ak="$(mktemp)"
+    printf '%s\n' "$merged" > "$tmp_ak"
+    install -m600 "$tmp_ak" "$authk"
     rm -f "$tmp_ak"
+    ok "rewrote fleet trust span → $authk (inbound trust)"
   fi
 }

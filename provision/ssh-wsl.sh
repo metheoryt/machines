@@ -53,6 +53,10 @@ EOF
 
 CONFIG_MARKER_BEGIN="# >>> fleet-ssh (managed by ssh-wsl.sh) >>>"
 CONFIG_MARKER_END="# <<< fleet-ssh <<<"
+# Separate markers for the authorized_keys span. Both this script (step 4) and
+# tiers.sh's tier_ssh_trust write it, so the label names the repo, not a script.
+TRUST_MARKER_BEGIN="# >>> fleet-trust (managed by machines) >>>"
+TRUST_MARKER_END="# <<< fleet-trust <<<"
 FLEET_KEY_NAME="id_fleet"
 
 # DNS-label safe: lowercase, non [a-z0-9-] → '-', collapse repeats, trim edges.
@@ -116,25 +120,54 @@ ssh_wsl_key_present() {
 }
 
 # Merge fleet public-key lines ($2, e.g. fleet-authorized-keys content) into
-# existing authorized_keys content ($1): keep every existing non-blank line
-# verbatim, then append each fleet key whose key BODY (2nd field) is not already
-# present. Blanks + #-comments are dropped from the fleet side; existing blanks
-# are dropped, existing comments kept. Echoes the merged content. Idempotent by
-# body-key — merge(merge(x)) == merge(x). Pure: the only IO is reading its two
-# string args. The trust is a SNAPSHOT — a member added later is not picked up
-# until ssh-wsl.sh re-runs (unlike NixOS keyFiles, which re-reads each rebuild).
+# existing authorized_keys content ($1) as a MANAGED SPAN: everything outside
+# TRUST_MARKER_BEGIN..END is kept verbatim, the span itself is rewritten from $2
+# on every call. Echoes the merged content. Pure: the only IO is reading its two
+# string args. Idempotent — merge(merge(x)) == merge(x).
+#
+# It is authoritative, not additive. This used to be an append-only union keyed
+# on the key body, which meant a key DELETED from fleet-authorized-keys was
+# revoked on Windows (which regenerates wholesale) and stayed trusted forever on
+# every POSIX box — the file read like a revocation list and was not one. It
+# also meant a RENAMED comment never propagated, since the body already matched.
+# Rewriting the span fixes both.
+#
+# Two behaviours that are load-bearing:
+#   • ABSORB — an existing line outside the span whose body is a current fleet
+#     key is dropped from the outside and re-emitted inside. That is the
+#     migration path: the first run on a box provisioned by the old append-only
+#     code pulls its already-installed fleet keys under management, instead of
+#     duplicating them and leaving the unmanaged copies un-revokable.
+#   • REFUSE — if $2 yields no key lines at all, return 1 and echo nothing. A
+#     truncated or unreadable fleet-authorized-keys must not be allowed to write
+#     an empty span and lock every member out of the box. Callers warn and skip.
+#
+# A foreign key outside the span (one that is NOT in fleet-authorized-keys) is
+# never touched — hand-added keys survive. The trust is still a SNAPSHOT: a
+# member added later lands when this box next provisions, not when the file
+# changes.
 ssh_wsl_merge_authorized_keys() {
-  awk '
-    function blank(s) { return s ~ /^[[:space:]]*$/ }
-    FNR == NR {                        # $1 — existing authorized_keys
-      if (blank($0)) next
-      print
-      if ($1 !~ /^#/ && $2 != "") have[$2] = 1
-      next
-    }
-    blank($0) || $1 ~ /^#/ { next }    # $2 — fleet keys: skip blanks + comments
-    $2 != "" && !($2 in have) { print; have[$2] = 1 }
-  ' <(printf '%s\n' "$1") <(printf '%s\n' "$2")
+  local keys kept
+  keys="$(printf '%s\n' "$2" | awk '!/^[[:space:]]*$/ && $1 !~ /^#/ && $2 != ""')"
+  [ -n "$keys" ] || return 1
+
+  # Two-file awk, not `-v keys=…`: BWK awk (the macOS /usr/bin/awk) rejects an
+  # embedded newline in a -v assignment, so the key list has to arrive as input.
+  kept="$(awk -v b="$TRUST_MARKER_BEGIN" -v e="$TRUST_MARKER_END" '
+    FNR == NR { if ($2 != "") fleetbody[$2] = 1; next }    # file 1 — fleet keys
+    $0 == b { skip = 1; next }                             # file 2 — existing
+    $0 == e { skip = 0; next }
+    skip    { next }
+    /^[[:space:]]*$/ { next }
+    $1 !~ /^#/ && $2 != "" && ($2 in fleetbody) { next }   # absorb into the span
+    { print }
+  ' <(printf '%s\n' "$keys") <(printf '%s\n' "$1"))"
+
+  if [ -n "$kept" ]; then
+    printf '%s\n%s\n%s\n%s\n' "$kept" "$TRUST_MARKER_BEGIN" "$keys" "$TRUST_MARKER_END"
+  else
+    printf '%s\n%s\n%s\n' "$TRUST_MARKER_BEGIN" "$keys" "$TRUST_MARKER_END"
+  fi
 }
 
 # Merge fleet BLOCK ($2) into existing ~/.ssh/config content ($1): drop any prior
@@ -157,7 +190,7 @@ ssh_wsl_merge_config() {
 
 # Map this box's hostname ($2) to the fleet member whose detect.hostname matches
 # it (case-insensitive), so the per-Windows-host leaf key is named after the
-# fleet box it lives inside (e.g. g614jv → desktop → me@wsl-desktop). Falls back
+# fleet box it lives inside (e.g. g614jv → desktop → me@desktop-wsl). Falls back
 # to the sanitized hostname when no fleet member matches. Deterministic; the only
 # IO is invoking jq on the fleet.json content ($1).
 ssh_wsl_host_label() {
@@ -231,7 +264,10 @@ mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
 # One key per Windows HOST (the store below is host-scoped, so every distro on a
 # host shares it) — so name it after the host, not the distro: map uname -n to
 # the matching fleet member (g614jv → desktop), else the sanitized hostname.
-KEY_COMMENT="me@wsl-$(ssh_wsl_host_label "$(cat "$FLEET_JSON")" "$(uname -n)")"
+# Suffix, not prefix: `desktop-wsl` matches the distro's own name, its tailnet
+# node and its dotfiles branch. The old `wsl-desktop` form was the same two words
+# in the other order, which read as a different box every time.
+KEY_COMMENT="me@$(ssh_wsl_host_label "$(cat "$FLEET_JSON")" "$(uname -n)")-wsl"
 
 # Resolve the persistence store. Auto-detect the single non-system dir under
 # /mnt/c/Users unless FLEET_WIN_USER / FLEET_KEY_DIR pin it.
@@ -302,12 +338,13 @@ else
   EXISTING_AK=""
   [ -f "$AUTHK" ] && EXISTING_AK="$(cat "$AUTHK")"
   tmp_ak="$(mktemp)"
-  ssh_wsl_merge_authorized_keys "$EXISTING_AK" "$(cat "$MESH_KEYS")" > "$tmp_ak"
-  if [ -f "$AUTHK" ] && cmp -s "$tmp_ak" "$AUTHK"; then
+  if ! ssh_wsl_merge_authorized_keys "$EXISTING_AK" "$(cat "$MESH_KEYS")" > "$tmp_ak"; then
+    warn "$MESH_KEYS holds no key lines — refusing to rewrite the trust span in $AUTHK."
+  elif [ -f "$AUTHK" ] && cmp -s "$tmp_ak" "$AUTHK"; then
     ok "authorized_keys already trusts the fleet"
   else
     install -m600 "$tmp_ak" "$AUTHK"
-    ok "installed fleet keys → $AUTHK (inbound trust)"
+    ok "rewrote fleet trust span → $AUTHK (inbound trust)"
   fi
   rm -f "$tmp_ak"
 fi
