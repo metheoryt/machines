@@ -37,23 +37,25 @@ P1 item before touching anything under `modules/`.
 
 ---
 
-## P0 — The 663 GiB archive has one copy, and the restic layer is gone.
+## P0 — Backups. Largely fixed 2026-08-01; two items remain.
 
-_Corrected 2026-08-01, after a full audit. An earlier revision of this section
-claimed "nothing has been backed up anywhere since 2026-07-19." **That was
-wrong** — immich's own nightly dump is alive. The real exposure is narrower and
-sharper than the overstatement, and the overstatement pointed at the wrong fix
-(a scheduler, when what is missing is a second copy)._
+_This section was rewritten twice. The first version claimed "nothing has been
+backed up anywhere since 2026-07-19", which was **wrong** — immich's own nightly
+dump was alive throughout — and it pointed at the wrong fix, a scheduler, when
+what was missing was a second copy. Kept visible because the corrected diagnosis
+is what made the right work obvious._
 
-### What is actually protected right now
+### What is protected now
 
 | Data | Size | Protection |
 |---|---|---|
-| immich DB (albums, faces, metadata) | 223 MB/night | ✅ immich's own nightly dump → `/var/backups/immich-db`, latest `20260801T020000` |
-| immich library, 2025→now | 242 G | ⚠️ rsync mirror → sdd2, **manual**, last run 2026-07-31 17:10 |
-| **immich archive 1970–2024** (`/mnt/immich-2024/admin`) | **663 G** | ❌ **exactly one copy** |
-| servarr media | 526 G | ✅ deliberately unprotected — replaceable |
-| versioned / prunable / off-host backup | — | ❌ gone entirely |
+| immich DB (albums, faces, metadata) | 2.9 G | ✅ immich's nightly dump → mirror **and** restic, daily 04:30 |
+| immich library, 2025→now | 242 G | ✅ rsync mirror → sdd2, **timer** daily 03:35 |
+| **immich archive 1970–2024** | **663 G** | ✅ second copy on `/mnt/xs`, byte-verified; monthly refresh |
+| `desktop-wsl` `$HOME` | 8.1 G | ✅ restic → latitude's REST hub, daily 06:00 |
+| ServarrConfig, xs-keepers, vps `.env`s | 3.6 G | ✅ restic, versioned, daily 04:30 |
+| servarr media | 526 G | ✅ deliberately unprotected — replaceable torrent data |
+| **history for the photo libraries** | — | ❌ mirrors give a second copy, **not versions** |
 
 ### What died
 
@@ -70,34 +72,59 @@ sharper than the overstatement, and the overstatement pointed at the wrong fix
   to) has been `Exited (0)` for 3 days. `latitude` has the restic binary but no
   repo, timer, or container; `hub` has no restic at all.
 
-### The fix, cheapest-irreversibility-first
+### Done 2026-08-01
 
-- [ ] **Disable the three dead tasks on `server`.** Zero risk, do it first — a
-  schedule that reports Ready while failing is worse than no schedule.
-- [ ] **Put a systemd user timer on `hosts/latitude/debian/mirror-refresh.sh`,**
-  alongside `fleet-selfpull` / `dotfiles-sync` / `git-autofetch`. Removes
-  "someone remembers" from the only live redundancy.
-- [ ] **Give `/mnt/immich-2024/admin` a second copy on `/mnt/xs`.** This is the
-  actual data-loss fix. Measured 2026-08-01: source 662.9 GiB, target 700.0 GiB
-  free and empty, **no hardlinks** (`nlink>1` count is 0), uniform `me:me`
-  ownership, 4 files over 4 GiB (largest 11.6 GB — well inside exfat's limit;
-  the 4 GiB ceiling is FAT32's, not exfat's). 37 GiB of slack is thin in
-  general but fine here: 1970–2024 is a **closed** set, new photos land on
-  `/mnt/immich`. exfat therefore works as-is; reformatting sda3 to ext4 would
-  buy ownership preservation but is destructive on a Ventoy drive and is not
-  required.
-- [ ] **Stand up restic for the small irreplaceable set** — the DB dump and the
-  stack configs. Fits anywhere, restores versioning, and does not require
-  solving the 815 G problem first. Use `resticprofile`, the tool the old design
-  already used (`vps/backup/base.yaml` + a new `latitude/profiles.yaml`).
-  **Do not try to restore `vps/backup/homeserver/profiles.yaml` as-is** — it
-  assumes two dedicated repo drives (`G:\`, `H:\`) that no longer exist as free
-  space anywhere in the fleet.
-- [ ] **The full versioned backup of all 815 G, and offsite rotation** — a
-  separate decision that needs hardware. There is no drive in the fleet with
-  815 G free. Everything currently lands in one apartment, on drives attached
-  to one laptop; the dock drives are removable, so rotation needs no new
-  infrastructure, but capacity does.
+- [x] **Disabled the three dead tasks on `server`.** All three now `Disabled`.
+  Note `Disable-ScheduledTask -TaskName x` without `-TaskPath` silently no-ops —
+  resticprofile registers under `\resticprofile backup\`.
+- [x] **`/mnt/immich-2024/admin` has a second copy.** 662.9 GiB to `/mnt/xs`,
+  clean on the first attempt in 2h10m at 97 MB/s with **zero** bus resets on a
+  dock that had logged 24 the previous day. Verified byte-exact (20456 files,
+  711832525257 bytes both sides), plus a 25-file md5 sample, plus the property
+  that actually decides the monthly re-run: a second pass transfers **0 files,
+  0 bytes**, so `--modify-window=1` copes with exfat's timestamp granularity.
+  Script `hosts/latitude/debian/archive-mirror.sh`.
+- [x] **Both mirrors are on timers** (`install-timers.sh`): library daily 03:35,
+  archive monthly. System scope, one shared `flock`, `Nice`/`IOSchedulingPriority`
+  to stay gentle on the bridge, `ConditionPathIsMountPoint` so an unplugged dock
+  skips instead of failing.
+- [x] **restic covers the small irreplaceable set** — repo `14f4eab544` on
+  spare320, 6.5 GiB → 2.3 G, backup 04:30 daily and `check --read-data-subset 5%`
+  Sundays. Restore verified byte-identical **and** `gzip -t` valid, so the dump is
+  a usable archive rather than merely matching bytes.
+- [x] **latitude is the `backup-hub`.** `restic-server` up, bound to
+  `100.64.0.8:8001` rather than `0.0.0.0` — it runs `--no-auth`, so publishing on
+  all interfaces had been exposing the fleet's backups to every device on the home
+  wifi. Verified: tailnet answers, LAN address refused.
+- [x] **`desktop-wsl` backs up again** — repo `8ca511f48c` via the hub, snapshot
+  `c2c05a9f`, 8.1 GiB, user timer daily 06:00. It had **no** timer at all; the
+  config pointed at the dead `server.gg.ez:8001`.
+- [x] **Fixed a bug the timers exposed.** `mirror-refresh.sh -go` had *always*
+  exited 1 — its last command was `[ -n "$DRY" ] && echo …`, false under `-go`.
+  Invisible by hand; under a timer it meant every successful nightly run reported
+  `Failed`, which is worse than silence because it teaches you to ignore the
+  alert. rsync's status was not checked either. Both fixed; found by **starting
+  the unit** rather than trusting a hand-run.
+
+### Still open
+
+- [ ] **None of it alerts, and that is the same shape as the failure that
+  started this.** Every job here fails silently; the `server` tasks failed
+  visibly in `LastTaskResult` for 13 days and nobody looked, so "it logs" is not
+  a defence. `provision/statusboard/statusboard.sh` already carries an alert
+  strip on every page with a fixture-testable severity policy
+  (`sb_fleet_alerts`, `sb_docker_alerts`); a `sb_backup_alerts` keyed on
+  newest-snapshot age is the right home. **This is the highest-value remaining
+  backup work.**
+- [ ] **The full versioned backup of all 815 G, and offsite rotation** — needs
+  hardware. No drive in the fleet has 815 G free, which is why the libraries get
+  mirrors rather than restic repos. The consequence to be honest about: a
+  corruption that rsyncs over the mirror is unrecoverable, because the libraries
+  have a second copy but **no history**. Everything also still lands in one
+  apartment on drives attached to one laptop; the dock drives are removable, so
+  rotation needs no new infrastructure, but capacity does.
+- [ ] **`/mnt/xs` is at 95%** (36 G free). Fine for a closed set, but it means
+  the archive drive has no room for anything else — do not plan to share it.
 
 - [ ] **Decide what the mirror does with the deleted `Media/` tree.**
   `/mnt/immich-mirror` is 287G against `/mnt/immich`'s 249G; the difference is
