@@ -228,12 +228,30 @@ global + per-host). One bullet per fact under a topical heading.
   its systemd unit, the `~/.local/bin/orca` CLI shim, and `provision/orca-serve.sh`
   are all gone. `provision/tailscale-wsl.sh` (tailnet identity) + `ssh-wsl.sh`
   (fleet SSH) stay — the WSL box is still a first-class tailnet/SSH node.
+- **RENAMED 2026-08-01: everything called `desktop-ubuntu26` or `Ubuntu-26.04` is
+  now `desktop-wsl`.** The WSL distro (registry `DistributionName`), the tailnet
+  node/MagicDNS name, and the dotfiles branch were all renamed together. Entries
+  **anywhere in this file** that predate 2026-08-01 keep the old names because
+  they are dated records of what was true then — read them as history, not as
+  addresses.
+  Live names now: distro `desktop-wsl`, `desktop-wsl.gg.ez` → `100.64.0.6`,
+  dotfiles branch `desktop-wsl`, UNC `\\wsl.localhost\desktop-wsl\…`.
+  `desktop-ubuntu26.gg.ez` is NXDOMAIN and the remote branch is deleted.
 - **The `desktop` WSL distro is its own tailnet node.** Node `100.64.0.6`;
-  Headscale given-name (MagicDNS) `desktop-ubuntu26` (`desktop-ubuntu26.gg.ez`),
-  renamed from `desktop-wsl-ubuntu-26-04` on 2026-07-19 via `sudo headscale nodes
-  rename desktop-ubuntu26 -i 6`. Reported hostname on the box is still the long
-  form (cosmetic; given-name is durable unless the node fully re-registers on a
-  `wsl --unregister` rebuild). Enrolled by `provision/tailscale-wsl.sh`.
+  Headscale given-name (MagicDNS) **`desktop-wsl`** (`desktop-wsl.gg.ez`), set
+  2026-08-01 with `sudo tailscale set --hostname desktop-wsl` from inside the
+  distro — which renames the Headscale node in place, leaving no duplicate and
+  keeping `100.64.0.6`. (It was `desktop-ubuntu26` from 2026-07-19, itself renamed
+  from `desktop-wsl-ubuntu-26-04`.) `tailscale set` needs root and there is no TTY
+  under the agent's Bash tool; drive it as
+  `ssh desktop 'wsl.exe -d desktop-wsl -u root -- tailscale set …'`. Enrolled by
+  `provision/tailscale-wsl.sh`.
+- **A distro rename does NOT re-publish `\\wsl.localhost\<name>` until the distro
+  restarts.** The 9p share name is registered at distro boot, so straight after
+  the registry edit Explorer can reach neither the old name nor the new one.
+  `wsl --terminate <distro>` fixes it and is preferable to `wsl --shutdown` — it
+  leaves `docker-desktop` up, and an abrupt terminate does not unregister
+  `WSLInterop` VM-wide the way a graceful systemd shutdown does.
 - **SSH into the WSL box (2026-07-19).** `ssh-wsl.sh` now installs
   `fleet-authorized-keys` into the box's own `~/.ssh/authorized_keys` (inbound
   trust; was a leaf that only trusted OUTward before). This ROG box's key
@@ -293,7 +311,8 @@ global + per-host). One bullet per fact under a topical heading.
   `100.64.0.0/10`. Kept: AmneziaVPN client (latitude + Windows winget) and the
   VPS AWG VPN server for RU relatives.
 - **Desktop WSL leaf SSH — LIVE + VERIFIED 2026-07-18.** The `Ubuntu-26.04`
-  distro on `desktop` (tailnet node `desktop-wsl-ubuntu-26-04` = `100.64.0.6`,
+  distro on `desktop` (**now named `desktop-wsl`**; tailnet node then
+  `desktop-wsl-ubuntu-26-04`, now `desktop-wsl`, = `100.64.0.6`,
   user `me`) is fully provisioned as a fleet SSH leaf: its `id_fleet` (comment
   `me@wsl-desktop`) is trusted on **latitude, server, AND the Debian hub**, and
   its `~/.ssh/config` resolves `ssh latitude`/`ssh server`/`ssh hub` correctly
@@ -370,7 +389,8 @@ global + per-host). One bullet per fact under a topical heading.
   a live box — the first can leak an unlisted file, the second deletes every
   host-local file from `$HOME` for the duration.
 - **Enrolled 2026-07-28** — `air`, `hub`, `desktop`, `latitude`, and the WSL host
-  `desktop-ubuntu26` (branch auto-created from `main` by the role). **`server` is
+  `desktop-ubuntu26` — **renamed to `desktop-wsl` 2026-08-01, local and remote**
+  (branch auto-created from `main` by the role). **`server` is
   NOT enrolled** — it was offline; enroll it by hand when it is back, since
   converge on a Windows box runs `windows.ps1` only and never the role.
   `.ssh/config` was dropped from every branch during migration (home-manager
@@ -1166,7 +1186,7 @@ global + per-host). One bullet per fact under a topical heading.
 - **Retire the WSL distro as a separate fleet host (in-flight, stated 2026-07-19).**
   Direction: the ROG G16 laptop's WSL distro should stop being provisioned as its own
   tailnet node + SSH leaf (`provision/ssh-wsl.sh`, `provision/tailscale-wsl.sh`, node
-  `desktop-ubuntu26`/`100.64.0.6`); going forward WSL is used purely as a **dev
+  `desktop-ubuntu26`, now `desktop-wsl`/`100.64.0.6`); going forward WSL is used purely as a **dev
   environment opened/run through Orca**, not a standalone fleet member. Not yet torn
   down — the WSL-leaf facts in `agents/hosts/g614jv.md` and the mesh/SSH-over-tailnet
   notes above stay live until the provisioning is actually removed. Consequence
@@ -1248,7 +1268,7 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   gap does not quietly become permanent.
 - **`air` tailnet address is `100.64.0.7`, not `.5`.** Live `headscale nodes
   list` (2026-07-27): hub .1, latitude .2, server .3, desktop .4, **ipheoryt12
-  .5**, **desktop-ubuntu26 .6**. The iPhone and the WSL host are real tailnet
+  .5**, **desktop-ubuntu26 .6** (that node is `desktop-wsl` since 2026-08-01). The iPhone and the WSL host are real tailnet
   nodes that never appear in `fleet.json` — always read Headscale, never infer
   the next free address from the manifest.
 - ~~**Per-host memory path is `agents/hosts/<detect.hostname>.md`**~~ —
