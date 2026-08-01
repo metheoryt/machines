@@ -33,6 +33,13 @@ export WSL_FIXES_LIB_ONLY=1
 # shellcheck source=/dev/null
 source "$REPO/provision/wsl-fixes.sh"
 
+# wsl-fixes.sh defines its own die() that calls `exit 1`, clobbering the one
+# above. Left alone, the FIRST failing assertion after this point kills the run
+# and every later assertion silently goes unreported. Restore the helpers.
+pass() { echo "PASS $1"; }
+die()  { echo "FAIL $1"; fail=1; }
+eq()   { [ "$1" = "$2" ] && pass "$3" || die "$3: expected '$2', got '$1'"; }
+
 # wsl_fixes_needs_reregister: 0 (act) when the binfmt entry is absent.
 tmp="$(mktemp -d)"
 wsl_fixes_needs_reregister "$tmp/absent" && pass "needs_reregister: absent → act" \
@@ -150,5 +157,25 @@ case "$tmr" in
   *"WantedBy=timers.target"*) pass "timer is enable-able" ;;
   *) die "timer must have WantedBy=timers.target" ;;
 esac
+
+# The poll interval IS the worst-case outage: interop is dead from the moment it
+# is unregistered until the next tick. A 60s interval was sized for a rare
+# failure. Measured 2026-08-01 with a second distro in play: seven unregisters
+# in 25 minutes, roughly one per interaction with desktop-pure. Anything above
+# ~15s makes routine `wsl.exe`/`cmd.exe` calls fail for most of a minute.
+secs() { case "$1" in *min) echo $(( ${1%min} * 60 ));; *s) echo "${1%s}";; *) echo "$1";; esac; }
+iv="$(printf '%s\n' "$tmr" | sed -n 's/^OnUnitActiveSec=//p')"
+[ -n "$iv" ] && [ "$(secs "$iv")" -le 15 ] && pass "timer polls at least every 15s (got $iv)" \
+  || die "OnUnitActiveSec must be <= 15s — it is the worst-case interop outage (got '${iv:-unset}')"
+
+bs="$(printf '%s\n' "$tmr" | sed -n 's/^OnBootSec=//p')"
+[ -n "$bs" ] && [ "$(secs "$bs")" -le 15 ] && pass "first check happens within 15s of boot (got $bs)" \
+  || die "OnBootSec must be <= 15s — interop can already be dead at boot (got '${bs:-unset}')"
+
+# AccuracySec lets systemd defer a tick by up to that much, so it adds straight
+# onto the outage window. Keep it small enough not to undo the interval above.
+ac="$(printf '%s\n' "$tmr" | sed -n 's/^AccuracySec=//p')"
+[ -n "$ac" ] && [ "$(secs "$ac")" -le 5 ] && pass "accuracy does not inflate the window (got $ac)" \
+  || die "AccuracySec must be <= 5s — it adds to the outage window (got '${ac:-unset}')"
 
 exit "$fail"

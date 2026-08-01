@@ -89,9 +89,9 @@ wsl_fixes_watchdog_timer() {
 Description=Periodically check the WSL interop binfmt handler
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=1min
-AccuracySec=10s
+OnBootSec=10s
+OnUnitActiveSec=15s
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
