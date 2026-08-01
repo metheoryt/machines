@@ -173,5 +173,30 @@ empty="$tmp/empty-accounts"; mkdir -p "$empty"
 out10="$(MACHINES_PRIMARY_DIR="$primary" ORCA_CLAUDE_ACCOUNTS_DIR="$empty" bash "$sync" 2>&1)"; rc10=$?
 check "no accounts → exit 0, no error" '[ "$rc10" -eq 0 ] && printf "%s" "$out10" | grep -q "nothing to sync"'
 
+# ── Case 9: bootstrap.sh must not treat an Orca dir as a `.claude-auth`
+# secondary profile. Its POSTFIX fallback would deploy the tracked baseline over
+# the mirror — which is exactly what the git hook did on 2026-08-01, via an
+# inherited CLAUDE_CONFIG_DIR. DRY_RUN so the redirect writes nothing.
+boot="$repo/bootstrap.sh"
+out11="$(MACHINES_BOOTSTRAP_ALLOW_COPY=1 DRY_RUN=1 MACHINES_PRIMARY_DIR="$primary" \
+         CLAUDE_CONFIG_DIR="$acct" bash "$boot" 2>&1)"
+check "bootstrap redirects an Orca dir to the mirror" \
+  'printf "%s" "$out11" | grep -q "running the mirror instead"'
+# Anchored on the profile NAME, not the bare phrase: the redirect re-enters
+# bootstrap in lib-only mode, and bootstrap compares against the real
+# $HOME/.claude — never MACHINES_PRIMARY_DIR — so a throwaway primary announces
+# itself as a secondary profile ("claude") in passing. What must never appear is
+# the ACCOUNT dir being deployed as profile "auth".
+check "bootstrap does not treat the account dir as profile \"auth\"" \
+  '! printf "%s" "$out11" | grep -q "Secondary profile \"auth\""'
+check "bootstrap names the primary escape hatch" \
+  'printf "%s" "$out11" | grep -q "env -u CLAUDE_CONFIG_DIR"'
+check "no baseline settings.json seeded over the mirror" \
+  '! printf "%s" "$out11" | grep -q "would sync (real copy).*'"$acct"'/settings.json"'
+
+# The hook that caused it must drop the inherited CLAUDE_CONFIG_DIR outright.
+check "git hook bootstraps the primary, not the inherited profile" \
+  'grep -q "env -u CLAUDE_CONFIG_DIR bash \"\$boot\"" "$repo/git-hooks/_refresh-claude-config"'
+
 if [ "$fail" -eq 0 ]; then echo "ALL PASS"; else echo "SOME TESTS FAILED"; fi
 exit "$fail"
