@@ -1,8 +1,9 @@
 # Fleet memory reflection prompt
 
 Prompt for the weekly reflection cron job. Runs **once for the whole fleet**, on
-Hermes, against the private dotfiles bare repo — the corpus moved out of
-`machines` on 2026-07-28 (`87bf673`, `6364b31`).
+Claude Code, against the private dotfiles bare repo — the corpus moved out of
+`machines` on 2026-07-28 (`87bf673`, `6364b31`). It ran on Hermes until Hermes
+was retired from the fleet on 2026-08-01 (not worth its price).
 
 Counterpart to `kb-cron-prompt.md`: the per-repo harvest jobs (Claude Code,
 daily) only ever append. This job is the only one allowed to generalize, merge,

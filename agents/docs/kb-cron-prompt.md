@@ -16,8 +16,10 @@ after the fact, on the whole corpus, instead of one candidate at a time.
 **Who runs this.** Intended for **Claude Code**, daily, one job per repo — it is
 mechanical, high-volume harvesting, and a MAX subscription makes frequency free.
 The reflection job is the opposite shape (rare, whole-corpus, judgement-heavy)
-and runs on Hermes. Step 4 is the only agent-specific part and self-skips when
-the runner has no cross-session memory.
+and also runs on Claude Code — it ran on Hermes until Hermes was retired from
+the fleet on 2026-08-01 (not worth its price). Step 4 is the only
+agent-specific part and self-skips when the runner has no cross-session memory,
+which every current runner does.
 
 ---
 
@@ -76,9 +78,11 @@ missing, or now-wrong statements. No unrelated rewriting or polish.
 ## Step 4 — Third source: your own experience
 
 **Only if you are a self-learning agent with memory that persists across
-sessions** (e.g. Hermes). If you are Claude Code — you have no cross-session
-memory of your own, Track A already harvests your transcripts, and this step
-would just re-report what Step 2 collected. Skip it and say so.
+sessions.** No runner in the fleet is, as of 2026-08-01 — Hermes was the one
+that qualified and it has been retired. If you are Claude Code — you have no
+cross-session memory of your own, Track A already harvests your transcripts,
+and this step would just re-report what Step 2 collected. Skip it and say so.
+The step stays here for a future runner that does keep its own memory.
 
 Add candidates with `source: "<your-agent-name>-self"`.
 
@@ -261,19 +265,20 @@ repos in parallel, but it means shared memory only accretes. It is half of a
 pair, and it is the cheap half on purpose: writing is fast and local, curating
 needs the whole corpus in view.
 
-The split is also a cost split, and the two happen to line up:
+The two are different shapes of work, on different cadences:
 
 | | this job (harvest) | reflection job |
 |---|---|---|
-| runner | Claude Code | Hermes |
+| runner | Claude Code | Claude Code |
 | cadence | daily, per repo | weekly-ish, once for the fleet |
 | shape | mechanical, high volume | judgement-heavy, whole-corpus |
 | writes | append-only | delete, merge, rewrite |
 
-Harvesting is bounded work that scales with the number of repos — exactly what a
-flat-rate MAX subscription is for. Reflection is one job over one corpus, run
-rarely, where reasoning quality decides whether memory gets sharper or just
-shorter — worth paying per-token for, and cheap precisely because it is rare.
+It used to be a cost split too: reflection ran on Hermes, paid per token,
+because it is rare and reasoning quality decides whether memory gets sharper or
+just shorter. Hermes was retired on 2026-08-01 (not worth its price) and
+reflection moved onto the same flat-rate MAX subscription as harvesting, which
+already covers bounded work scaling with the number of repos.
 
 The counterpart is a separate scheduled job in `machines` that does the thinking:
 
