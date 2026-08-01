@@ -23,11 +23,26 @@ STATUS_FILE="$STATE/last-converge"
 
 log() { printf 'converge: %s\n' "$*"; }
 
-# box_class: nixos | windows | linux (NixOS wins; then uname).
+# box_class: nixos | windows | darwin | linux (NixOS wins; then uname).
+#
+# Darwin got its own arm on 2026-08-01. It used to fall through the catch-all to
+# `linux`, so every convergence on the Mac ran provision/linux.sh — an apt-based
+# driver that aborts on Darwin at its first precondition. air pulled cleanly and
+# then failed to apply the pull, every time, since it joined the fleet: the box
+# looked enrolled (fleet.json member, self-pull running, git up to date) while
+# nothing the repo shipped ever took effect on it. A catch-all that maps an
+# unrecognized OS onto a specific provisioner cannot fail safe — it fails loud on
+# a good day and silently wrong on a bad one.
+#
+# NIXOS_MARKER is a test seam (mirrors CONVERGE_LIB_ONLY): the probe is a real
+# path, so converge.test.sh cannot exercise the uname arms on a NixOS box without
+# it.
+NIXOS_MARKER="${NIXOS_MARKER:-/etc/NIXOS}"
 box_class() {
-  if [ -e /etc/NIXOS ]; then echo nixos; return; fi
+  if [ -e "$NIXOS_MARKER" ]; then echo nixos; return; fi
   case "$(uname -s 2>/dev/null)" in
     MINGW* | MSYS* | CYGWIN*) echo windows ;;
+    Darwin) echo darwin ;;
     *) echo linux ;;
   esac
 }
@@ -75,9 +90,17 @@ touches_nix() {
 # provision/fleet-authorized-keys counts as well: tier_fleet_ssh merges it into
 # ~/.ssh/authorized_keys, so a key-only pull must reprovision or the box never
 # accepts the newly-enrolled member.
-touches_linux() {
-  changed_paths "$1" "$2" | grep -qE '(^provision/linux\.sh$|^provision/lib/tiers\.sh$|^provision/lib/fleet\.sh$|^provision/fleet-selfpull\.sh$|^provision/fleet-authorized-keys$|^pkgs/gortex\.nix$|^agents/bootstrap\.sh$)'
+# touches_macos is the same gate for the Darwin driver, and the shared inputs are
+# genuinely shared: provision/macos.sh runs the SAME tier bodies out of
+# provision/lib/tiers.sh with the same profile resolution, self-pull, fleet trust,
+# pinned gortex and agent bootstrap. Only the driver path differs, so the two
+# gates are one function with the driver injected — a duplicated regex here would
+# drift the moment a new shared input is added to one and not the other.
+_touches_driver() {
+  changed_paths "$2" "$3" | grep -qE "^($1|provision/lib/tiers\.sh|provision/lib/fleet\.sh|provision/fleet-selfpull\.sh|provision/fleet-authorized-keys|pkgs/gortex\.nix|agents/bootstrap\.sh)\$"
 }
+touches_linux() { _touches_driver 'provision/linux\.sh' "$1" "$2"; }
+touches_macos() { _touches_driver 'provision/macos\.sh' "$1" "$2"; }
 
 # write_status <rev> <ok|fail> <reason>: record outcome; advance converged-rev
 # only on ok (a failure retries the same range on the next fire).
@@ -129,6 +152,21 @@ converge_main() {
         write_status "$high" ok "provision/windows.ps1"
       else
         write_status "$high" fail "provision/windows.ps1 failed"
+      fi ;;
+    darwin)
+      if [ -n "$low" ] && ! touches_macos "$low" "$high"; then
+        write_status "$high" ok "darwin: no provisioning-relevant change — agent config already relinked by post-merge hook"
+        exit 0
+      fi
+      # macos.sh is idempotent and needs no root (Homebrew refuses sudo and owns
+      # its own prefix), so it is safe unattended. Its one interactive tier,
+      # tier_brew_cask, degrades rather than hangs: an already-installed cask is a
+      # no-op, and a missing one fails its sudo against the hook's </dev/null and
+      # warns. A warning does not fail the driver, so it cannot wedge convergence.
+      if bash "$REPO/provision/macos.sh"; then
+        write_status "$high" ok "provision/macos.sh"
+      else
+        write_status "$high" fail "provision/macos.sh failed"
       fi ;;
     linux)
       if [ -n "$low" ] && ! touches_linux "$low" "$high"; then

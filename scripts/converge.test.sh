@@ -85,6 +85,38 @@ revk="$(git -C "$repo" rev-parse HEAD)"
 touches_nix "$rev6" "$revk" && pass "touches_nix detects fleet-authorized-keys" || die "touches_nix detects fleet-authorized-keys"
 touches_linux "$rev6" "$revk" && pass "touches_linux detects fleet-authorized-keys" || die "touches_linux detects fleet-authorized-keys"
 
+# touches_macos: the Darwin driver's gate. Same shared inputs as touches_linux
+# (both run provision/lib/tiers.sh) — only the driver path differs, so each gate
+# must fire on its OWN driver and ignore the other's. Asserted against the ranges
+# built above: rev3..rev4 added provision/linux.sh, rev4..rev5 added tiers.sh.
+touches_macos "$rev3" "$rev4" && die "touches_macos false-positive on provision/linux.sh" || pass "touches_macos ignores the linux driver"
+touches_linux "$rev6" "$revk" && pass "touches_linux detects fleet-authorized-keys (shared)" || die "touches_linux detects fleet-authorized-keys (shared)"
+touches_macos "$rev4" "$rev5" && pass "touches_macos detects provision/lib/tiers.sh (shared)" || die "touches_macos detects provision/lib/tiers.sh (shared)"
+touches_macos "$rev2" "$rev3" && die "touches_macos false-positive on content-only change" || pass "touches_macos ignores content-only change"
+touches_macos "" "$rev4" && pass "touches_macos first-run is hit" || die "touches_macos first-run is hit"
+echo x > "$repo/provision/macos.sh"; git -C "$repo" add .; git -C "$repo" commit -qm cmac
+revm="$(git -C "$repo" rev-parse HEAD)"
+touches_macos "$revk" "$revm" && pass "touches_macos detects provision/macos.sh" || die "touches_macos detects provision/macos.sh"
+touches_linux "$revk" "$revm" && die "touches_linux false-positive on provision/macos.sh" || pass "touches_linux ignores the darwin driver"
+
+# box_class: the OS routing itself, previously untested — which is how Darwin
+# stayed in the `linux` catch-all and made every convergence on the Mac run the
+# apt driver. Shadow `uname` to drive the arms, and point the NixOS probe at a
+# path that does not exist so the test result does not depend on the box it runs
+# on. Both overrides are undone straight after.
+_real_nixos_marker="$NIXOS_MARKER"
+NIXOS_MARKER="$tmp/definitely-not-nixos"
+uname() { printf '%s\n' "$_fake_uname"; }
+_fake_uname=Darwin      ; eq "$(box_class)" darwin  "box_class: Darwin -> darwin (not the linux catch-all)"
+_fake_uname=Linux       ; eq "$(box_class)" linux   "box_class: Linux -> linux"
+_fake_uname=MINGW64_NT-10.0; eq "$(box_class)" windows "box_class: MINGW -> windows"
+_fake_uname=MSYS_NT-10.0; eq "$(box_class)" windows "box_class: MSYS -> windows"
+_fake_uname=FreeBSD     ; eq "$(box_class)" linux   "box_class: an unknown OS still falls back to linux"
+NIXOS_MARKER="$tmp/is-nixos"; : > "$NIXOS_MARKER"
+_fake_uname=Darwin      ; eq "$(box_class)" nixos   "box_class: the NixOS marker wins over uname"
+unset -f uname
+NIXOS_MARKER="$_real_nixos_marker"
+
 # on_main_primary: true on main in primary checkout.
 on_main_primary && pass "on_main_primary true on main" || die "on_main_primary true on main"
 

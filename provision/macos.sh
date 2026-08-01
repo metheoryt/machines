@@ -95,6 +95,21 @@ fi
 
 # ── Preconditions ─────────────────────────────────────────────────────────────
 [ "$(uname -s)" = "Darwin" ] || die "this script targets macOS; this box is $(uname -s). Use provision/linux.sh."
+
+# Put Homebrew on PATH ourselves rather than inheriting it. macOS ships no
+# /etc/profile.d equivalent for brew, so its prefix reaches PATH only via the
+# shellenv line tier_shell_init seeds into ~/.zshrc — and that file is read by
+# INTERACTIVE zsh only. Anything non-interactive (a converge fired detached from
+# the post-merge hook, `ssh air bash provision/macos.sh`, a LaunchAgent) gets the
+# bare /usr/bin:/bin:/usr/sbin:/sbin and died here claiming Homebrew was missing
+# on a box that has had it all along. Same two-prefix probe as the ~/.zshrc seed:
+# /opt/homebrew on Apple Silicon, /usr/local on Intel. A no-op when the caller's
+# environment already had it.
+for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+  [ -x "$_brew" ] && eval "$("$_brew" shellenv)" && break
+done
+unset _brew
+
 have brew || die "Homebrew not found. Install it first:
   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"
 then re-run this script."
