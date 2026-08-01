@@ -15,10 +15,31 @@ global + per-host). One bullet per fact under a topical heading.
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
 - **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
-  globs every `*.test.sh` in the repo — 27 suites — and exits nonzero on failure.
-  Three fail at HEAD and have for a while: `provision-wsl.test.sh`,
-  `orca-profile-harvest.test.sh`, `orca-profile-link.test.sh`. They reproduce in a
-  clean worktree; a red suite gives no signal, so greening them is roadmap P4.
+  globs every `*.test.sh` in the repo — 28 suites — and exits nonzero on failure.
+  **It is GREEN as of 2026-08-01; keep it that way.** A red suite gives no signal,
+  and that is not theoretical: `provision-wsl.test.sh` sat red for weeks while
+  correctly reporting a real bug in shipped code, and nobody read it because the
+  failure count had become a baseline.
+- **Three portability traps that made tests red on `air` but not on Linux.** All
+  three cost real debugging time on 2026-08-01; expect them in any new test.
+  - **An unbraced expansion against a multibyte character is FATAL** —
+    `"$var…"` under bash 5.x in a UTF-8 locale resolves a variable named `var…`,
+    so `set -u` aborts. `LC_ALL=C` masks it and `bash -n` never sees it. Always
+    `"${var}…"`. Guarded by `provision/tests/expansion-multibyte.test.sh`.
+  - **BSD `wc -l` pads its count with leading spaces** (`"       1"`), so
+    `[ "$(… | wc -l)" = 1 ]` fails on macOS and passes on Linux. Use `-eq`, or
+    `| tr -d '[:space:]'`. **`grep -c` does NOT pad** on either platform — that
+    asymmetry is why only the `wc -l` assertions broke while 15 `grep -c` count
+    assertions were always fine.
+  - **On macOS `/var` is a symlink to `/private/var`**, so `mktemp -d` returns
+    `/var/folders/…` while anything that resolves the path reports
+    `/private/var/folders/…`. When a test compares paths, match the spelling to the
+    source: **resolved** for text a script emitted, **unresolved** for a symlink
+    target a script stored (it keeps the spelling it was given). Getting this
+    backwards reads as a logic failure — it made a working dedup look like
+    "synced twice" by counting zero matches.
+  - When a count assertion is repaired, **mutation-test it** (expect N+1, confirm it
+    fails). A loosened assertion and a fixed one look identical in a green run.
 - **THE NIX TREE IS GONE — deleted 2026-08-01 in `f3d63b2`, tag `nixos-final`.**
   `flake.nix`, `flake.lock`, 22 modules, `hosts/latitude/nixos/` and `pkgs/`:
   10.3k lines describing a machine that no longer existed. It was reviewed on the

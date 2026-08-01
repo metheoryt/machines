@@ -91,7 +91,10 @@ check "it records the orca id"             'grep -qxF "orca_profile_id=acct-one"
 printf 'NEWER\n' > "$auth/projects/-home-me-x/session2.jsonl"
 out3="$(run)"
 check "second run reuses the same copy"    '[ -f "$dest/projects/-home-me-x/session2.jsonl" ]'
-check "…and creates no second directory"   '[ "$(ls -1 "$profiles" | wc -l)" = 1 ]'
+# -eq, not =: BSD `wc -l` pads its count with leading spaces ("       1"), so a
+# STRING compare fails on macOS and passes on Linux. Numeric compare strips it.
+# (`grep -c` does not pad on either, which is why only the wc sites broke.)
+check "…and creates no second directory"   '[ "$(ls -1 "$profiles" | wc -l)" -eq 1 ]'
 # Pairing is by Orca id, not path, so renaming the copy by hand sticks.
 mv "$dest" "$profiles/renamed"
 printf 'AFTER-RENAME\n' > "$auth/history.jsonl"
@@ -196,7 +199,7 @@ out10b="$(run "$authR2")"; rc10b=$?
 check "a re-login is not refused"           '[ "$rc10b" -eq 0 ]'
 check "…and says what happened"             'printf "%s" "$out10b" | grep -q "re-created this account"'
 check "…it reuses the same copy"            '[ -f "$relog/projects/-home-me-x/session-new.jsonl" ]'
-check "…creating no second copy"            '[ "$(ls -1d "$profiles"/relog* | wc -l)" = 1 ]'
+check "…creating no second copy"            '[ "$(ls -1d "$profiles"/relog* | wc -l)" -eq 1 ]'  # -eq: see the wc -l note above
 check "…and keeps what the old dir held"    \
   '[ "$(cat "$relog/projects/-home-me-x/session.jsonl")" = "TRANSCRIPT-acct-relog-a" ]'
 check "the pairing follows to the new dir"  'grep -qxF "auth_dir=$authR2" "$relog/.orca-source"'
@@ -258,7 +261,7 @@ mv "$tmp/pair.tmp" "$legacy/.orca-source"
 printf 'LATER\n' > "$authL/history.jsonl"
 out13b="$(run "$authL")"; rc13=$?
 check "a uuid-less copy still pairs by orca id" \
-  '[ "$rc13" -eq 0 ] && [ "$(ls -1d "$profiles"/legacy* | wc -l)" = 1 ]'
+  '[ "$rc13" -eq 0 ] && [ "$(ls -1d "$profiles"/legacy* | wc -l)" -eq 1 ]'  # -eq: see the wc -l note above
 check "…and is brought up to date"          '[ "$(cat "$legacy/history.jsonl")" = "LATER" ]'
 check "…and gains a uuid on the way through" 'grep -qxF "account_uuid=uuid-legacy" "$legacy/.orca-source"'
 

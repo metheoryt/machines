@@ -72,8 +72,8 @@ agent config + CLI tools) — a peer of `install-media/`.
 | `just hardware` / `just logs` / `just monitor` | Hardware, recent logs, live monitor |
 
 `just test` used to be `nixos-rebuild test`, so the suite had no recipe at all.
-Three suites currently fail (`provision-wsl`, `orca-profile-harvest`,
-`orca-profile-link`) — pre-existing, and roadmap P4.
+All 28 suites pass as of 2026-08-01 (roadmap P4). Keep it green — it is the
+repo's only gate, and a red suite gives no signal.
 
 ## Architecture
 

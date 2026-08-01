@@ -21,6 +21,15 @@ check() { if eval "$2"; then echo "ok   - $1"; else echo "FAIL - $1"; fail=1; fi
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 accounts="$tmp/accounts"
 profiles="$tmp/profiles"
+# The SAME directory under two spellings, and both are needed. On macOS /var is a
+# symlink to /private/var, so `mktemp -d` hands back /var/folders/… while anything
+# that resolves the path (as orca-profile-sync.sh does before printing it) reports
+# /private/var/folders/…. Assertions against text the SCRIPT emitted must use the
+# resolved form; assertions against a symlink target the script STORED must use the
+# unresolved form, because that is the spelling it was given. Mixing them up is why
+# "a healthy link is not synced twice" was red — it compared a resolved output line
+# to an unresolved expectation and counted 0, while the dedup it tests worked fine.
+profiles_real=""   # set after the dir exists, below
 
 # run_link / run_sync: the two scripts, pinned at the throwaway roots.
 run_link() { env -u CLAUDE_CONFIG_DIR ORCA_CLAUDE_ACCOUNTS_DIR="$accounts" \
@@ -174,8 +183,9 @@ check "…and reports no failure"           'printf "%s" "$out11" | grep -q "fai
 # Restore the link so the dedup case below is meaningful.
 run_link --relink >/dev/null
 out11b="$(run_sync)"
+profiles_real="$(cd "$profiles" && pwd -P)"
 check "a healthy link is not synced twice" \
-  '[ "$(printf "%s" "$out11b" | grep -c "^Profile $profiles/three$")" = 1 ]'
+  '[ "$(printf "%s" "$out11b" | grep -c "^Profile $profiles_real/three$")" -eq 1 ]'
 
 if [ "$fail" -eq 0 ]; then echo "ALL PASS"; else echo "SOME TESTS FAILED"; fi
 exit "$fail"

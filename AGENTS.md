@@ -129,11 +129,16 @@ for t in provision/tests/*.test.sh provision/*.test.sh \
          agents/tests/*.test.sh scripts/*.test.sh; do bash "$t"; done
 ```
 
-**Three suites fail at HEAD and have for a while** — `provision-wsl.test.sh`,
-`orca-profile-harvest.test.sh`, `orca-profile-link.test.sh`. They reproduce in a
-clean worktree and are not fallout from recent work. Since the Nix gate is gone
-this suite is the only validation the repo has, so a red suite gives no signal:
-greening these three is `docs/fleet-roadmap.md` P4.
+**The suite is GREEN as of 2026-08-01 — 28 suites, 0 failures.** Keep it that way:
+it is the only validation the repo has since the Nix gate went, and a red suite
+gives no signal at all. The three long-standing failures were fixed that day, and
+what they turned out to be is worth knowing: `provision-wsl.test.sh` had been
+reporting a **real bug in shipped code** for weeks (an unbraced `"$var…"` that is
+fatal under `set -u` in a UTF-8 locale — it also broke `just provision --apply`),
+while the two `orca-profile-*` suites were **macOS-portability bugs in the tests**
+(BSD `wc -l` pads its count; `/var` resolves to `/private/var`). Treating a red
+count as a baseline is how the first one stayed unread — see
+`docs/fleet-roadmap.md` P4.
 
 ## Architecture
 

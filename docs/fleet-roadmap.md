@@ -318,40 +318,43 @@ Nix ever returns. Leave them.
 
 ---
 
-## P4 — Green the test suite. It is the only gate, and `just test` runs it.
+## P4 — ✅ DONE 2026-08-01. `just test` is green: 28 suites, 0 failures.
 
-- [x] **`provision-wsl.test.sh` greened 2026-08-01 — and it was never test rot.**
-  It had been reporting a **real bug in shipped code** the whole time. Three scripts
-  carried an unbraced expansion pressed against a multibyte character —
-  `"$var…"` instead of `"${var}…"` — and under bash 5.x in a **UTF-8 locale** the
-  ellipsis bytes get absorbed into the identifier, so `set -u` aborts on a variable
-  named `var…`. Under `LC_ALL=C` the same line is fine, which is why it survived:
-  it breaks for whoever has a normal locale and works for whoever does not, and
-  `bash -n` never sees it because the failure is at runtime.
-  **The worst of the three was `provision/provision.sh`, one line after the
-  `Apply <role>? [y/N]` prompt** — so `just provision --apply` took the user's
-  consent and then aborted before running a single role, on any UTF-8-locale box.
-  The other two were `provision-wsl.sh` (step 1 of `just provision-wsl`) and
-  `tailscale-wsl.sh`'s enroll step. All three braced; new
-  `provision/tests/expansion-multibyte.test.sh` scans every `*.sh` for the class,
-  with a positive control so an empty result cannot be mistaken for a passing scan,
-  and asserts the underlying bash behaviour still holds so the rule cannot quietly
-  stop being load-bearing. **This is the argument for P4 in one item:** a red suite
-  is indistinguishable from a broken one, so a real defect in the front door sat
-  visible and unread for weeks.
-- [ ] **Two failures left, and these two do look test-only** — 3 failing
-  assertions in `agents/tests/orca-profile-harvest.test.sh` ("…and creates no
-  second directory", "…creating no second copy", "a uuid-less copy still pairs by
-  orca id") and 1 in `agents/tests/orca-profile-link.test.sh` ("a healthy link is
-  not synced twice"). Both concern idempotence — a second run creating a second
-  copy — so confirm which side is wrong before editing the assertion: the same
-  reasoning that made `provision-wsl` look like rot applies here too.
-- [x] **`just test` now runs the suite** (landed with P1). It globs every
-  `*.test.sh` — 27 suites, up from the 4 globs documented here — so a new suite is
-  picked up without editing the recipe. `just test` previously meant
-  `nixos-rebuild test`, one typo away from the suite; that footgun is gone.
+First time the repo has had a working gate since the Nix one was deleted. The three
+"pre-existing failures" turned out to be two different things, and telling them
+apart mattered:
 
----
+- [x] **`provision-wsl.test.sh` was reporting a REAL BUG in shipped code**, not
+  rotting. Three scripts had an unbraced expansion against a multibyte character
+  (`"$var…"`), which bash 5.x in a UTF-8 locale resolves as a variable named
+  `var…` — fatal under `set -u`, fine under `LC_ALL=C`, invisible to `bash -n`.
+  **`provision/provision.sh` carried it one line after the `Apply <role>? [y/N]`
+  prompt, so `just provision --apply` aborted after taking consent and before
+  running any role.** Fixed + guarded by
+  `provision/tests/expansion-multibyte.test.sh`.
+- [x] **The two `orca-profile-*` suites were genuinely test-only — and both failed
+  for macOS-vs-Linux reasons, which is why they were red on `air` specifically.**
+  The code was correct in all four cases; the dedup behaviour they check works.
+  - 3 assertions in `orca-profile-harvest.test.sh` compared a count as a **string**:
+    BSD `wc -l` pads to `"       1"`, so `= 1` fails on macOS and passes on Linux.
+    Now `-eq`. (`grep -c` does not pad on either, which is exactly why only the
+    `wc -l` sites broke — 15 other `grep -c` count assertions in this repo were
+    always fine.)
+  - 1 assertion in `orca-profile-link.test.sh` compared a **path spelling**. On
+    macOS `/var` is a symlink to `/private/var`, so `mktemp -d` yields
+    `/var/folders/…` while `orca-profile-sync.sh` prints the resolved
+    `/private/var/folders/…`. It counted 0 matches and read as "synced twice".
+    Fixed with a resolved `$profiles_real` for output comparisons, keeping the
+    unresolved `$profiles` for the assertions that check a **stored symlink
+    target** — the script keeps the spelling it was given, so both forms are
+    needed and the file now says so.
+  - Both repairs were **mutation-tested** (expect 2 instead of 1 → both fail) to
+    prove the assertions still bite rather than having been loosened into
+    vacuous truth.
+
+**Keep it green.** The value showed up within the hour: when this session's earlier
+change broke two suites, a green baseline made that obvious instead of something to
+be diffed against a remembered failure count.
 
 ## P5 — Documentation drift.
 
