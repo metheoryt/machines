@@ -101,6 +101,9 @@ just provision-wsl <nickname>           # self-declare THIS WSL distro
 
 just agent-bootstrap                    # link ~/.claude + ~/.codex
 just agent-bootstrap-profile <postfix>  # provision ~/.claude-<postfix>
+just agent-sync-orca                    # mirror ~/.claude into Orca's per-account
+                                        #   profiles (once per Orca auth; also runs
+                                        #   at the end of agent-bootstrap)
 just hermes-bootstrap                   # link ~/.hermes
 just gortex-setup                       # wire per-profile gortex (NixOS only)
 
@@ -169,7 +172,7 @@ None of these are Nix modules — they are the non-NixOS half of the repo.
 | Dir | What it is |
 |---|---|
 | `provision/` | Cross-platform provisioner — `provision.{sh,ps1}` role front door, `roles/*.{sh,ps1}` executors, `lib/` manifest readers (`fleet.sh`, `Fleet.psm1`, `tiers.sh`), `linux.sh`/`macos.sh` tier drivers, `statusboard/`, `tests/`. See `provision/README.md`. |
-| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
+| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (mirrors `~/.claude` into Orca's per-account config dirs), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
 | `hermes/` | Hermes Agent config — `config.yaml`, `skills/`; `bootstrap.sh` links it into `~/.hermes/`. Its `memories/` is an **empty, unfilled slot** — the agent-config handover did not fill it. |
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `quick-check.sh` (the `just quick` gate), the `update-*.sh` version bumpers. |
 | `pkgs/` | Pinned out-of-tree packages (e.g. `gortex.nix`). |

@@ -66,6 +66,16 @@ agent-bootstrap-profile postfix:
     @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
     @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
 
+# Mirror ~/.claude into every Orca-managed account profile
+# (~/.local/share/orca/claude-accounts/<uuid>/auth). Once per Orca auth;
+# idempotent, and `just agent-bootstrap` already runs it at the end of a personal
+# run. Pass a dir to target one account, `--dry-run` to preview.
+[group('fleet')]
+[doc('Mirror the base Claude profile into Orca-managed account profiles')]
+agent-sync-orca *args:
+    @echo "🔗 Syncing base Claude profile into Orca-managed profiles..."
+    @bash agents/orca-profile-sync.sh {{args}}
+
 # Bootstrap Hermes Agent config (~/.hermes)
 [group('fleet')]
 [doc('Link Hermes Agent config (~/.hermes)')]

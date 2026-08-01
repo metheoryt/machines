@@ -229,6 +229,66 @@ agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
 agents/bootstrap.sh` (any other profile — SHARED set + the matching
 `settings.<postfix>.json`).
 
+### Orca-managed profiles (`orca-profile-sync.sh`)
+
+Orca runs Claude Code against a **per-account** config dir it creates at login:
+
+```
+~/.local/share/orca/claude-accounts/<account-uuid>/auth
+```
+
+That dir holds only account/session state, and its name (`auth`) matches no
+`.claude-<postfix>` convention, so neither `bootstrap.sh` recipe can reach it.
+Switching to an Orca-managed profile therefore drops the whole profile: settings
++ hooks + statusline, `CLAUDE.md`, `memory/` and `host-memory.md` (the cyphy
+`global-memory-load.sh` hook reads `$CLAUDE_CONFIG_DIR/memory`, so the synced
+stores go dark), every entry under `skills/` including the `cyphy` link,
+`agents/` and `commands/`.
+
+- `just agent-sync-orca` — mirror `~/.claude` into **every** discovered account
+  dir. Once per Orca auth; idempotent, so re-running is free. Takes an explicit
+  dir to target one account, `--dry-run` to preview, `--force` to accept a path
+  that carries no `.orca-managed-claude-auth` marker.
+- Runs automatically at the end of a personal `bootstrap.sh` — last, so it
+  mirrors the primary in its final state (after the `settings.json` re-seed and
+  the gortex hook merge). A new account is picked up by the next pull or
+  provisioning run without a manual step.
+
+What it mirrors, and how:
+
+| Path | Mechanism |
+|---|---|
+| `CLAUDE.md`, `host-memory.md`, `statusline-command.sh`, `balance-refresh.py` | symlink at `~/.claude/…` |
+| `skills/`, `agents/`, `commands/`, `memory/` | symlink **per entry**, so machine-local additions inside the Orca profile coexist |
+| `settings.json` | real file, deep-merged — primary wins per key, Orca-only keys survive, `permissions.allow/deny/ask` are unioned |
+
+Unlike `bootstrap.sh` the source is the **live primary profile**, not this repo:
+an Orca profile also needs the machine-local parts the repo never carries
+(`gortex install`'s skills/agents/commands, plugin state written through
+`/plugin` and `/config`).
+
+`settings.json` is the one path that is not a symlink — for the same reason
+`copy_managed` exists: Claude (`/config`, `/plugin`) and Orca (its agent-hooks
+block, re-injected on every launch) both write through the live file, and a
+symlink would push those writes into the primary and on into a dirty working
+tree. The pre-merge original is snapshotted once to
+`.settings.json.pre-orca-sync` and never overwritten again.
+
+Never touched — mirroring them would cross-wire two accounts' auth or corrupt
+live session state: `.credentials.json`, `oauth-account.json`, `.claude.json`,
+`.orca-managed-claude-auth`, `projects/`, `sessions/`, `history.jsonl`,
+`shell-snapshots/`, `session-env/`, `backups/`, `cache/`, `policy-limits.json`,
+`remote-settings.json`. `plugins/` is excluded too: `enabledPlugins` and
+`extraKnownMarketplaces` ride along in `settings.json`, and Claude Code installs
+the declared marketplaces into the profile itself on the next launch.
+
+A link whose primary source has since been deleted is pruned on the next run; a
+real file the Orca profile owns, and a symlink pointing anywhere other than the
+primary, are both left alone.
+
+**Restart the Orca session** to pick up a fresh sync — Claude Code reads the
+config dir at startup.
+
 ### Windows note — Developer Mode
 
 On Windows the script sets `MSYS=winsymlinks:nativestrict` so Git Bash creates

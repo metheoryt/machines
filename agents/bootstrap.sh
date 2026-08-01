@@ -110,6 +110,32 @@ if [ "$(_resolve "$CLAUDE_DIR")" = "$(_resolve "$HOME/.claude")" ]; then
   IS_PERSONAL=1
 else
   IS_PERSONAL=0
+  # ── An Orca-managed per-account dir is NOT a `.claude-<postfix>` profile ───
+  # Orca points CLAUDE_CONFIG_DIR at ~/.local/share/orca/claude-accounts/<uuid>/auth.
+  # Its basename is `auth`, so POSTFIX lands on `auth`, settings.auth.json does
+  # not exist, and the fallback below deploys the TRACKED BASELINE over the
+  # mirror orca-profile-sync.sh maintains there.
+  #
+  # Not hypothetical: git-hooks/_refresh-claude-config runs this script after
+  # every pull/checkout/rebase and (before the fix landing alongside this) passed
+  # the shell's own CLAUDE_CONFIG_DIR straight through — inside an Orca terminal,
+  # the account dir. Observed 2026-08-01: one `git stash` round-trip re-seeded
+  # that account's settings.json from the baseline and moved the merged file into
+  # .bootstrap-bak. A direct `bash agents/bootstrap.sh` typed in an Orca terminal
+  # does the same, which is why the guard lives here and not only in the hook.
+  #
+  # Redirect rather than refuse: for an Orca profile, "bootstrap" IS the mirror.
+  # Skipped under BOOTSTRAP_LIB_ONLY — a caller sourcing the helpers wants the
+  # functions, never an exec.
+  if [ -z "${BOOTSTRAP_LIB_ONLY:-}" ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ] \
+     && { [ -f "$CLAUDE_DIR/.orca-managed-claude-auth" ] \
+          || case "$CLAUDE_DIR" in */orca/claude-accounts/*/auth) true ;; *) false ;; esac; }; then
+    printf 'Orca-managed profile "%s" — running the mirror instead of the\n' "$CLAUDE_DIR"
+    printf 'secondary-profile bootstrap (see agents/orca-profile-sync.sh).\n'
+    printf 'To bootstrap the PRIMARY profile from here:\n'
+    printf '    env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh   (or: just agent-bootstrap)\n\n'
+    exec bash "$SRC_DIR/orca-profile-sync.sh" "$CLAUDE_DIR"
+  fi
   printf 'Secondary profile "%s" — SHARED set + settings.%s.json (Codex skipped, settings.local.json untouched)\n\n' "$CLAUDE_BASE" "$POSTFIX"
 fi
 
@@ -588,6 +614,22 @@ ensure_gortex_wired
 # the hooks need re-merging after any settings.json re-seed, not only when
 # wiring ran. See gortex_merge_hooks for why the merge is needed at all.
 gortex_merge_hooks "$CLAUDE_DIR"
+
+# ── Orca-managed profiles — the fan-out no naming convention can reach ───────
+# Orca runs Claude Code against a per-account config dir
+# (~/.local/share/orca/claude-accounts/<account-uuid>/auth), so the
+# ~/.claude-<postfix> convention above never sees it. orca-profile-sync.sh
+# mirrors the primary profile into each such dir; see its header.
+#
+# Personal run only, and deliberately LAST: the mirror's source is the primary
+# profile in its final state — after copy_managed re-seeded settings.json and
+# gortex_merge_hooks put the hooks back. A secondary-profile run has nothing to
+# contribute (it is not the source), and running it there would fan a
+# secondary's content out to every account.
+if [ "$IS_PERSONAL" -eq 1 ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ]; then
+  printf '\n'
+  bash "$SRC_DIR/orca-profile-sync.sh" || true
+fi
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
 # (merge / rebase / checkout) re-link without a manual bootstrap run. core.hooksPath
