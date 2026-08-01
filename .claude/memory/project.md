@@ -276,6 +276,45 @@ global + per-host). One bullet per fact under a topical heading.
   `wsl --terminate <distro>` fixes it and is preferable to `wsl --shutdown` — it
   leaves `docker-desktop` up, and an abrupt terminate does not unregister
   `WSLInterop` VM-wide the way a graceful systemd shutdown does.
+- **`fleet-authorized-keys` IS AUTHORITATIVE NOW, and comments are LOGICAL fleet
+  names (2026-08-01, commit `3fcd6ae`).** POSIX used to merge it append-only
+  keyed on the key BODY, so a deleted line was revoked on Windows (which
+  regenerates wholesale) and stayed trusted forever everywhere else — the file
+  read like a revocation list and was not one. Same body-keying meant a renamed
+  comment never propagated. `ssh_wsl_merge_authorized_keys` now rewrites a
+  managed span `# >>> fleet-trust (managed by machines) >>> … # <<< fleet-trust
+  <<<`; `tier_ssh_trust` calls that one implementation instead of its own awk
+  copy, **sourcing ssh-wsl.sh in a SUBSHELL** because the script runs `set -u`
+  and defines its own `info/ok/warn/die/have` that would otherwise replace the
+  tier runner's for every later tier. Three rules that matter: lines OUTSIDE the
+  span are never touched (hand-added keys survive); a fleet key found unmanaged
+  outside it is ABSORBED rather than duplicated (the migration path — a stray
+  copy would keep granting access after the span revoked it); an empty/unreadable
+  key list makes the merge REFUSE rather than write an empty span and lock the
+  fleet out. Comments unified to `<login>@<logical fleet name>`:
+  `methe@g513ie`→`methe@server`, `methe@me-g614jv`→`methe@desktop`,
+  `me@wsl-desktop`→`me@desktop-wsl`. Reason: OS hostnames churn and the labels
+  rot — desktop had been `DESKTOP-4PQ6V6B`→`ME-G614JV`→`g614jv` (stale by two
+  renames), server's own key still said `methe@methe-server`, latitude answers
+  `uname -n` with `latitude5520`, a machine that no longer exists. **Propagation
+  after a push is AUTOMATIC and fast on hub/desktop/server** — measured
+  2026-08-01: desktop fetched the commit at 14:13:25 and rewrote
+  `administrators_authorized_keys` at 14:13:37. air/latitude/desktop-wsl were
+  applied by hand (their `tier_ssh_trust` only runs on a provision).
+- **Two residues the span deliberately will NOT clean, on hub only.** Keys
+  installed before the span exists sit outside it and are never auto-pruned —
+  by design, since auto-deleting unrecognised keys would nuke legitimate
+  hand-added ones. hub's `~/.ssh/authorized_keys` still carries
+  `methe@lat5520` (…cSCvBc — matches NO key on any reachable box, dead) and
+  `me@desktop-wsl-ubuntu-26-04` (…DXi623 — **LIVE**: it is desktop-wsl's
+  `id_ed25519`, redundant only because its ssh config pins `id_fleet`). Check
+  before pruning either; the dead-looking one is dead, the other is not.
+- **hub is SSH TARGET-ONLY, and always was.** It has no ed25519 fleet key (only
+  `debian@27608` RSA, absent from `fleet-authorized-keys`) and no fleet block in
+  `~/.ssh/config` — `tier_fleet_ssh` is darwin-only and hub deliberately skips
+  `tier_ssh_accounts`. So `hub → any member` fails (`debian@latitude: Permission
+  denied`, host-key failures elsewhere) while everything reaches hub fine. Not a
+  regression; don't "fix" it without deciding hub should initiate at all.
 - **SSH into the WSL box (2026-07-19).** `ssh-wsl.sh` now installs
   `fleet-authorized-keys` into the box's own `~/.ssh/authorized_keys` (inbound
   trust; was a leaf that only trusted OUTward before). This ROG box's key
@@ -340,7 +379,8 @@ global + per-host). One bullet per fact under a topical heading.
   distro on `desktop` (**now named `desktop-wsl`**; tailnet node then
   `desktop-wsl-ubuntu-26-04`, now `desktop-wsl`, = `100.64.0.6`,
   user `me`) is fully provisioned as a fleet SSH leaf: its `id_fleet` (comment
-  `me@wsl-desktop`) is trusted on **latitude, server, AND the Debian hub**, and
+  `me@desktop-wsl` since 2026-08-01) is trusted on **latitude, server, AND the
+  Debian hub**, and
   its `~/.ssh/config` resolves `ssh latitude`/`ssh server`/`ssh hub` correctly
   (hub → `cyphy.kz`/`debian`). Verified end-to-end from inside the distro (auth
   OK to all three; `ssh server whoami` → `methe-server\methe`). GOTCHAs:
