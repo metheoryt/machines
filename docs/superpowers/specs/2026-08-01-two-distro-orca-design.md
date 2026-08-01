@@ -1,8 +1,56 @@
 # Two-distro Orca on desktop: one WSL distro per Claude account
 
 **Date:** 2026-08-01
-**Status:** design approved — not yet implemented
+**Status:** **ABANDONED 2026-08-01.** The second distro was built and then
+removed. The rename half shipped and is live; the two-distro half is not, and
+should not be revived without new evidence. See *Why this was abandoned* below.
 **Branch:** `metheoryt/Pure-WSL`
+
+## Why this was abandoned
+
+`desktop-pure` was created, provisioned to the point of a base package set and a
+`machines` clone, and then `wsl --unregister`ed the same afternoon.
+
+Not because any single step failed — each was solved — but because of what
+solving them revealed. Four platform surprises surfaced in one session, on a
+design that had *already* been probed live:
+
+| surprise | what it forced |
+|---|---|
+| the cgroup tree is shared, so `user@1000` collides | second distro needs uid 1001 |
+| `binfmt_misc` thrashes with two distros — 7 unregisters in 25 min | watchdog poll 60s → 15s |
+| Docker Desktop's WSL integration half-completes | native `docker-ce-cli` + `dpkg-divert` |
+| `\\wsl.localhost\<name>` is registered at distro boot | a restart after any rename |
+
+The through-line: **WSL2 gives distros far less isolation than "separate
+distro" suggests.** Network namespace, cgroup tree, and `binfmt_misc` are all
+VM-wide. A second distro is not a cheap encapsulation boundary; it is a
+co-tenant that perturbs the first one every time it is touched. With two distros
+live, interop broke roughly once per interaction — recoverable, but only because
+a watchdog existed.
+
+Weighed against that: the goal was **two Claude accounts usable at once**, and
+the cheaper path was never disproven. `$HOME/CLAUDE.md` records that a
+`~/.claude-pure` work profile existed and was folded back into `settings.json`
+in `d48c09a`. Per-profile config dirs in **one** distro get the same outcome
+with none of the above. Windows Orca opening WSL repos over
+`\\wsl.localhost\desktop-wsl\…` already works.
+
+**What shipped anyway, and stands on its own** — all of it improves the
+single-distro box:
+
+- `provision/assets/wslopen` + `provision/wsl-fixes.sh` — the browser opener and
+  the binfmt watchdog, now polling every 15 s.
+- The native docker CLI, independent of Docker Desktop's tmpfs.
+- The interop-death root cause and its widened trigger (below).
+- `fleet.local.json`'s `dispatch` field and the parent-dispatch machinery in
+  `fleet-dispatch.sh` — unused for now, but correct and tested.
+- The rename `Ubuntu-26.04` → `desktop-wsl`, its tailnet node, and the dotfiles
+  branch `desktop-ubuntu26` → `desktop-wsl`.
+
+**If this is ever revisited**, the findings below are the ones that cost the
+most to learn — read them before assuming a second distro is isolated. And test
+the one-distro two-profile path first.
 
 ## Goal
 

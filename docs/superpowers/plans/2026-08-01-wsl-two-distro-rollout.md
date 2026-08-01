@@ -1,5 +1,30 @@
 # WSL Two-Distro Rollout Implementation Plan
 
+> **ABANDONED 2026-08-01, part-way through Task 4.** Do not execute this plan.
+> `desktop-pure` was created and then `wsl --unregister`ed the same afternoon;
+> see *Why this was abandoned* in the spec.
+>
+> **Executed and live** — Task 1 (inventory), Task 2 (fixes backfilled onto the
+> existing distro), Task 3 (rename of the distro, the tailnet node and the
+> dotfiles branch), Task 4 Steps 1–4 (distro created, since removed).
+>
+> **Never executed** — Tasks 5–10.
+>
+> **One deviation to know about:** Task 7 Step 4 (remove the Windows-local repo
+> registrations) was performed by hand before the stop, in preparation for the
+> Linux-path re-registration that never happened. It was undone by restoring
+> `orca-data.json` from `orca-data.json.bak.0` with `Ubuntu-26.04` rewritten to
+> `desktop-wsl` — 11 repos, their `wt-setup`/`wt-teardown` hooks, and 34
+> `worktreeMeta` entries, all repointed at the renamed distro.
+>
+> Corrections this plan's own text still contains, if it is ever mined for
+> reference: `wsl --install` **does** support `--name` and `--no-launch` (Task 4
+> Step 1's fallback branch is unnecessary); the VHD is **not** sparse (WSL
+> disables sparse support); `C:\` root is not writable from WSL without
+> elevation, so `C:\wsl-images` fails — use `C:\Users\<user>\…`; and `hub`
+> cannot serve as a dispatch origin, so Task 10's `ssh air` steps have no
+> substitute while `air` is asleep.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Do NOT use subagent-driven-development for this plan.** Every task mutates live machines — a renamed distro, a moved repo, a deleted VHD. A fresh subagent per task cannot see what the previous one actually did to the box, and several tasks are irreversible. Execute inline, with the user at the checkpoints.
