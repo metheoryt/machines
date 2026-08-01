@@ -36,7 +36,6 @@ in {
     # Development tools
     orca # worktree IDE for AI agents — see ./orca-bin.nix (upstream AppImage)
     claude-code
-    codex # OpenAI Codex CLI (config provisioned by bootstrap's personal run); attr unverified on Windows — confirm with `just check` on a Nix host
     sox # for claude /voice audio recording
     difftastic # structural diff tool — `difft`, also wired as `git dft`
 

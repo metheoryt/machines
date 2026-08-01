@@ -80,7 +80,7 @@ fi
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # The PRIMARY profile's live dir — always ~/.claude, independent of which profile
 # this run is bootstrapping. Dotfiles owns the content inside it; secondary
-# profiles and ~/.codex are linked AT it, not at the repo.
+# profiles are linked AT it, not at the repo.
 #
 # It must NOT be derived from CLAUDE_CONFIG_DIR: that variable is how a secondary
 # profile run is driven (CLAUDE_CONFIG_DIR=~/.claude-pure), so deriving from it
@@ -98,8 +98,7 @@ BAK_ROOT="$CLAUDE_DIR/.bootstrap-bak"
 # chosen by convention from the profile dir's name:
 #   ~/.claude            -> settings.json
 #   ~/.claude-<postfix>  -> settings.<postfix>.json   (e.g. ~/.claude-pure -> settings.pure.json)
-# Codex rides with the personal run (~/.claude) only. The machine-local
-# settings.local.json is never touched by any profile.
+# The machine-local settings.local.json is never touched by any profile.
 _resolve() { readlink -f "$1" 2>/dev/null || printf '%s' "$1"; }
 CLAUDE_BASE="$(basename "$CLAUDE_DIR")"
 case "$CLAUDE_BASE" in
@@ -136,7 +135,7 @@ else
     printf '    env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh   (or: just agent-bootstrap)\n\n'
     exec bash "$SRC_DIR/orca-profile-sync.sh" "$CLAUDE_DIR"
   fi
-  printf 'Secondary profile "%s" — SHARED set + settings.%s.json (Codex skipped, settings.local.json untouched)\n\n' "$CLAUDE_BASE" "$POSTFIX"
+  printf 'Secondary profile "%s" — SHARED set + settings.%s.json (settings.local.json untouched)\n\n' "$CLAUDE_BASE" "$POSTFIX"
 fi
 
 linked=0
@@ -241,7 +240,7 @@ hash_file() {
 
 # copy_managed <abs-src> <abs-dest>: maintain dest as a REAL FILE seeded from the
 # committed src — deliberately NOT a symlink. A tool that writes through the live
-# config (Orca injecting its agent-hooks block into settings.json / codex hooks.json)
+# config (Orca injecting its agent-hooks block into settings.json)
 # then mutates only this local copy, never the tracked repo file — so the working
 # tree never dirties and convergence's clean-tree gate never jams. The tracked
 # file stays the deliberate shared baseline; changes to it are explicit commits.
@@ -325,7 +324,7 @@ retire_link() {
 }
 
 # link_if_present <abs-src> <abs-dest>: link() only if src exists. The fan-out
-# links into ~/.codex and ~/.claude-<postfix> point at the PRIMARY profile's real
+# links into ~/.claude-<postfix> point at the PRIMARY profile's real
 # file, which the handover ordering does not guarantee is in place yet — beat 1
 # lands this script fleet-wide, and a box whose content has not been converted
 # has nothing at the primary path. Plain link() would leave a dangling symlink
@@ -371,8 +370,6 @@ link_entries_into() {
     [ -e "$entry" ] || continue           # no matches → skip the literal glob
     base="$(basename "$entry")"
     [ "$base" = ".gitkeep" ] && continue   # placeholder, not real config
-    [ "$base" = "hooks.json" ] && continue # cyphy plugin manifest, not a Codex hook
-    [ "$base" = "tests" ] && continue      # hook test scripts, not runtime hooks
     link "$entry" "$dest_sub/$base"
   done
 }
@@ -489,7 +486,7 @@ fi
 # The shared memory store is dotfiles-owned: real files at
 # ~/.claude/memory/{global.md,personality/*.md}, tracked on the dotfiles repo's
 # main branch. bootstrap only clears links from the era when agents/memory/ was
-# the source. Secondary profiles and ~/.codex are linked AT the primary below.
+# the source. Secondary profiles are linked AT the primary below.
 _mkdir "$CLAUDE_DIR/memory"
 retire_link "$CLAUDE_DIR/memory/global.md"
 retire_link "$CLAUDE_DIR/memory/personality"
@@ -518,31 +515,11 @@ link "$SRC_DIR/plugin" "$CLAUDE_DIR/skills/cyphy"
 # gortex-rendered gortex-*.md all coexist in ~/.claude/agents/.
 link_entries_into "$SRC_DIR/subagents" "$CLAUDE_DIR/agents"
 
-# ── Codex config (~/.codex) — rides with the personal run only ───────────────
-if [ "$IS_PERSONAL" -eq 1 ]; then
-  CODEX_SRC="$SRC_DIR/codex"
-  CODEX_DIR="${CODEX_CONFIG_DIR:-$HOME/.codex}"
-  _mkdir "$CODEX_DIR"
-  printf '\nBootstrapping Codex config\n  live:  %s\n\n' "$CODEX_DIR"
-
-  link_if_present "$PRIMARY_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
-
-  _mkdir "$CODEX_DIR/memory"
-  # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
-  link_if_present "$PRIMARY_DIR/memory/global.md"   "$CODEX_DIR/memory/global.md"
-  link_if_present "$PRIMARY_DIR/memory/personality" "$CODEX_DIR/memory/personality"
-  # Sourced from the PRIMARY profile, which dotfiles owns — not from the repo.
-  link_if_present "$PRIMARY_DIR/host-memory.md" "$CODEX_DIR/host-memory.md"
-
-  # copy_managed, NOT link: Orca injects its agent-hooks block into the live
-  # hooks.json; a symlink would dirty the tracked repo file. Codex never
-  # self-writes it, so the copy has no propagation cost beyond baseline edits.
-  copy_managed "$CODEX_SRC/hooks.json" "$CODEX_DIR/hooks.json"
-
-  link_entries_into "$SRC_DIR/plugin/skills" "$CODEX_DIR/skills"
-  link_entries_into "$SRC_DIR/plugin/hooks"  "$CODEX_DIR/hooks"
-  link_entries_into "$CODEX_SRC/subagents"   "$CODEX_DIR/agents"
-fi
+# Codex (~/.codex) was deployed from here until 2026-08-01, when it was dropped
+# fleet-wide — unused, and 627MB of vendored release binaries per box. The
+# plugin's hooks.json still takes the config dir as an argument rather than
+# deriving it, which is what made a second agent deployable at all; keep that
+# shape if another one ever arrives.
 
 # ── gortex: code-intelligence engine / MCP server ────────────────────────────
 # Two concerns, split by platform (see docs/superpowers/specs/2026-07-20-gortex-
@@ -627,6 +604,16 @@ gortex_merge_hooks "$CLAUDE_DIR"
 # contribute (it is not the source), and running it there would fan a
 # secondary's content out to every account.
 if [ "$IS_PERSONAL" -eq 1 ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ]; then
+  # --relink first: a profile migrated into ~/.claude-profiles is reached through
+  # a symlink Orca can replace with a fresh dir on re-auth. Re-heal before
+  # populating, so the sync writes to the real profile rather than into a
+  # throwaway dir Orca will own. No-op when every link is healthy, and it skips
+  # (never aborts on) a profile with a live session — this runs unattended after
+  # every pull.
+  if [ -f "$SRC_DIR/orca-profile-link.sh" ]; then
+    printf '\n'
+    bash "$SRC_DIR/orca-profile-link.sh" --relink || true
+  fi
   printf '\n'
   bash "$SRC_DIR/orca-profile-sync.sh" || true
 fi

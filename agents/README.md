@@ -28,7 +28,8 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 > all tested, all reading `fleet.json`).
 >
 > **One deployer per path.** Dotfiles owns everything inside `~/.claude` listed
-> above. `bootstrap.sh` owns `~/.codex` and each `~/.claude-<postfix>`, and it
+> above. `bootstrap.sh` owns each `~/.claude-<postfix>` and the Orca-managed
+> account profiles, and it
 > links those **at the primary profile** (`$PRIMARY_DIR`, always `~/.claude`),
 > never at this repo. `retire_link()` clears a link left over from the old
 > arrangement and refuses to delete a real file; `link_if_present()` skips a
@@ -57,72 +58,6 @@ machine-local skill/agent dropped directly into `~/.claude/skills/` or
 `~/.claude/agents/` still works fine alongside it — it's just not part of
 `cyphy`.
 
-### Codex (`~/.codex`) — same setup, shared content
-
-Codex is Claude-Code-compatible, so it reuses **this** config as its source of
-truth rather than a separate copy. The tool-agnostic content is symlinked into
-`~/.codex` entry-by-entry — `plugin/hooks/` and `plugin/skills/` from this repo,
-and the instruction file plus the memory stores **from the primary profile**
-(`~/.claude/CLAUDE.md`, `~/.claude/memory/*`, `~/.claude/host-memory.md`), which
-dotfiles owns. Only Claude's own
-wiring changed (a whole-directory `cyphy` plugin symlink instead of
-entry-by-entry). Only the format-divergent files live under `agents/codex/`
-(`hooks.json`, `subagents/*.toml`) and link into `~/.codex` alone — the
-`.toml` subagent defs land at `~/.codex/agents/*.toml`, the same tool-dictated
-target dirname Claude uses, just read by a different tool.
-Machine-local Codex state (`config.toml`, `auth.json`, sessions, caches) is
-git-ignored (`agents/codex/.gitignore`) and never tracked. `~/.codex` is now
-produced solely by `bootstrap.sh` — run directly off-nix (Windows/macOS/
-non-Nix Linux), or invoked on NixOS by `claude.nix`'s activation script, which
-provisioned as part of the personal `~/.claude` profile run
-(bootstrap's `IS_PERSONAL` block). The Claude side works the same way:
-`claude.nix` invokes `bootstrap.sh` per registered profile instead of
-reimplementing the symlink logic, so `~/.claude` and `~/.codex` both converge
-on `bootstrap.sh` as the single deployer rather than the old dual-mechanism
-model.
-
-### Hermes Agent (`~/.hermes`) — same pattern, own config dir
-
-Hermes Agent config is version-controlled in `hermes/` (repo root) and
-bootstrapped with `hermes/bootstrap.sh` — mirroring the Claude/Codex pattern:
-
-- `hermes/config.yaml` → `~/.hermes/config.yaml` (copy_managed, NOT symlink —
-  Hermes self-writes it at runtime via `hermes config set …`)
-- `hermes/skills/` → individual symlinks in `~/.hermes/skills/` (each skill
-  dir linked separately so machine-local skills coexist)
-- `hermes/memories/` → individual symlinks in `~/.hermes/memories/`
-- `hermes/SOUL.md` → `~/.hermes/SOUL.md` (symlink, if present)
-
-Secrets (`.env`, `auth.json`) and volatile state (`state.db`, sessions, caches)
-are gitignored. Bootstrap:
-
-```bash
-just hermes-bootstrap       # or: bash hermes/bootstrap.sh
-```
-
-On WSL, provisioning (`just provision-wsl`) installs Hermes via
-`tier_agent_clis hermes` and bootstraps config via `tier_hermes_config`.
-
-### Hermes dashboard (systemd user service)
-
-A `hermes serve` backend running on `0.0.0.0:9119` so the Windows Desktop app
-can connect at `<nickname>.gg.ez:9119`. Managed as a systemd user service
-(service file: `hermes/hermes-serve.service`; provisioned by
-`tier_hermes_dashboard`).
-
-**Setup (one-time, per host):** basic auth credentials must be in
-`~/.hermes/.env` before the service starts — the tier warns if they're missing:
-
-```
-HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
-HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<choose a strong password>
-HERMES_DASHBOARD_BASIC_AUTH_SECRET=$(openssl rand -base64 32)
-```
-
-On the Windows Desktop app, connect to `http://<wsl-nickname>.gg.ez:9119` with
-those credentials. The frontend login gate appears automatically when the
-backend detects the non-loopback bind.
-
 ## What's NOT tracked (and never copy in)
 
 Secrets, transcripts, caches and auto-regenerated state stay machine-local in
@@ -149,7 +84,7 @@ Two distinct things load into every session:
   feedback, learned context). A "memory store" is just a markdown file injected
   every session by the `global-memory-load.sh` SessionStart hook — so it's read
   each session and appended to over time. (This replaced `CLAUDE.md` `@import`s,
-  which only Claude Code resolved; the hook works for Codex too.)
+  which only Claude Code resolved; the hook is tool-agnostic.)
 
 **Every store below lives in the dotfiles repo now, at its real `$HOME` path.**
 None of them is in this repo; `bootstrap.sh` only fans the other profiles out at
@@ -164,8 +99,8 @@ the primary. Editing one is a plain write to a dotfiles-tracked file.
 The `global-memory-load.sh` SessionStart hook injects `memory/global.md`,
 the `memory/personality/` facets (`tone.md`, `habits.md`, `values.md`,
 `practices.md`), and `host-memory.md` into every session — so all of them
-load regardless of cwd, in both Claude Code and Codex (it derives the config dir
-from its own path, so the one script serves `~/.claude` and `~/.codex`).
+load regardless of cwd. The hook takes the config dir as an argument rather than
+deriving it, so one script serves every profile.
 `host-memory.md` is a **real file on this machine's dotfiles branch** — no
 hostname lookup and no stub seeding. It replaced `hosts/<host-id>.md`, whose
 `$HOST_ID` scheme keyed on OS-hostname *identity* rather than machine and had
@@ -207,8 +142,9 @@ any existing real file to `<name>.bak` before linking, and is idempotent.
 
 From this repo, prefer the `just` recipes over calling the script directly:
 
-- `just agent-bootstrap` — the **personal** profile: `~/.claude` + `~/.codex`,
-  forced personal even if `$CLAUDE_CONFIG_DIR` is set elsewhere in your shell
+- `just agent-bootstrap` — the **personal** profile `~/.claude` (and, at the end
+  of the run, every Orca-managed account profile), forced personal even if
+  `$CLAUDE_CONFIG_DIR` is set elsewhere in your shell
   (`env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh`).
 - `just agent-bootstrap-profile <postfix>` — a **secondary** profile
   `~/.claude-<postfix>`, e.g. `pure` → `~/.claude-pure` (invoked as `ccp`):
@@ -220,8 +156,10 @@ From this repo, prefer the `just` recipes over calling the script directly:
   `settings.<postfix>.json` → `settings.json` (falls back to the primary
   `settings.json` if that file isn't committed). It never touches the
   machine-local `settings.local.json` (which holds the profile's Sentry secret)
-  or its Codex config
   (`CLAUDE_CONFIG_DIR="$HOME/.claude-<postfix>" bash agents/bootstrap.sh`).
+  **Deprecated** — driving extra profiles through `$CLAUDE_CONFIG_DIR` is on its
+  way out; only `settings.json` is committed today, and Orca's account profiles
+  are handled by the mirror below instead.
   On NixOS every registered profile is also managed by `just switch` (see the nix section).
 
 Direct invocation, if you need something other than those recipes: `bash
@@ -229,30 +167,82 @@ agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
 agents/bootstrap.sh` (any other profile — SHARED set + the matching
 `settings.<postfix>.json`).
 
-### Orca-managed profiles (`orca-profile-sync.sh`)
+### Orca-managed profiles
 
-Orca runs Claude Code against a **per-account** config dir it creates at login:
+Orca runs Claude Code against a **per-account** config dir it creates at login
+and owns, keyed by an Orca-internal id (not the account UUID):
 
 ```
-~/.local/share/orca/claude-accounts/<account-uuid>/auth
+~/.local/share/orca/claude-accounts/<orca-profile-id>/auth
 ```
 
-That dir holds only account/session state, and its name (`auth`) matches no
-`.claude-<postfix>` convention, so neither `bootstrap.sh` recipe can reach it.
-Switching to an Orca-managed profile therefore drops the whole profile: settings
-+ hooks + statusline, `CLAUDE.md`, `memory/` and `host-memory.md` (the cyphy
-`global-memory-load.sh` hook reads `$CLAUDE_CONFIG_DIR/memory`, so the synced
-stores go dark), every entry under `skills/` including the `cyphy` link,
-`agents/` and `commands/`.
+Two separate problems, two scripts.
 
-- `just agent-sync-orca` — mirror `~/.claude` into **every** discovered account
-  dir. Once per Orca auth; idempotent, so re-running is free. Takes an explicit
-  dir to target one account, `--dry-run` to preview, `--force` to accept a path
-  that carries no `.orca-managed-claude-auth` marker.
+**1. The profile is empty** — that dir holds only account/session state, and its
+name (`auth`) matches no `.claude-<postfix>` convention, so neither
+`bootstrap.sh` recipe can reach it. Switching to an Orca-managed profile drops
+the whole config: settings + hooks + statusline, `CLAUDE.md`, `memory/` and
+`host-memory.md` (the cyphy `global-memory-load.sh` hook reads
+`$CLAUDE_CONFIG_DIR/memory`, so the synced stores go dark), every entry under
+`skills/` including the `cyphy` link, `agents/` and `commands/`.
+
+**2. Everything it accumulates is disposable** — transcripts under `projects/`,
+`sessions/`, prompt history and per-project auto-memory all live inside a
+directory only Orca manages. On this box that was 525MB of transcripts one
+re-auth away from disappearing.
+
+#### `orca-profile-link.sh` — make the profile outlive the account dir
+
+Relocates the profile into `$HOME` and leaves a symlink in Orca's tree:
+
+```
+~/.claude-profiles/<name>/                        ← the real profile, yours
+…/claude-accounts/<orca-id>/auth -> ~/.claude-profiles/<name>
+```
+
+Nothing about how Claude Code reads the profile changes — a symlinked config dir
+resolves like any other, and Orca's `mkdir -p` is satisfied by it. What changes
+is the **failure mode**: Orca replacing that dir now costs you *the link*, not
+the data. The profile sits untouched in `$HOME` and `--relink` puts it back.
+Sessions become yours to move between profiles with `mv`.
+
+`~/.claude-profiles/` is its own namespace on purpose — a profile named
+`~/.claude-<postfix>` would be claimed by `bootstrap.sh`'s secondary-profile
+registry and have the tracked baseline deployed over it.
+
+- `just agent-link-orca <name>` — migrate one account (**Orca closed**). Names
+  the account dir explicitly, or discovers it when exactly one is un-migrated.
+- `just agent-link-orca --status` — every account dir and profile, and whether
+  the two are joined.
+- `just agent-link-orca --relink` — re-heal after Orca re-created the dir: folds
+  the fresh auth state in (`.credentials.json`, `oauth-account.json`,
+  `.claude.json`, Orca's marker) while keeping everything the profile already
+  has, then restores the link. Runs automatically before each sync.
+
+It **refuses to relocate a profile with a live session** — checked via this
+shell's `CLAUDE_CONFIG_DIR` and, on Linux, a `/proc` sweep for any other process
+pointed at it. A same-filesystem `mv` keeps open file descriptors valid so it
+would usually survive, but "usually" is a poor bet against a live transcript.
+`--force-live` overrides. `--relink` *skips* a live profile instead of aborting,
+since it sweeps every profile and runs unattended after each pull.
+
+#### `orca-profile-sync.sh` — the curated population
+
+`PROFILE_FILES` + `PROFILE_DIRS` at the top of the script **are** the answer to
+"what do I want in every profile". Everything else in a profile stays
+profile-specific.
+
+- `just agent-sync-orca` — populate **every** discovered profile. Idempotent.
+  Takes an explicit dir, `--dry-run` to preview, `--force` to accept a path with
+  no marker.
 - Runs automatically at the end of a personal `bootstrap.sh` — last, so it
   mirrors the primary in its final state (after the `settings.json` re-seed and
-  the gortex hook merge). A new account is picked up by the next pull or
-  provisioning run without a manual step.
+  the gortex hook merge), and after `--relink`, so it writes to the real profile
+  rather than into a dir Orca is about to own.
+- It follows the link to the real profile (backups and the settings stamp land in
+  `$HOME`, and the output names the link it followed), and it discovers a
+  migrated profile whose link is currently broken by its `.orca-account` pairing
+  marker — population never depends on Orca's dir being intact.
 
 What it mirrors, and how:
 
@@ -266,6 +256,16 @@ Unlike `bootstrap.sh` the source is the **live primary profile**, not this repo:
 an Orca profile also needs the machine-local parts the repo never carries
 (`gortex install`'s skills/agents/commands, plugin state written through
 `/plugin` and `/config`).
+
+**It only fills gaps — a real file in the destination is never overwritten.**
+`gortex install` regenerates `commands/`, `agents/` and the `gortex-*` skills
+*per profile*, and the destination's copy is routinely the newer one: on
+`desktop` the Orca profile already held the consolidated-tool commands
+(`explore` / `search` / `relations`) while `~/.claude` still had the previous
+generation. Linking would have downgraded them, gortex would rewrite them, and
+the next sync would link again — churn, plus a `.bootstrap-bak` tree growing on
+every round trip. A fresh profile still gets the primary's copy of everything;
+any generator that later writes its own version wins permanently.
 
 `settings.json` is the one path that is not a symlink — for the same reason
 `copy_managed` exists: Claude (`/config`, `/plugin`) and Orca (its agent-hooks
@@ -288,6 +288,22 @@ primary, are both left alone.
 
 **Restart the Orca session** to pick up a fresh sync — Claude Code reads the
 config dir at startup.
+
+#### Never bootstrap an Orca dir as a secondary profile
+
+An account dir's basename is `auth`, so the `.claude-<postfix>` convention
+resolves `POSTFIX=auth`, finds no `settings.auth.json`, and falls back to
+deploying the **tracked baseline** over the mirror. `bootstrap.sh` now detects
+the account dir (its `.orca-managed-claude-auth` marker, or the canonical path)
+and redirects to `orca-profile-sync.sh` instead of taking that path.
+
+This is what went wrong on 2026-08-01: `git-hooks/_refresh-claude-config` runs
+bootstrap after every pull/checkout/rebase and passed the shell's own
+`CLAUDE_CONFIG_DIR` straight through. Inside an Orca terminal that is the
+account dir, so a single `git stash` round-trip re-seeded that profile's
+`settings.json` from the baseline and moved the merged file into
+`.bootstrap-bak`. Both ends are fixed — the hook drops the variable, and
+bootstrap refuses the dir even when invoked by hand from an Orca terminal.
 
 ### Windows note — Developer Mode
 
@@ -384,6 +400,9 @@ hand:
   `pull --rebase` / checkout. Silent when nothing changed; prints a one-liner
   when it links a new entry. (If *you* already set a custom `core.hooksPath`,
   bootstrap won't touch it — re-run bootstrap manually after adding files.)
+  The hook runs bootstrap under `env -u CLAUDE_CONFIG_DIR`, so it always targets
+  the **primary** profile no matter which profile the pulling shell belongs to —
+  see the Orca section below for the bug that taught us this.
 - **NixOS laptops:** `just switch` owns the links; the git hooks no-op there.
 
 **No manual sync between the two mechanisms.** Both `bootstrap.sh`

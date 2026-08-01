@@ -63,9 +63,9 @@ The 100 GB qaz-law Postgres volume is **dropped**: the data can be re-ingested a
 
 ### 1d. Windows configs & creds → `R:\backup\home`
 
-**Inclusive sweep with a blocklist:** every dotfile/dotdir in the profile is copied (`.ssh` incl. `config`+`known_hosts`, `.claude.json`, `.config`, `.kube`, `.gcm`, `.agents`, `.claude`, `.codex`, shell histories, etc.), so no config is missed — minus `node_modules`/`.venv` inside them. Plus loose `AGENTS.md`. (Repos → 1a; WSL secrets → 1f.)
+**Inclusive sweep with a blocklist:** every dotfile/dotdir in the profile is copied (`.ssh` incl. `config`+`known_hosts`, `.claude.json`, `.config`, `.kube`, `.gcm`, `.agents`, `.claude`, shell histories, etc.), so no config is missed — minus `node_modules`/`.venv` inside them. Plus loose `AGENTS.md`. (Repos → 1a; WSL secrets → 1f.)
 
-> **Agent config symlinks:** `.claude`/`.codex` contain symlinks into the **`machines` repo** (`agents/…`: `CLAUDE.md`, `settings.json`, `memory/*`, `hooks/*`, `skills/*`, `cyphy` plugin). Those are the source of truth and are backed up via the machines repo in 1a — the sweep uses `/XJ` so it does **not** duplicate them. The backup keeps only the **machine-local** real files in `.claude`/`.codex` (`.credentials.json`, `settings.local.json`, `projects/` history). See Phase 4.2 for the restore order.
+> **Agent config symlinks:** `.claude` contains symlinks into the **`machines` repo** (`agents/…`: `CLAUDE.md`, `settings.json`, `memory/*`, `hooks/*`, `skills/*`, `cyphy` plugin). Those are the source of truth and are backed up via the machines repo in 1a — the sweep uses `/XJ` so it does **not** duplicate them. The backup keeps only the **machine-local** real files in `.claude` (`.credentials.json`, `settings.local.json`, `projects/` history). See Phase 4.2 for the restore order.
 
 **Excluded** (recreatable caches, dropped apps, or explicitly not wanted): `.cache`, `.lmstudio`, `.vscode`, `.codeium`, `.windsurf`, `.zcode`, `.zed_server`, `.openclaude`(+`.json`), `.marvin`, `.junie`, `.gortex`, `.boto`, `.gsutil`, `.gemini`, `.k8slens`, `.docker` (Docker Desktop rebuilds it; re-`docker login` for registries).
 
@@ -153,7 +153,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 
 1. **Windows apps:** the curated keeper list is version-controlled in the repo at `hosts\desktop\windows\winget-packages.json` (already pruned — dropped apps removed, Store/forgotten apps added), so no manual editing: `winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable hosts\desktop\windows\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer, RustDesk, Intel DSA) by hand. *(The SSD `inventory\winget-packages-snapshot.json` is only a point-in-time capture for diffing new installs back into the curated list — not the restore source.)*
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
-   - **Agent config (`.claude`/`.codex`) — bootstrap, don't copy verbatim:** run `provision\windows.ps1 -BackupRoot R:\backup` (add `-Work` if the work profile is used). One script enables **Developer Mode** (native symlinks fail without it — the agent config is all symlinks into this repo), ensures Git + Claude Code, runs `agents/bootstrap.sh` (via Git Bash — the `just agent-bootstrap` recipe and the bare `bash` on PATH both misbehave on Windows), and restores only the machine-local bits (`.credentials.json`, `settings.local.json`, `projects/`) without clobbering the freshly-bootstrapped symlink trees. On NixOS/macOS the equivalent is `just agent-bootstrap`.
+   - **Agent config (`.claude`) — bootstrap, don't copy verbatim:** run `provision\windows.ps1 -BackupRoot R:\backup` (add `-Work` if the work profile is used). One script enables **Developer Mode** (native symlinks fail without it — the agent config is all symlinks into this repo), ensures Git + Claude Code, runs `agents/bootstrap.sh` (via Git Bash — the `just agent-bootstrap` recipe and the bare `bash` on PATH both misbehave on Windows), and restores only the machine-local bits (`.credentials.json`, `settings.local.json`, `projects/`) without clobbering the freshly-bootstrapped symlink trees. On NixOS/macOS the equivalent is `just agent-bootstrap`.
    - **Background git-sync (`git-autofetch`) — register the Scheduled Task (⚠️ easy to forget: it was NOT auto-installed after the 2026-07 restore).** The fleet relies on a per-machine timer that fetches every repo's refs every ~10 min, so `git status` / the shell prompt show "behind by N" without anyone fetching first (NixOS gets this from `services.gitAutoFetch`). On Windows it's a Scheduled Task wrapping `modules\system\git-autofetch\git-autofetch.ps1`; register it **once**, from the machines repo root, using the snippet in that script's header `.EXAMPLE` block. It auto-includes this repo's own checkout as a scan root (plus `~\GitHub`), so it works wherever the repo lives. Verify: `Get-ScheduledTask git-autofetch`.
 3. **WSL:** install WSL + Ubuntu, then either
    - `wsl --import Ubuntu-24.04 C:\Users\<you>\WSL\Ubuntu-24.04 R:\backup\wsl\Ubuntu-24.04.tar` to restore wholesale (one `--import` per distro tar you kept), **or**
@@ -189,7 +189,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 | `R:\backup\wsl\*.tar` | Entire WSL per distro: projects, GPG keys, dotfiles | No |
 | `R:\backup\secrets\` (+ 2nd copy off-SSD) | GPG + SSH keys — irreplaceable | No |
 | `R:\backup\home\.ssh` | Windows SSH keys | No |
-| `R:\backup\home\.{kube,gcm,docker,claude,codex,agents}` + gitconfig | Creds/configs | Partly |
+| `R:\backup\home\.{kube,gcm,docker,claude,agents}` + gitconfig | Creds/configs | Partly |
 | `R:\backup\repos\*` | All Windows repos, full incl `.git` (stashes/uncommitted) | No (local-only state) |
 | `R:\backup\Downloads` | Downloads | No |
 | `R:\backup\Obsidian\*` | Notes | No |
@@ -222,7 +222,7 @@ PyCharm (via **JetBrains Toolbox** — install Toolbox first, then IDEs; not win
 Windows Terminal · PowerShell 7 · PowerToys · Git · GitHub CLI · delta · Just · Docker Desktop · WSL + Ubuntu 24.04 · Python 3.13 + Launcher · Node.js (native) · restic + resticprofile · **NCALayer** (Kazakh PKI signing — manual, from pki.gov.kz)
 
 ### AI / LLM
-Claude Desktop · Codex · LM Studio · (WSL: `@openai/codex` via npm)
+Claude Desktop · LM Studio
 
 ### Browsers
 Google Chrome · Edge (built-in)
@@ -255,4 +255,4 @@ Steam (+ games: Conan Exiles, GTA V, Grounded, Icarus, Metal Hellsinger, NieR Re
 > Save games: mostly Steam Cloud, but check `%USERPROFILE%\Saved Games`, `Documents\My Games`, and `AppData` for any local-only saves you care about before wiping.
 
 ### WSL (Ubuntu) — rebuild
-Captured wholesale in `ubuntu-2404.tar`; for a clean rebuild use `wsl-apt-selections.txt`. Key apt packages: `clang ffmpeg gdal-bin gh google-cloud-cli jq just keychain ncdu npm restic resticprofile` + build libs (`libavif-dev libcairo2-dev libheif-dev libjpeg-dev pkg-config zlib1g-dev`). Toolchains: Python 3.12, Node 18, gcloud, gh, codex. **Reinstall `uv`** (Astral — used by every project's venv; not an apt package). npm globals: `@openai/codex`, `vot-cli`.
+Captured wholesale in `ubuntu-2404.tar`; for a clean rebuild use `wsl-apt-selections.txt`. Key apt packages: `clang ffmpeg gdal-bin gh google-cloud-cli jq just keychain ncdu npm restic resticprofile` + build libs (`libavif-dev libcairo2-dev libheif-dev libjpeg-dev pkg-config zlib1g-dev`). Toolchains: Python 3.12, Node 18, gcloud, gh. **Reinstall `uv`** (Astral — used by every project's venv; not an apt package). npm globals: `vot-cli`.

@@ -22,8 +22,8 @@
 #     that wants an interactive terminal (see its comment in tiers.sh).
 #   • No fdfind/batcat aliasing — brew installs `fd` and `bat` under their real
 #     names (see tier_brew_dev).
-#   • launchd, not systemd — tier_autofetch / tier_selfpull / tier_hermes_dashboard
-#     branch on Darwin internally and install LaunchAgents.
+#   • launchd, not systemd — tier_autofetch / tier_selfpull branch on Darwin
+#     internally and install LaunchAgents.
 #   • arm64 AND x86_64 are both fine here; the gortex asset is resolved per
 #     platform (tier_gortex), unlike linux.sh which is x86_64-only because
 #     upstream ships no linux_arm64 build.
@@ -76,9 +76,8 @@ fi
 case "$PROFILE" in
   workstation)
     TIERS=(brew_min brew_dev brew_cask agents_config git_base gortex
-           "agent_clis claude codex hermes" shell_init autofetch
-           ssh_accounts fleet_ssh selfpull ssh_trust
-           hermes_config hermes_dashboard) ;;
+           "agent_clis claude" shell_init autofetch
+           ssh_accounts fleet_ssh selfpull ssh_trust) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — macos.sh supports workstation only" ;;
 esac
@@ -140,7 +139,7 @@ printf '\n\033[1mDone.\033[0m %s warning(s).\n\n' "$WARNINGS"
 cat <<EOF
 Next steps:
   • Open a new shell (or: source ~/.zshrc) so ~/.local/bin is on PATH.
-  • Authenticate the agents:  claude   (browser login)   ·   codex
+  • Authenticate the agent:   claude   (browser login)
   • Run the role dispatcher:  bash provision/provision.sh --machine air --apply
   • Verify the LaunchAgents loaded:
         launchctl list | grep kz.cyphy

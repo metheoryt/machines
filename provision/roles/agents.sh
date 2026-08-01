@@ -1,7 +1,7 @@
 # provision/roles/agents.sh — the `agents` role executor (posix side).
 # Sourced by provision.sh (do not execute). Defines role_agents.
 #
-# agents = the synced Claude/Codex config produced by agents/bootstrap.sh.
+# agents = the synced Claude Code config produced by agents/bootstrap.sh.
 # On nixos it is owned by home-manager (claude.nix, which invokes
 # bootstrap.sh) and applied by `just switch`, so the dispatcher must NOT run
 # bootstrap.sh there.

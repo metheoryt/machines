@@ -2,22 +2,21 @@
   Windows reinstall - agent environment bootstrap.
 
   Fills the gap restore.ps1 leaves as a GUIDED (manual) step: it stands up the
-  Claude/Codex agent environment on a fresh Windows box, end to end:
+  Claude Code agent environment on a fresh Windows box, end to end:
 
     1. Developer Mode  - enable it (self-elevates via UAC only for this reg write).
                          Native symlinks (ln -s) fail without it, and the whole
                          agent config is symlinks into this repo.
     2. Git + Git Bash  - ensure present (winget). bootstrap.sh runs under Git Bash.
     3. Claude Code     - install the native CLI (irm claude.ai/install.ps1) if missing.
-    4. Codex           - best-effort (npm) if npm is present; skipped otherwise.
-    5. agents bootstrap- run agents/bootstrap.sh via Git Bash (NOT the WSL bash
+    4. agents bootstrap- run agents/bootstrap.sh via Git Bash (NOT the WSL bash
                          stub, NOT `just` - the justfile recipe mangles the path
                          on Windows). Personal profile always; -Postfix <name>
                          adds a secondary profile (e.g. -Postfix pure) too.
-    6. machine-local   - if a backup is found (auto-discovered on ANY drive
+    5. machine-local   - if a backup is found (auto-discovered on ANY drive
                          letter, or via -BackupRoot), restore ONLY the
                          non-symlinked bits (.credentials.json,
-                         settings.local.json, projects\) into .claude/.codex.
+                         settings.local.json, projects\) into .claude.
                          The symlinked trees are left alone.
 
   Idempotent. Re-run any time - each step detects "already done" and skips.
@@ -36,7 +35,7 @@ param(
     [string]$BackupRoot,                 # explicit <L>:\backup; omitted => auto-discover on any drive
     [string]$Postfix,                    # also bootstrap ~/.claude-<Postfix> (e.g. "pure")
     [switch]$Force,                      # overwrite existing .credentials.json / settings.local.json
-    [switch]$SkipInstall                 # skip the Claude Code / Codex install steps
+    [switch]$SkipInstall                 # skip the Claude Code install step
 )
 $ErrorActionPreference = 'Stop'
 
@@ -157,21 +156,8 @@ if ($SkipInstall) {
 $localBin = Join-Path $env:USERPROFILE '.local\bin'
 if ((Test-Path $localBin) -and ($env:Path -notlike "*$localBin*")) { $env:Path = "$localBin;$env:Path" }
 
-# ---- 4. Codex (best-effort) --------------------------------------------------
-Step "4. Codex CLI (optional)"
-if ($SkipInstall) {
-    Info "skipped (-SkipInstall)."
-} elseif (Have codex) {
-    Info "already installed."
-} elseif (Have npm) {
-    Warn "installing @openai/codex via npm..."
-    try { npm install -g @openai/codex } catch { Warn "codex install failed (non-fatal): $($_.Exception.Message)" }
-} else {
-    Info "npm not present - skipping (Codex config is still linked in step 5; install the CLI later if you use it)."
-}
-
-# ---- 5. Run the agents bootstrap (Git Bash) ----------------------------------
-Step "5. agents/bootstrap.sh"
+# ---- 4. Run the agents bootstrap (Git Bash) ----------------------------------
+Step "4. agents/bootstrap.sh"
 $repoUnix = ($RepoDir -replace '\\','/')
 function Invoke-Bootstrap($envPrefix, $label) {
     Info "bootstrapping $label profile..."
@@ -181,8 +167,8 @@ function Invoke-Bootstrap($envPrefix, $label) {
 Invoke-Bootstrap 'env -u CLAUDE_CONFIG_DIR' 'personal'
 if ($Postfix) { Invoke-Bootstrap "CLAUDE_CONFIG_DIR=`"`$HOME/.claude-$Postfix`"" $Postfix }
 
-# ---- 6. Restore machine-local bits (auto-discovers the backup; -BackupRoot overrides) ----
-Step "6. Machine-local restore"
+# ---- 5. Restore machine-local bits (auto-discovers the backup; -BackupRoot overrides) ----
+Step "5. Machine-local restore"
 if (-not $BackupRoot) {
     $hits = @(Find-BackupRoot)
     if ($hits.Count -eq 1) {
@@ -204,7 +190,7 @@ if (-not $BackupRoot) {
         Copy-Item $src $dst -Force
         Info "restored $(Split-Path $dst -Leaf)"
     }
-    foreach ($p in @('.claude', '.codex')) {
+    foreach ($p in @('.claude')) {
         $srcDir = Join-Path $BackupRoot "home\$p"
         if (-not (Test-Path $srcDir)) { continue }
         $dstDir = Join-Path $env:USERPROFILE $p
@@ -220,12 +206,12 @@ if (-not $BackupRoot) {
     }
 }
 
-# ---- 7. OpenSSH server (agent/human SSH into this box over tailnet+LAN) ------
-Step "7. OpenSSH server"
-$isAdmin7 = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+# ---- 6. OpenSSH server (agent/human SSH into this box over tailnet+LAN) ------
+Step "6. OpenSSH server"
+$isAdmin6 = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
             ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-if (-not $isAdmin7) { throw "Step 7 (OpenSSH server) needs an elevated session. Re-run provision\windows.ps1 from an elevated PowerShell (see hosts\g16\windows\windows-reinstall-runbook.md)." }
-# 7a. Ensure the OpenSSH.Server capability is present. The '~~~~0.0.1.0' suffix
+if (-not $isAdmin6) { throw "Step 6 (OpenSSH server) needs an elevated session. Re-run provision\windows.ps1 from an elevated PowerShell (see hosts\g16\windows\windows-reinstall-runbook.md)." }
+# 6a. Ensure the OpenSSH.Server capability is present. The '~~~~0.0.1.0' suffix
 #     is a FIXED Windows-capability identifier, not a version to bump.
 $sshCap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue |
           Where-Object Name -like 'OpenSSH.Server*' | Select-Object -First 1
@@ -235,12 +221,12 @@ if ($sshCap -and $sshCap.State -eq 'Installed') {
     Warn "installing OpenSSH.Server capability..."
     Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null
 }
-# 7b. Service: start now + start on boot.
+# 6b. Service: start now + start on boot.
 Set-Service -Name sshd -StartupType Automatic
 if ((Get-Service sshd).Status -ne 'Running') { Start-Service sshd }
 Info "sshd: $((Get-Service sshd).Status), startup Automatic."
 
-# 7c. Default shell = PowerShell, so an agent's commands land somewhere
+# 6c. Default shell = PowerShell, so an agent's commands land somewhere
 #     scriptable rather than cmd.exe. Idempotent (rewrite each run).
 $pwshExe = (Get-Command powershell.exe).Source
 New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
@@ -248,7 +234,7 @@ New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
     -Value $pwshExe -PropertyType String -Force | Out-Null
 Info "default shell: $pwshExe"
 
-# 7d. Authorized keys. For an admin user, OpenSSH on Windows reads
+# 6d. Authorized keys. For an admin user, OpenSSH on Windows reads
 #     ProgramData\ssh\administrators_authorized_keys and REFUSES it unless the
 #     ACL is locked to Administrators/SYSTEM. Rewrite + re-ACL each run.
 $adminKeys = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
@@ -271,7 +257,7 @@ if (Test-Path $srcKeys) {
     Warn "provision\fleet-authorized-keys not found - skipped authorized_keys."
 }
 
-# 7e. Firewall: inbound 22 from the tailnet + LAN only (never the open internet).
+# 6e. Firewall: inbound 22 from the tailnet + LAN only (never the open internet).
 #     CONVERGE, don't create-if-absent: a box may already carry a stale rule from
 #     a prior (AWG-era) run, so remove any prior rule (the old name + this one)
 #     then recreate. Create-if-absent would silently leave the old scope in place.
@@ -289,7 +275,7 @@ Info "firewall rule '$fwRule' set (22 from 100.64.0.0/10, 192.168.8.0/24)."
 Disable-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
 Info "disabled default 'OpenSSH-Server-In-TCP' (Any) rule; only tailnet+LAN remains."
 
-# 7f. Key-only auth (parity with the NixOS spokes' PasswordAuthentication=false).
+# 6f. Key-only auth (parity with the NixOS spokes' PasswordAuthentication=false).
 $sshdConfig = Join-Path $env:ProgramData 'ssh\sshd_config'
 if (Test-Path $sshdConfig) {
     $cfg = Get-Content $sshdConfig -Raw
@@ -310,7 +296,7 @@ if (Test-Path $sshdConfig) {
 
 Warn "Reachable over the tailnet only while this box has joined the Headscale tailnet (tailscale0 up, address in 100.64.0.0/10) - verify separately."
 
-# 7g. CLIENT config - the fleet block in ~\.ssh\config (OUTBOUND). Everything
+# 6g. CLIENT config - the fleet block in ~\.ssh\config (OUTBOUND). Everything
 #     above this point configures inbound SSH only, which is why these boxes had
 #     no fleet block at all and `ssh latitude` resolved to methe@latitude and was
 #     refused - taking fd_run, /ship's fleet-pull and kb-refresh's fleet-gather
@@ -354,7 +340,7 @@ if (-not (Test-Path $fleetJsonPath)) {
     }
 }
 
-# ---- 8. Fleet convergence tasks (spec 2026-07-21) ----------------------------
+# ---- 7. Fleet convergence tasks (spec 2026-07-21) ----------------------------
 # Two idempotent (-Force) Scheduled Tasks:
 #   1. machines-converge - SYSTEM task, on-demand only (fired by the post-merge
 #      hook via `schtasks /run /tn machines-converge`). Runs scripts/converge.sh
@@ -362,7 +348,7 @@ if (-not (Test-Path $fleetJsonPath)) {
 #      granting the pulling user elevation.
 #   2. fleet-selfpull - repeating ~10-min task (Trigger B). Its pull fires the
 #      post-merge hook, which in turn fires machines-converge. Runs as the user.
-Step "8. Fleet convergence tasks"
+Step "7. Fleet convergence tasks"
 $convergeScript = Join-Path $RepoDir 'scripts\converge.sh'
 if (-not (Test-Path $convergeScript)) {
     Warn "scripts\converge.sh not found under $RepoDir - skipping convergence task registration."

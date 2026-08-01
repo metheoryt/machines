@@ -51,11 +51,11 @@ _check-machines-link:
 # and on Windows {{flake_dir}} is a backslash path bash mangles (C:Users… → not
 # found). No-just fallbacks: `bash agents/bootstrap.sh`, or on Windows the PS
 # script provision\windows.ps1.
-# Bootstrap personal agent config (~/.claude + ~/.codex)
+# Bootstrap personal agent config (~/.claude + Orca-managed account profiles)
 [group('fleet')]
-[doc('Link personal agent config (~/.claude + ~/.codex)')]
+[doc('Link personal agent config (~/.claude + Orca profiles)')]
 agent-bootstrap:
-    @echo "🔗 Bootstrapping agent config (personal ~/.claude + ~/.codex)..."
+    @echo "🔗 Bootstrapping agent config (personal ~/.claude)..."
     @env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
 
 # Bootstrap a secondary profile ~/.claude-<postfix> (e.g. `just agent-bootstrap-profile pure`).
@@ -76,12 +76,14 @@ agent-sync-orca *args:
     @echo "🔗 Syncing base Claude profile into Orca-managed profiles..."
     @bash agents/orca-profile-sync.sh {{args}}
 
-# Bootstrap Hermes Agent config (~/.hermes)
+# Move an Orca account profile into ~/.claude-profiles/<name> and leave a symlink
+# in Orca's tree, so transcripts and sessions outlive the account dir. Once per
+# account, with Orca CLOSED — it refuses to relocate a profile with a live session.
+# `--status` shows every pairing; `--relink` re-heals a link Orca replaced.
 [group('fleet')]
-[doc('Link Hermes Agent config (~/.hermes)')]
-hermes-bootstrap:
-    @echo "🔗 Bootstrapping Hermes Agent config..."
-    @bash hermes/bootstrap.sh
+[doc('Move an Orca account profile into $HOME and link it back')]
+agent-link-orca *args:
+    @bash agents/orca-profile-link.sh {{args}}
 
 # NixOS-only: run the machine-local `gortex install --no-claude-md` wiring, which
 # bootstrap.sh skips under home-manager activation (kept fast/offline there). The

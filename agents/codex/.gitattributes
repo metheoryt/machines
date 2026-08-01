@@ -1,4 +1,0 @@
-# Consumed by bash / json / toml parsers on Windows (Git Bash), macOS and Linux.
-# Force LF in the working tree everywhere — CRLF breaks bash shebangs and confuses
-# parsers on the symlinked files. Everything here is text; there are no binaries.
-* text eol=lf

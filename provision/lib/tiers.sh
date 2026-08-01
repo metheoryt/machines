@@ -10,18 +10,18 @@
 # Three kinds of tier live here. Know which you are editing:
 #
 #   PORTABLE  — identical on every posix platform, shared byte-for-byte:
-#               agents_config, hermes_config, git_base, agent_clis,
-#               ssh_accounts, ssh_trust. A fix here reaches every box. Do NOT
-#               fork these per platform; that is the whole point of the split.
+#               agents_config, git_base, agent_clis, ssh_accounts, ssh_trust.
+#               A fix here reaches every box. Do NOT fork these per platform;
+#               that is the whole point of the split.
 #   PACKAGED  — one tier per package manager, selected by the driver's tier
 #               list: apt_min/apt_dev (Debian/Ubuntu) vs brew_min/brew_dev
 #               (macOS). Same CORE/best-effort semantics, different installer.
-#   SCHEDULED — one body, an explicit Darwin branch at the top: autofetch,
-#               selfpull, hermes_dashboard. macOS has no systemd and no usable
-#               per-user cron (it needs Full Disk Access), so these install a
-#               launchd LaunchAgent instead. The Linux path below each branch is
-#               untouched — it runs live on hub and the WSL boxes, and a
-#               generic scheduler abstraction would put that at risk for no gain.
+#   SCHEDULED — one body, an explicit Darwin branch at the top: autofetch and
+#               selfpull. macOS has no systemd and no usable per-user cron (it
+#               needs Full Disk Access), so these install a launchd LaunchAgent
+#               instead. The Linux path below each branch is untouched — it runs
+#               live on hub and the WSL boxes, and a generic scheduler
+#               abstraction would put that at risk for no gain.
 #
 # Testable: this file only DEFINES functions, so `TIERS_LIB_ONLY=1 source` (or a
 # plain source) loads them without running any tier.
@@ -646,73 +646,16 @@ tier_brew_cask() {
   return 0
 }
 
-# ── CORE 2: agent config (Claude + Codex) — the crown jewels ──────────────────
-# agents/bootstrap.sh symlinks the version-controlled config into ~/.claude and
-# ~/.codex. It only needs git + python3 (both installed above) and has no
-# Nix-only assumptions, so it works verbatim here. env -u CLAUDE_CONFIG_DIR
-# forces the personal profile (mirrors `just agent-bootstrap`).
+# ── CORE 2: agent config (Claude Code) — the crown jewels ─────────────────────
+# agents/bootstrap.sh symlinks the version-controlled config into ~/.claude (and
+# mirrors it into any Orca-managed account profile). It only needs git + python3
+# (both installed above) and has no Nix-only assumptions, so it works verbatim
+# here. env -u CLAUDE_CONFIG_DIR forces the personal profile (mirrors
+# `just agent-bootstrap`).
 tier_agents_config() {
-  info "Linking synced agent config (Claude + Codex)…"
+  info "Linking synced agent config (Claude Code)…"
   env -u CLAUDE_CONFIG_DIR bash "$REPO/agents/bootstrap.sh" || die "agents/bootstrap.sh failed"
   ok "agent config linked"
-}
-
-# ── CORE 2b: Hermes Agent config ─────────────────────────────────────────────
-# hermes/bootstrap.sh symlinks the version-controlled config into ~/.hermes/.
-# config.yaml is copy_managed (Hermes self-writes it); skills + memory are
-# individual symlinks so machine-local additions coexist with tracked ones.
-tier_hermes_config() {
-  info "Linking synced Hermes config…"
-  bash "$REPO/hermes/bootstrap.sh" || die "hermes/bootstrap.sh failed"
-  ok "Hermes config linked"
-}
-
-# ── BEST-EFFORT: Hermes dashboard (systemd user service) ─────────────────────
-# Installs hermes-serve.service so the Windows Desktop app can connect at
-# <nickname>.gg.ez:9119. Idempotent; the service file is a managed copy from
-# the repo (hermes/hermes-serve.service).
-tier_hermes_dashboard() {
-  info "Installing Hermes dashboard service…"
-  local svc="$HOME/.config/systemd/user/hermes-serve.service"
-
-  # Warn if basic auth is not configured — the service needs it for non-loopback bind.
-  if ! grep -q "HERMES_DASHBOARD_BASIC_AUTH_USERNAME" "$HOME/.hermes/.env" 2>/dev/null; then
-    warn "dashboard basic auth not configured in ~/.hermes/.env"
-    cat <<'AUTHMSG'
-    Dashboard bound to 0.0.0.0 requires auth. Set in ~/.hermes/.env:
-      HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
-      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<strong password>
-      HERMES_DASHBOARD_BASIC_AUTH_SECRET=$(openssl rand -base64 32)
-    chmod 600 ~/.hermes/.env
-AUTHMSG
-  fi
-
-  # SCHEDULED tier — Darwin branch. The systemd unit is a managed copy from the
-  # repo; launchd cannot read it, so the plist is synthesised from the same
-  # ExecStart line (hermes/hermes-serve.service). Keep the two in step: if that
-  # unit's ExecStart changes, change this argv too.
-  if _is_darwin; then
-    if _launchd_service kz.cyphy.hermes-serve \
-         "$HOME/.local/bin/hermes" serve --host 0.0.0.0 --port 9119 --skip-build --no-open; then
-      ok "hermes-serve LaunchAgent installed → 0.0.0.0:9119"
-    else
-      warn "hermes-serve LaunchAgent failed to load — check: launchctl print gui/$(id -u)/kz.cyphy.hermes-serve"
-    fi
-    return
-  fi
-
-  if ! systemctl --user show-environment >/dev/null 2>&1; then
-    warn "systemd user manager not available — skipping hermes dashboard service"
-    return
-  fi
-
-  cp "$REPO/hermes/hermes-serve.service" "$svc"
-  systemctl --user daemon-reload
-  if systemctl --user enable --now hermes-serve.service >/dev/null 2>&1; then
-    ok "hermes-serve.service (systemd-user) installed → 0.0.0.0:9119"
-  else
-    warn "hermes-serve.service failed to start — check: systemctl --user status hermes-serve"
-  fi
 }
 
 # ── CORE 3: git identity + basics (cheap, high-value; mirrors modules/home/me.nix) ──
@@ -782,24 +725,6 @@ tier_agent_clis() {
           curl -fsSL https://claude.ai/install.sh | bash >/dev/null 2>&1 \
             && ok "claude installed" \
             || warn "claude install failed — retry: curl -fsSL https://claude.ai/install.sh | bash"
-        fi ;;
-      codex)
-        if have codex; then
-          ok "codex already installed"
-        else
-          info "Installing Codex…"
-          CODEX_NON_INTERACTIVE=1 curl -fsSL https://chatgpt.com/codex/install.sh | sh >/dev/null 2>&1 \
-            && ok "codex installed" \
-            || warn "codex install failed — retry: curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-        fi ;;
-      hermes)
-        if have hermes; then
-          ok "hermes already installed"
-        else
-          info "Installing Hermes Agent…"
-          curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash >/dev/null 2>&1 \
-            && ok "hermes installed" \
-            || warn "hermes install failed — retry: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
         fi ;;
       *) warn "unknown agent CLI '$c' — skipped" ;;
     esac
@@ -883,8 +808,8 @@ while IFS= read -r gitentry; do
   # SKIP SHALLOW CLONES — fetching one is expensive and destroys its shallowness.
   # A `clone --depth 1` client can only offer its single commit during negotiation,
   # and its shallow boundary stops it claiming any ancestor, so the server resends
-  # the whole history it cannot prove the client has. Measured on
-  # ~/.hermes/hermes-agent (upstream's install.sh does `clone --depth 1 --branch`):
+  # the whole history it cannot prove the client has. Measured on the since-removed
+  # ~/.hermes/hermes-agent (upstream's install.sh did `clone --depth 1 --branch`):
   # a 60M / 1-commit clone became 350M with refs/remotes/origin/main legitimately
   # reaching 18914 commits. `git gc` cannot reclaim that — nothing is garbage, the
   # ref really does reach it all — so the damage is one-way.
@@ -1448,7 +1373,7 @@ UNIT
 # ── BEST-EFFORT: inbound fleet SSH trust (ssh-server role) ────────────────────
 # Merge provision/fleet-authorized-keys into ~/.ssh/authorized_keys so this box
 # accepts inbound fleet logins (mirrors ssh-server.nix keyFiles / windows.ps1
-# step 7 / ssh-wsl.sh step 4). Snapshot copy — re-run after a new member joins.
+# step 6 / ssh-wsl.sh step 4). Snapshot copy — re-run after a new member joins.
 # Idempotent by key body. sshd itself is configured by ssh-wsl.sh (key-only);
 # here we only ensure the authorized_keys trust so a bare linux.sh re-run keeps it.
 tier_ssh_trust() {

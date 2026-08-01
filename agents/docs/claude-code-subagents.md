@@ -107,7 +107,7 @@ Skills are reusable *instructions*; subagents are reusable *contexts*.
 - **The `cyphy` plugin** (`agents/plugin/`) ships `quick-tasks` as its subagent
   (routine git/lint one-steppers; `Bash, Read, Glob, Grep`).
 - **`agents/` is the git-tracked SHARED tier** symlinked into every profile
-  (`~/.claude`, `~/.codex`, `~/.claude-*`). Shared agents added under
+  (`~/.claude`, `~/.claude-*`, and Orca's account profiles). Shared agents added under
   `agents/plugin/agents/` propagate across the whole fleet on commit + pull;
   machine-local ones stay in `settings.local.json` territory.
 

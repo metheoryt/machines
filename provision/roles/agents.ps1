@@ -1,7 +1,7 @@
 ﻿# provision/roles/agents.ps1 — the `agents` role executor (Windows side).
 # Dot-sourced by provision.ps1. Defines Invoke-RoleAgents.
 #
-# agents = the synced Claude/Codex config produced by agents/bootstrap.sh,
+# agents = the synced Claude Code config produced by agents/bootstrap.sh,
 # run under Git Bash on Windows (bootstrap.sh is a bash script).
 
 function Invoke-RoleAgents {

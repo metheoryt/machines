@@ -435,8 +435,8 @@ global + per-host). One bullet per fact under a topical heading.
   plugin. **This REVERSES `d9b1be4`**, which had recorded `$HOME/CLAUDE.md` as the
   only available agent-memory slot on the premise that bootstrap's `link()` would
   fight dotfiles for `~/.claude/…`. bootstrap no longer touches those paths — it
-  only `retire_link()`s stale links and fans `~/.codex` / `~/.claude-<postfix>` out
-  AT the primary profile (`$PRIMARY_DIR`, always `~/.claude`). `$HOME/CLAUDE.md`
+  only `retire_link()`s stale links and fans `~/.claude-<postfix>` and Orca's
+  account profiles out AT the primary profile (`$PRIMARY_DIR`, always `~/.claude`). `$HOME/CLAUDE.md`
   keeps its own distinct job, above.
 - **A skill with `tests/` stays in `machines`; a skill without moves to dotfiles.**
   The line coincides exactly with fleet coupling — every `fleet.json` reader is
@@ -944,7 +944,7 @@ global + per-host). One bullet per fact under a topical heading.
   creation/deletion. The paste-into-Orca one-liners are
   `bash "$HOME/machines/agents/worktree-setup.sh"` (Setup) and
   `bash "$HOME/machines/agents/worktree-teardown.sh"` (Archive).
-- **`settings.json` + `codex/hooks.json` are bootstrap COPIES, not symlinks**
+- **`settings.json` is a bootstrap COPY, not a symlink**
   (`copy_managed` in `agents/bootstrap.sh`, added 2026-07-25). Orca injects its
   `agent-hooks` block into the live files (`/home/me/.orca/agent-hooks/*.sh`); as
   symlinks those writes dirtied the tracked baseline and jammed convergence's
@@ -1035,11 +1035,50 @@ global + per-host). One bullet per fact under a topical heading.
   + marketplace `"caveman": {"repo": "JuliusBrussee/caveman"}`), fired by the plugin's
   SessionStart hook — so it travels to every profile bootstrapped from this repo.
   `/caveman-init` (writing the always-on rule into `CLAUDE.md`/`AGENTS.md`) is only
-  needed for non-Claude agents (Codex/Cursor) that load no plugin.
-- **Orca auto-injects hook wiring into `agents/settings.json` + `agents/codex/hooks.json`
-  on launch** (SHARED tier — committing them pushes fleet-wide) and re-injects on the
-  next launch. Prefer NOT to commit these: the Codex side has no existence guard and
-  fires a nonexistent Windows path on other hosts.
+  needed for non-Claude agents (Cursor et al.) that load no plugin.
+- **Orca auto-injects hook wiring into `agents/settings.json` on launch** (SHARED
+  tier — committing it pushes fleet-wide) and re-injects on the next launch.
+  Prefer NOT to commit it.
+- **Orca account profiles live in $HOME and are linked back (2026-08-01).** Orca
+  runs Claude Code against `~/.local/share/orca/claude-accounts/<orca-id>/auth` — a
+  dir it owns, keyed by an Orca-internal id, holding all transcripts/sessions
+  (525MB here) and reachable by no `.claude-<postfix>` convention (basename is
+  `auth`). `agents/orca-profile-link.sh` moves it to `~/.claude-profiles/<name>`
+  and leaves a symlink, so the profile outlives the account dir: Orca re-creating
+  it now costs THE LINK, not the data, and `--relink` folds the fresh auth state
+  in and restores it (also run automatically before each sync). It refuses to
+  relocate a profile with a live session (`CLAUDE_CONFIG_DIR` + a `/proc` sweep);
+  `--relink` skips rather than aborts, since it runs unattended after every pull.
+  `~/.claude-profiles/` is its own namespace so `bootstrap.sh`'s secondary-profile
+  registry cannot claim it. Population is separate: `agents/orca-profile-sync.sh`
+  symlinks the **live** `~/.claude` content into each account dir — not the repo
+  baseline, because an Orca profile also needs the machine-local parts the repo
+  never carries (`gortex install` output, plugin state). It **fills gaps only**: a
+  real file in the destination is never overwritten, since gortex regenerates
+  `commands/`/`agents/`/`gortex-*` skills per profile and the account copy is often
+  NEWER than the primary's. `settings.json` is a jq deep-merge (primary wins,
+  target extras survive, permission arrays unioned), never a symlink. Runs at the
+  end of every personal `bootstrap.sh`; `just agent-sync-orca` on demand. The
+  mirror set is an allowlist and reports any unrecognised top-level path in the
+  primary so layout drift is visible rather than silent. `PROFILE_FILES` +
+  `PROFILE_DIRS` ARE the curated "what belongs in every profile" list — edit those
+  two to change it. The sync follows the link to the real profile and finds a
+  migrated profile by its `.orca-account` marker even when the link is broken.
+- **Never bootstrap an Orca account dir as a secondary profile (2026-08-01).** Its
+  POSTFIX resolves to `auth`, so the fallback deployed the tracked baseline over
+  the mirror. `git-hooks/_refresh-claude-config` did exactly that after every
+  pull/checkout by passing the shell's inherited `CLAUDE_CONFIG_DIR` through —
+  one `git stash` round-trip re-seeded a live account's `settings.json` and moved
+  the merged file to `.bootstrap-bak`. Fixed at both ends: the hook runs bootstrap
+  under `env -u CLAUDE_CONFIG_DIR`, and bootstrap redirects an Orca dir to the mirror.
+- **Codex was retired fleet-wide 2026-08-01.** `agents/codex/`, bootstrap's
+  `IS_PERSONAL` Codex block, the `agent_clis codex` installer arm and
+  `pkgs`-level `codex` are all gone; `~/.codex` (627MB, almost entirely vendored
+  release binaries) is deleted on `desktop`. Unused in practice. The plugin's
+  `hooks/hooks.json` still passes the config dir as an argument rather than
+  deriving it — that is what made a second agent deployable, so keep the shape if
+  another one ever arrives. Driving extra profiles through `$CLAUDE_CONFIG_DIR` is
+  deprecated generally; Orca's own account dirs are the one surviving user.
 
 ## Pending follow-ups
 
@@ -1270,3 +1309,37 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   `fleet-selfpull.sh` breaks self-updating on **every box at once**. Accepted
   deliberately as the cost of running one implementation; treat that test file
   as load-bearing, not decorative.
+
+## Hermes retired from the fleet (2026-08-01)
+
+- **Hermes Agent was removed entirely — from provisioning and from every box —
+  because it was not worth its price.** Gone from the repo: the whole `hermes/`
+  tree (config, SOUL.md, 550 skill files, `bootstrap.sh`,
+  `hermes-serve.service`), `tier_hermes_config`, `tier_hermes_dashboard`, the
+  `hermes)` arm of `tier_agent_clis`, `just hermes-bootstrap`, and the
+  workstation tier-list entries in both `linux.sh` and `macos.sh`. If you find a
+  reference that survived, delete it — this is not a pause, it is a removal.
+- **The weekly memory-reflection cron lost its runner and now runs on Claude
+  Code.** It was deliberately on Hermes as a *cost split*: daily per-repo
+  harvesting is flat-rate MAX work, rare whole-corpus reflection was worth
+  paying per token for. That rationale is dead; `kb-reflection-prompt.md` and
+  `kb-cron-prompt.md` were updated. Step 4 of the harvest prompt (the
+  "self-learning agent with cross-session memory" branch) now matches **no**
+  runner and always self-skips — kept only for a future agent that qualifies.
+- **The shallow-clone skip in `tier_autofetch` / `git-autofetch` outlives
+  Hermes.** `~/.hermes/hermes-agent` was only the case that *measured* it (60M
+  1-commit clone → 350M after one fetch). The guard is general; do not remove it
+  along with the hermes references, and do not go hunting for that directory.
+- **Hermes' credentials are gone from disk but were NOT revoked at the source.**
+  The removal briefly stashed them at `hermes-removed-2026-08-01/` on each box;
+  those stashes were then deleted outright on 2026-08-01, so nothing is
+  recoverable. What was live at the time, and therefore may still be live
+  upstream with no local copy: a **Telegram bot token**
+  (`TELEGRAM_BOT_TOKEN` — revoke via BotFather), the Hermes dashboard basic-auth
+  password/secret, and an LLM provider `credential_pool` holding **nous** (the
+  active provider) and **copilot** entries. Revoke those provider credentials
+  from their own consoles if they were Hermes-only.
+- **Windows Hermes was never provisioned by this repo** — `windows.ps1` has no
+  hermes step. The 980M install on desktop (`%LOCALAPPDATA%\hermes`, plus a user
+  PATH entry) was a manual one, removed by hand. So "wipe it from provisioning"
+  and "delete it from the fleet" are genuinely two jobs here, not one.

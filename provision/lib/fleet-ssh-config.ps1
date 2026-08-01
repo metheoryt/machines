@@ -1,7 +1,7 @@
 # provision/lib/fleet-ssh-config.ps1 — render + merge the fleet SSH client block
 # on a WINDOWS-NATIVE member. Dot-source me; or run with -SelfTest.
 #
-# Why this exists at all: provision/windows.ps1 step 7 only ever configured the
+# Why this exists at all: provision/windows.ps1 step 6 only ever configured the
 # SERVER side (sshd, administrators_authorized_keys, firewall), so the Windows
 # members had no ~/.ssh/config fleet block. `ssh latitude` there fell through to
 # the local username and failed with `methe@latitude: Permission denied`, which

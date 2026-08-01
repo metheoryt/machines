@@ -120,8 +120,8 @@ modules/
 
 **`provision/`** — persisted or disposable non-Nix distro (Linux dev environment on Windows), a peer of `install-media/`
 - `provision/linux.sh` provisions a fresh Debian/Ubuntu box (or persisted/throwaway WSL2 distro)
-  with the *portable* layer only: the git-synced Claude/Codex config (via
-  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, codex, gh, ripgrep/fd/fzf, …).
+  with the *portable* layer only: the git-synced Claude Code config (via
+  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, gh, ripgrep/fd/fzf, …).
 - Imperative and apt-based — no NixOS. See `provision/README.md` for usage and
   base-distro guidance.
 

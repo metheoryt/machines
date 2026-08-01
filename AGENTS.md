@@ -99,12 +99,14 @@ just provision-mac <machine>            # provision THIS Mac end to end
 just provision-wsl <nickname>           # self-declare THIS WSL distro
                                         #   (--no-tailscale for a second distro)
 
-just agent-bootstrap                    # link ~/.claude + ~/.codex
+just agent-bootstrap                    # link ~/.claude (+ mirror into Orca profiles)
 just agent-bootstrap-profile <postfix>  # provision ~/.claude-<postfix>
-just agent-sync-orca                    # mirror ~/.claude into Orca's per-account
-                                        #   profiles (once per Orca auth; also runs
-                                        #   at the end of agent-bootstrap)
-just hermes-bootstrap                   # link ~/.hermes
+just agent-sync-orca                    # populate Orca's per-account profiles from
+                                        #   ~/.claude (also runs at agent-bootstrap)
+just agent-link-orca <name>             # move an Orca account profile to
+                                        #   ~/.claude-profiles/<name> + symlink it back
+                                        #   (once per account, Orca CLOSED);
+                                        #   --status / --relink
 just gortex-setup                       # wire per-profile gortex (NixOS only)
 
 just update-gortex | update-orca | update-rustdesk   # bump pinned out-of-tree pkgs
@@ -172,8 +174,7 @@ None of these are Nix modules — they are the non-NixOS half of the repo.
 | Dir | What it is |
 |---|---|
 | `provision/` | Cross-platform provisioner — `provision.{sh,ps1}` role front door, `roles/*.{sh,ps1}` executors, `lib/` manifest readers (`fleet.sh`, `Fleet.psm1`, `tiers.sh`), `linux.sh`/`macos.sh` tier drivers, `statusboard/`, `tests/`. See `provision/README.md`. |
-| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (mirrors `~/.claude` into Orca's per-account config dirs), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
-| `hermes/` | Hermes Agent config — `config.yaml`, `skills/`; `bootstrap.sh` links it into `~/.hermes/`. Its `memories/` is an **empty, unfilled slot** — the agent-config handover did not fill it. |
+| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (populates Orca's per-account profiles from `~/.claude`), `orca-profile-link.sh` (relocates those profiles to `~/.claude-profiles/<name>` so transcripts outlive Orca's dir), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `quick-check.sh` (the `just quick` gate), the `update-*.sh` version bumpers. |
 | `pkgs/` | Pinned out-of-tree packages (e.g. `gortex.nix`). |
 | `install-media/` | Shared Win11 install media. |
@@ -183,7 +184,7 @@ None of these are Nix modules — they are the non-NixOS half of the repo.
 The fleet transport is a self-hosted **Headscale tailnet** (`cc.cyphy.kz`,
 MagicDNS suffix `gg.ez`, CGNAT `100.64.0.0/10`); `fleet.json` (repo root) is
 the machine manifest, and the `ssh-server` role (`modules/system/ssh-server.nix`
-+ `windows.ps1` step 7) generates every host's keys-only-sshd-over-tailnet
++ `windows.ps1` step 6) generates every host's keys-only-sshd-over-tailnet
 story. The old AmneziaWG mesh was retired from the repo 2026-07-17 (AmneziaWG
 survives only as the VPS's obfuscated VPN for RU relatives).
 

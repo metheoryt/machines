@@ -17,16 +17,16 @@
 # memory stores go dark), every entry under skills/ (including the `cyphy`
 # plugin link), agents/ and commands/.
 #
-# bootstrap.sh already fans the SHARED set out to ~/.codex and
-# ~/.claude-<postfix>, but it cannot serve this case: it keys a profile off the
+# bootstrap.sh already fans the SHARED set out to ~/.claude-<postfix>, but it
+# cannot serve this case: it keys a profile off the
 # `.claude-<postfix>` basename (an Orca dir is named `auth`), and it deploys the
 # REPO baseline. What an Orca profile needs is the LIVE primary profile —
 # including the machine-local parts the repo never carries (`gortex install`'s
 # skills/agents/commands, plugin state written through /plugin and /config).
 #
 # So: content paths are SYMLINKED at the primary profile — one edit, every
-# profile sees it, exactly like the ~/.codex fan-out. settings.json is the sole
-# exception; see merge_settings.
+# profile sees it, exactly like the secondary-profile fan-out. settings.json is
+# the sole exception; see merge_settings.
 #
 # Never touched (Orca- and account-owned, and mirroring them would cross-wire
 # two accounts' auth or corrupt live session state):
@@ -38,14 +38,25 @@
 # ride along in settings.json, and Claude Code installs the declared
 # marketplaces into the profile itself on next launch.
 #
+# The curated set is PROFILE_FILES + PROFILE_DIRS below — that pair IS the answer
+# to "what do I want in every profile". Edit them to change it; everything else
+# in a profile stays profile-specific.
+#
+# Pairs with agents/orca-profile-link.sh, which relocates an account profile to
+# ~/.claude-profiles/<name> and leaves a symlink in Orca's tree, so transcripts
+# and sessions outlive the account dir. This script follows that link and writes
+# to the real profile; it also finds a migrated profile whose link is currently
+# broken, so population never depends on Orca's dir being intact.
+#
 # Usage:
-#   bash agents/orca-profile-sync.sh                 # every discovered account
+#   bash agents/orca-profile-sync.sh                 # every discovered profile
 #   bash agents/orca-profile-sync.sh <auth-dir> …    # specific dirs
 #   bash agents/orca-profile-sync.sh --dry-run       # report, change nothing
 #   bash agents/orca-profile-sync.sh --force <dir>   # skip the Orca-dir check
 #
-# Also invoked automatically at the end of a personal `bootstrap.sh` run, so a
-# new account picked up by a pull/provision run is wired without a manual step.
+# Also invoked automatically at the end of a personal `bootstrap.sh` run (after
+# orca-profile-link.sh --relink), so a new account picked up by a pull/provision
+# run is wired without a manual step.
 set -u
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,6 +67,9 @@ BOOT="$SRC_DIR/bootstrap.sh"
 PRIMARY_DIR="${MACHINES_PRIMARY_DIR:-$HOME/.claude}"
 
 ACCOUNTS_DIR="${ORCA_CLAUDE_ACCOUNTS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/orca/claude-accounts}"
+# Where orca-profile-link.sh parks migrated profiles. Discovery reads it so a
+# profile whose account link is currently broken still gets populated.
+PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
 
 # Parsed BEFORE bootstrap.sh is sourced: sourcing honours DRY_RUN (it mkdirs the
 # config dir otherwise), so --dry-run has to be in the environment by then.
@@ -99,7 +113,7 @@ synced=0
 
 # ── Whole files and per-entry dirs mirrored from the primary ────────────────
 # Whole-file links. statusline-command.sh / balance-refresh.py are here for
-# parity with the ~/.codex fan-out even though settings.json spells the
+# parity with the secondary-profile fan-out even though settings.json spells the
 # statusline out as "$HOME/.claude/statusline-command.sh" (an absolute primary
 # path that resolves from any profile) — a profile-relative statusline config
 # would otherwise break silently.
@@ -109,11 +123,62 @@ PROFILE_FILES="CLAUDE.md host-memory.md statusline-command.sh balance-refresh.py
 # against that profile) coexist with the mirrored ones.
 PROFILE_DIRS="skills agents commands memory"
 
-# looks_like_orca_dir <dir>: the account marker Orca writes, or the canonical
-# claude-accounts path. Keeps a --force-less run from mirroring the profile into
-# an arbitrary directory typo'd on the command line.
+# Top-level entries in the primary that are deliberately NOT mirrored: live
+# session/account state, caches, plugin data. Purely a REPORTING list — nothing
+# reads it to decide behaviour, so a wrong entry costs at most a missing or
+# spurious warning, never a wrong link.
+KNOWN_STATE="backups cache daemon daemon.log downloads file-history gortex-cache
+history.jsonl jobs mcp-needs-auth-cache.json paste-cache plugins policy-limits.json
+pr-cache projects pure-dev remote-settings.json session-env sessions
+settings.json.bak settings.local.json shell-snapshots tasks telemetry tmp
+window-reset.json"
+
+# report_drift: name every top-level path in the primary that is neither mirrored
+# nor known state.
+#
+# PROFILE_FILES / PROFILE_DIRS are ALLOWLISTS on purpose: a denylist would sooner
+# or later mirror a state file and cross-wire two accounts' history or sessions.
+# The price of an allowlist is that a NEW top-level path — Claude Code starting
+# to write an `output-styles/`, a `keybindings.json` — is missed in SILENCE, and
+# you find out weeks later when the feature is quietly absent from every Orca
+# profile. This converts that silence into one line of output per unknown path.
+#
+# Dot-entries are skipped wholesale: every one of them in this profile is state
+# (.credentials.json, .claude.json, .bootstrap-bak, the .srchash stamps).
+report_drift() {
+  local entry base known unknown=0
+  [ -d "$PRIMARY_DIR" ] || return 0
+  # Collapse to a single space-delimited line first: KNOWN_STATE is wrapped
+  # across several source lines, and an embedded newline would break the
+  # *" $base "* match for every entry sitting at a line boundary.
+  known=" $(printf '%s %s %s %s' "$PROFILE_FILES" "$PROFILE_DIRS" settings.json \
+            "$KNOWN_STATE" | tr -s '[:space:]' ' ') "
+  for entry in "$PRIMARY_DIR"/*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    case "$known" in
+      *" $base "*) continue ;;
+    esac
+    [ "$unknown" -eq 0 ] && printf '\n'
+    printf '  ! not mirrored and not known state: %s/%s\n' "$PRIMARY_DIR" "$base"
+    unknown=$((unknown + 1))
+  done
+  [ "$unknown" -gt 0 ] && printf '    Add it to PROFILE_FILES / PROFILE_DIRS to mirror it, or to KNOWN_STATE\n    to silence this. (%s path(s) — the primary layout has drifted.)\n' "$unknown"
+  return 0
+}
+
+# looks_like_orca_dir <dir>: Orca's own account marker, the pairing marker
+# orca-profile-link.sh writes, or the canonical claude-accounts path. Keeps a
+# --force-less run from mirroring the profile into an arbitrary directory typo'd
+# on the command line.
+#
+# The pairing marker is what lets a MIGRATED profile still identify as one: after
+# orca-profile-link.sh moves it to ~/.claude-profiles/<name>, the path no longer
+# matches the canonical pattern. Orca's own marker moves with the content and
+# would carry it too, but a re-auth can rewrite that file, so we do not lean on it.
 looks_like_orca_dir() {
   [ -f "$1/.orca-managed-claude-auth" ] && return 0
+  [ -f "$1/.orca-account" ] && return 0
   case "$1" in
     */orca/claude-accounts/*/auth | */orca/claude-accounts/*/auth/) return 0 ;;
   esac
@@ -270,15 +335,26 @@ merge_settings() {
 # is dynamically scoped, so link()/backup_target() called from here see the Orca
 # dir — backups land in that profile's .bootstrap-bak, not the primary's.
 sync_profile() {
-  local dir="$1" f sub
-  local CLAUDE_DIR="$dir"
-  local BAK_ROOT="$dir/.bootstrap-bak"
+  local dir="$1" f sub link_note=""
 
   if [ ! -d "$dir" ]; then
     printf '  ✗ not a directory: %s\n' "$dir"
     failed=$((failed + 1))
     return 0
   fi
+  # Follow the link to the real profile. After orca-profile-link.sh migrates an
+  # account, the account dir is a symlink into ~/.claude-profiles/<name>; writing
+  # through it would work, but backups (.bootstrap-bak) and the settings stamp
+  # must land at the real path, and the output should name where things actually
+  # went. Harmless when the dir is not a link — _resolve is then a no-op.
+  if [ -L "$dir" ]; then
+    link_note="$dir"
+    dir="$(_resolve "$dir")"
+    [ -d "$dir" ] || { printf '  ✗ broken account link: %s -> %s (run orca-profile-link.sh --relink)\n' "$link_note" "$dir"; failed=$((failed + 1)); return 0; }
+  fi
+
+  local CLAUDE_DIR="$dir"
+  local BAK_ROOT="$dir/.bootstrap-bak"
   if [ "$(_resolve "$dir")" = "$(_resolve "$PRIMARY_DIR")" ]; then
     printf '  ✗ refusing to sync the primary profile onto itself: %s\n' "$dir"
     failed=$((failed + 1))
@@ -291,7 +367,11 @@ sync_profile() {
     return 0
   fi
 
-  printf '\nProfile %s\n' "$dir"
+  if [ -n "$link_note" ]; then
+    printf '\nProfile %s\n         (via %s)\n' "$dir" "$link_note"
+  else
+    printf '\nProfile %s\n' "$dir"
+  fi
   for f in $PROFILE_FILES; do
     drop_dangling "$dir/$f"
     if keep_local "$dir/$f"; then
@@ -315,16 +395,29 @@ if [ "${#targets[@]}" -eq 0 ]; then
     [ -d "$d" ] || continue
     targets+=("$d")
   done
+  # Migrated profiles (orca-profile-link.sh) whose account link is broken or not
+  # yet re-created still deserve the curated set — the whole point of moving them
+  # into $HOME is that they stand on their own. Found by their pairing marker,
+  # deduped against the glob above, which reaches the same dir via a healthy link.
+  for p in "$PROFILES_DIR"/*; do
+    [ -f "$p/.orca-account" ] || continue
+    dup=0
+    for t in ${targets[@]+"${targets[@]}"}; do
+      [ "$(_resolve "$t")" = "$(_resolve "$p")" ] && { dup=1; break; }
+    done
+    [ "$dup" -eq 0 ] && targets+=("$p")
+  done
   if [ "${#targets[@]}" -eq 0 ]; then
     # Silent-ish no-op: bootstrap.sh calls this unconditionally on machines that
     # have never signed into an Orca-managed account.
-    printf 'No Orca-managed Claude profiles under %s — nothing to sync.\n' "$ACCOUNTS_DIR"
+    printf 'No Orca-managed Claude profiles under %s or %s — nothing to sync.\n' "$ACCOUNTS_DIR" "$PROFILES_DIR"
     exit 0
   fi
 fi
 
 printf 'Syncing base Claude profile into Orca-managed profiles\n  primary: %s\n' "$PRIMARY_DIR"
 [ -n "${DRY_RUN:-}" ] && printf '  (dry run — nothing will be written)\n'
+report_drift
 
 for d in "${targets[@]}"; do
   sync_profile "${d%/}"

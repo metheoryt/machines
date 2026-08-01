@@ -34,13 +34,12 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles tier_hermes_config tier_hermes_dashboard " \
+   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
 
-# hub is lean: no dev apt layer, no gortex, no codex.
+# hub is lean: no dev apt layer, no gortex.
 hasnt "$hub" '^tier_apt_dev$' "hub omits tier_apt_dev"
 hasnt "$hub" '^tier_gortex$'  "hub omits tier_gortex"
-hasnt "$hub" 'codex'          "hub omits the codex CLI"
 
 # HAZARD GUARD: ssh_accounts would overwrite hub's ~/.ssh/config with
 # IdentitiesOnly on an unregistered key and kill its only GitHub auth.
@@ -69,8 +68,6 @@ hasnt "$hub" '^tier_sudo_nopasswd$'    "hub NEVER grants passwordless sudo"
 hasnt "$mac" '^tier_sudo_nopasswd$'    "macOS NEVER grants passwordless sudo"
 
 hasnt "$srv" '^tier_gortex$'           "server omits tier_gortex (no indexed checkouts to serve)"
-hasnt "$srv" 'codex'                   "server omits the codex CLI"
-hasnt "$srv" '^tier_hermes'            "server omits the hermes tiers"
 has   "$srv" '^tier_apt_dev$'          "server KEEPS the dev apt layer (gh, fish, starship)"
 has   "$srv" '^tier_shell_init$'       "server keeps fish (no --no-fish, unlike hub)"
 has   "$srv" '^tier_ssh_accounts$'     "server wires the GitHub account aliases"
@@ -219,7 +216,7 @@ grep -q 'KillMode=process' "$TIERS" \
 # makes these assertions possible at all; if someone moves the precondition
 # above the dry-run exit, every case below starts failing with "targets macOS".
 eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_brew_min tier_brew_dev tier_brew_cask tier_agents_config tier_git_base tier_gortex tier_agent_clis claude codex hermes tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust tier_hermes_config tier_hermes_dashboard " \
+   "tier_brew_min tier_brew_dev tier_brew_cask tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust " \
    "macos workstation tier list and order"
 
 # tier_fleet_ssh is darwin-only ON PURPOSE. NixOS gets its fleet client config

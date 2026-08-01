@@ -173,6 +173,20 @@ empty="$tmp/empty-accounts"; mkdir -p "$empty"
 out10="$(MACHINES_PRIMARY_DIR="$primary" ORCA_CLAUDE_ACCOUNTS_DIR="$empty" bash "$sync" 2>&1)"; rc10=$?
 check "no accounts → exit 0, no error" '[ "$rc10" -eq 0 ] && printf "%s" "$out10" | grep -q "nothing to sync"'
 
+# ── Case 8b: drift reporting. The mirror set is an allowlist, so a NEW top-level
+# path in the primary is not mirrored — that is by design, but it must not be
+# silent.
+printf 'style\n' > "$primary/output-styles.md"     # pretend Claude Code grew a path
+mkdir -p "$primary/plugins"                        # known state — must stay quiet
+out12="$(run --dry-run)"
+check "an unknown primary path is reported"  'printf "%s" "$out12" | grep -q "not mirrored and not known state: .*output-styles.md"'
+check "the report says how to resolve it"    'printf "%s" "$out12" | grep -q "Add it to PROFILE_FILES"'
+check "known state is not reported"          '! printf "%s" "$out12" | grep -q "not known state: .*plugins"'
+check "mirrored paths are not reported"      '! printf "%s" "$out12" | grep -qE "not known state: .*(CLAUDE\.md|skills|memory)$"'
+rm -f "$primary/output-styles.md"
+check "a clean primary reports no drift" \
+  '! run --dry-run | grep -q "not known state"'
+
 # ── Case 9: bootstrap.sh must not treat an Orca dir as a `.claude-auth`
 # secondary profile. Its POSTFIX fallback would deploy the tracked baseline over
 # the mirror — which is exactly what the git hook did on 2026-08-01, via an

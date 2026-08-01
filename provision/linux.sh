@@ -3,12 +3,12 @@
 # layer. DRIVER ONLY: it resolves this box's PROFILE, then runs that profile's
 # ordered tier list from provision/lib/tiers.sh (which holds what this script
 # used to do inline):
-#   • the git-synced Claude Code / Codex agent config (via agents/bootstrap.sh)
-#   • the core CLI dev tools (gortex, claude, codex, ripgrep/fd/fzf, …)
+#   • the git-synced Claude Code agent config (via agents/bootstrap.sh)
+#   • the core CLI dev tools (gortex, claude, ripgrep/fd/fzf, …)
 #
 # Profiles exist so a lean box can converge without the workstation dev layer:
 #   workstation — the default (WSL dev distros): every tier
-#   hub         — the 960MB Debian VPS: no dev apt layer, no gortex, no codex,
+#   hub         — the 960MB Debian VPS: no dev apt layer, no gortex,
 #                 and deliberately no ssh_accounts (it would overwrite that
 #                 box's ~/.ssh/config and kill its only GitHub auth)
 #   server      — the always-on services box (latitude, post-NixOS): the full
@@ -28,7 +28,7 @@
 # has no `base` role executor, so it cannot stand one up. Run this script.
 #
 # Targets glibc apt distros: Debian 11+ / Ubuntu 22.04+. NOT Alpine/musl — the
-# prebuilt gortex binary and the native claude/codex CLIs are glibc builds.
+# prebuilt gortex binary and the native claude CLI are glibc builds.
 #
 # Idempotent; safe to re-run. Usage inside a fresh Ubuntu/Debian WSL:
 #   sudo apt-get update && sudo apt-get install -y git
@@ -67,10 +67,10 @@ fi
 case "$PROFILE" in
   workstation)
     TIERS=(apt_min apt_dev agents_config git_base gortex
-           "agent_clis claude codex hermes" shell_init autofetch
-           ssh_accounts selfpull ssh_trust dotfiles hermes_config hermes_dashboard) ;;
+           "agent_clis claude" shell_init autofetch
+           ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
-    # Lean server tier. Deliberately absent: apt_dev, gortex, codex, and
+    # Lean server tier. Deliberately absent: apt_dev, gortex, and
     # ssh_accounts — the last would overwrite hub's ~/.ssh/config with
     # IdentitiesOnly on a fresh unregistered key and kill its GitHub auth.
     TIERS=(apt_min agents_config git_base "agent_clis claude"
@@ -80,10 +80,8 @@ case "$PROFILE" in
     # The always-on services box. NOT the hub tier: hub is lean because it is a
     # 960MB VPS, whereas this box has 24GB and 470GB and is SSHed into by a
     # human, so it keeps apt_dev (gh, ripgrep/fd/fzf, fish, starship, uv) and
-    # fish. It is workstation MINUS the tiers a services box never exercises:
+    # fish. It is workstation MINUS the one tier a services box never exercises:
     #   gortex          — a code-graph daemon that wants indexed source checkouts
-    #   codex, hermes   — secondary agent CLIs; claude alone is enough here
-    #   hermes_config / hermes_dashboard — same reason
     # ssh_accounts IS included, unlike hub: this box starts with no key at all
     # after the reinstall, so there is no working GitHub auth for the tier to
     # break, and pinning the account aliases fixes the gap the NixOS config left
@@ -178,7 +176,7 @@ printf '\n\033[1mDone.\033[0m %s warning(s).\n\n' "$WARNINGS"
 cat <<EOF
 Next steps:
   • Open a new shell (or: source ~/.bashrc) so ~/.local/bin is on PATH.
-  • Authenticate the agents:  claude   (browser login)   ·   codex
+  • Authenticate the agent:   claude   (browser login)
   • Optional — live in fish: append to ~/.bashrc:
         case \$- in *i*) exec fish ;; esac
   • This box's clone auto-relinks agent config on git pull (core.hooksPath set

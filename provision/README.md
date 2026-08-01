@@ -13,7 +13,7 @@
 Provision a **fresh, non-Nix box** — any glibc apt Linux (persisted or
 disposable) or macOS — into this fleet's *portable* dev layer. It works the same whether
 you're provisioning a throwaway WSL2 distro (ephemeral, `wsl --unregister` to
-reset) or a long-lived daily driver: the **same git-synced Claude/Codex config**
+reset) or a long-lived daily driver: the **same git-synced Claude Code config**
 the NixOS laptops run (via `agents/bootstrap.sh`, which produces identical
 symlinks on any OS) plus the core CLI tools — installed imperatively with `apt`
 + official installers instead of `nixos-rebuild`.
@@ -29,7 +29,7 @@ minutes, or keep running indefinitely.
   `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`, `tmux`); the synced agent config via
   `agents/bootstrap.sh`; `git config --global` identity + aliases.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
-  `pkgs/gortex.nix`), `claude` + `codex` (native installers, no Node.js),
+  `pkgs/gortex.nix`), `claude` (native installer, no Node.js),
   `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
   `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`. Shell hooks are
   appended to `~/.bashrc` (and a minimal `~/.config/fish/config.fish` if fish
@@ -51,14 +51,14 @@ git clone https://github.com/<you>/machines ~/machines
 bash ~/machines/provision/linux.sh
 ```
 
-Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`, `codex`.
+Then open a new shell (or `source ~/.bashrc`) and authenticate: `claude`.
 
 It's idempotent — re-run any time (e.g. after `git pull`) to pick up changes.
 
 > **Not `just provision`.** The `provision.sh` dispatcher is manifest-driven off
 > `fleet.json`, which declares no WSL machine — and it carries role executors only
 > for `agents`, `dotfiles`, `repos`, and `mesh-*`. There is no `base` executor, so
-> even with a manifest entry it would skip the apt base, `gortex`, `claude`/`codex`,
+> even with a manifest entry it would skip the apt base, `gortex`, `claude`,
 > the SSH keys, and `git-autofetch`. `linux.sh` is what installs those. Use it.
 
 ## Multi-account SSH
@@ -214,7 +214,7 @@ MACHINES_TIERS_DRY_RUN=1 bash ~/machines/provision/macos.sh   # inspect the plan
 bash ~/machines/provision/macos.sh                            # apply
 ```
 
-Then open a new shell (or `source ~/.zshrc`) and authenticate: `claude`, `codex`.
+Then open a new shell (or `source ~/.zshrc`) and authenticate: `claude`.
 Idempotent — re-run any time.
 
 **What differs from the Linux path, and why:**
@@ -248,7 +248,6 @@ tiers install LaunchAgents into `~/Library/LaunchAgents/` instead:
 launchctl list | grep kz.cyphy
 #   kz.cyphy.git-autofetch     every 10 min
 #   kz.cyphy.fleet-selfpull    every 10 min
-#   kz.cyphy.hermes-serve      long-running, restart-on-failure
 ```
 
 `launchctl bootout` runs before every `bootstrap`, so re-provisioning reloads a
@@ -266,7 +265,7 @@ bash provision/provision.sh --machine air --apply
 ```
 
 > Never run `provision.sh --apply` from inside a git worktree. The `agents` role
-> runs `agents/bootstrap.sh`, which repoints `~/.claude` and `~/.codex` at
+> runs `agents/bootstrap.sh`, which repoints `~/.claude` at
 > *whatever checkout it is invoked from* — from a worktree that means your live
 > agent config starts pointing into a temporary directory. Run it from the main
 > clone.
@@ -281,7 +280,7 @@ Targets **glibc apt** distros. Recommended:
 Avoid:
 
 - **Alpine / musl** — the prebuilt `gortex` binary (patchelf'd for glibc in the
-  Nix fleet) and the native `claude`/`codex` CLIs are glibc builds; they won't
+  Nix fleet) and the native `claude` CLI are glibc builds; they won't
   run under musl.
 - **Arch (ArchWSL)** — works (glibc), but rolling; you'd swap the `apt` blocks
   for `pacman`. Not wired up here.

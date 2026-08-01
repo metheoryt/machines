@@ -8,6 +8,24 @@ boot="$repo/bootstrap.sh"
 fail=0
 check() { if eval "$2"; then echo "ok   - $1"; else echo "FAIL - $1"; fail=1; fi; }
 
+# HARD REFUSAL: never run with the copy-guard disabled from the environment.
+#
+# Case 8 exists to prove the guard refuses a temp copy and a linked worktree —
+# with the override set, every one of those assertions is testing the opposite of
+# its name. Worse, it is not merely useless: `git worktree add` below fires this
+# repo's own post-checkout hook, which runs bootstrap from the NEW temp worktree.
+# The guard is what normally stops that; disable it and the hook repoints the
+# LIVE ~/.claude at $wt_tmp, which cleanup_case8 then deletes — dangling
+# skills/cyphy and subagent links, exactly the 2026-07-28 air incident the guard
+# was written for. Reproduced 2026-08-01 by running this file with the override.
+if [ -n "${MACHINES_BOOTSTRAP_ALLOW_COPY:-}" ]; then
+  echo "FAIL - refusing to run with MACHINES_BOOTSTRAP_ALLOW_COPY set:" >&2
+  echo "       it disables the very guard Case 8 tests, and lets this file's" >&2
+  echo "       worktree-add hook repoint the LIVE ~/.claude at a temp dir." >&2
+  echo "       Run from the canonical checkout (~/machines) instead." >&2
+  exit 1
+fi
+
 # Case 1: per-host memory is dotfiles-owned. bootstrap neither seeds
 # agents/hosts/<id>.md nor links anything at ~/.claude/host-memory.md; it only
 # retires a stale link there. MACHINES_HOST_ID is no longer consulted.
@@ -21,22 +39,16 @@ check() { if eval "$2"; then echo "ok   - $1"; else echo "FAIL - $1"; fail=1; fi
 # profile dir would be a secondary profile, where a fan-out link at
 # host-memory.md is CORRECT — asserting its absence there tests the opposite of
 # the intent. The destination is printed first ("would link: DEST -> SRC"), so
-# anchoring on the primary dest also tolerates the legitimate ~/.codex link.
-out1="$(MACHINES_HOST_ID=testhost DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+# anchoring the grep on the primary dest keeps other profiles' output from
+# matching.
+out1="$(MACHINES_HOST_ID=testhost DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
 check "no per-host file is seeded in the repo" \
   '! printf "%s" "$out1" | grep -q "hosts/testhost.md"'
 check "nothing is linked at the primary profile's host-memory.md" \
   '! printf "%s" "$out1" | grep -qE "would (link|back up \+ link): '"$HOME"'/\.claude/host-memory\.md"'
 
-# Case 2: the plugin hooks tests/ dir is never linked. The Codex block that links
-# plugin/hooks entry-by-entry runs ONLY on the personal profile (IS_PERSONAL=1),
-# so drive $HOME/.claude with a THROWAWAY Codex dir (DRY_RUN writes nothing to it).
-out2="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
-check "tests dir excluded from hook linking" \
-  '! printf "%s" "$out2" | grep -q "hooks/tests"'
-
-# Case 3: copy_managed — the churn-free real-copy handler for settings.json /
-# codex hooks.json. Source bootstrap in lib-only mode (defines helpers, runs no
+# Case 3: copy_managed — the churn-free real-copy handler for settings.json.
+# Source bootstrap in lib-only mode (defines helpers, runs no
 # bootstrap) with CLAUDE_CONFIG_DIR pointed at a throwaway dir so the source-time
 # mkdir lands there, not real ~/.claude.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -112,20 +124,18 @@ link_if_present "$SRC_DIR/nope.md" "$a_dest" >/dev/null
 check "link_if_present creates nothing for a missing source" '[ ! -e "$a_dest" ] && [ ! -L "$a_dest" ]'
 
 # Case 5: the shared memory store is dotfiles-owned. bootstrap links nothing
-# from agents/memory into the primary profile, and points Codex at the primary.
-out5="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+# from agents/memory into the primary profile.
+out5="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
 check "nothing links agents/memory into the primary profile" \
   '! printf "%s" "$out5" | grep -qE "would (link|back up \+ link): '"$HOME"'/\.claude/memory/(global\.md|personality)"'
-check "codex memory is sourced from the primary profile, not the repo" \
-  '! printf "%s" "$out5" | grep -E "\.codex/memory" | grep -q "machines/agents/memory"'
 
-# Case 6: agent instructions are dotfiles-owned; Codex reads the primary's copy.
-out6="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+# Case 6: agent instructions are dotfiles-owned.
+out6="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
 check "no link from agents/AGENTS.md into the primary profile" \
   '! printf "%s" "$out6" | grep -q "agents/AGENTS.md"'
 
 # Case 7: statusline + balance refresh are dotfiles-owned.
-out7="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+out7="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
 check "statusline is not linked from the repo" \
   '! printf "%s" "$out7" | grep -q "agents/statusline-command.sh"'
 check "balance-refresh is not linked from the repo" \
@@ -141,8 +151,9 @@ check "balance-refresh is not linked from the repo" \
 # memory/personality directory were left dangling.
 wt_tmp="$(mktemp -d)"
 cleanup_case8() {
-  [ -d "$wt_tmp/wt" ] && git -C "$repo" worktree remove --force "$wt_tmp/wt" >/dev/null 2>&1
-  git -C "$repo" worktree prune >/dev/null 2>&1
+  [ -d "$wt_tmp/wt" ] && git -C "$repo" -c core.hooksPath=/dev/null \
+    worktree remove --force "$wt_tmp/wt" >/dev/null 2>&1
+  git -C "$repo" -c core.hooksPath=/dev/null worktree prune >/dev/null 2>&1
   rm -rf "$wt_tmp"
 }
 trap cleanup_case8 EXIT
@@ -150,7 +161,7 @@ trap cleanup_case8 EXIT
 # (a) a plain copy under a temp dir. `cp -R agents` carries no .git, so the
 #     worktree probe finds nothing and the temp-path arm is what fires.
 cp -R "$repo" "$wt_tmp/agents-copy"
-out8a="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" \
+out8a="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" \
          bash "$wt_tmp/agents-copy/bootstrap.sh" 2>&1)"; rc8a=$?
 check "a temp-dir copy is refused (non-zero exit)" '[ "$rc8a" -ne 0 ]'
 check "the refusal names the temp-dir reason" \
@@ -161,19 +172,24 @@ check "the refusal points at the canonical checkout" \
 # (b) a linked git worktree — the worktree-agent case. It also sits under a temp
 #     root here, so this doubles as the guard that the worktree probe is checked
 #     FIRST and wins the reason string.
-if git -C "$repo" worktree add -q --detach "$wt_tmp/wt" HEAD >/dev/null 2>&1; then
+# -c core.hooksPath=/dev/null: `worktree add` checks out, which fires this repo's
+# post-checkout hook — and that hook runs bootstrap from the NEW worktree against
+# the LIVE profile. The copy-guard refuses it, so nothing happens today; but a
+# test must not depend on a guard it is itself testing. Suppress the hook here and
+# the hazard is gone at the source. (Same for the removal in cleanup_case8.)
+if git -C "$repo" -c core.hooksPath=/dev/null worktree add -q --detach "$wt_tmp/wt" HEAD >/dev/null 2>&1; then
   # The worktree checks out HEAD, so drop the WORKING-TREE script in — otherwise
   # this asserts against whatever was last committed and fails while iterating.
   # It stays a genuine linked worktree; only the script under test is refreshed.
   cp "$boot" "$wt_tmp/wt/agents/bootstrap.sh"
-  out8b="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" \
+  out8b="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" \
            bash "$wt_tmp/wt/agents/bootstrap.sh" 2>&1)"; rc8b=$?
   check "a linked worktree is refused (non-zero exit)" '[ "$rc8b" -ne 0 ]'
   check "the worktree reason wins over the temp-dir reason" \
     'printf "%s" "$out8b" | grep -q "linked git worktree"'
   # (c) the override still works — an escape hatch, not a locked door.
   MACHINES_BOOTSTRAP_ALLOW_COPY=1 DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" \
-    CODEX_CONFIG_DIR="$(mktemp -d)" bash "$wt_tmp/wt/agents/bootstrap.sh" >/dev/null 2>&1
+    bash "$wt_tmp/wt/agents/bootstrap.sh" >/dev/null 2>&1
   rc8c=$?
   check "MACHINES_BOOTSTRAP_ALLOW_COPY overrides the refusal" '[ "$rc8c" -eq 0 ]'
 else
@@ -249,7 +265,7 @@ fi
 # fired after doing damage. The second is the over-fire guard — if the probe ever
 # misclassifies the canonical checkout, every box silently stops being bootstrapped.
 check "a refused run links nothing" '! printf "%s" "$out8a" | grep -q "would link"'
-out8d="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" CODEX_CONFIG_DIR="$(mktemp -d)" bash "$boot" 2>&1)"
+out8d="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
 check "the canonical checkout is NOT refused" \
   '! printf "%s" "$out8d" | grep -q "refusing to bootstrap from"'
 

@@ -6,8 +6,10 @@
 # statusline-command.sh,balance-refresh.py} and the three untested skills are
 # tracked in the private dotfiles bare repo at those real $HOME paths, because its
 # work-tree IS $HOME. bootstrap.sh deploys only what has no $HOME home — the cyphy
-# plugin, subagents, and the per-profile settings.json — and links ~/.codex and
-# each ~/.claude-<postfix> AT the primary profile rather than at this repo.
+# plugin, subagents, and the per-profile settings.json — and links each
+# ~/.claude-<postfix> AT the primary profile rather than at this repo. The
+# personal run also mirrors the primary into any Orca-managed account profile
+# (agents/orca-profile-sync.sh).
 # MACHINES_HOST_ID is still passed below but is now INERT: per-host memory is a
 # dotfiles branch file, so bootstrap no longer resolves a host id.
 #
@@ -53,7 +55,8 @@ in {
   home.activation.linkClaudeProfiles = lib.hm.dag.entryAfter ["writeBoundary"] ''
     # Single deployer: bootstrap.sh is THE implementation of the profile links
     # (shared with Windows/macOS). Call it once per committed settings*.json
-    # profile; the personal ~/.claude call also provisions ~/.codex. MACHINES_HOST_ID
+    # profile; the personal ~/.claude call also mirrors into Orca's account
+    # profiles. MACHINES_HOST_ID
     # gives bootstrap the authoritative host id so nix and bash name the per-host
     # memory file identically (no drift). Runs after writeBoundary so home-manager
     # has already GC'd any prior store-routed links before bootstrap recreates them.
