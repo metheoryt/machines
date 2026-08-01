@@ -101,8 +101,25 @@ sync_guard() {
 # so tracking stays an explicit act (the offer-hook surfaces candidates instead).
 # Returns 0 whether or not there was anything to commit.
 sync_commit() {
-    local branch="$1" paths n
+    local branch="$1" paths n p
     df add -u || return 1
+
+    # VANISHED-TREE GUARD: unstage any deletion whose PARENT DIRECTORY is also
+    # gone. That signature is not a deliberate `rm` of a file — it is a tracked
+    # path inside a FOREIGN checkout that was removed or re-cloned wholesale.
+    # Those paths (a project's gitignored `.claude/memory/project.md`, say) are
+    # tracked here precisely because their own repo won't carry them, so losing
+    # the checkout must not commit the loss. Observed 2026-08-01: re-cloning
+    # ~/pure/backend-api took 219 lines of project memory with it and a tick
+    # committed the deletion. An ordinary single-file delete leaves its directory
+    # standing and still commits; removing a whole tracked directory on purpose
+    # now needs an explicit `dotfiles rm`.
+    while IFS= read -r -d '' p; do
+        [ -d "$DOTFILES_WORK_TREE/$(dirname "$p")" ] && continue
+        df reset -q -- "$p" \
+            && echo "dotfiles-sync: not committing deletion of '$p' — its directory is gone too; use 'dotfiles rm' if deliberate" >&2
+    done < <(df diff --cached --name-only -z --diff-filter=D)
+
     if df diff --cached --quiet; then return 0; fi
     n="$(df diff --cached --name-only | wc -l | tr -d ' ')"
     paths="$(df diff --cached --name-only | head -5 | tr '\n' ' ')"

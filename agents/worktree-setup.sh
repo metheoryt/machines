@@ -127,8 +127,18 @@ fi
 #     file and shares a single namespace: same compose project, image tag and test
 #     DBs, silently. A repo that genuinely wants main's `.env` shared can link it
 #     from its own script; this dispatcher cannot know which of the two a repo means.
+#
+#     `.claude/memory/project.md` IS in this list. Where the repo tracks it, a
+#     fresh worktree already has it committed and the `! -e "$dst"` guard makes
+#     this a no-op. Where the repo's own .gitignore swallows `.claude/` (the
+#     allowlist-`*` style), the file exists only in the main checkout — usually
+#     tracked by dotfiles at its absolute $HOME path — so without this link every
+#     worktree session starts with no project memory and the SessionStart hook
+#     (agents/plugin/hooks/project-memory-check.sh) nags to create one. That hook
+#     resolves the repo with `rev-parse --show-toplevel`, which in a linked
+#     worktree is the WORKTREE root, so it can only ever find a worktree-local path.
 if [ "$gitdir" != "$common" ]; then
-  for rel in .claude/settings.local.json; do
+  for rel in .claude/settings.local.json .claude/memory/project.md; do
     src="$main_root/$rel"
     dst="$wt_root/$rel"
     if [ -e "$src" ] && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
