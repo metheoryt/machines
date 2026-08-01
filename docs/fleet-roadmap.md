@@ -282,7 +282,9 @@ Nix ever returns. Leave them.
     `jellyseerr-data` pair were both stale even on server — jellyseerr's config was
     a **bind mount**, not a volume, which is the finding that reframed the whole
     migration.
-- [ ] **What is actually left to decide is `C:`, not Docker.** `server` now has
+- [~] **What is actually left to decide is `C:`, not Docker — AND THE OWNER IS
+  DOING IT.** Stated 2026-08-01: *"i will check g15 myself for needed files."* Do
+  not start a filesystem audit of that box; wait for the outcome. `server` now has
   **only `C:` attached** — 953 GB with 523.5 GB free, so **~430 GB in use**. Every
   external drive (D:/E:/G:/H:) already physically moved to latitude, which is also
   why the bind-mounted arr configs are gone from the box rather than pending. Docker
@@ -318,13 +320,32 @@ Nix ever returns. Leave them.
 
 ## P4 — Green the test suite. It is the only gate, and `just test` runs it.
 
-- [ ] **Three failures, all pre-existing** — they reproduce at HEAD in a clean
-  worktree and are *not* fallout from the fleet-ssh work:
-  `provision/tests/provision-wsl.test.sh`,
-  `agents/tests/orca-profile-harvest.test.sh`,
-  `agents/tests/orca-profile-link.test.sh`.
-  With the Nix gate gone the bash suite is all the validation the repo has, and
-  a red suite gives no signal at all. Run it with `just test`.
+- [x] **`provision-wsl.test.sh` greened 2026-08-01 — and it was never test rot.**
+  It had been reporting a **real bug in shipped code** the whole time. Three scripts
+  carried an unbraced expansion pressed against a multibyte character —
+  `"$var…"` instead of `"${var}…"` — and under bash 5.x in a **UTF-8 locale** the
+  ellipsis bytes get absorbed into the identifier, so `set -u` aborts on a variable
+  named `var…`. Under `LC_ALL=C` the same line is fine, which is why it survived:
+  it breaks for whoever has a normal locale and works for whoever does not, and
+  `bash -n` never sees it because the failure is at runtime.
+  **The worst of the three was `provision/provision.sh`, one line after the
+  `Apply <role>? [y/N]` prompt** — so `just provision --apply` took the user's
+  consent and then aborted before running a single role, on any UTF-8-locale box.
+  The other two were `provision-wsl.sh` (step 1 of `just provision-wsl`) and
+  `tailscale-wsl.sh`'s enroll step. All three braced; new
+  `provision/tests/expansion-multibyte.test.sh` scans every `*.sh` for the class,
+  with a positive control so an empty result cannot be mistaken for a passing scan,
+  and asserts the underlying bash behaviour still holds so the rule cannot quietly
+  stop being load-bearing. **This is the argument for P4 in one item:** a red suite
+  is indistinguishable from a broken one, so a real defect in the front door sat
+  visible and unread for weeks.
+- [ ] **Two failures left, and these two do look test-only** — 3 failing
+  assertions in `agents/tests/orca-profile-harvest.test.sh` ("…and creates no
+  second directory", "…creating no second copy", "a uuid-less copy still pairs by
+  orca id") and 1 in `agents/tests/orca-profile-link.test.sh` ("a healthy link is
+  not synced twice"). Both concern idempotence — a second run creating a second
+  copy — so confirm which side is wrong before editing the assertion: the same
+  reasoning that made `provision-wsl` look like rot applies here too.
 - [x] **`just test` now runs the suite** (landed with P1). It globs every
   `*.test.sh` — 27 suites, up from the 4 globs documented here — so a new suite is
   picked up without editing the recipe. `just test` previously meant

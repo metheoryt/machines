@@ -65,7 +65,7 @@ for role in "${roles[@]}"; do
             read -r ans
             case "$ans" in
                 [yY]|[yY][eE][sS])
-                    echo "  ⟳ applying $role…"
+                    echo "  ⟳ applying ${role}…"
                     if "$fn" apply "$platform" "$MACHINE"; then
                         echo "  ✓ $role applied."
                     else

@@ -225,7 +225,7 @@ $SUDO systemctl enable --now tailscaled || die "could not start tailscaled."
 # ── Enroll (skip if already up) ───────────────────────────────────────────────
 if [ "$ALREADY_UP" = 0 ]; then
   [ -n "$AUTHKEY" ] || die "no pre-auth key available. Provide one via --authkey-file <path>, \$HEADSCALE_AUTHKEY, or a prior $AUTHKEY_STORE (reusable key, headscale user 'fleet')."
-  info "Enrolling on $LOGIN_SERVER as $HOSTNAME_TS…"
+  info "Enrolling on $LOGIN_SERVER as ${HOSTNAME_TS}…"
   $SUDO tailscale up \
     --login-server "$LOGIN_SERVER" \
     --authkey "$AUTHKEY" \

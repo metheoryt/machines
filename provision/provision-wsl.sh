@@ -51,7 +51,7 @@ provision_wsl_main() {
 
   for step in "${steps[@]}"; do
     i=$((i + 1))
-    info "$i/$total $step…"
+    info "$i/$total ${step}…"
     case "$step" in
       tailscale-wsl.sh) bash "$REPO/provision/$step" --hostname "$nick" ;;
       fleet-local.sh)
