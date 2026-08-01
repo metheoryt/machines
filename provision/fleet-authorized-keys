@@ -1,8 +1,19 @@
 # Fleet SSH trust — PUBLIC keys only, one per host. Safe to commit.
-# Consumed by NixOS (users.users.me.openssh.authorizedKeys.keyFiles) and by
-# Windows (provision/windows.ps1 -> administrators_authorized_keys).
-# Append g16's key when reachable.
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBnlGSKtGHQwJNyODkQK0QyKX3h3hAOP2jjy5eAiEY8n me-nixos-latitude5520
+# Consumed by: Windows (provision/windows.ps1 -> administrators_authorized_keys,
+# regenerated WHOLESALE) and POSIX (tier_ssh_trust -> ~/.ssh/authorized_keys,
+# APPEND-ONLY).
+#
+# ⚠ REMOVING A LINE HERE DOES NOT REVOKE IT ON LINUX/macOS. tier_ssh_trust only
+# appends keys it doesn't find; it never prunes. Windows does prune. So a
+# retired key must ALSO be deleted by hand from ~/.ssh/authorized_keys on every
+# POSIX member, or it stays trusted forever.
+#
+# ⚠ A REINSTALLED HOST GETS A NEW KEY AND NOTHING ADDS IT HERE AUTOMATICALLY.
+# That is exactly how latitude locked itself out of desktop on 2026-08-01: the
+# box was rebuilt as Debian, minted a new me@latitude, and this file still
+# listed only its dead NixOS-era key. Update this file in the same change that
+# rebuilds a host.
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID1phM6MJjQbFKInnKyjVPYrMGs7AxTuq3+Y43V0QzQX me@latitude
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@g513ie
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@wsl-desktop
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH15XqDE0jcoeF5H2BJP39aBjvSPMLzB0W/n/m0SSNwD methe@me-g614jv
