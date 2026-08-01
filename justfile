@@ -85,6 +85,15 @@ agent-sync-orca *args:
 agent-link-orca *args:
     @bash agents/orca-profile-link.sh {{args}}
 
+# Copy Orca's live account profiles OUT to ~/.claude-profiles/<name> so their
+# transcripts and sessions survive Orca dropping the account dir. One-way rsync,
+# archive semantics (no deletions propagate), regenerable trees excluded. Runs at
+# the end of every agent-bootstrap; `--restore <name>` copies a snapshot back.
+[group('fleet')]
+[doc('Harvest Orca account profiles out to $HOME (backup)')]
+agent-harvest-orca *args:
+    @bash agents/orca-profile-harvest.sh {{args}}
+
 # NixOS-only: run the machine-local `gortex install --no-claude-md` wiring, which
 # bootstrap.sh skips under home-manager activation (kept fast/offline there). The
 # binary + daemon come from pkgs/gortex.nix + me.nix; this fills in the per-profile

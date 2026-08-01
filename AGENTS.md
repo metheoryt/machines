@@ -103,7 +103,10 @@ just agent-bootstrap                    # link ~/.claude (+ mirror into Orca pro
 just agent-bootstrap-profile <postfix>  # provision ~/.claude-<postfix>
 just agent-sync-orca                    # populate Orca's per-account profiles from
                                         #   ~/.claude (also runs at agent-bootstrap)
-just agent-link-orca <name>             # move an Orca account profile to
+just agent-harvest-orca                 # copy Orca's live account profiles OUT to
+                                        #   ~/.claude-profiles/<name> (backup; runs at
+                                        #   agent-bootstrap); --restore <name>
+just agent-link-orca <name>             # ALTERNATIVE to harvesting: move the profile to
                                         #   ~/.claude-profiles/<name> + symlink it back
                                         #   (once per account, Orca CLOSED);
                                         #   --status / --relink
@@ -174,7 +177,7 @@ None of these are Nix modules — they are the non-NixOS half of the repo.
 | Dir | What it is |
 |---|---|
 | `provision/` | Cross-platform provisioner — `provision.{sh,ps1}` role front door, `roles/*.{sh,ps1}` executors, `lib/` manifest readers (`fleet.sh`, `Fleet.psm1`, `tiers.sh`), `linux.sh`/`macos.sh` tier drivers, `statusboard/`, `tests/`. See `provision/README.md`. |
-| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (populates Orca's per-account profiles from `~/.claude`), `orca-profile-link.sh` (relocates those profiles to `~/.claude-profiles/<name>` so transcripts outlive Orca's dir), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
+| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (populates Orca's per-account profiles from `~/.claude`), `orca-profile-harvest.sh` (one-way rsync of the live account profiles out to `~/.claude-profiles/<name>` so transcripts outlive Orca's dir), `orca-profile-link.sh` (the stronger alternative — relocates the profile and symlinks it back), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `quick-check.sh` (the `just quick` gate), the `update-*.sh` version bumpers. |
 | `pkgs/` | Pinned out-of-tree packages (e.g. `gortex.nix`). |
 | `install-media/` | Shared Win11 install media. |

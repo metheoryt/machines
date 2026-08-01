@@ -1039,10 +1039,32 @@ global + per-host). One bullet per fact under a topical heading.
 - **Orca auto-injects hook wiring into `agents/settings.json` on launch** (SHARED
   tier — committing it pushes fleet-wide) and re-injects on the next launch.
   Prefer NOT to commit it.
-- **Orca account profiles live in $HOME and are linked back (2026-08-01).** Orca
+- **Orca profiles are harvested OUT to $HOME by default (2026-08-01).** The live
+  account dir works — Orca picks up the account and its sessions from it — so the
+  default is to leave it alone and rsync it out:
+  `agents/orca-profile-harvest.sh` copies each account to `~/.claude-profiles/<name>`
+  with ARCHIVE semantics (no `--delete`; a vanished transcript survives in the
+  copy), excluding the regenerable trees (`plugins/` alone is 18MB of the live
+  26MB; the payload is ~5MB of transcripts). The copy keeps the curated set as
+  symlinks, so it is a usable profile —
+  `CLAUDE_CONFIG_DIR=~/.claude-profiles/pure claude` reads old sessions outside
+  Orca. Pairing is recorded in `.orca-source` and keyed on the account's own
+  `accountUuid`, falling back to the Orca dir id — deleting an account and
+  signing back in mints a NEW `<orca-profile-id>`, so id-only pairing would
+  refuse the re-login as a stranger and `--restore` would write into the dead
+  dir and still print ✓. A hand-rename sticks either way. Runs at the end of
+  every personal bootstrap; `--restore <name>` copies back, follows the account
+  if its dir moved (`--to` overrides), and refuses into a live profile.
+  Read-only w.r.t. Orca — no symlink in its tree, nothing to migrate, no
+  coupling to its layout. Trade: the copy is a snapshot. The snapshot itself
+  cannot be lost to a re-auth: with no `--delete`, a blank or missing source
+  copies nothing and removes nothing — only `--mirror` propagates deletions.
+- **Relocating the profile is the stronger alternative (2026-08-01).** Orca
   runs Claude Code against `~/.local/share/orca/claude-accounts/<orca-id>/auth` — a
   dir it owns, keyed by an Orca-internal id, holding all transcripts/sessions
-  (525MB here) and reachable by no `.claude-<postfix>` convention (basename is
+  (26MB here — 18MB of it regenerable `plugins/`; ~5MB is transcripts, and the
+  525MB figure quoted earlier was `~/.claude`'s own history, not this dir) and
+  reachable by no `.claude-<postfix>` convention (basename is
   `auth`). `agents/orca-profile-link.sh` moves it to `~/.claude-profiles/<name>`
   and leaves a symlink, so the profile outlives the account dir: Orca re-creating
   it now costs THE LINK, not the data, and `--relink` folds the fresh auth state

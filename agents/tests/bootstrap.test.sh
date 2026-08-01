@@ -265,8 +265,25 @@ fi
 # fired after doing damage. The second is the over-fire guard — if the probe ever
 # misclassifies the canonical checkout, every box silently stops being bootstrapped.
 check "a refused run links nothing" '! printf "%s" "$out8a" | grep -q "would link"'
-out8d="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$boot" 2>&1)"
+#
+# It has to probe the CANONICAL checkout even when this suite is itself running
+# from a worktree — there, `$boot` is refused correctly, and asserting against it
+# would assert the opposite of the contract. Resolve the main checkout through
+# --git-common-dir and use its copy. DRY_RUN keeps it read-only.
+canon_boot="$boot"
+_gd="$(git -C "$repo" rev-parse --absolute-git-dir 2>/dev/null || true)"
+_gc="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$_gd" ] && [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+  canon_boot="$(dirname "$_gc")/agents/bootstrap.sh"
+fi
+if [ ! -f "$canon_boot" ]; then
+  echo "skip - over-fire guard (no canonical checkout at $canon_boot)"
+  canon_boot=""
+fi
+if [ -n "$canon_boot" ]; then
+out8d="$(DRY_RUN=1 CLAUDE_CONFIG_DIR="$HOME/.claude" bash "$canon_boot" 2>&1)"
 check "the canonical checkout is NOT refused" \
   '! printf "%s" "$out8d" | grep -q "refusing to bootstrap from"'
+fi
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

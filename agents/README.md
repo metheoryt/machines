@@ -188,10 +188,68 @@ the whole config: settings + hooks + statusline, `CLAUDE.md`, `memory/` and
 
 **2. Everything it accumulates is disposable** — transcripts under `projects/`,
 `sessions/`, prompt history and per-project auto-memory all live inside a
-directory only Orca manages. On this box that was 525MB of transcripts one
-re-auth away from disappearing.
+directory only Orca manages, and nothing else backs up WSL `$HOME`. Two answers,
+in increasing order of coupling: **harvest** it out on a schedule (default), or
+**relocate** it into `$HOME` and symlink it back.
 
-#### `orca-profile-link.sh` — make the profile outlive the account dir
+#### `orca-profile-harvest.sh` — copy the profile out (the default)
+
+One-way rsync, Orca -> `~/.claude-profiles/<name>/`. Read-only with respect to
+Orca: nothing in its tree changes, there is no symlink for it to trip over, and
+there is nothing to migrate. The live profile keeps working exactly as it does
+today — which, verified 2026-08-01, it does.
+
+- `just agent-harvest-orca` — every account. Names a new copy from the account's
+  org (else the email local part, else the Orca id) and records the pairing in
+  `.orca-source`, so later runs find the same destination and a hand-rename
+  sticks. `--name` overrides; `--dry-run` previews.
+- Runs at the end of every personal `bootstrap.sh`, after the sync — delta-only,
+  so it costs ~nothing per pull.
+- `just agent-harvest-orca --restore <name>` — copy a snapshot back after Orca
+  loses the dir. Refuses into a live profile, and never deletes: the live dir
+  keeps anything newer than the snapshot. `--to <auth-dir>` names the target by
+  hand when it cannot be worked out — and is checked, because it is the one path
+  where a typo (`--to ~/.claude`) would bury a whole profile: the target must sit
+  under the accounts root or carry Orca's `.orca-managed-claude-auth` marker,
+  unless `--force`.
+
+**A deleted-and-re-added account keeps its copy.** Signing back in mints a fresh
+`<orca-profile-id>`, so the copy is paired to the account's own `accountUuid`
+(from `oauth-account.json`) rather than to Orca's directory id: harvest tops the
+same copy up instead of refusing it as a stranger, and `--restore` follows the
+account to its new directory instead of writing into the dead one. Copies made
+before uuids were recorded still pair by directory id, and gain a uuid on the
+next run. Two genuinely different accounts are still refused — and an account
+with no `oauth-account.json` counts as unidentified, never as matching another
+unidentified one.
+
+The snapshot itself is never at risk in any of this: with no `--delete`, a
+blank or missing source copies nothing and removes nothing.
+
+**Archive semantics — no `--delete`.** A file that vanishes from the live profile
+stays in the copy. That is the entire point; a faithful mirror would reproduce
+the deletion it exists to protect against. `--mirror` opts into exact copying.
+
+**The copy is a working profile, not a blob.** The curated set arrives as
+symlinks (absolute `~/.claude` paths, so they still resolve), which means
+`CLAUDE_CONFIG_DIR=~/.claude-profiles/pure claude` reads the old sessions outside
+Orca, and moving transcripts between profiles is `mv`.
+
+Excluded because they regenerate — 18MB of the live profile's 26MB: `plugins/`
+(rebuilt from `settings.json` on launch), `cache/`, `file-history/`,
+`shell-snapshots/`, `session-env/`, `tmp/` and the `*-cache` dirs. What is left
+is ~5MB, mostly transcripts.
+
+The trade against relocating: the copy is a **snapshot**, so sessions since the
+last run are not in it.
+
+#### `orca-profile-link.sh` — the stronger alternative
+
+Relocates instead of copying, so there is no snapshot lag — at the cost of
+putting a symlink in Orca's tree and needing a one-time migration with Orca
+closed. Harvesting is the default because it couples to nothing; reach for this
+when losing even one session between harvests is unacceptable.
+
 
 Relocates the profile into `$HOME` and leaves a symlink in Orca's tree:
 

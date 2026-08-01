@@ -47,7 +47,13 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Two shapes are refused: a temp-dir copy, and a linked git worktree (where a
 # worktree agent would otherwise repoint the live profile at a tree that gets
 # removed on merge-back). Set MACHINES_BOOTSTRAP_ALLOW_COPY=1 to override.
-if [ -z "${MACHINES_BOOTSTRAP_ALLOW_COPY:-}" ]; then
+#
+# BOOTSTRAP_LIB_ONLY is exempt: it defines the helpers and links nothing, so the
+# damage this guards against cannot happen. Without the exemption, sourcing the
+# library from a worktree hits `exit 1` and takes the SOURCING shell down with
+# it — which is how agents/tests/bootstrap.test.sh died after two checks, in
+# silence, whenever the suite ran from a worktree.
+if [ -z "${MACHINES_BOOTSTRAP_ALLOW_COPY:-}" ] && [ -z "${BOOTSTRAP_LIB_ONLY:-}" ]; then
   _src_real="$(readlink -f "$SRC_DIR" 2>/dev/null || printf '%s' "$SRC_DIR")"
   _why=""
   # Worktree check FIRST: a worktree agent's tree usually also sits under a temp
@@ -616,6 +622,14 @@ if [ "$IS_PERSONAL" -eq 1 ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ]; then
   fi
   printf '\n'
   bash "$SRC_DIR/orca-profile-sync.sh" || true
+  # Harvest LAST: the copy should include the curated set the sync just wrote.
+  # One-way rsync out to ~/.claude-profiles/<name>, so transcripts and sessions
+  # survive Orca dropping its account dir. Delta-only, so it costs ~nothing per
+  # pull; never fails the bootstrap.
+  if [ -f "$SRC_DIR/orca-profile-harvest.sh" ]; then
+    printf '\n'
+    bash "$SRC_DIR/orca-profile-harvest.sh" || true
+  fi
 fi
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
