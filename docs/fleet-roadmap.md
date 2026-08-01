@@ -368,24 +368,12 @@ be diffed against a remembered failure count.
   checkboxes are unchecked even where fully executed, so the directory cannot be
   read as a backlog — worth a status line at the top of each, or at least of the
   two migration plans that are effectively complete.
-- [ ] **The cost of this drift is now measured, not theoretical.** Four times on
-  2026-08-01 an agent re-derived something the repos had already written down, and
-  twice reached the *wrong* answer before finding the record:
-  1. "Forgejo is the only copy, do not wipe" — the 2026-07-27 plan said *delete
-     it, do not export it*, and the 2026-07-30 spec said dropped by user decision.
-  2. `telegrind_pgdata` flagged as unverified — the spec already showed it restored
-     to latitude.
-  3. The four anonymous volumes flagged as unknown — the spec already identified
-     them as venvs.
-  4. P6's "rotation blocks telegrind/embedthat" nearly corrected to "rotation is
-     independent" — **`vps`'s** `.claude/memory/project.md` had the right nuance
-     already: rotation gates the bring-up on *security* grounds (never start a bot
-     on a token a third party has seen) while the PowerShell-only deploy path is
-     what blocks it mechanically. Both true, neither alone.
-  The fix that generalises: **before correcting a claim, grep the sibling repo's
-  memory too.** Three of the four records were in `machines`, the fourth in `vps`,
-  and the boundary between the two repos is exactly where a fact gets looked for
-  in the wrong place.
+- [ ] **The drift has a measured cost**: on 2026-08-01 four answers already written
+  down in `docs/superpowers/` or in project memory were re-derived from scratch, two
+  of them wrongly first — including one where the record was in **`vps`**, not here.
+  Hence the rule now in `.claude/memory/project.md`: before correcting a recorded
+  claim, check the sibling repo's memory too. The `machines`/`vps` boundary is
+  exactly where a fact gets hunted in the wrong place.
 
 ---
 
@@ -416,11 +404,23 @@ be diffed against a remembered failure count.
   plus a coupled edit to the `DATABASE_URL` two lines above it in the same file.
   Real risk of leaving the DB unopenable, no exposure reduced.
 
-  **Rotate embedthat's `BOT_TOKEN` too, without trying to prove it leaked.** The
-  four names above are telegrind's `.env.prod` exactly and three of them are ones
-  `embedthat/.env` does not define, so the *evidence* points at telegrind alone —
-  but the cost is asymmetric. Rotating a bot token is a two-minute BotFather
-  round-trip; starting a bot on a token someone else has seen hands them the bot.
+  **Still open and still needed, measured rather than assumed (2026-08-01).** Each
+  live value in `.env.prod` was tested for a byte-identical match anywhere under
+  `~/.claude/projects/` on air. All four telegrind values match, so nothing has
+  been rotated yet and the file is still the leaked file. **embedthat's `BOT_TOKEN`
+  is clean** — it appears in no transcript, so it needs no rotation; an earlier
+  draft of this item said rotate it anyway on cost asymmetry, which the test made
+  unnecessary. Re-run that comparison before rotating, in case you got there first.
+
+  **Size the exposure honestly, because it changes the urgency.** The values are in
+  exactly one file — this session's own transcript on air — and
+  `~/.claude/projects/` is path-keyed, machine-local and deliberately untracked, so
+  they are not in git, not on a shared host, and not on another box. What did leave
+  the machine is the API round-trip: they were sent to Anthropic as prompt context.
+  So this is not "a third party is holding your bot token", but it is not nothing
+  either, and the plaintext file is a standing local copy until rotation makes it
+  inert. Rotation is the fix; deleting the transcript is not, since it does not
+  reach anything already transmitted.
 - [ ] **Hermes' credentials — a different job, not this one.** They were deleted
   from disk on 2026-08-01 *without* being revoked at source, so unlike the three
   above there is no local copy to replace: it is revoke-blind-at-the-console and
