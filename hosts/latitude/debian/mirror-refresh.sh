@@ -37,8 +37,22 @@ S=/mnt/immich; D=/mnt/immich-mirror
 DRY=-n; [ "${1:-}" = "-go" ] && DRY=""
 for m in "$S" "$D"; do findmnt -no SOURCE "$m" >/dev/null || { echo "FATAL $m not mounted"; exit 1; }; done
 EX=(--exclude=/ImmichMedia/postgres/ --exclude=/lost+found/)
+# EXIT STATUS IS LOAD-BEARING NOW - this runs under a systemd timer.
+#
+# It used to end with `[ -n "$DRY" ] && echo ...`, which is FALSE under -go and
+# was the last command, so a fully successful `mirror-refresh.sh -go` always
+# exited 1. Invisible when typed by hand; under the timer every nightly run
+# reported Failed, which is worse than no alert because it teaches you to ignore
+# the one that matters. Neither rsync's status was checked either, so real
+# failures were equally unreported. Found 2026-08-01 by starting the unit instead
+# of trusting a hand-run.
+rc=0
 echo "=== library + config ==="
-rsync -aHAX $DRY --info=stats2 "${EX[@]}" "$S/" "$D/"
+rsync -aHAX $DRY --info=stats2 "${EX[@]}" "$S/" "$D/" || rc=$?
 echo "=== current DB dumps ==="
-rsync -a $DRY --info=stats2 /var/backups/immich-db "$D/var-backups/"
-[ -n "$DRY" ] && echo "(dry run - pass -go to apply)"
+rsync -a $DRY --info=stats2 /var/backups/immich-db "$D/var-backups/" || rc=$?
+if [ -n "$DRY" ]; then echo "(dry run - pass -go to apply)"; fi
+# 24 = "some files vanished before they could be transferred". Expected against a
+# live immich library and not a failure; anything else is.
+[ "$rc" = 24 ] && rc=0
+exit "$rc"
