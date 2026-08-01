@@ -323,8 +323,9 @@ Run **both scripts inside each distro**, in order:
 
 Notes:
 
-- **Per-distro identity.** Each distro runs its own `tailscaled` and gets a
-  distinct `100.64.x.y` + MagicDNS name (`wsl-<distro>.gg.ez`). No `.wslconfig`
+- **Per-distro identity.** Exactly one distro per Windows host runs `tailscaled`
+  and owns the tailnet node; others share that node's IP and use distinct ports.
+  No `.wslconfig`
   mirrored networking, no `netsh portproxy` — inbound rides the VPS DERP relay
   through WSL's NAT.
 - **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with

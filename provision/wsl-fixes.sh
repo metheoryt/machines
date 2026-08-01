@@ -21,6 +21,9 @@
 #      binfmt.d is applied, which is why the live flags always read `P` and
 #      never the conf's `PF`. The verified recovery is
 #      `systemctl restart systemd-binfmt`, so the watchdog does exactly that.
+# NOTE: This file is currently sourced only by provision/tests/wsl-fixes.test.sh
+# (with WSL_FIXES_LIB_ONLY=1). The `set -e` would leak into any other shell
+# that sources it, so this is a sourcing caveat, not a standalone-script safety.
 set -euo pipefail
 
 info() { printf '\033[0;36m▸ %s\033[0m\n' "$*"; }

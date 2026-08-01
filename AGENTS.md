@@ -175,8 +175,11 @@ Runs at system level (`nixosModules.default`) with `useGlobalPkgs = true` and `u
   2026-07-20.
 - **Self-declared WSL hosts add a third identity, outside this two-layer
   scheme entirely**: they are not a `fleet.json` member, so there's no
-  logical-name/OS-hostname pair — just a `fleet.local.json` nickname that IS
-  the tailnet node name, reached directly at `<nickname>.gg.ez`.
+  logical-name/OS-hostname pair — just a `fleet.local.json` nickname. Only a
+  `dispatch:direct` distro (at most one per Windows host — WSL2 distros share
+  one network namespace) owns the tailnet node and is reached directly at
+  `<nickname>.gg.ez`; other distros are `dispatch:parent` and are reached
+  through their Windows parent instead.
 
 ### latitude5520 (Dell Latitude 5520)
 
