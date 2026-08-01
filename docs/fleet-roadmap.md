@@ -368,6 +368,24 @@ be diffed against a remembered failure count.
   checkboxes are unchecked even where fully executed, so the directory cannot be
   read as a backlog — worth a status line at the top of each, or at least of the
   two migration plans that are effectively complete.
+- [ ] **The cost of this drift is now measured, not theoretical.** Four times on
+  2026-08-01 an agent re-derived something the repos had already written down, and
+  twice reached the *wrong* answer before finding the record:
+  1. "Forgejo is the only copy, do not wipe" — the 2026-07-27 plan said *delete
+     it, do not export it*, and the 2026-07-30 spec said dropped by user decision.
+  2. `telegrind_pgdata` flagged as unverified — the spec already showed it restored
+     to latitude.
+  3. The four anonymous volumes flagged as unknown — the spec already identified
+     them as venvs.
+  4. P6's "rotation blocks telegrind/embedthat" nearly corrected to "rotation is
+     independent" — **`vps`'s** `.claude/memory/project.md` had the right nuance
+     already: rotation gates the bring-up on *security* grounds (never start a bot
+     on a token a third party has seen) while the PowerShell-only deploy path is
+     what blocks it mechanically. Both true, neither alone.
+  The fix that generalises: **before correcting a claim, grep the sibling repo's
+  memory too.** Three of the four records were in `machines`, the fourth in `vps`,
+  and the boundary between the two repos is exactly where a fact gets looked for
+  in the wrong place.
 
 ---
 
@@ -379,9 +397,63 @@ be diffed against a remembered failure count.
   Needs a deliberate decision.
 - [ ] **latitude's migration debris**: 21M `~/immich-migration/` plus six
   `*.log` (`overnight.log` alone is 3.2M).
-- [ ] **Rotate the leaked Anthropic API key and Telegram bot token.** Blocks
-  bringing telegrind and embedthat back up. Hermes credentials were never
-  revoked at source either.
+- [ ] **Rotate three leaked credentials. Do this before starting either bot, and
+  note it is not what stops them starting** (the item after next is).
+  `docker inspect --format
+  '{{.Config.Env}}'` on the telegrind container printed `BOT_TOKEN`,
+  `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `POSTGRES_PASSWORD` into a session
+  transcript on `air` — `~/.claude/projects/…/*.jsonl`, plaintext, still on
+  disk. Use `{{.Config.Image}}` alone in future. Each value is one line of
+  `latitude:~/my/vps/homeserver/telegrind/.env.prod` (0600), so replacing it is
+  a one-line edit once the new value exists. All three need a browser:
+  - `ANTHROPIC_API_KEY` — console.anthropic.com: revoke, create, replace.
+  - `BOT_TOKEN` — BotFather `/revoke` on the telegrind bot, then `/token`.
+  - `GOOGLE_API_KEY` — aistudio.google.com/apikey: delete, create.
+
+  **`POSTGRES_PASSWORD` is deliberately excluded.** It never leaves latitude's
+  docker network, and it is baked into the existing `telegrind_pgdata` cluster —
+  so rotating it means an `ALTER ROLE` inside a container that is currently down,
+  plus a coupled edit to the `DATABASE_URL` two lines above it in the same file.
+  Real risk of leaving the DB unopenable, no exposure reduced.
+
+  **Rotate embedthat's `BOT_TOKEN` too, without trying to prove it leaked.** The
+  four names above are telegrind's `.env.prod` exactly and three of them are ones
+  `embedthat/.env` does not define, so the *evidence* points at telegrind alone —
+  but the cost is asymmetric. Rotating a bot token is a two-minute BotFather
+  round-trip; starting a bot on a token someone else has seen hands them the bot.
+- [ ] **Hermes' credentials — a different job, not this one.** They were deleted
+  from disk on 2026-08-01 *without* being revoked at source, so unlike the three
+  above there is no local copy to replace: it is revoke-blind-at-the-console and
+  nothing to edit afterwards. Inventory in project memory.
+- [ ] **Port the poll-deploy engine to Linux — the *other* half of the telegrind
+  and embedthat blockage.** The rotation above is a real gate, but only on the
+  security side: it says do not *start* the bots yet. It is not what stops them
+  starting. Four separate things do, verified 2026-08-01, and `vps`'s own
+  `.claude/memory/project.md` had already recorded the shape of this:
+  - The engine is **PowerShell on a Windows Scheduled Task** — `vps`'s
+    `homeserver/deploy-repos.ps1`, `register-repos-deploy.ps1`, `repos.psd1`, task
+    `repos-deploy` every 3 minutes. None of it runs on Debian. latitude has no
+    equivalent, so nothing polls, builds or recreates either stack.
+  - **The engine could not do the first start anyway**, on any platform: it acts
+    only when the gated service (`Service = 'bot'`) is *already running*. A fresh
+    bring-up is manual once, then the engine keeps it current.
+  - **Neither `src/` clone exists on latitude.** `homeserver/*/src/` is the
+    gitignored build-context clone the engine manages, and both `compose.prod.yml`
+    files use `build: context: ./src`. No src, no image.
+  - **telegrind also needs its GCP service-account key placed.** `.env.prod` says
+    `GOOGLE_SERVICE_ACCOUNT_FILE=local/google-account.json` and the compose mounts
+    `./src:/app/local`, so the file belongs at
+    `homeserver/telegrind/src/google-account.json`. It **is** preserved —
+    `latitude:~/g513ie-prod-config/telegrind/google-account.json`, 0600 — and it
+    embeds an RSA private key, so place it, never commit it.
+  - Both named volumes already survived the migration onto latitude:
+    `telegrind_pgdata`, `embedthat_redis_data`. Data is not the gap. Note
+    telegrind crash-loops on a *freshly recreated* pgdata (alembic has no version
+    seed) — a bring-up must reuse this volume, never `down -v`.
+
+  Order: rotate → clone both `src/` → place the GCP key → start each stack by
+  hand once → then decide whether to port the loop to a systemd timer. Porting is
+  a separate decision; the bots run fine without it, they just never self-update.
 - [ ] **Headscale ACLs.** The tailnet is default-open. Relatives never join it,
   but least privilege across our own boxes is cheap now and annoying later.
 - [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its

@@ -14,6 +14,16 @@ global + per-host). One bullet per fact under a topical heading.
   mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
+- **Before correcting a recorded claim, check the SIBLING repo's memory too.**
+  `machines` owns the machines, `~/my/vps` owns the services, and the boundary is
+  exactly where a fact gets hunted in the wrong repo. On 2026-08-01 four
+  already-written answers were re-derived from scratch and two came out wrong
+  first — the fourth was `vps`'s `.claude/memory/project.md` correctly recording
+  that the leaked-credential rotation gates telegrind's bring-up on *security*
+  grounds (never start a bot on a token a third party has seen) while the
+  Windows-only deploy path is what blocks it *mechanically*. `machines`'s roadmap
+  had collapsed those into one claim and the correction nearly collapsed them the
+  other way. See `docs/fleet-roadmap.md` P5 for all four.
 - **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
   globs every `*.test.sh` in the repo — 28 suites — and exits nonzero on failure.
   **It is GREEN as of 2026-08-01; keep it that way.** A red suite gives no signal,
