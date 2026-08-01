@@ -159,7 +159,8 @@ Coupled to P0: `backup-hub` is declared on `server` in `fleet.json` and exists
 nowhere else, so backups cannot be fixed without deciding where it goes, and the
 decommission cannot finish without the same decision. Do them together.
 
-- [ ] Move the `backup-hub` role to `latitude`.
+- [x] **Move the `backup-hub` role to `latitude`.** Done 2026-08-01 with P0 —
+  `fleet.json` declares it on `latitude` and nowhere else.
 - [ ] Repoint the six Caddy routes still aimed at the dead `100.64.0.3`:
   `speed` (2282), `tug` (9412), `jfin` (8096), `seerr` (5055), navidrome (4533),
   and the layer4 `:2222`. **`jfin` republishes Jellyfin publicly — needs an
