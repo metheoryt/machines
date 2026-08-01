@@ -4,7 +4,7 @@
       "platform": "debian",
       "profile": "server",
       "tailnet": { "ip": "100.64.0.8" },
-      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-client"],
+      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-hub", "backup-client"],
       "detect": { "hostname": "latitude5520" }
     },
     "air": {
@@ -24,7 +24,7 @@
       "platform": "windows",
       "tailnet": { "ip": "100.64.0.3" },
       "ssh": { "user": "methe" },
-      "roles": ["base", "ssh-server", "agents", "dotfiles", "backup-hub", "backup-client"],
+      "roles": ["base", "ssh-server", "agents", "dotfiles", "backup-client"],
       "detect": { "hostname": "g513ie" }
     },
     "hub": {
