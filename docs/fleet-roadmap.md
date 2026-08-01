@@ -37,32 +37,67 @@ P1 item before touching anything under `modules/`.
 
 ---
 
-## P0 — Backups are dead. Fix this first.
+## P0 — The 663 GiB archive has one copy, and the restic layer is gone.
 
-Nothing has been backed up anywhere in the fleet since **2026-07-19**. This is
-the only item on the list where waiting costs something irreversible.
+_Corrected 2026-08-01, after a full audit. An earlier revision of this section
+claimed "nothing has been backed up anywhere since 2026-07-19." **That was
+wrong** — immich's own nightly dump is alive. The real exposure is narrower and
+sharper than the overstatement, and the overstatement pointed at the wrong fix
+(a scheduler, when what is missing is a second copy)._
 
-- [ ] **Re-establish a backup path for the immich data on latitude.**
-  Evidence gathered 2026-08-01:
-  - The three `immich-*` scheduled tasks on `server` last ran **2026-07-19** and
-    returned `0x8007010B` — *"the directory name is invalid."* They target
-    `G:\` / `H:\`, drives that moved during the migration. They are still
-    `State: Ready` and still have a `NextRunTime`, so the schedule **looks
-    healthy and is not**.
-  - `restic-server` on `server` has been `Exited (0)` for 3 days.
-  - `latitude` has restic installed at `/usr/bin/restic` but **no repo on any
-    mount, no timer, and no container**. `hub` has no restic at all.
-  - Net: last good backup predates 2026-07-19.
-  Sub-steps: decide where `backup-hub` lives (see P2 — same decision from the
-  other end) → stand the repo up → retarget
-  `vps/backup/homeserver/profiles.yaml` off `G:\`/`H:\` → **disable the three
-  dead tasks on `server`** so a failing schedule stops reading as a live one.
+### What is actually protected right now
 
-- [ ] **Put a systemd timer on `hosts/latitude/debian/mirror-refresh.sh`.**
-  Small, and worth doing before the item above lands. Right now the fleet's only
-  live redundancy is a manual rsync that depends on someone remembering to run
-  it. A user timer alongside `fleet-selfpull` / `dotfiles-sync` /
-  `git-autofetch` is the whole job.
+| Data | Size | Protection |
+|---|---|---|
+| immich DB (albums, faces, metadata) | 223 MB/night | ✅ immich's own nightly dump → `/var/backups/immich-db`, latest `20260801T020000` |
+| immich library, 2025→now | 242 G | ⚠️ rsync mirror → sdd2, **manual**, last run 2026-07-31 17:10 |
+| **immich archive 1970–2024** (`/mnt/immich-2024/admin`) | **663 G** | ❌ **exactly one copy** |
+| servarr media | 526 G | ✅ deliberately unprotected — replaceable |
+| versioned / prunable / off-host backup | — | ❌ gone entirely |
+
+### What died
+
+- The three `immich-*` scheduled tasks on `server` last ran **2026-07-19** and
+  have returned `0x8007010B` — *"the directory name is invalid"* — ever since.
+  They target `G:\`/`H:\`. They are still `State: Ready` with a `NextRunTime`,
+  so **the schedule reads healthy while backing up nothing.**
+- **The restic repos no longer exist.** No `backup-homeserver` directory and no
+  repo markers on any mount, on any box. G:/H: were repurposed into
+  `immich-mirror` / `spare320` / `immich-2024` during the migration — the
+  migration consumed the backup drives. Whatever gets built starts from zero;
+  there is no history to recover.
+- `restic-server` (the REST target on `server:8001`, which `desktop-wsl` pushed
+  to) has been `Exited (0)` for 3 days. `latitude` has the restic binary but no
+  repo, timer, or container; `hub` has no restic at all.
+
+### The fix, cheapest-irreversibility-first
+
+- [ ] **Disable the three dead tasks on `server`.** Zero risk, do it first — a
+  schedule that reports Ready while failing is worse than no schedule.
+- [ ] **Put a systemd user timer on `hosts/latitude/debian/mirror-refresh.sh`,**
+  alongside `fleet-selfpull` / `dotfiles-sync` / `git-autofetch`. Removes
+  "someone remembers" from the only live redundancy.
+- [ ] **Give `/mnt/immich-2024/admin` a second copy on `/mnt/xs`.** This is the
+  actual data-loss fix. Measured 2026-08-01: source 662.9 GiB, target 700.0 GiB
+  free and empty, **no hardlinks** (`nlink>1` count is 0), uniform `me:me`
+  ownership, 4 files over 4 GiB (largest 11.6 GB — well inside exfat's limit;
+  the 4 GiB ceiling is FAT32's, not exfat's). 37 GiB of slack is thin in
+  general but fine here: 1970–2024 is a **closed** set, new photos land on
+  `/mnt/immich`. exfat therefore works as-is; reformatting sda3 to ext4 would
+  buy ownership preservation but is destructive on a Ventoy drive and is not
+  required.
+- [ ] **Stand up restic for the small irreplaceable set** — the DB dump and the
+  stack configs. Fits anywhere, restores versioning, and does not require
+  solving the 815 G problem first. Use `resticprofile`, the tool the old design
+  already used (`vps/backup/base.yaml` + a new `latitude/profiles.yaml`).
+  **Do not try to restore `vps/backup/homeserver/profiles.yaml` as-is** — it
+  assumes two dedicated repo drives (`G:\`, `H:\`) that no longer exist as free
+  space anywhere in the fleet.
+- [ ] **The full versioned backup of all 815 G, and offsite rotation** — a
+  separate decision that needs hardware. There is no drive in the fleet with
+  815 G free. Everything currently lands in one apartment, on drives attached
+  to one laptop; the dock drives are removable, so rotation needs no new
+  infrastructure, but capacity does.
 
 - [ ] **Decide what the mirror does with the deleted `Media/` tree.**
   `/mnt/immich-mirror` is 287G against `/mnt/immich`'s 249G; the difference is
@@ -70,10 +105,6 @@ the only item on the list where waiting costs something irreversible.
   `var-backups/`. `--delete` is **off by design** (see the script header), so
   the mirror will never drop it on its own. Prune deliberately or accept it as a
   last-resort copy — but write down which.
-
-- [ ] **Truly-offsite backups.** Everything lands in one apartment: primary and
-  every copy. The dock drives are already removable, so the fix needs no new
-  infrastructure — just periodic manual rotation of one drive off-site.
 
 ---
 
