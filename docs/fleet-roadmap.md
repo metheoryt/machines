@@ -37,7 +37,32 @@ P1 item before touching anything under `modules/`.
 
 ---
 
-## P0 — Backups. Largely fixed 2026-08-01; two items remain.
+## P0 — Backups. Largely fixed 2026-08-01; the remainder is DEFERRED by decision.
+
+> **Deferred 2026-08-01, deliberately — do not re-raise it as an oversight.**
+> Asked whether to build backup monitoring (a statusboard page, a notification,
+> or a scheduled agent check), the answer was: *"we shouldn't focus on backups
+> that much. If they will get broken, we will eventually know. Let's defer proper
+> backups and monitoring to future."* The statusboard backups page was declined
+> outright — that board is a local VT on latitude and the work happens on `air`,
+> so the page would have been decoration.
+>
+> The accepted trade, stated once and then left alone: the three jobs below run
+> unwatched, and the failure mode of an unwatched job is silence, which is how the
+> `server` tasks went 13 days unnoticed. What is different now is that the data
+> has a **second copy** rather than a single one, so silence costs currency, not
+> the archive. That is the part that actually mattered and it is done.
+>
+> If this is picked back up: the enabling trick is already proven — a repo's
+> newest snapshot age is readable from `<repo>/snapshots/` **file mtimes**, with
+> no restic binary and no password, and because latitude is the hub it can see
+> every pusher's repo including `desktop-wsl`'s. The design that was worked out
+> and not built: one status script emitting rows (`--json` for agents), pure
+> `sb_backup_*` helpers above the `STATUSBOARD_LIB_ONLY` guard so they are
+> fixture-testable like `sb_docker_alerts`, and a severity policy keyed on each
+> job's **declared expected period** rather than on periodicity — that rule is
+> what keeps Debian's nine housekeeping timers off the page while catching the
+> four that matter.
 
 _This section was rewritten twice. The first version claimed "nothing has been
 backed up anywhere since 2026-07-19", which was **wrong** — immich's own nightly
@@ -106,16 +131,10 @@ is what made the right work obvious._
   alert. rsync's status was not checked either. Both fixed; found by **starting
   the unit** rather than trusting a hand-run.
 
-### Still open
+### Deferred (see the decision box at the top of P0)
 
-- [ ] **None of it alerts, and that is the same shape as the failure that
-  started this.** Every job here fails silently; the `server` tasks failed
-  visibly in `LastTaskResult` for 13 days and nobody looked, so "it logs" is not
-  a defence. `provision/statusboard/statusboard.sh` already carries an alert
-  strip on every page with a fixture-testable severity policy
-  (`sb_fleet_alerts`, `sb_docker_alerts`); a `sb_backup_alerts` keyed on
-  newest-snapshot age is the right home. **This is the highest-value remaining
-  backup work.**
+- [~] **Nothing alerts.** Deferred by decision, not left open. The design is
+  recorded in the box above so picking it up does not start from zero.
 - [ ] **The full versioned backup of all 815 G, and offsite rotation** — needs
   hardware. No drive in the fleet has 815 G free, which is why the libraries get
   mirrors rather than restic repos. The consequence to be honest about: a
