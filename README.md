@@ -19,8 +19,11 @@ provisioner under `provision/`.
 - **hub** — Debian VPS at `cyphy.kz`; Headscale control server + AmneziaWG VPN hub.
 - **desktop** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
   **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
-- **server** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti, Windows 11,
-  OS hostname `g513ie`. **Being decommissioned** — its services moved to latitude.
+- ~~**server**~~ — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
+  Windows 11, OS hostname `g513ie`. **Left `fleet.json` 2026-08-01**; its services
+  moved to latitude. Still powered on and reachable as `server.gg.ez`, and it holds
+  the only copy of the `forgejo_data` volume — see `docs/fleet-roadmap.md` P2 before
+  wiping it.
   It used to run the cyphy.kz platform, defined in the sibling **`vps`** repo —
   that repo owns the *services*; `machines` owns the *machines* + their backups.
 
@@ -36,7 +39,7 @@ answer file + Ventoy config).
 |---|---|
 | **macOS** — air | `just provision-mac air` |
 | **Debian / any glibc Linux** | `bash provision/linux.sh` |
-| **Windows** — ME-G614JV, g513ie | `provision\windows.ps1` (`-Work` adds the work profile) |
+| **Windows** — ME-G614JV | `provision\windows.ps1` (`-Work` adds the work profile) |
 | **WSL** — self-declaring fleet host | `just provision-wsl <nickname>` |
 
 All of them link your synced agent config for you (via `agents/bootstrap.sh`); to
@@ -109,7 +112,7 @@ between latitude leaving NixOS and 2026-08-01.
 install both as system timers. Read the headers first — they record decisions the
 code cannot show you.
 
-**`hosts/desktop/windows/`**, **`hosts/server/windows/`** — install/reinstall +
+**`hosts/desktop/windows/`** — install/reinstall +
 backup scripts.
 
 ## Hardware Notes

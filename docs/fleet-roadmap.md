@@ -20,7 +20,7 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| `server` | `100.64.0.3` | Windows 11 (`g513ie`) | **draining** — services moved to latitude, containers stopped, retirement pending |
+| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet, still holds the only `forgejo_data`; reach it at `server.gg.ez` |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
@@ -196,22 +196,74 @@ and `converge.sh` still *detects* a `nixos` class on purpose (folding it into
 `linux` would run the apt driver on a Nix box and abort). Both are fail-safe if
 Nix ever returns. Leave them.
 
-## P2 — Finish the `server` (g513ie) decommission.
+## P2 — ✅ DONE 2026-08-01. `server` (g513ie) is out of the fleet.
 
-Coupled to P0: `backup-hub` is declared on `server` in `fleet.json` and exists
-nowhere else, so backups cannot be fixed without deciding where it goes, and the
-decommission cannot finish without the same decision. Do them together.
+**The hardware is NOT retired** — see the Forgejo item below before wiping it.
 
 - [x] **Move the `backup-hub` role to `latitude`.** Done 2026-08-01 with P0 —
   `fleet.json` declares it on `latitude` and nowhere else.
-- [ ] Repoint the six Caddy routes still aimed at the dead `100.64.0.3`:
-  `speed` (2282), `tug` (9412), `jfin` (8096), `seerr` (5055), navidrome (4533),
-  and the layer4 `:2222`. **`jfin` republishes Jellyfin publicly — needs an
-  explicit go, not a silent repoint.**
-- [ ] Remove `server` from `fleet.json` and drop `methe@server` from
-  `provision/fleet-authorized-keys`. Not before the two above: it is still
-  reachable and still holds the only copies of things.
-- [ ] Archive or delete `hosts/server/windows/`.
+- [x] **Caddy repointed — and it was SEVEN routes, not six.** `git.cyphy.kz`
+  (3000) was missing from the list this file used to carry, which is the same
+  undercount P1's header warns about. `speed` (2282), `tug` (9412), `seerr` (5055)
+  and `jfin` (8096) now point at `100.64.0.8`, each verified answering **from
+  hub** rather than from a dev box — hub reaches latitude over DERP, so an
+  air-side probe proves nothing about what the proxy can see. All four went
+  502 → live. `jfin`, `seerr` and `tug` were each confirmed as deliberate public
+  exposure rather than swept along; `tug` can stop or update every container on
+  latitude, though it does enforce auth (`/api/hosts/list` → 401 unauthenticated,
+  checked before republishing). vps commits `954a8cc` + `7009448`.
+- [x] **Two routes retired instead of repointed**, because a repoint to a port
+  nothing listens on trades a 502 for a 502 (both verified refused from hub):
+  navidrome (parked — its library was `Airdrome`, being rebuilt by hand) and
+  Forgejo. Also corrected the `qb` block's note, which told the reader to reach
+  qBittorrent at the dead `100.64.0.3:8084`.
+- [x] **`server` removed from `fleet.json`; `methe@server` dropped from
+  `provision/fleet-authorized-keys`.** Checked first that this costs no access:
+  `ssh server.gg.ez` works from air via the `Host *.gg.ez` catch-all (only the
+  bare-name alias is lost), and the dropped key is server's OUTBOUND trust into
+  latitude and hub, not anything's route in. Note the file's own warning: the
+  revocation lands when latitude and hub next provision, not now.
+- [x] **`hosts/server/` deleted** — a `winget-packages.json` for a box leaving
+  service, and a README whose only unique facts are recorded here. Git history
+  holds both.
+- [x] **Fixed a live defect the removal surfaced.** `--machine <not-a-member>`
+  printed `platform: null`, emitted a raw `jq: error … Cannot iterate over null`,
+  listed no roles and **exited 0** — provisioned nothing, reported success. The jq
+  failure sat inside a process substitution, so `set -e` never fired. New
+  `fleet_has_machine` guard exits 2 and lists the known members. Never specific to
+  `server`; any typo did it.
+- [x] **Two tests were hardcoding fleet membership** and broke on the removal
+  while the code was correct: `fleet-ssh-tier.test.sh` named the five members in a
+  loop and asserted `-ge 6` IdentityFile lines (both now derived from the
+  manifest), and `statusboard.test.sh` fed the REAL manifest into the
+  `sb_fleet_join` assertions (now a synthetic fixture — `sb_fleet_parse` above it
+  is what legitimately pins the shipped file). Suite is back to the 3 pre-existing
+  failures, no new ones.
+
+### Still open — Forgejo has no home, and it is why the box must not be wiped
+
+- [ ] **Rehome Forgejo off `server`, or decide to lose it.** Its container has
+  been `Exited(137)` since ~2026-07-18 — *two weeks before* the migration stopped
+  everything else, so it broke independently and nobody noticed; and
+  `git.cyphy.kz` has **no DNS record at all**, so its web half was unreachable
+  regardless of the upstream. Both Caddy blocks (web 3000 + git-SSH via the
+  layer4 `:2222` — one service, two halves) are commented out, not repointed.
+  Bringing it back is a **service migration**: move the `forgejo_data` volume to
+  latitude and create the missing `git.cyphy.kz` A record. Deliberately kept out
+  of the decommission so P2 could close.
+  - ⚠ **`forgejo_data` is still on `server`, and it is the only copy.** Do not
+    wipe or return that machine until this is resolved. It is reachable at
+    `server.gg.ez` from air.
+  - Note `latitude` **cannot** reach server (`me@server.gg.ez: Permission
+    denied`) — it was rebuilt as Debian and minted a new key that server's
+    `authorized_keys` never learned, exactly the trap
+    `provision/fleet-authorized-keys` documents. So a pull-based migration has to
+    be orchestrated from air, or that key enrolled first. This is P3's missing
+    generator showing up as a concrete blocker.
+- [ ] The `server` **profile** name survives the `server` **machine** — latitude
+  uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
+  `plan server`. Not a bug, but the two now mean different things; do not "clean
+  up" the profile thinking it is the retired box.
 
 ---
 

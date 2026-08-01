@@ -147,6 +147,38 @@ global + per-host). One bullet per fact under a topical heading.
 
 ## Fleet network
 
+- **`server` (g513ie) left `fleet.json` on 2026-08-01 — but the hardware is still
+  live.** The decommission is done: manifest entry removed, `methe@server` dropped
+  from `provision/fleet-authorized-keys`, `hosts/server/` deleted, and the seven
+  Caddy routes repointed (roadmap P2). What to know before touching it:
+  - **It holds the only copy of the `forgejo_data` volume.** Do NOT wipe or return
+    the machine until Forgejo is rehomed. Its container has been `Exited(137)`
+    since ~2026-07-18 — it broke two weeks *before* the migration, independently —
+    and `git.cyphy.kz` has no DNS record, so rehoming means a volume move to
+    latitude **plus** creating that A record.
+  - **Reach it as `server.gg.ez`, not `server`.** Losing the manifest entry loses
+    the bare-name alias from every generated `~/.ssh/config`; the `Host *.gg.ez`
+    catch-all still resolves it. Verified from air.
+  - **`latitude` cannot reach it** — `me@server.gg.ez: Permission denied`. latitude
+    was rebuilt as Debian and minted a new key that server's `authorized_keys`
+    never learned. So drive any migration from `air`, or enrol that key first.
+  - Removing a key line here is not an instant revocation: it lands when latitude
+    and hub next provision.
+  - The `server` **profile** outlives the `server` **machine** — latitude runs
+    `profile: server` and `tiers.test.sh` exercises it as `plan server`. Don't
+    "clean up" the profile thinking it is the retired box.
+- **A manifest entry is load-bearing for more than provisioning, and two tests
+  hardcoded it.** Removing a member broke `fleet-ssh-tier.test.sh` (five members
+  named in a loop, `-ge 6` IdentityFile lines) and `statusboard.test.sh` (the REAL
+  fleet.json fed into `sb_fleet_join` assertions) while the code under test was
+  correct. Both now derive from the manifest or use a synthetic fixture. If you add
+  or remove a member and the suite goes red, suspect the fixtures first.
+- **`--machine <not-a-member>` used to provision nothing and exit 0.**
+  `fleet_platform` returned the string `"null"`, `fleet_roles` died with a raw
+  `jq: error … Cannot iterate over null` inside a process substitution so `set -e`
+  never fired, no roles printed, status 0. `fleet_has_machine` now guards the front
+  door: exit 2, and it lists the known members.
+
 - Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
   the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
   Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).

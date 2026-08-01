@@ -920,15 +920,29 @@ hasnt "$FLEET" 'base' 'fleet: the roles array is not mistaken for a field'
 hasnt "$FLEET" 'methe' 'fleet: the ssh block is not mistaken for a field'
 
 # The join is what the page renders. States, in the order they matter.
+#
+# A SYNTHETIC manifest on purpose. sb_fleet_parse above is what pins the REAL
+# fleet.json (that assertion is the whole reason it reads the shipped file); the
+# join's semantics have nothing to do with who is in the fleet this month. These
+# rows used to be the real manifest's, which meant every membership change broke
+# three assertions down here — removing `server` on 2026-08-01 did exactly that,
+# and the join code was correct throughout. `oldbox` is deliberately not a real
+# member: five rows keep all five join states coverable with a four-member fleet.
+FLEETX="$(printf '%s\n' \
+  'latitude|100.64.0.8|debian|latitude5520' \
+  'desktop|100.64.0.4|windows|g614jv' \
+  'oldbox|100.64.0.3|windows|oldbox5000' \
+  'hub|100.64.0.1|debian|27608' \
+  'air|100.64.0.7|darwin|air')"
 FPEERS="$(printf '%s\n' \
   '100.64.0.4|desktop|windows|direct|' \
-  '100.64.0.3|server|windows|offline|3d' \
+  '100.64.0.3|oldbox|windows|offline|3d' \
   '100.64.0.1|hub|linux|relay|' \
   '100.64.0.9|somephone|iOS|idle|')"
-FJ="$(sb_fleet_join "$FLEET" "$FPEERS" 100.64.0.8 1)"
+FJ="$(sb_fleet_join "$FLEETX" "$FPEERS" 100.64.0.8 1)"
 has "$FJ" 'latitude|100.64.0.8|debian|self|'    'join: the box running the board is self'
 has "$FJ" 'desktop|100.64.0.4|windows|direct|'  'join: an active session is direct'
-has "$FJ" 'server|100.64.0.3|windows|offline|3d' 'join: an offline member keeps its last-seen age'
+has "$FJ" 'oldbox|100.64.0.3|windows|offline|3d' 'join: an offline member keeps its last-seen age'
 has "$FJ" 'hub|100.64.0.1|debian|relay|'        'join: a relayed member is distinguishable from a direct one'
 # The failure a peer COUNT cannot express: air is in the manifest and not on the
 # tailnet, so it is a ROW that says so rather than a number that never mentions it.
@@ -938,7 +952,7 @@ has "$FJ" '_others|1|1|'                        'join: non-fleet nodes are count
 hasnt "$FJ" 'somephone'                         'join: a non-fleet node gets no row of its own'
 # Nothing was learned about the peers, so nothing is claimed about them. Five red rows
 # for one local fault would bury the single alert that is true.
-FJD="$(sb_fleet_join "$FLEET" "" "" 0)"
+FJD="$(sb_fleet_join "$FLEETX" "" "" 0)"
 eq "$(printf '%s\n' "$FJD" | grep -c 'unknown')" '5' 'join: an unreadable local tailnet makes every member unknown'
 hasnt "$FJD" 'missing' 'join: an unreadable local tailnet accuses nobody of being missing'
 eq "$(printf '%s\n' "$FJD" | grep -c '_others|0|0')" '1' 'join: and counts no strangers either'

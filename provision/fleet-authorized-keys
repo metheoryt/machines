@@ -28,7 +28,6 @@
 # latitude5520, a machine that no longer exists. No logical name has ever
 # changed. sshd ignores the comment — every human pruning this file does not.
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID1phM6MJjQbFKInnKyjVPYrMGs7AxTuq3+Y43V0QzQX me@latitude
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@server
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@desktop-wsl
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH15XqDE0jcoeF5H2BJP39aBjvSPMLzB0W/n/m0SSNwD methe@desktop
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHC5QVL/9jlSdmswvx9KWZ6rKVT+fr97sr9zAOoFIPKG me@air

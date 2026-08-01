@@ -40,6 +40,20 @@ fleet_detect() {
     echo "$m"
 }
 
+# fleet_has_machine <name>: 0 when <name> is a member of the manifest.
+#
+# Guards the front door against a name that is not, or is no longer, a member.
+# Without it the failure is green rather than loud: fleet_platform yields the STRING
+# "null" (that is how jq -r prints null), fleet_roles then dies with a raw
+# `jq: error ... Cannot iterate over null`, and because that runs inside provision.sh's
+# process substitution `set -e` never fires -- so the run prints an empty role list and
+# exits 0. `server` was a valid name until 2026-08-01, which makes this reachable by
+# muscle memory and not only by typo.
+fleet_has_machine() {
+    [ -n "${1:-}" ] || return 1
+    jq -e --arg m "$1" '.machines | has($m)' "$(fleet_manifest_path)" >/dev/null 2>&1
+}
+
 fleet_platform() {
     jq -r --arg m "$1" '.machines[$m].platform' "$(fleet_manifest_path)"
 }

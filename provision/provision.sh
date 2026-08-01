@@ -36,6 +36,16 @@ if [ -z "$MACHINE" ]; then
 fi
 if [ -z "$MACHINE" ]; then echo "no machine selected" >&2; exit 2; fi
 
+# A name that is not in the manifest must fail HERE and loudly. See
+# fleet_has_machine: without this the run emits a raw jq error, prints no roles, and
+# still exits 0 -- "provisioned nothing, reported success", which is the same failure
+# the role executors' `*)` arms are guarded against in provision/tests/roles.test.sh.
+if ! fleet_has_machine "$MACHINE"; then
+    echo "unknown machine: $MACHINE" >&2
+    echo "known machines: $(fleet_machines | tr '\n' ' ')" >&2
+    exit 2
+fi
+
 platform="$(fleet_platform "$MACHINE")"
 echo "▸ Machine: $MACHINE   platform: $platform   mode: $MODE"
 echo "▸ Roles:"

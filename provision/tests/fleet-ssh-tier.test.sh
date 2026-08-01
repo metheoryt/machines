@@ -47,7 +47,11 @@ has "$out" 'ENROLLMENT NEEDED' "warns that the new key needs enrolling"
 # the bare name AND the MagicDNS FQDN: without the second pattern the FQDN form
 # fell through to the `Host *.gg.ez` catch-all's `User me` and was refused on the
 # members whose user is methe/debian.
-for h in air latitude desktop server hub; do
+# DERIVED from the manifest, not hardcoded. This loop used to name the five members
+# literally, so removing `server` on 2026-08-01 failed it for the right reason and the
+# wrong cause: the tier was correct and the test was stale. Membership churns; the
+# invariant — every member gets a block matching both forms — does not.
+for h in $(jq -r '.machines | keys[]' "$REPO/fleet.json"); do
   has "$cfg" "^Host ${h} ${h}\.gg\.ez\$" "config has a Host block for ${h} + its FQDN"
 done
 
@@ -60,9 +64,12 @@ has "$cfg" '^Host \*\.gg\.ez$'           "the MagicDNS wildcard block is present
 
 # The whole point: an identity file on every block, so `ssh latitude` from the
 # Mac presents id_fleet instead of falling back to the local account name.
+# One per member block, plus one for the *.gg.ez wildcard. Derived for the reason
+# above: a hardcoded `-ge 6` was a five-member fleet frozen into an assertion.
+n_want=$(( $(jq -r '.machines | length' "$REPO/fleet.json") + 1 ))
 n_id="$(grep -c '^  IdentityFile ~/.ssh/id_fleet$' "$CFG")"
-[ "$n_id" -ge 6 ] && pass "every block sets IdentityFile id_fleet ($n_id)" \
-  || die "expected >=6 IdentityFile lines, got $n_id"
+[ "$n_id" -ge "$n_want" ] && pass "every block sets IdentityFile id_fleet ($n_id)" \
+  || die "expected >=$n_want IdentityFile lines, got $n_id"
 
 # 0600 or ssh refuses the file outright.
 perm="$(stat -c '%a' "$CFG" 2>/dev/null || stat -f '%Lp' "$CFG" 2>/dev/null)"

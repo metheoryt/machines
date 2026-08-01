@@ -61,4 +61,35 @@ eq "$nojq" "hub" "for_host resolves without jq (python3 fallback)"
 nojq_sfx="$(PATH="$tmp/bin" bash -c 'source "$1"; fleet_profile_for_host 27608.example.net' _ "$LIB")"
 eq "$nojq_sfx" "hub" "for_host strips the suffix on the python3 fallback too"
 
+# fleet_has_machine + the front door's unknown-machine guard. The bug this closes:
+# `--machine <not-a-member>` used to print `platform: null`, emit a raw
+# `jq: error ... Cannot iterate over null`, list NO roles, and exit 0 -- provisioned
+# nothing, reported success. It surfaced when `server` was removed from the manifest
+# on 2026-08-01, but it was never specific to that name.
+fleet_has_machine latitude && pass "fleet_has_machine accepts a real member" \
+  || die "fleet_has_machine accepts a real member"
+fleet_has_machine no-such-box && die "fleet_has_machine accepts a non-member" \
+  || pass "fleet_has_machine rejects a non-member"
+fleet_has_machine "" && die "fleet_has_machine accepts an empty name" \
+  || pass "fleet_has_machine rejects an empty name"
+# `server` by name, because muscle memory outlives a manifest edit and this is the
+# regression that would make a retired member silently look provisionable again.
+fleet_has_machine server && die "fleet_has_machine still accepts the retired 'server'" \
+  || pass "fleet_has_machine rejects the retired 'server'"
+
+# The exit CODE is the assertion: a nonzero status is what stops `just provision
+# --machine typo --apply` from reading as a successful no-op.
+PROV="$HERE/../provision.sh"
+out="$(bash "$PROV" --machine no-such-box --dry-run 2>&1)"; rc=$?
+eq "$rc" "2" "provision.sh exits 2 for an unknown machine"
+printf '%s\n' "$out" | grep -q 'unknown machine: no-such-box' \
+  && pass "provision.sh names the unknown machine" \
+  || die "provision.sh names the unknown machine"
+printf '%s\n' "$out" | grep -q 'known machines:' \
+  && pass "provision.sh lists the known machines" \
+  || die "provision.sh lists the known machines"
+printf '%s\n' "$out" | grep -q 'Cannot iterate over null' \
+  && die "provision.sh still leaks the raw jq error" \
+  || pass "provision.sh no longer leaks a raw jq error"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

@@ -28,10 +28,15 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
   `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
 - **server / g513ie** — ASUS ROG **G15** 2023 (model G513IE), RTX 3050 Ti,
-  Windows 11, tailnet `100.64.0.3`. **Being decommissioned** — its services moved
-  to latitude and its containers are stopped. Still reachable and still holds the
-  only copies of some things, so do not prune it from `fleet.json` before the
-  remaining Caddy routes are repointed (see `docs/fleet-roadmap.md` P2).
+  Windows 11, was tailnet `100.64.0.3`. **Removed from `fleet.json` 2026-08-01**,
+  along with `hosts/server/` and its `methe@server` trust line — the decommission
+  is done (`docs/fleet-roadmap.md` P2). It is **not** retired hardware: still
+  powered on, still on the tailnet, reachable as `server.gg.ez` (the bare-name
+  alias is gone with its manifest entry; the `Host *.gg.ez` catch-all still
+  resolves it). **It holds the only copy of the `forgejo_data` volume** — do not
+  wipe or return the machine until Forgejo is rehomed. `latitude` cannot reach it:
+  latitude was rebuilt as Debian and its new key was never enrolled there, so any
+  migration has to be driven from `air`.
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
@@ -184,9 +189,10 @@ namespace) is reached directly at `<nickname>.gg.ez`; every other distro is
 parent — not through a `fleet.json` entry either way. The shared dispatch primitive
 `agents/plugin/skills/lib/fleet-dispatch.sh` (`fd_probe`/`fd_run`/
 `fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and kb-refresh's
-`fleet-gather.sh`; it also handles the Windows-native members (`desktop`,
-`server`) by dispatching through Git Bash via PowerShell's call operator,
-keyed on `platform: windows` in `fleet.json`.
+`fleet-gather.sh`; it also handles the Windows-native members by dispatching
+through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
+`fleet.json` — which since 2026-08-01 means `desktop` alone, `server` having left
+the manifest.
 
 **Gotcha:** a self-declared WSL host has no `fleet.json` entry, so the generated
 `~/.ssh/config` has no `Host` block for its bare name — only the catch-all
@@ -212,8 +218,8 @@ from the code.
   units into `/etc/systemd/system` rather than symlinking, so a `git pull` cannot
   change what root runs on a timer without review.
 
-The Windows hosts carry install/reinstall + backup scripts under
-`hosts/<name>/windows/`.
+`hosts/desktop/windows/` carries install/reinstall + backup scripts.
+(`hosts/server/` was deleted with the decommission — git history has it.)
 
 ### Key patterns
 
@@ -238,8 +244,8 @@ The Windows hosts carry install/reinstall + backup scripts under
 ### Two-layer hostname convention
 
 - **Logical name** — the fleet key / SSH alias / tailnet node / repo
-  `hosts/<dir>` — role-based and stable: `latitude` / `desktop` / `server` /
-  `hub` / `air`.
+  `hosts/<dir>` — role-based and stable: `latitude` / `desktop` /
+  `hub` / `air` (and `server` until it left the manifest 2026-08-01).
 - **OS hostname** — `detect.hostname` in `fleet.json` — the hardware model,
   lowercased: `latitude5520`, `g614jv`, `g513ie`, `27608`.
 - `hub`/`27608` is the VPS special-case: no laptop model, so its OS hostname
