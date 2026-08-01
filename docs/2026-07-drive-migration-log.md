@@ -290,3 +290,42 @@ every reboot — identify by UUID or bridge serial.
   no error, because it could not create its lock file; `--no-lock` returns in
   seconds. Same for `cat config`.
 
+
+## Techniques worth reusing (harvested 2026-08-01, before deleting the scripts)
+
+The migration ran out of ~16 one-shot scripts in latitude's `$HOME`. Those were
+deleted once the rotation completed — they referenced mounts that no longer
+exist (`/mnt/immich/Media`, `/mnt/public`, `/mnt/xs`) and re-running them would
+have been actively dangerous. What was NOT re-derivable from the code is the
+handful of measurement rules they encoded, recorded here so the scripts could go:
+
+- **Never edit a shell script while it runs.** bash reads the file incrementally
+  as it executes; an in-place edit shifts the offset it resumes from and the
+  running job executes garbage. Several of those scripts carried the warning in
+  their own headers because it had already bitten. Edit a copy and swap it.
+- **`du -sb` is not a portable byte tally across filesystems.** It counts
+  directory `st_size`, which differs between ntfs3 and ext4 — so a tree appears
+  to change size purely by being copied, and a src/dst comparison "fails" for no
+  reason. Compare regular files only:
+  `find "$d" -type f -printf '%s\n' | awk '{s+=$1}END{print s+0}'`.
+- **`du` also under-reports any hardlinked tree** — a shared inode is credited to
+  whichever directory `du` walks first. To measure one honestly, build an inode
+  manifest and dedupe on it: `find "$d" -type f -printf '%i\t%s\t%n\t%P\n'`, then
+  sum field 2 once per distinct field 1. That is how the servarr tree was proven
+  to be 526 GiB actual against 1.03 TB apparent — the number that determined it
+  would fit on the 931 GB sdb2 at all, and why its rsync needed `-H` in ONE
+  invocation across all four dirs.
+- **Classify `rsync --itemize-changes` output by a flag histogram, never by regex
+  against the whole line.** The flags are the first field (`>fcsT......`); the
+  rest is a filename, and a filename can contain any substring being grepped for.
+  Cut the flag field, then count. A whole-line grep will happily "verify" a match
+  against a file whose *name* contains the pattern.
+- **Identity-guard every destructive script.** The ones that reformatted anything
+  resolved the target by UUID or `/dev/disk/by-id/usb-*` and cross-checked the
+  USB bridge serial before `mkfs` — latitude has five bus-powered USB drives plus
+  a card reader, and the `sdX` letters reshuffle on every boot. Several also
+  asserted a surviving copy existed before wiping. Keep that shape.
+
+The one recurring script was kept and is now tracked at
+`hosts/latitude/debian/smart-long.sh` (SMART long self-tests), alongside
+`mirror-refresh.sh`.
