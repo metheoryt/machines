@@ -70,6 +70,73 @@ case "$svc" in
   *) pass "watchdog avoids the inert binfmt.d conf" ;;
 esac
 
+# ── the native docker CLI ─────────────────────────────────────────────────────
+# Docker Desktop injects /usr/bin/docker and the cli-plugins as symlinks into
+# /mnt/wsl/docker-desktop/cli-tools, a VM-wide tmpfs it repopulates every boot.
+# On 2026-08-01 that repopulation half-failed: the socket, the bind-mounts and
+# the symlink were all wired, cli-tools was left empty, and `docker` vanished
+# from a distro whose integration toggle still read ON. A headless work distro
+# nobody opens would not notice. These packages give each distro a CLI that
+# does not depend on that tmpfs.
+
+pkgs="$(wsl_fixes_docker_packages | sort | tr '\n' ' ')"
+eq "$pkgs" "docker-buildx-plugin docker-ce-cli docker-compose-plugin " \
+  "docker packages are the CLI plus compose and buildx"
+
+# The daemon must NEVER be installed: dockerd belongs to Docker Desktop, and a
+# second one would fight it for /var/run/docker.sock.
+case "$(wsl_fixes_docker_packages)" in
+  *docker-ce-cli*) : ;;
+  *) die "docker packages must include docker-ce-cli" ;;
+esac
+case " $pkgs " in
+  *" docker-ce "*|*" docker.io "*|*" containerd"*)
+    die "docker packages must not install a daemon (docker-ce / docker.io / containerd)" ;;
+  *) pass "docker packages install no daemon" ;;
+esac
+
+# The apt source must be pinned to this distro's own codename and signed by the
+# keyring we install — an unsigned or wrong-suite line silently breaks apt.
+line="$(wsl_fixes_docker_repo_line amd64 resolute)"
+case "$line" in
+  *"arch=amd64"*)   pass "repo line pins the architecture" ;;
+  *) die "repo line must pin arch=: $line" ;;
+esac
+case "$line" in
+  *"signed-by=$WSL_FIXES_DOCKER_KEYRING"*) pass "repo line is signed-by the installed keyring" ;;
+  *) die "repo line must be signed-by=$WSL_FIXES_DOCKER_KEYRING: $line" ;;
+esac
+case "$line" in
+  *"https://download.docker.com/linux/ubuntu resolute stable"*)
+    pass "repo line targets the distro codename on the stable channel" ;;
+  *) die "repo line must be '<url> <codename> stable': $line" ;;
+esac
+
+# Docker Desktop owns /usr/bin/docker and recreates it as a symlink on every
+# boot. dpkg-divert moves the package's binary out of its way so both survive;
+# /usr/local/bin precedes /usr/bin on PATH, so the diverted one wins.
+eq "$WSL_FIXES_DOCKER_DIVERT" "/usr/bin/docker.native" \
+  "the package binary is diverted clear of Docker Desktop's symlink"
+case "$WSL_FIXES_DOCKER_SHIM" in
+  /usr/local/bin/*) pass "shim sits on a PATH entry ahead of /usr/bin" ;;
+  *) die "shim must live under /usr/local/bin, got $WSL_FIXES_DOCKER_SHIM" ;;
+esac
+
+# needs_install keys off the DIVERTED path, not `command -v docker` — Docker
+# Desktop's symlink makes `command -v docker` succeed even while dangling,
+# which is precisely the state this fix exists to survive.
+tmp="$(mktemp -d)"
+wsl_fixes_docker_needs_install "$tmp/absent" && pass "docker needs_install: absent → act" \
+  || die "docker needs_install must return 0 when the diverted binary is missing"
+printf '#!/bin/sh\n' > "$tmp/present"; chmod +x "$tmp/present"
+wsl_fixes_docker_needs_install "$tmp/present" && die "docker needs_install must return 1 when present" \
+  || pass "docker needs_install: present → no action"
+# A dangling symlink is the observed failure mode, and must count as absent.
+ln -s "$tmp/nowhere" "$tmp/dangling"
+wsl_fixes_docker_needs_install "$tmp/dangling" && pass "docker needs_install: dangling symlink → act" \
+  || die "a dangling symlink must count as absent"
+rm -rf "$tmp"
+
 tmr="$(wsl_fixes_watchdog_timer)"
 case "$tmr" in
   *"OnBootSec="*) pass "timer fires at boot" ;;
