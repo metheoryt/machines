@@ -20,7 +20,7 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet, still holds the only `forgejo_data`; reach it at `server.gg.ez` |
+| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet. Forgejo wiped; `telegrind_pgdata` + two large anonymous volumes still unverified, so not yet disposable. Reach it as `methe@server.gg.ez` |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
@@ -221,8 +221,9 @@ Nix ever returns. Leave them.
   `provision/fleet-authorized-keys`.** The dropped key is server's OUTBOUND trust
   into latitude and hub, not anything's route in, and the file's own warning
   applies: the revocation lands when latitude and hub next provision, not now.
-  **Access path: `ssh methe@server.gg.ez`** — see the Forgejo item; the bare form
-  is on borrowed time.
+  **Access path: `ssh methe@server.gg.ez`** — bare `server.gg.ez` works only until
+  `tier_fleet_ssh` next rewrites air's config and drops the member block, after
+  which the FQDN hits the `Host *.gg.ez` catch-all's `User me` and is refused.
 - [x] **`hosts/server/` deleted** — a `winget-packages.json` for a box leaving
   service, and a README whose only unique facts are recorded here. Git history
   holds both.
@@ -240,30 +241,40 @@ Nix ever returns. Leave them.
   is what legitimately pins the shipped file). Suite is back to the 3 pre-existing
   failures, no new ones.
 
-### Still open — Forgejo has no home, and it is why the box must not be wiped
+### Forgejo: ✅ wiped 2026-08-01, not rehomed
 
-- [ ] **Rehome Forgejo off `server`, or decide to lose it.** Its container has
-  been `Exited(137)` since ~2026-07-18 — *two weeks before* the migration stopped
-  everything else, so it broke independently and nobody noticed; and
-  `git.cyphy.kz` has **no DNS record at all**, so its web half was unreachable
-  regardless of the upstream. Both Caddy blocks (web 3000 + git-SSH via the
-  layer4 `:2222` — one service, two halves) are commented out, not repointed.
-  Bringing it back is a **service migration**: move the `forgejo_data` volume to
-  latitude and create the missing `git.cyphy.kz` A record. Deliberately kept out
-  of the decommission so P2 could close.
-  - ⚠ **`forgejo_data` is still on `server`, and it is the only copy.** Do not
-    wipe or return that machine until this is resolved.
-  - ⚠ **Reach it as `methe@server.gg.ez`. Name the user.** Both `air` and
-    `latitude` can, verified. Bare `ssh server.gg.ez` works from air *today* only
-    because `tier_fleet_ssh`'s span still holds the member block it generated
-    before the removal; the next provision run on air deletes that block and the
-    FQDN falls through to `Host *.gg.ez`, which carries `User me` — and server's
-    user is `methe`, so it will be refused. Tested both ways: `methe@` returns
-    `g513ie`, `me@` returns `Permission denied`.
-  - So a **pull-based migration from latitude works** and needs no key enrolment.
-    An earlier revision of this item claimed latitude could not reach server at
-    all and blamed an unenrolled post-rebuild key; that was the username, not the
-    key. latitude's `id_ed25519` is authorized on server.
+- [x] **Wiped, on the owner's call — it was never used.** The volume agreed before
+  anything was deleted: **zero repositories**, a 2.3M bare-install `gitea.db`, and
+  nothing written since the 2026-05-03 install date. Removed the container and
+  **both** volumes (`forgejo_forgejo_data`, 3.7M, the one the container actually
+  mounted — compose prefixes the project name; and `forgejo_data`, an 8K stub
+  Docker created on 2026-07-27 that nothing ever used), verified absent by name.
+  Also deleted `homeserver/forgejo/` and both Caddy blocks in the vps repo
+  (`8b0c91d`) — deleted, not re-commented, since there is nothing to restore to.
+  It had been `Exited(137)` since ~2026-07-18, and `git.cyphy.kz` never had a DNS
+  record, so its web half was unreachable for its entire life.
+- **This had already been decided, and this file did not know it.** Both
+  `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`
+  ("the container is stopped and `forgejo_data` is 4.0 K with no
+  `git/repositories` — it hosts nothing. Delete it; do not export it") and
+  `docs/superpowers/specs/2026-07-30-g513ie-to-latitude-migration.md`
+  ("dropped by user decision") had established it days earlier, with the same
+  measurement this wipe re-took. Treating it as an open blocker was a regression
+  against the repo's own records — and a direct consequence of P5: 45 plans with
+  nothing marked done, so nobody reads them for current state. Cheap here; the
+  same gap on a destructive step would not be.
+- **This removes the reason to keep `server` intact that was written here, but it
+  does NOT make the box wipeable.** Forgejo was the blocker that had been
+  *identified*, not a proven complete list — the original note said "the only
+  copies of some things", plural. Still unverified, from the volume listing taken
+  during the wipe: **`telegrind_pgdata` (54.8M)** — telegrind is itself blocked on
+  the leaked bot token (P6), so its database may be the only copy of whatever it
+  holds — and **two anonymous volumes at 6.7G and 7.1G**, most likely the old
+  immich postgres/library data that latitude now serves, but not confirmed.
+  `immich_model-cache` (6.1G) is regenerable and does not matter.
+  - [ ] Verify those three before wiping or returning `server`. Until then the
+    box is "no longer a fleet member, still not disposable".
+
 - [ ] The `server` **profile** name survives the `server` **machine** — latitude
   uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
   `plan server`. Not a bug, but the two now mean different things; do not "clean

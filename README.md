@@ -23,7 +23,8 @@ provisioner under `provision/`.
   Windows 11, OS hostname `g513ie`. **Left `fleet.json` 2026-08-01**; its services
   moved to latitude. Still powered on, reachable as
   `methe@server.gg.ez` (name the user — the bare alias dies at air's next provision
-  run), and it holds the only copy of the `forgejo_data` volume — see
+  run), . Forgejo was wiped from it 2026-08-01 (never used,
+  zero repos), but a few volumes on it are still unverified — see
   `docs/fleet-roadmap.md` P2 before wiping it.
   It used to run the cyphy.kz platform, defined in the sibling **`vps`** repo —
   that repo owns the *services*; `machines` owns the *machines* + their backups.

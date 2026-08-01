@@ -151,11 +151,18 @@ global + per-host). One bullet per fact under a topical heading.
   live.** The decommission is done: manifest entry removed, `methe@server` dropped
   from `provision/fleet-authorized-keys`, `hosts/server/` deleted, and the seven
   Caddy routes repointed (roadmap P2). What to know before touching it:
-  - **It holds the only copy of the `forgejo_data` volume.** Do NOT wipe or return
-    the machine until Forgejo is rehomed. Its container has been `Exited(137)`
-    since ~2026-07-18 — it broke two weeks *before* the migration, independently —
-    and `git.cyphy.kz` has no DNS record, so rehoming means a volume move to
-    latitude **plus** creating that A record.
+  - **Forgejo was WIPED 2026-08-01, not rehomed** — the owner had never used it,
+    and the volume agreed: zero repositories, a bare-install `gitea.db`, nothing
+    written since the 2026-05-03 install. Container and **both** volumes removed
+    (there were two: `forgejo_forgejo_data`, the one actually mounted because
+    compose prefixes the project name, and an 8K `forgejo_data` stub). No old data
+    exists to restore — start fresh if git hosting is ever wanted again.
+  - **The box is still NOT disposable.** Forgejo was the blocker that had been
+    *identified*, not a verified complete list. Unverified as of the wipe:
+    `telegrind_pgdata` (54.8M — telegrind is blocked on the leaked bot token, so
+    this may be the only copy) and two anonymous volumes at 6.7G/7.1G (probably
+    the old immich data latitude now serves, unconfirmed). `immich_model-cache`
+    (6.1G) is regenerable. Check those three before wiping or returning it.
   - **Reach it as `methe@server.gg.ez` — NAME THE USER.** Removing the manifest
     entry removes the `Host server server.gg.ez` block (`User methe`) from every
     generated `~/.ssh/config` at that box's next provision run, after which the
