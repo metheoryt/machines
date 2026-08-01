@@ -18,7 +18,15 @@ repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 boot="$repo/agents/bootstrap.sh"
 [ -f "$boot" ] || exit 0
 
-out="$(bash "$boot" 2>&1)"
+# `env -u CLAUDE_CONFIG_DIR`, exactly like the `just agent-bootstrap` recipe: this
+# hook's job is the PRIMARY profile, whatever profile the pulling shell happens to
+# be running. Without it, a pull typed in an Orca terminal (CLAUDE_CONFIG_DIR =
+# ~/.local/share/orca/claude-accounts/<uuid>/auth) bootstrapped THAT dir as a
+# secondary profile named `auth` and re-seeded its settings.json from the tracked
+# baseline — clobbering the mirror orca-profile-sync.sh maintains there. Seen
+# 2026-08-01. bootstrap.sh now also refuses that dir on its own; this is the other
+# half, and it is the one that keeps the hook doing what its name says.
+out="$(env -u CLAUDE_CONFIG_DIR bash "$boot" 2>&1)"
 status=$?
 
 if [ "$status" -ne 0 ] || ! printf '%s' "$out" | grep -q 'failed=0'; then
