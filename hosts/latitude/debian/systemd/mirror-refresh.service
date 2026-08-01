@@ -1,0 +1,23 @@
+[Unit]
+Description=Mirror /mnt/immich to /mnt/immich-mirror
+Documentation=file:/home/me/machines/hosts/latitude/debian/mirror-refresh.sh
+# Skip cleanly rather than failing when a dock is unplugged or a bus drop left a
+# mount behind. nofail in fstab only applies at boot, so an absent mount here is
+# normal, not an error worth alerting on.
+ConditionPathIsMountPoint=/mnt/immich
+ConditionPathIsMountPoint=/mnt/immich-mirror
+
+[Service]
+Type=oneshot
+# System scope, not user: -aHAX preserves ownership, and the immich DB dumps are
+# written root:root 644 - a non-root copy job can read but not reproduce them.
+User=root
+# flock, shared with archive-mirror.service: both read drives in the same dock
+# (usb4/4-2), and simultaneous reads are what provokes the bus resets. -n so a
+# collision skips this run instead of queueing another reader behind it.
+ExecStart=/usr/bin/flock -n /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/mirror-refresh.sh -go
+# Be gentle on the bridge. The resets cluster under sustained load.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=6h

@@ -1,0 +1,14 @@
+[Unit]
+Description=Daily mirror of /mnt/immich to /mnt/immich-mirror
+
+[Timer]
+# 03:30, after immich's own 02:00 pg_dumpall, so each run picks up that night's
+# dump rather than the previous day's.
+OnCalendar=*-*-* 03:30:00
+# Catch up after the laptop has been off. Randomised so a catch-up run does not
+# start the instant the box wakes, while the desktop session is still settling.
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

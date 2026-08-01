@@ -1,0 +1,17 @@
+[Unit]
+Description=Mirror the 1970-2024 immich archive to /mnt/xs
+Documentation=file:/home/me/machines/hosts/latitude/debian/archive-mirror.sh
+ConditionPathIsMountPoint=/mnt/immich-2024
+ConditionPathIsMountPoint=/mnt/xs
+
+[Service]
+Type=oneshot
+User=root
+# Same lock as mirror-refresh.service - see the comment there.
+ExecStart=/usr/bin/flock -n /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/archive-mirror.sh -go
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# The first run copies 663 GiB across a bridge that drops; the script retries and
+# resumes, so allow it a long window rather than killing a run that is recovering.
+TimeoutStartSec=12h

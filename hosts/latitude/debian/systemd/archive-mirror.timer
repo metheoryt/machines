@@ -1,0 +1,17 @@
+[Unit]
+Description=Monthly mirror of the 1970-2024 immich archive
+
+[Timer]
+# Monthly, not daily. 1970-2024 is a CLOSED set - new photos land on /mnt/immich,
+# not here - so a run is almost always a no-op that still costs a full 20k-file
+# scan across the flaky usb4/4-2 bridge. Monthly keeps the copy honest without
+# provoking that bus more often than necessary.
+#
+# 05:00 on the 1st, well clear of mirror-refresh at 03:30. The flock makes an
+# overlap safe anyway; the separation just means neither has to skip.
+OnCalendar=*-*-01 05:00:00
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target
