@@ -995,6 +995,9 @@ has "$(plain "$(STATUSBOARD_RAMP=height sb_alert_line 'bad:a' 'bad:b')")" 'a · 
 # ── Severity policy (sb_fleet_alerts / sb_docker_alerts) ──────────────────────
 # What is worth waking someone for. Both take one argument precisely so this judgement is
 # testable — the strip's other half, sb_alerts, has to read a dozen globals.
+# `server` below is raw input, not a manifest lookup — sb_fleet_alerts is handed
+# rows directly, so the name is arbitrary and stayed put when the member was
+# removed from fleet.json on 2026-08-01. Same for the sb_ts_parse fixture above.
 FA="$(sb_fleet_alerts "$(printf '%s\n' \
   'latitude|100.64.0.8|debian|self|' \
   'desktop|100.64.0.4|windows|direct|' \

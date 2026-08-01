@@ -156,12 +156,20 @@ global + per-host). One bullet per fact under a topical heading.
     since ~2026-07-18 — it broke two weeks *before* the migration, independently —
     and `git.cyphy.kz` has no DNS record, so rehoming means a volume move to
     latitude **plus** creating that A record.
-  - **Reach it as `server.gg.ez`, not `server`.** Losing the manifest entry loses
-    the bare-name alias from every generated `~/.ssh/config`; the `Host *.gg.ez`
-    catch-all still resolves it. Verified from air.
-  - **`latitude` cannot reach it** — `me@server.gg.ez: Permission denied`. latitude
-    was rebuilt as Debian and minted a new key that server's `authorized_keys`
-    never learned. So drive any migration from `air`, or enrol that key first.
+  - **Reach it as `methe@server.gg.ez` — NAME THE USER.** Removing the manifest
+    entry removes the `Host server server.gg.ez` block (`User methe`) from every
+    generated `~/.ssh/config` at that box's next provision run, after which the
+    FQDN falls through to `Host *.gg.ez`, which carries **`User me`** — and
+    server's user is `methe`. Tested both ways: `methe@` → `g513ie`, `me@` →
+    `Permission denied`. A bare `ssh server.gg.ez` that works today is working off
+    the stale member block, not the catch-all.
+  - **Both air and latitude reach it** as `methe@`, verified. An earlier note here
+    claimed latitude could not reach server and blamed an unenrolled
+    post-rebuild key — that was the username, not the key; latitude's
+    `id_ed25519` is authorized on server. A pull-based migration from latitude
+    needs no enrolment. Lesson worth keeping: a `Permission denied (publickey)`
+    names the user it tried, and reading that field first would have saved the
+    wrong diagnosis.
   - Removing a key line here is not an instant revocation: it lands when latitude
     and hub next provision.
   - The `server` **profile** outlives the `server` **machine** — latitude runs

@@ -218,11 +218,11 @@ Nix ever returns. Leave them.
   Forgejo. Also corrected the `qb` block's note, which told the reader to reach
   qBittorrent at the dead `100.64.0.3:8084`.
 - [x] **`server` removed from `fleet.json`; `methe@server` dropped from
-  `provision/fleet-authorized-keys`.** Checked first that this costs no access:
-  `ssh server.gg.ez` works from air via the `Host *.gg.ez` catch-all (only the
-  bare-name alias is lost), and the dropped key is server's OUTBOUND trust into
-  latitude and hub, not anything's route in. Note the file's own warning: the
-  revocation lands when latitude and hub next provision, not now.
+  `provision/fleet-authorized-keys`.** The dropped key is server's OUTBOUND trust
+  into latitude and hub, not anything's route in, and the file's own warning
+  applies: the revocation lands when latitude and hub next provision, not now.
+  **Access path: `ssh methe@server.gg.ez`** — see the Forgejo item; the bare form
+  is on borrowed time.
 - [x] **`hosts/server/` deleted** — a `winget-packages.json` for a box leaving
   service, and a README whose only unique facts are recorded here. Git history
   holds both.
@@ -252,14 +252,18 @@ Nix ever returns. Leave them.
   latitude and create the missing `git.cyphy.kz` A record. Deliberately kept out
   of the decommission so P2 could close.
   - ⚠ **`forgejo_data` is still on `server`, and it is the only copy.** Do not
-    wipe or return that machine until this is resolved. It is reachable at
-    `server.gg.ez` from air.
-  - Note `latitude` **cannot** reach server (`me@server.gg.ez: Permission
-    denied`) — it was rebuilt as Debian and minted a new key that server's
-    `authorized_keys` never learned, exactly the trap
-    `provision/fleet-authorized-keys` documents. So a pull-based migration has to
-    be orchestrated from air, or that key enrolled first. This is P3's missing
-    generator showing up as a concrete blocker.
+    wipe or return that machine until this is resolved.
+  - ⚠ **Reach it as `methe@server.gg.ez`. Name the user.** Both `air` and
+    `latitude` can, verified. Bare `ssh server.gg.ez` works from air *today* only
+    because `tier_fleet_ssh`'s span still holds the member block it generated
+    before the removal; the next provision run on air deletes that block and the
+    FQDN falls through to `Host *.gg.ez`, which carries `User me` — and server's
+    user is `methe`, so it will be refused. Tested both ways: `methe@` returns
+    `g513ie`, `me@` returns `Permission denied`.
+  - So a **pull-based migration from latitude works** and needs no key enrolment.
+    An earlier revision of this item claimed latitude could not reach server at
+    all and blamed an unenrolled post-rebuild key; that was the username, not the
+    key. latitude's `id_ed25519` is authorized on server.
 - [ ] The `server` **profile** name survives the `server` **machine** — latitude
   uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
   `plan server`. Not a bug, but the two now mean different things; do not "clean

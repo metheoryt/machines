@@ -21,9 +21,10 @@ provisioner under `provision/`.
   **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
 - ~~**server**~~ — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
   Windows 11, OS hostname `g513ie`. **Left `fleet.json` 2026-08-01**; its services
-  moved to latitude. Still powered on and reachable as `server.gg.ez`, and it holds
-  the only copy of the `forgejo_data` volume — see `docs/fleet-roadmap.md` P2 before
-  wiping it.
+  moved to latitude. Still powered on, reachable as
+  `methe@server.gg.ez` (name the user — the bare alias dies at air's next provision
+  run), and it holds the only copy of the `forgejo_data` volume — see
+  `docs/fleet-roadmap.md` P2 before wiping it.
   It used to run the cyphy.kz platform, defined in the sibling **`vps`** repo —
   that repo owns the *services*; `machines` owns the *machines* + their backups.
 

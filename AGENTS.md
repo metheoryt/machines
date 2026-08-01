@@ -31,12 +31,14 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   Windows 11, was tailnet `100.64.0.3`. **Removed from `fleet.json` 2026-08-01**,
   along with `hosts/server/` and its `methe@server` trust line — the decommission
   is done (`docs/fleet-roadmap.md` P2). It is **not** retired hardware: still
-  powered on, still on the tailnet, reachable as `server.gg.ez` (the bare-name
-  alias is gone with its manifest entry; the `Host *.gg.ez` catch-all still
-  resolves it). **It holds the only copy of the `forgejo_data` volume** — do not
-  wipe or return the machine until Forgejo is rehomed. `latitude` cannot reach it:
-  latitude was rebuilt as Debian and its new key was never enrolled there, so any
-  migration has to be driven from `air`.
+  powered on, still on the tailnet, and it **holds the only copy of the
+  `forgejo_data` volume** — do not wipe or return the machine until Forgejo is
+  rehomed. **Reach it as `methe@server.gg.ez`, naming the user**: bare
+  `ssh server.gg.ez` works from air only until `tier_fleet_ssh` next rewrites its
+  span and drops the member block, after which the FQDN hits the `Host *.gg.ez`
+  catch-all's `User me` and is refused (server's user is `methe`). Both air and
+  latitude reach it that way, verified — so a pull-based migration can be driven
+  from either.
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
