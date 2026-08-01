@@ -158,7 +158,7 @@ is what made the right work obvious._
 
 ## P1 — ✅ DONE 2026-08-01. The flake is deleted.
 
-Tag **`nixos-final`** (annotated, pushed) preserves it. Commit `fb6a014`.
+Tag **`nixos-final`** (annotated, pushed) preserves it. Commit `f3d63b2`.
 `docs/2026-08-01-nixos-harvest.md` is the review, written before the delete —
 read that before restoring anything from the tag.
 

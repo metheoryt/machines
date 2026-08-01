@@ -19,7 +19,7 @@ global + per-host). One bullet per fact under a topical heading.
   Three fail at HEAD and have for a while: `provision-wsl.test.sh`,
   `orca-profile-harvest.test.sh`, `orca-profile-link.test.sh`. They reproduce in a
   clean worktree; a red suite gives no signal, so greening them is roadmap P4.
-- **THE NIX TREE IS GONE — deleted 2026-08-01 in `fb6a014`, tag `nixos-final`.**
+- **THE NIX TREE IS GONE — deleted 2026-08-01 in `f3d63b2`, tag `nixos-final`.**
   `flake.nix`, `flake.lock`, 22 modules, `hosts/latitude/nixos/` and `pkgs/`:
   10.3k lines describing a machine that no longer existed. It was reviewed on the
   way out — **read `docs/2026-08-01-nixos-harvest.md` before restoring anything.**

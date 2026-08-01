@@ -43,7 +43,7 @@ Machine here, services there.
 
 ### The NixOS tree is gone
 
-Deleted 2026-08-01 in `fb6a014`, after the last Nix host was reinstalled as
+Deleted 2026-08-01 in `f3d63b2`, after the last Nix host was reinstalled as
 Debian. Preserved in the annotated tag **`nixos-final`**, and reviewed on the way
 out — **read `docs/2026-08-01-nixos-harvest.md` before restoring anything from
 it.** Two findings there matter beyond the cleanup:
