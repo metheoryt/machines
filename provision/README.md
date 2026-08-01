@@ -29,7 +29,7 @@ minutes, or keep running indefinitely.
   `build-essential`, `ripgrep`, `fd`, `fzf`, `jq`, `tmux`); the synced agent config via
   `agents/bootstrap.sh`; `git config --global` identity + aliases.
 - **Best-effort** (warn + continue): `gortex` (pinned to the version in
-  `pkgs/gortex.nix`), `claude` (native installer, no Node.js),
+  `provision/gortex.version`), `claude` (native installer, no Node.js),
   `gh` (from GitHub's official apt repo — not in Ubuntu's default repos),
   `starship`, `direnv`, `fish`, `uv`, `git-delta`, `bat`, `nodejs`. That last
   one is for the **agent config, not the toolchain**: a Claude Code plugin may
