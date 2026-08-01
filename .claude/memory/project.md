@@ -712,6 +712,77 @@ global + per-host). One bullet per fact under a topical heading.
 - **On a read-only restic repo, always pass `--no-lock`.** Without it `restic
   snapshots` against a `ro` mount hangs indefinitely with no output and no error.
 
+### The backup topology, rebuilt 2026-08-01
+
+- **The old homeserver restic repos are GONE, not merely unscheduled.** No
+  `backup-homeserver` directory and no repo markers survive on any mount on any
+  box: `G:\` and `H:\` were reformatted into `/mnt/servarr`, `/mnt/immich-2024`
+  and friends during the migration, so **the migration consumed the backup
+  drives**. There is no history to continue — anything built now starts at zero.
+  g513ie has only `C:` left. Do not go looking for those repos again.
+- **What the three `immich-*` scheduled tasks on `server` teach:** they sat at
+  `State: Ready` with a live `NextRunTime` while every run since 2026-07-19
+  returned `0x8007010B` ("the directory name is invalid") — they pointed at the
+  moved `G:\`/`H:\`. A schedule that reports healthy while failing is worse than
+  no schedule. Disabled 2026-08-01. **`Disable-ScheduledTask -TaskName x` without
+  `-TaskPath` silently no-ops** — resticprofile registers under
+  `\resticprofile backup\`; read `TaskPath` first, verify `State` after.
+- **latitude is now the `backup-hub`** (moved off `server` in `fleet.json`,
+  `69614ea`). Layers, deliberately different tools for different problems:
+  - **rsync mirrors for the photo libraries**, because no drive in the fleet has
+    815 G free for a restic repo and a config that cannot fit its sources just
+    fails nightly. `mirror-refresh.sh` (daily 03:30) and `archive-mirror.sh`
+    (monthly) — system timers, one shared `flock`, installed by
+    `hosts/latitude/debian/install-timers.sh`.
+  - **restic for the small irreplaceable set** — `/mnt/spare320/restic/latitude`,
+    repo `14f4eab544`, covering the nightly pg_dumpall, ServarrConfig,
+    xs-keepers and `~/my/vps` (for its seven gitignored `.env` files). 6.5 GiB →
+    2.3 G. Backup 04:30 daily, `check --read-data-subset 5%` Sundays 06:00.
+    Config `vps/backup/latitude/profiles.yaml`, `schedule-permission: system`
+    because pg_dumpall output is root-owned.
+  - **`restic-server` REST hub** for other boxes — `vps/homeserver/restic-server`,
+    now bound to **`100.64.0.8:8001`, not `0.0.0.0`**. It runs `--no-auth`, so
+    reachability IS authorisation; publishing on all interfaces exposed the
+    fleet's backups to every device on the home wifi. Verified: tailnet answers
+    405, LAN address refused. Costs a boot race (docker cannot bind before
+    tailscaled is up) which `restart: unless-stopped` absorbs — check that first
+    if the container is ever dead after a reboot.
+  - `--append-only` is deliberately NOT set: it would break `forget --prune` and
+    turn retention into a manual chore, and an unwatched manual step is exactly
+    what caused this outage. Revisit if anything irreplaceable ever routes
+    through the REST hub; today the photo libraries do not.
+- **`desktop-wsl` backs up to the hub at `rest:http://100.64.0.8:8001/g614jv`**
+  (repo `8ca511f48c`). Two traps found wiring it:
+  - **resticprofile's `schedule-permission: user` needs root.** It installs a
+    *root-owned* unit that merely runs as the user. `user_logged_on` is the one
+    that makes a genuine `systemctl --user` unit — and despite the name it does
+    **not** need a login session, because `Linger=yes` on that distro keeps the
+    user systemd instance alive. If linger is ever disabled the backup stops
+    firing silently. `show` reports the configured value, not the one it will
+    demand, so it is not a useful check.
+  - **desktop-wsl has no passwordless sudo and no TTY over ssh** (`sudo: timed
+    out`). Not needed: restic and resticprofile are static binaries — install to
+    `~/.local/bin`, and a `$HOME` backup under a user timer never wants root.
+  - `{{ .Hostname }}` in the wsl profile expands to **`g614jv`**, the *Windows*
+    hostname, not the distro nickname or tailnet node name — a WSL distro
+    inherits its host's name. Both of desktop's distros therefore share one repo.
+    Safe (restic keys snapshots by host+paths, so it dedupes) but it is not
+    isolation. `$WSL_DISTRO_NAME` is absent from systemd units, so it is not a fix.
+- **`ssh desktop-wsl` fails from air; `ssh desktop-wsl.gg.ez` works.**
+  `tier_fleet_ssh` emits one `Host` block per **`fleet.json` member** plus a
+  catch-all `Host *.gg.ez → id_fleet`. Self-declared WSL hosts are deliberately
+  absent from `fleet.json`, so the bare name matches no block and falls through
+  to the default `~/.ssh/id_ed25519`, which is not the authorized fleet key.
+  Inbound trust is fine — the managed span on desktop-wsl carries all five keys
+  including `me@air`. Use the FQDN, or reach it via `wsl -d desktop-wsl` on its
+  Windows parent.
+- **The gap that remains: none of this alerts.** Every job's failure mode is
+  silence, which is the same shape as the `server` tasks that failed unnoticed
+  for 13 days. `provision/statusboard/statusboard.sh` already has an alert strip
+  on every page with a fixture-testable severity policy (`sb_fleet_alerts`,
+  `sb_docker_alerts`) — a `sb_backup_alerts` keyed on newest-snapshot age is the
+  right home for this, and is not built yet.
+
 ## SSH key hygiene (audited 2026-07-31)
 
 - **desktop's live SSH identity is `SHA256:fFZUwTp9Ye4HukFntyjVplkAJxczc7GWz6ssWlcyg40`
