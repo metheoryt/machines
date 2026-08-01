@@ -423,43 +423,55 @@ be diffed against a remembered failure count.
   local copy survives, so there is nothing to edit and nothing to inspect — only a
   blind revoke at each console, or a deliberate choice to leave them live upstream.
   Inventory in project memory.
-- [ ] **Bring telegrind and embedthat back up, then decide about the deploy loop.**
-  Both are down. With rotation closed by decision there is **no security gate left**
-  — nothing is waiting on a credential, so the path is clear. What actually stops
-  them, verified 2026-08-01:
-  - The engine is **PowerShell on a Windows Scheduled Task** — `vps`'s
-    `homeserver/deploy-repos.ps1`, `register-repos-deploy.ps1`, `repos.psd1`, task
-    `repos-deploy` every 3 minutes. None of it runs on Debian. latitude has no
-    equivalent, so nothing polls, builds or recreates either stack.
-  - **The engine could not do the first start anyway**, on any platform: it acts
-    only when the gated service (`Service = 'bot'`) is *already running*. A fresh
-    bring-up is manual once, then the engine keeps it current.
-  - **Neither `src/` clone exists on latitude.** `homeserver/*/src/` is the
-    gitignored build-context clone the engine manages, and both `compose.prod.yml`
-    files use `build: context: ./src`. No src, no image.
-  - **telegrind also needs its GCP service-account key placed.** `.env.prod` says
-    `GOOGLE_SERVICE_ACCOUNT_FILE=local/google-account.json` and the compose mounts
-    `./src:/app/local`, so the file belongs at
-    `homeserver/telegrind/src/google-account.json`. It **is** preserved —
-    `latitude:~/g513ie-prod-config/telegrind/google-account.json`, 0600 — and it
-    embeds an RSA private key, so place it, never commit it.
-  - Both named volumes already survived the migration onto latitude:
-    `telegrind_pgdata`, `embedthat_redis_data`. Data is not the gap. Note
-    telegrind crash-loops on a *freshly recreated* pgdata (alembic has no version
-    seed) — a bring-up must reuse this volume, never `down -v`.
-
-  Order: clone both `src/` → place the GCP key → start each stack by hand once →
-  then decide whether to port the loop to a systemd timer. Porting is a separate
-  decision; the bots run fine without it, they just never self-update.
-- [ ] **Headscale ACLs.** The tailnet is default-open. Relatives never join it,
-  but least privilege across our own boxes is cheap now and annoying later.
-- [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its
-  services already work over the tailnet. Remove once nothing depends on
-  `10.0.0.6`, then drop the peer on hub.
-- [ ] Enumerate `xs-keepers/home`'s ~20 config dirs; unbundle
-  `qaz-code-feature-sync-dashboard.bundle`; decide
-  `windows-reinstall-runbook.md`'s fate; confirm immich still has "Hardware
-  decoding" ticked.
+- [x] **telegrind and embedthat are back up on latitude — 2026-08-01.** Both stacks
+  live, both reusing their migrated volumes. What the bring-up took, and what it
+  taught:
+  - **Clone both `src/`** (`homeserver/*/src/`, gitignored build context, URLs in
+    `repos.psd1`). Then **build the images BEFORE placing telegrind's
+    `google-account.json`** — `src/` *is* the build context, so a `--build` with the
+    key already in it can bake an RSA private key into an image layer. The app's
+    `.dockerignore` and `.gitignore` both cover it, but building first makes that
+    moot instead of load-bearing. Verified absent from the image afterwards.
+  - **The key is at `homeserver/telegrind/src/google-account.json`** (0600), copied
+    from `~/g513ie-prod-config/telegrind/google-account.json`. Note it lives INSIDE
+    the gitignored clone, so a re-clone does not bring it and `git clean -fd` in
+    `src/` would delete it (`git reset --hard` would not).
+  - **Start postgres/redis before the app.** `depends_on` has no
+    `condition: service_healthy`, so it waits for start, not readiness, and
+    telegrind runs `alembic upgrade head` at startup.
+  - **Verified with data, not with `docker ps`.** telegrind: **62 chats** (matches
+    what memory recorded) and `alembic_version = 2700e0b3a8b6` present, which proves
+    the right volume attached AND the credentials matched in one query; plus
+    `Run polling for bot @telegrindbot`, a real Telegram API round-trip. embedthat:
+    **5338 redis keys** restored, and within 25 seconds the worker had downloaded,
+    ffmpeg-merged and sent a video to the dump chat — the whole pipeline, not a
+    process that happens to be running.
+  - **`server` still holds all five old containers**, `Exited` but present. Harmless
+    only because their restart policy is `no` — otherwise a Docker Desktop start
+    there would have put a second poller on the same bot tokens, which reads as an
+    intermittent bug in the *new* deployment. Its `repos-deploy` task is also still
+    `Ready`, firing every 3 min; also harmless only because the engine acts solely
+    on already-running services.
+  - **Diff the live `.env` against the harvested copy before trusting it.**
+    `telegrind_pgdata` was restored as a raw tar, so the cluster's password is
+    whatever server's file said; drift would surface as a connectivity error, not a
+    credential one. All three copies were identical.
+  - **embedthat's first build takes ~40 minutes and that is expected.**
+    `faster-whisper` → CTranslate2 → NVIDIA CUDA/cuDNN wheels, ~GBs, on a box with
+    Intel graphics only. Never GPU-accelerated even on the RTX-equipped server box
+    (the compose requests no devices), so this is wasted download, not lost
+    capability. Final image 592 MB.
+  - **Re-read tugtainer's toggles instead of trusting the record.**
+    `embedthat-redis-1` was `check_enabled=1, update_enabled=1` — unprotected —
+    though `vps` memory said all three embedthat containers were toggled off on
+    2026-07-14. `redis-stack:latest` is one of only two images here tugtainer can
+    actually update, and this is the stack it has broken twice. All five now `0|0`.
+- [ ] **Decide whether to port the poll-deploy engine to a systemd timer.** Now the
+  only piece left, and worth naming plainly: **a push to either bot repo currently
+  does nothing.** Push-to-deploy was the whole point of `deploy-repos.ps1` +
+  `repos-deploy`, and neither runs on Debian. The bots are fine without it — they
+  just never self-update, so every deploy is a manual `git pull` in `src/` plus
+  `up -d --build`. Spec to reproduce: `vps/homeserver/DEPLOYING-A-REPO.md`.
 
 ---
 
