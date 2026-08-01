@@ -56,6 +56,57 @@ and reported "separate netns". It was wrong — the backgrounded listener in the
 other distro never came up, so the successful bind measured nothing. Compare
 `ns/net` inodes and listener tables instead.
 
+### They share the cgroup tree too — and that collides systemd user managers
+
+Measured 2026-08-01 with `desktop-wsl` and `desktop-pure` both running:
+
+| namespace | inode | shared? |
+|---|---|---|
+| `net` | `4026531833` | **yes** |
+| `cgroup` | `4026531835` | **yes** |
+| `pid` / `mnt` / `ipc` / `uts` | differ | no |
+
+The shared *tree*, not merely the namespace id, is what matters. `desktop-pure`
+listed `tailscaled.service` in its `system.slice` while having no tailscale
+installed at all (`systemctl is-enabled tailscaled` → `not-found`, no binary on
+`PATH`) — it was seeing `desktop-wsl`'s unit. Both reported an identical
+16-service `system.slice`.
+
+systemd derives a user manager's cgroup path from the **uid**:
+`/user.slice/user-<uid>.slice/user@<uid>.service`. Two distros whose `me` is uid
+1000 therefore fight over one path, and the second to claim it loses:
+
+```
+desktop-pure: systemctl start user@1000.service → failed (unavailable resources)
+desktop-pure: systemctl start user@1001.service → active in 25ms
+```
+
+**Decision: `desktop-pure`'s `me` is uid 1001.** `$HOME` stays `/home/me`, so
+Claude session slugs remain byte-identical and the move needs no `cwd` rewrite.
+
+This is not only about `orca serve`. `desktop-wsl` runs **`dotfiles-sync` and the
+gortex daemon as systemd *user* units**. A colliding uid would have broken those
+in `desktop-pure` as well — surfacing much later, as three unrelated-looking
+failures. A system unit with `User=me` also works (verified: a uniquely-named
+probe unit started and ran as `me`), but it fixes one daemon rather than the
+class.
+
+Two further consequences:
+
+- **Unit names must not collide across distros within the same slice.** An
+  `orca-serve.service` in *both* `/system.slice` would collide the same way.
+  Keeping `orca serve` a per-user unit under `user@<uid>` avoids this now that
+  the uids differ.
+- `user@0.service` still fails on every `wsl -d <distro> -u root` into the second
+  distro — both use uid 0. Cosmetic; the command runs regardless. Expect the
+  "Failed to start the systemd user session for 'root'" line and ignore it.
+
+*Method note:* the first read of this said the cgroup tree was **not** shared,
+because `desktop-pure` could not see `desktop-wsl`'s
+`wsl-binfmt-watchdog.service`. That unit is `Type=oneshot` and holds a cgroup for
+about a second per minute, so its absence measured nothing. Probe with a
+**long-running** unit the other distro cannot possibly have.
+
 ### Per-distro netns was considered and rejected
 
 Restoring per-distro tailnet identity would mean `ip netns add`, a veth pair into
@@ -167,6 +218,33 @@ belt-and-braces; it is the mechanism that makes the topology viable, and it must
 be installed on **both** distros. `wsl --shutdown` (all distros at once) is
 harmless by comparison: everything goes down together and each `/init`
 re-registers on next boot.
+
+**The graceful-shutdown trigger is necessary but not sufficient — widened
+2026-08-01 while creating `desktop-pure`.** Interop died twice inside ten
+minutes: once on `wsl -t desktop-pure` (an *abrupt* terminate, which the table
+above records as harmless), and once from merely running commands inside that
+distro. The difference from the `Ubuntu-24.04` test is that `desktop-pure`'s
+systemd was still settling — its first boot had no `systemd=true` yet, and
+`user@0`/`user@1000` were failing on the cgroup collision described above. So
+the rule is not "only a graceful poweroff": **any distro whose systemd is
+starting, stopping, or thrashing can unregister `WSLInterop` VM-wide.** Bringing
+a second distro into service is exactly that condition, repeatedly.
+
+The watchdog handled both unattended, recovering in ~30 s and ~60 s:
+
+```
+06:33:13  skipped, unmet condition ConditionPathExists=!…/WSLInterop
+06:34:13  skipped, unmet condition
+06:35:13  skipped, unmet condition
+06:36:13  Starting … / Finished        → interop back, flags: P
+```
+
+Install it in `desktop-pure` **before** that distro is used routinely, not after.
+
+Note also that `systemd-binfmt`'s own re-registration logs
+`cannot create /proc/sys/fs/binfmt_misc/WSLInterop: Permission denied` and the
+unit still reports success — so its exit status is not evidence the handler is
+registered. Check the path, never the unit.
 
 Recovery is verified: `systemctl restart systemd-binfmt` restores it. When local
 interop is the thing that is dead, drive it out-of-band:
@@ -344,19 +422,44 @@ again.
 - `orca serve` as a systemd **user** unit with `loginctl enable-linger me`, so a
   distro with no interactive session stays alive.
 
-**Linger is unverified for `desktop-pure` and must be proven in Phase 4.** It is
-known to work on `desktop-wsl`, which is opened interactively all the time. The
-work distro's whole premise is the opposite: it runs untouched while `air` talks
-to it over the tailnet, and WSL's boot path is not a normal one — a distro that
-is never `wsl -d`'d may not start its user manager at all. Fallback if linger
-does not hold: a **system** unit with `User=me`. Rejecting per-distro netns freed
-that option, since `NetworkNamespacePath=` is no longer needed.
+**A user unit in `desktop-pure` requires uid 1001** — see the shared-cgroup-tree
+finding. At uid 1000 its `user@1000.service` cannot start at all while
+`desktop-wsl` holds that cgroup path, so linger would have had nothing to keep
+alive. With uid 1001 the user manager starts in 25 ms. `$HOME` is still
+`/home/me`; only the numeric uid differs.
+
+**Linger itself is still unverified for `desktop-pure` and must be proven in
+Phase 4.** The uid fix is a *precondition* for that test, not the test. Linger is
+known to work on `desktop-wsl`, which is opened interactively all the time; the
+work distro's whole premise is the opposite — it runs untouched while `air` talks
+to it over the tailnet, and WSL's boot path is not a normal one, so a distro that
+is never `wsl -d`'d may never start its user manager. Substitute
+`user@1001.service` wherever Phase 4 says `user@1000.service`.
+
+Fallback if linger does not hold: a **system** unit with `User=me` (verified to
+work — a uniquely-named probe unit started and ran as `me`). Rejecting per-distro
+netns freed that option, since `NetworkNamespacePath=` is no longer needed. If it
+is taken, the unit must **not** be named `orca-serve.service` in both distros:
+`/system.slice` is shared, so identical names collide.
 
 ### 7. `desktop-pure` creation
 
-Fresh Ubuntu-26.04 rootfs via `wsl --import`, own 52 GB sparse VHD.
-`/etc/wsl.conf`: `[boot] systemd=true`, `[user] default=me`. `Ubuntu-24.04` is
-left untouched.
+Created 2026-08-01 with `wsl --install Ubuntu-26.04 --name desktop-pure
+--no-launch` — the official 26.04 LTS image, no rootfs download and no rename.
+`/etc/wsl.conf`: `[boot] systemd=true`, `[user] default=me`. User `me` is
+**uid 1001** (see the shared-cgroup-tree finding); `$HOME` stays `/home/me`.
+`Ubuntu-24.04` is left untouched.
+
+Two corrections to earlier drafts of this section:
+
+- `--import` of a downloaded rootfs is **not** needed. `wsl --install` does take
+  `--name <Name>` and `--no-launch`. An earlier probe concluded otherwise by
+  running `wsl --install --help`, which is an invalid combination
+  (`Wsl/E_INVALIDARG`) — the grep found nothing because the command errored, not
+  because the flag was missing. `wsl.exe` emits UTF-16LE; decode before grepping.
+- The VHD is **not** sparse. WSL now refuses: *"Sparse VHD support is currently
+  disabled due to possible data corruption."* Re-enabling needs
+  `wsl --manage <distro> --set-sparse true --allow-unsafe`; not done.
 
 Provisioned with `just provision-wsl desktop-pure`, **minus** the
 `tailscale-wsl.sh` step — it has no tailnet node. `provision-wsl.sh` hardcodes
