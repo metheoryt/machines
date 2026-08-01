@@ -1,0 +1,17 @@
+# The gortex release this fleet pins to. One bare semver, no `v` prefix.
+#
+# WHY IT LIVES HERE. This pin used to be `pkgs/gortex.nix`, and `tier_gortex` in
+# provision/lib/tiers.sh grepped the `version = "…"` line out of it on every box.
+# That made a Nix package definition a live input to POSIX provisioning, which
+# was already odd and became untenable when the NixOS tree was deleted on
+# 2026-08-01 (see docs/2026-08-01-nixos-harvest.md). It is data, so it is a data
+# file, and it sits under provision/ because the provisioner is what reads it.
+#
+# Readers: tier_gortex (provision/lib/tiers.sh) installs this version into
+# ~/.local/bin; _touches_driver (scripts/converge.sh) treats a change here as a
+# reprovision trigger so a bump actually reaches every box. Writer:
+# scripts/update-gortex.sh (`just update-gortex`).
+#
+# The reader takes the first bare semver on a non-comment line, so this header is
+# safe. Do NOT add a `v`.
+0.61.4

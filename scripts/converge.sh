@@ -66,18 +66,21 @@ changed_paths() {
   fi
 }
 
-# touches_nix <low> <high>: 0 if any *.nix / flake.nix / flake.lock in range —
-# plus fleet.json, which is a Nix INPUT, not just a shell manifest
-# (modules/system/fleet.nix reads it with fromJSON and modules/home/ssh.nix
-# renders every ~/.ssh/config host block from it). Without it, adding a fleet
-# member never reaches a NixOS host: converge finds no .nix change, writes ok,
-# and advances converged-rev — a permanent silent skip.
-# provision/fleet-authorized-keys is the same case: it is the literal path in
-# modules/system/ssh-server.nix's openssh.authorizedKeys.keyFiles, so enrolling a
-# new member's key only takes effect after a rebuild.
-touches_nix() {
-  changed_paths "$1" "$2" | grep -qE '(\.nix$|(^|/)flake\.(nix|lock)$|^fleet\.json$|^provision/fleet-authorized-keys$)'
-}
+# touches_nix is GONE (2026-08-01), with the NixOS tree it gated. Its regex is
+# preserved in the `nixos-final` tag if a Nix host is ever reintroduced.
+#
+# It took a live bug with it, so read this before trusting the gate below.
+# touches_nix was the ONLY place `fleet.json` counted as a reprovision trigger,
+# on the reasoning that it is a Nix input (fleet.nix read it with fromJSON,
+# ssh.nix rendered every ~/.ssh/config host block from it). But fleet.json is
+# just as much an input to the POSIX provisioner — tier_fleet_ssh renders the
+# same host blocks from the same file — and `_touches_driver` never listed it.
+# So while NixOS existed the trigger worked on exactly one box, and the day
+# latitude became Debian it worked on none: adding a fleet member changed
+# fleet.json, matched nothing, wrote ok, advanced converged-rev, and the new
+# member never appeared in any box's ~/.ssh/config. A permanent silent skip —
+# the precise failure the original comment was written to prevent, relocated
+# rather than fixed. fleet.json is now in the driver gate where it belongs.
 
 # touches_linux <low> <high>: 0 if any provisioning-relevant path changed in
 # range — the linux provisioner itself or the inputs it acts on. A content-only
@@ -96,8 +99,12 @@ touches_nix() {
 # pinned gortex and agent bootstrap. Only the driver path differs, so the two
 # gates are one function with the driver injected — a duplicated regex here would
 # drift the moment a new shared input is added to one and not the other.
+# fleet.json and provision/gortex.version are both here deliberately: the first
+# because tier_fleet_ssh renders ~/.ssh/config from it (see the touches_nix note
+# above for the bug that taught us), the second because tier_gortex installs the
+# version it pins and a bump that never reprovisions never lands.
 _touches_driver() {
-  changed_paths "$2" "$3" | grep -qE "^($1|provision/lib/tiers\.sh|provision/lib/fleet\.sh|provision/fleet-selfpull\.sh|provision/fleet-authorized-keys|pkgs/gortex\.nix|agents/bootstrap\.sh)\$"
+  changed_paths "$2" "$3" | grep -qE "^($1|fleet\.json|provision/lib/tiers\.sh|provision/lib/fleet\.sh|provision/fleet-selfpull\.sh|provision/fleet-authorized-keys|provision/gortex\.version|agents/bootstrap\.sh)\$"
 }
 touches_linux() { _touches_driver 'provision/linux\.sh' "$1" "$2"; }
 touches_macos() { _touches_driver 'provision/macos\.sh' "$1" "$2"; }
@@ -138,15 +145,16 @@ converge_main() {
   cd "$REPO" || { log "cannot cd $REPO"; exit 0; }
   case "$class" in
     nixos)
-      if [ -n "$low" ] && ! touches_nix "$low" "$high"; then
-        write_status "$high" ok "nixos: no *.nix/flake change — config already live via symlinks"
-        exit 0
-      fi
-      if nixos-rebuild switch --flake "$REPO#$(hostname)"; then
-        write_status "$high" ok "nixos-rebuild switch"
-      else
-        write_status "$high" fail "nixos-rebuild switch failed (see journalctl -u machines-converge)"
-      fi ;;
+      # The flake this used to run was deleted 2026-08-01 (tag nixos-final); no
+      # Nix host remains. The class is still DETECTED rather than folded into
+      # `linux` on purpose: a NixOS box classed `linux` would run
+      # provision/linux.sh, an apt driver that aborts on its first precondition,
+      # which is the fail-loud-on-a-good-day / silently-wrong-on-a-bad-one trap
+      # the darwin arm above was added to close. So refuse, explicitly, and
+      # record it as a FAILURE — converged-rev must not advance past a pull this
+      # box never applied.
+      write_status "$high" fail "nixos: no flake in this repo since 2026-08-01 (tag nixos-final) — reprovision this box or restore the tree"
+      ;;
     windows)
       if powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$REPO/provision/windows.ps1"; then
         write_status "$high" ok "provision/windows.ps1"

@@ -34,19 +34,14 @@ source "$repo/scripts/converge.sh"
 # range_low: empty when no converged-rev file yet.
 eq "$(range_low)" "" "range_low empty on first run"
 
-# touches_nix: rev1..rev2 added mod.nix -> hit.
-touches_nix "$rev1" "$rev2" && pass "touches_nix detects .nix" || die "touches_nix detects .nix"
-
-# touches_nix: empty low (first run) -> treat as changed (hit).
-touches_nix "" "$rev2" && pass "touches_nix first-run is hit" || die "touches_nix first-run is hit"
-
-# touches_nix: fleet.json is a Nix INPUT (modules/system/fleet.nix reads it with
-# fromJSON; modules/home/ssh.nix renders ~/.ssh/config host blocks from it), so a
-# manifest-only pull must rebuild — otherwise adding a fleet member never reaches
-# any NixOS host and converge writes ok + advances converged-rev anyway.
-echo '{"machines":{}}' > "$repo/fleet.json"; git -C "$repo" add .; git -C "$repo" commit -qm cfleet
-revf="$(git -C "$repo" rev-parse HEAD)"
-touches_nix "$rev2" "$revf" && pass "touches_nix detects fleet.json" || die "touches_nix detects fleet.json"
+# touches_nix is gone with the NixOS tree (2026-08-01). rev1..rev2 still adds a
+# .nix file, now to assert the OPPOSITE of what it used to: a stray .nix must NOT
+# trigger a reprovision on any surviving tier. The one .nix path that was a real
+# POSIX input, pkgs/gortex.nix, was rehomed to provision/gortex.version — so if a
+# .nix file ever fires a gate again, something has quietly regrown a Nix
+# dependency and this assertion is where it shows up.
+touches_linux "$rev1" "$rev2" && die "touches_linux fires on a stray .nix (Nix coupling has regrown?)" || pass "touches_linux ignores a stray .nix"
+touches_macos "$rev1" "$rev2" && die "touches_macos fires on a stray .nix (Nix coupling has regrown?)" || pass "touches_macos ignores a stray .nix"
 
 # touches_linux: only provisioning-relevant paths (the linux provisioner / its
 # version inputs) count — a content-only pull must NOT trigger a reprovision.
@@ -70,19 +65,14 @@ echo y > "$repo/provision/lib/fleet.sh"; git -C "$repo" add .; git -C "$repo" co
 rev6="$(git -C "$repo" rev-parse HEAD)"
 touches_linux "$rev5" "$rev6" && pass "touches_linux detects provision/lib/fleet.sh" || die "touches_linux detects provision/lib/fleet.sh"
 
-# provision/fleet-authorized-keys counts on BOTH tiers, and is asserted last so
-# its commit stays outside the ranges the assertions above depend on.
-#   nixos — it is the literal path in modules/system/ssh-server.nix's
-#     users.users.me.openssh.authorizedKeys.keyFiles, so the trust is baked at
-#     build time and only takes effect after a rebuild.
-#   linux — tier_fleet_ssh merges it into ~/.ssh/authorized_keys.
-# Same silent-skip shape as fleet.json: enrolling a new member's key would
-# otherwise write ok, advance converged-rev, and never be applied — leaving the
-# newly-added box permanently unable to SSH into latitude or hub.
+# provision/fleet-authorized-keys is asserted late so its commit stays outside the
+# ranges the assertions above depend on. tier_fleet_ssh merges it into
+# ~/.ssh/authorized_keys, so enrolling a new member's key would otherwise write
+# ok, advance converged-rev, and never be applied — leaving the newly-added box
+# permanently unable to SSH into latitude or hub.
 echo 'ssh-ed25519 AAAA test@x' > "$repo/provision/fleet-authorized-keys"
 git -C "$repo" add .; git -C "$repo" commit -qm ckeys
 revk="$(git -C "$repo" rev-parse HEAD)"
-touches_nix "$rev6" "$revk" && pass "touches_nix detects fleet-authorized-keys" || die "touches_nix detects fleet-authorized-keys"
 touches_linux "$rev6" "$revk" && pass "touches_linux detects fleet-authorized-keys" || die "touches_linux detects fleet-authorized-keys"
 
 # touches_macos: the Darwin driver's gate. Same shared inputs as touches_linux
@@ -98,6 +88,28 @@ echo x > "$repo/provision/macos.sh"; git -C "$repo" add .; git -C "$repo" commit
 revm="$(git -C "$repo" rev-parse HEAD)"
 touches_macos "$revk" "$revm" && pass "touches_macos detects provision/macos.sh" || die "touches_macos detects provision/macos.sh"
 touches_linux "$revk" "$revm" && die "touches_linux false-positive on provision/macos.sh" || pass "touches_linux ignores the darwin driver"
+
+# fleet.json on BOTH surviving tiers — the bug the NixOS deletion uncovered.
+# It used to be gated only by touches_nix, on the reasoning that it was a Nix
+# input; but tier_fleet_ssh renders ~/.ssh/config from the same manifest, so it
+# was always a POSIX input too and _touches_driver never listed it. While NixOS
+# existed the trigger worked on exactly one box; the day latitude became Debian it
+# worked on none. Adding a fleet member matched nothing, wrote ok, advanced
+# converged-rev, and the new member never appeared in any box's ~/.ssh/config.
+# Asserted on both tiers so a future edit cannot re-narrow it to one.
+echo '{"machines":{}}' > "$repo/fleet.json"; git -C "$repo" add .; git -C "$repo" commit -qm cfleet
+revf="$(git -C "$repo" rev-parse HEAD)"
+touches_linux "$revm" "$revf" && pass "touches_linux detects fleet.json" || die "touches_linux detects fleet.json"
+touches_macos "$revm" "$revf" && pass "touches_macos detects fleet.json" || die "touches_macos detects fleet.json"
+
+# provision/gortex.version — the rehomed pin. tier_gortex installs the version it
+# names, so a bump that does not reprovision never reaches ~/.local/bin. This is
+# the same input pkgs/gortex.nix used to be; the assertion moves with the file so
+# the coverage does not lapse in the rename.
+echo '0.0.1' > "$repo/provision/gortex.version"; git -C "$repo" add .; git -C "$repo" commit -qm cgort
+revg="$(git -C "$repo" rev-parse HEAD)"
+touches_linux "$revf" "$revg" && pass "touches_linux detects provision/gortex.version" || die "touches_linux detects provision/gortex.version"
+touches_macos "$revf" "$revg" && pass "touches_macos detects provision/gortex.version" || die "touches_macos detects provision/gortex.version"
 
 # box_class: the OS routing itself, previously untested — which is how Darwin
 # stayed in the `linux` catch-all and made every convergence on the Mac run the

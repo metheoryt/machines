@@ -69,7 +69,14 @@ fi
 
 # Spot-check that recipes added late in the migration are actually listed —
 # these were among the 24 the old hardcoded block had missed.
-for r in provision-mac provision-wsl provision backup health rollback update-gortex; do
+#
+# `backup` and `rollback` left this list on 2026-08-01: both were Nix recipes
+# (`nix-collect-garbage`/`nixos-rebuild --rollback`, plus a `cp -r` of the repo to
+# a timestamped .backup dir) and went with the flake. They are named here only so
+# the next reader knows they were removed on purpose rather than dropped from the
+# assertion by accident. `test` replaces them as the spot-check that matters —
+# it is now the repo's only gate, so it must never fall out of the help.
+for r in provision-mac provision-wsl provision test health update-gortex; do
   printf '%s\n' "$listing" | grep -qE "^[[:space:]]+${r}( |$)" \
     && pass "help lists '$r'" \
     || die "help does not list '$r'"

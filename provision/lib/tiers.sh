@@ -678,12 +678,16 @@ tier_git_base() {
 }
 
 # ── BEST-EFFORT: gortex code-intelligence daemon binary ───────────────────────
-# Version is read from pkgs/gortex.nix so the disposable box stays pinned to the
-# same release as the Nix fleet. Note pkgs/gortex.nix declares
-# `platforms = ["x86_64-linux"]` and pins the linux_amd64 tarball's hash — that
-# derivation is for the Nix hosts. Only the VERSION is shared; the asset name is
-# resolved per platform here, because the upstream release also ships
-# darwin_arm64 and darwin_amd64 builds that the Nix expression never references.
+# Version is read from provision/gortex.version — one bare semver, whose own
+# header explains why it is a data file. It used to be grepped out of
+# `pkgs/gortex.nix`, which made a Nix package definition a live input to POSIX
+# provisioning; that file went with the NixOS tree on 2026-08-01
+# (docs/2026-08-01-nixos-harvest.md) and this pin was rehomed rather than lost.
+#
+# The asset name is resolved per platform here rather than pinned, because the
+# upstream release ships darwin_arm64 and darwin_amd64 alongside linux_amd64 and
+# this fleet now runs on all three. No hash is verified: the download is HTTPS
+# from the GitHub release, which is the same trust root as the pin itself.
 _gortex_asset() {
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64|Linux-amd64)   echo gortex_linux_amd64 ;;
@@ -695,10 +699,12 @@ _gortex_asset() {
 
 tier_gortex() {
   info "Installing gortex…"
-  GVER="$(grep -oE 'version = "[0-9]+\.[0-9]+\.[0-9]+"' "$REPO/pkgs/gortex.nix" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+  # First bare semver on a non-comment line, so the file can carry a header.
+  GVER="$(grep -vE '^[[:space:]]*#' "$REPO/provision/gortex.version" 2>/dev/null \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
   local asset
   if [ -z "$GVER" ]; then
-    warn "couldn't parse gortex version from pkgs/gortex.nix — skipping gortex"
+    warn "couldn't parse a version from provision/gortex.version — skipping gortex"
   elif ! asset="$(_gortex_asset)"; then
     warn "no gortex release asset for $(uname -s)/$(uname -m) — skipping gortex"
   elif curl -fsSL "https://github.com/zzet/gortex/releases/download/v${GVER}/${asset}.tar.gz" \

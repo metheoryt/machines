@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-# Update pkgs/gortex.nix to the latest gortex release.
+# Bump provision/gortex.version to the latest gortex release.
 #
-# Queries the GitHub API for the newest release tag, prefetches the x86_64 Linux
-# tarball, and rewrites the `version` + `hash` lines in place. gortex tags are
-# v-prefixed (v0.60.0) and the version field is stored without it. This is the
-# NixOS half of the "float" story: the Windows boxes float via the upstream
-# installer, while latitude pins here and bumps with this script.
-# Invoked automatically by `just update` (and therefore `just upgrade`), but can
-# also be run on its own. Nix-only (needs `nix store prefetch-file`) — run it on
-# the NixOS box, never on the Windows fleet members.
+# Queries the GitHub API for the newest release tag and rewrites the pin. gortex
+# tags are v-prefixed (v0.61.4); the pin is stored without it.
 #
-# Requires: curl, jq, nix (all present in the dev shell / system).
+# THIS SCRIPT WAS BROKEN AND IS NOW FIXED (2026-08-01). It used to rewrite
+# `version` + `hash` in pkgs/gortex.nix and needed `nix store prefetch-file` for
+# the hash — so once the fleet had no Nix host it could not run anywhere, while
+# tier_gortex went on reading a pin that nothing could bump. There is no hash any
+# more: tier_gortex installs the release tarball over HTTPS from GitHub and
+# verifies nothing, which is the same trust root as the pin itself. Dropping the
+# hash loses no check that was actually being made.
+#
+# Requires: curl, jq. Runs on any platform in the fleet.
 set -euo pipefail
 
 repo="zzet/gortex"
-file="$(cd "$(dirname "$0")/.." && pwd)/pkgs/gortex.nix"
+file="$(cd "$(dirname "$0")/.." && pwd)/provision/gortex.version"
+
+[ -f "$file" ] || { echo "❌ pin not found: $file" >&2; exit 1; }
 
 tag=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | jq -r '.tag_name')
 latest=${tag#v}
-current=$(sed -nE 's/^[[:space:]]*version = "([^"]+)";.*/\1/p' "$file" | head -1)
+current=$(grep -vE '^[[:space:]]*#' "$file" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 
 if [ -z "$latest" ] || [ "$latest" = "null" ]; then
   echo "❌ Could not determine latest gortex release" >&2
@@ -31,10 +35,15 @@ if [ "$latest" = "$current" ]; then
 fi
 
 echo "⬆️  gortex $current → $latest"
-url="https://github.com/${repo}/releases/download/v${latest}/gortex_linux_amd64.tar.gz"
-hash=$(nix store prefetch-file --json "$url" | jq -r '.hash')
+# Replace only the bare-semver line, so the file's header survives the bump.
+tmp="$(mktemp)"
+awk -v v="$latest" '
+  /^[[:space:]]*#/ { print; next }
+  /[0-9]+\.[0-9]+\.[0-9]+/ && !done { print v; done = 1; next }
+  { print }
+' "$file" > "$tmp"
+mv "$tmp" "$file"
 
-sed -i -E "s|^([[:space:]]*version = )\"[^\"]+\";|\1\"${latest}\";|" "$file"
-sed -i -E "s|^([[:space:]]*hash = )\"sha256-[^\"]+\";|\1\"${hash}\";|" "$file"
-
-echo "✅ gortex updated to $latest ($hash)"
+echo "✅ gortex pin updated to $latest"
+echo "   Commit + push it: every box picks it up via converge (the pin is a"
+echo "   reprovision trigger in scripts/converge.sh's _touches_driver)."
