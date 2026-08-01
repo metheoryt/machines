@@ -1,164 +1,134 @@
 # machines — personal machine fleet
 
 Config, provisioning, and data-backup for a small fleet of physical machines —
-NixOS *and* Windows. The NixOS hosts are a flake (Home Manager integrated); the
-Windows hosts carry their reinstall/backup scripts and shared install media.
+**Debian, Windows and macOS.** Each host carries its ops scripts under
+`hosts/<name>/<platform>/`; the shared behaviour lives in the cross-platform
+provisioner under `provision/`.
 
+> **There is no NixOS host left.** The flake and its 22 modules were deleted
+> 2026-08-01 and live in the annotated tag `nixos-final`. If you came looking for
+> `just switch`, `nix flake check` or `just quick`, read
+> `docs/2026-08-01-nixos-harvest.md` — it records what that tree knew, what was
+> already ported, and the two files in it that were live provisioning inputs
+> rather than Nix packaging.
+
+- **latitude** — Dell Latitude 5520, Intel Tiger Lake, **Debian 13 trixie**. The
+  always-on **services host**: immich, servarr, speedtest, tugtainer, and the
+  restic REST backup hub. Never sleeps, by design.
+- **air** — MacBook, the **primary dev box**.
+- **hub** — Debian VPS at `cyphy.kz`; Headscale control server + AmneziaWG VPN hub.
 - **desktop** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
   **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
-- **homeserver** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti.
-  Windows 11 + Docker Desktop, logical name `server`, OS hostname `g513ie`
-  (renamed from `methe-server` 2026-07-20 — the model code; see the
-  hostname-normalization spec). Runs the cyphy.kz service platform (defined in the
-  sibling **`vps`** repo — that repo owns the *services*; `machines` owns the
-  *machine* + its data backups).
-- **latitude5520** — Dell Latitude 5520, Intel Tiger Lake (integrated only).
-  NixOS.
+- **server** — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti, Windows 11,
+  OS hostname `g513ie`. **Being decommissioned** — its services moved to latitude.
+  It used to run the cyphy.kz platform, defined in the sibling **`vps`** repo —
+  that repo owns the *services*; `machines` owns the *machines* + their backups.
 
-Top-level layout: `hosts/<host>/{nixos,windows}/` (per-machine OS config),
-`modules/` (shared NixOS modules), `install-media/` (shared Win11 answer file +
-Ventoy config), `backup/` (fleet restic clients), `scripts/` (shared repo
-tooling), `agents/` (agent config, memory, bootstrap).
+Top-level layout: `hosts/<host>/<platform>/` (per-machine ops scripts),
+`provision/` (the cross-platform provisioner + tier library), `agents/` (agent
+config, plugin, bootstrap), `scripts/` (convergence engine + version bumper),
+`docs/` (`fleet-roadmap.md` is the live backlog), `install-media/` (shared Win11
+answer file + Ventoy config).
 
 ## Onboarding — start here
 
 | Box kind | One command |
 |---|---|
-| **NixOS** — latitude5520 | `just switch` |
+| **macOS** — air | `just provision-mac air` |
+| **Debian / any glibc Linux** | `bash provision/linux.sh` |
 | **Windows** — ME-G614JV, g513ie | `provision\windows.ps1` (`-Work` adds the work profile) |
-| **WSL / any glibc Linux** — persisted or throwaway | `bash provision/linux.sh` |
+| **WSL** — self-declaring fleet host | `just provision-wsl <nickname>` |
 
-All three link your synced agent config for you (via `agents/bootstrap.sh`); to
-re-link only that, run `bash agents/bootstrap.sh` (or `just agent-bootstrap`; on
-NixOS `just switch`). To clone your repos into the `~/my` · `~/pure` ·
-`~/cyphy671` layout, run `bash provision/repos.sh <groups>` (e.g. `my cyphy671`
-on a personal box, `pure` on a work box).
+All of them link your synced agent config for you (via `agents/bootstrap.sh`); to
+re-link only that, run `bash agents/bootstrap.sh` (or `just agent-bootstrap`). To
+clone your repos into the `~/my` · `~/pure` · `~/cyphy671` layout, run
+`bash provision/repos.sh <groups>` (e.g. `my cyphy671` on a personal box, `pure`
+on a work box).
 
 For a Linux dev environment on Windows, `provision/linux.sh` provisions a
 persisted or disposable Debian/Ubuntu WSL box with the portable layer (synced
 agent config + CLI tools) — a peer of `install-media/`.
 
-## Quick Start
-
-```bash
-# Validate syntax without building
-just quick
-
-# Build and switch to new configuration
-just switch
-
-# Safe path when updating NVIDIA drivers (reboots into new config)
-just upgrade
-```
-
 ## Common Commands
+
+`just --list` is the full menu (16 recipes).
 
 | Command | Description |
 |---|---|
-| `just quick` | Fast syntax validation (no build) |
-| `just check` | Full `nix flake check` evaluation |
-| `just fmt` | Format all `.nix` files with alejandra |
-| `just build` | Build without activating |
-| `just switch` | Build and activate immediately |
-| `just test` | Temporary test (reverts on next boot) |
-| `just boot` | Set for next boot without switching |
-| `just upgrade` | Update inputs + set for next boot (safe for NVIDIA) |
-| `just upgrade-now` | Update inputs + switch immediately |
-| `just update` | Update flake inputs only |
-| `just clean` | Remove generations older than 7 days |
-| `just cleanup` | Remove all old generations (interactive) |
-| `just status` | Show system info (hostname, kernel, uptime, memory, disk, battery) |
-| `just hardware` | Show hardware details (CPU, GPU, storage) |
-| `just generations` | List system and Home Manager generations |
-| `just rollback` | Interactive rollback to previous generation |
-| `just diff` | Show recent system changes |
-| `just shell` | Enter dev shell with Nix tooling |
-| `just search <pkg>` | Search nixpkgs |
-| `just run <pkg>` | Run a package temporarily |
-| `just health` | Check store, services, disk |
+| `just test` | **The validation gate** — runs every `*.test.sh` in the repo |
+| `just provision --machine <m> --dry-run` | Show a machine's provisioning plan |
+| `just provision-mac <machine>` | Provision THIS Mac end to end |
+| `just provision-wsl <nickname>` | Self-declare THIS WSL distro as a fleet host |
+| `just agent-bootstrap` | Link `~/.claude` (+ mirror into Orca profiles) |
+| `just gortex-setup` | Force a gortex rewire (run after a version bump) |
+| `just update-gortex` | Bump `provision/gortex.version` |
+| `just status` | Host, kernel, uptime, memory, disk, battery |
+| `just health` | Failed units, next timers, disk pressure |
+| `just hardware` / `just logs` / `just monitor` | Hardware, recent logs, live monitor |
+
+`just test` used to be `nixos-rebuild test`, so the suite had no recipe at all.
+Three suites currently fail (`provision-wsl`, `orca-profile-harvest`,
+`orca-profile-link`) — pre-existing, and roadmap P4.
 
 ## Architecture
 
-### Flake Inputs
+### The provisioner
 
-| Input | Channel | Purpose |
-|---|---|---|
-| `nixpkgs` | unstable | Primary package set |
-| `nixpkgs-stable` | 25.05 | Pinned packages via `pkgs.stable.*` |
-| `home-manager` | unstable | User-level config |
-| `nixos-hardware` | latest | Hardware-specific modules |
-| `claude-code-nix` | latest | Claude Code package |
+`provision/` is the cross-platform provisioner and, since the modules were
+deleted, where behaviour lives.
 
-### Module Structure
+- `provision.{sh,ps1}` — the role front door, driven by `fleet.json`.
+- `lib/tiers.sh` — the `tier_*` functions: the portable implementation of what
+  the NixOS modules used to declare. Several name the module they replaced; that
+  provenance is deliberate, not stale.
+- `linux.sh` / `macos.sh` — tier drivers. Both run the same tier bodies; only the
+  driver path differs.
+- `roles/*.{sh,ps1}` — role executors. Only `agents`, `dotfiles` and `repos` are
+  implemented; `ssh-server`, `base` and `backup-client` are stubs that print a
+  plan (roadmap P3).
+- `gortex.version` — the pinned gortex release, installed by `tier_gortex` into
+  `~/.local/bin` on every box.
+- `statusboard/` — the console dashboard (a local VT/tmux board, Linux-only).
 
-```
-modules/
-├── system/
-│   ├── base.nix          # Boot, Nix daemon, networking, ZRAM, core packages
-│   └── laptop.nix        # Power profiles, thermald, touchpad, backlight, S3 sleep
-├── desktop/
-│   └── gnome.nix         # GDM + GNOME (Wayland), PipeWire, fonts, XDG portals
-├── hardware/
-│   ├── asus-rog.nix      # Battery charge threshold, ROG keyboard fixes, DPCD backlight
-│   └── dell-latitude.nix # Battery charge threshold, Thunderbolt, Intel GPU
-├── home/
-│   └── me.nix            # Home Manager: packages, git, Fish, Starship, Ghostty, GNOME dconf
-├── nvidia.nix            # NVIDIA open modules, PRIME offload, fine-grained power, Wayland vars
-└── programs/
-    └── development.nix   # Dev tools, Docker, Python 3.13, nix-ld, direnv
-```
+See `provision/README.md` for usage and base-distro guidance.
 
-### Host Configurations
+### Convergence
 
-**`hosts/desktop/windows/`** — ROG G16 2024 (Windows-only); NixOS `g16` retired.
+`scripts/converge.sh` applies pulled state on each box after a fast-forward pull,
+routing by OS class. A change to a *provisioning-relevant* path triggers a
+reprovision; a content-only pull does not. `scripts/converge.test.sh` asserts the
+gates, including that `fleet.json` and `provision/gortex.version` count on both
+the linux and darwin tiers — `fleet.json` had silently counted on no box at all
+between latitude leaving NixOS and 2026-08-01.
 
-**`hosts/latitude5520/nixos/`** — Dell Latitude 5520
-- Intel Tiger Lake with `intel-compute-runtime` (replaces `intel-ocl`)
-- Imports: `base`, `laptop`, `gnome`, `dell-latitude`, `development`, home-manager
-- Thunderbolt authorization via `bolt` service
-- Battery charge limit: 85% via `charge-upto <percent>`
+### Host scripts
 
-**`provision/`** — persisted or disposable non-Nix distro (Linux dev environment on Windows), a peer of `install-media/`
-- `provision/linux.sh` provisions a fresh Debian/Ubuntu box (or persisted/throwaway WSL2 distro)
-  with the *portable* layer only: the git-synced Claude Code config (via
-  `agents/bootstrap.sh`) + core CLI tools (gortex, claude, gh, ripgrep/fd/fzf, …).
-- Imperative and apt-based — no NixOS. See `provision/README.md` for usage and
-  base-distro guidance.
+**`hosts/latitude/debian/`** — the services host's recurring jobs:
+`mirror-refresh.sh` (immich library → mirror), `archive-mirror.sh` (the closed
+1970–2024 archive → its second drive), and `install-timers.sh` + `systemd/` to
+install both as system timers. Read the headers first — they record decisions the
+code cannot show you.
 
-### Home Manager (`modules/home/me.nix`)
-
-User `me` (Maxim Romanyuk) configuration:
-- **Shell:** Fish with aliases, NixOS rebuild shortcuts (`nrs`, `nrt`, `nrb`), fastfetch on login
-- **Terminal:** Ghostty (Dracula dark / GitHub Light), JetBrainsMono Nerd Font 10pt
-- **Prompt:** Starship with git status, nix-shell indicator
-- **Git:** rebase pulls, diff3 merges, common aliases
-- **GNOME:** dconf settings — battery %, Alt+F4 close, Ctrl+Alt+T → Ghostty, power policy
-- **Key packages:** google-chrome, telegram-desktop, ghostty, vlc, gimp, libreoffice, zed-editor, pycharm, claude-code, rustdesk
+**`hosts/desktop/windows/`**, **`hosts/server/windows/`** — install/reinstall +
+backup scripts.
 
 ## Hardware Notes
 
-### Battery Charge Limiting
+### Battery charge limiting
 
-Both hosts cap battery charging at 85% by default:
-
-```bash
-# Change the charge limit (takes effect immediately + persists across reboots)
-charge-upto 80
-charge-upto 100   # disable limit
-```
-
-## Development Shell
+The laptops cap charging via `charge-upto`, installed by `tier_battery_limit`:
 
 ```bash
-just shell
-# Includes: nixfmt, nil, nixd, alejandra, git, just, direnv, wget, curl, jq, yq
+charge-upto 80         # ceiling, applied now and persisted
+charge-upto 100        # effectively disable the limit
 ```
 
-## Locale & Timezone
-
-- Timezone: `Asia/Almaty`
-- Locale: `ru_RU.UTF-8`
-- State version: 25.05
+Writing `charge_control_end_threshold` alone is **not enough on a Dell** — the EC
+honours it only in Custom charge mode and boots in `[Fast]`, so a naive
+implementation displays a limit it is not enforcing. `charge-upto` writes the mode
+too, and takes a floor as well as a ceiling so the cell holds steady instead of
+cycling down and back. latitude runs 80–85% because it is on AC 24/7 as the
+services host.
 
 ## Worktree dispatchers
 

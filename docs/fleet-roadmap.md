@@ -32,8 +32,10 @@ Two separate LANs. Same-LAN pairs get direct P2P (~3ms); cross-LAN pairs relay
 through our own DERP — expected and accepted, which is why **UPnP/router
 port-mapping is not on this backlog**.
 
-**There is no Nix host left in the fleet** (verified live 2026-08-01). Read the
-P1 item before touching anything under `modules/`.
+**There is no Nix host left in the fleet, and the NixOS tree is deleted**
+(2026-08-01, tag `nixos-final`). `modules/`, `flake.nix` and `pkgs/` no longer
+exist — read P1 and `docs/2026-08-01-nixos-harvest.md` before restoring anything
+from the tag.
 
 ---
 
@@ -154,23 +156,45 @@ is what made the right work obvious._
 
 ---
 
-## P1 — Decide the flake's fate. It blocks everything under `modules/`.
+## P1 — ✅ DONE 2026-08-01. The flake is deleted.
 
-- [ ] **Delete or archive the NixOS tree.** No Nix host remains, yet `flake.nix`
-  still builds `latitude5520` — a machine that no longer exists. The carcass is
-  ~10.1k lines across `flake.nix`, `flake.lock`, 18 `modules/*.nix`,
-  `hosts/latitude/nixos/`, and `pkgs/`.
-  **The consequence that matters is not the line count:** roughly twenty
-  `justfile` recipes target it and cannot run on any box in the fleet —
-  including **`just quick`, the validation gate AGENTS.md documents**. There is
-  currently no gate at all (see P4 for what's left of one).
-  Suggested shape: `git tag nixos-final` before deleting. It costs nothing and
-  permanently answers "how did we do X under NixOS." Then prune the dead recipes
-  and rewrite the AGENTS.md build section.
-  This also retires the `pylspFixOverlay` item that used to live under
-  Housekeeping — it goes with the flake, not separately.
+Tag **`nixos-final`** (annotated, pushed) preserves it. Commit `fb6a014`.
+`docs/2026-08-01-nixos-harvest.md` is the review, written before the delete —
+read that before restoring anything from the tag.
 
----
+- [x] **Reviewed module by module** against `tiers.sh` and against latitude's live
+  Debian install. The result that justifies the delete: in both places where a Nix
+  module and Debian disagreed, **Debian was right**. `laptop.nix` set
+  `HandleLidSwitch = "suspend"`, which on the box latitude has become would drop
+  immich, servarr, the REST hub and every backup timer on a lid close; latitude has
+  lid+idle `ignore` *and* all three sleep targets masked. And the battery module
+  wrote `charge_control_end_threshold` without the Dell EC's Custom charge mode, so
+  it displayed an 85% ceiling while charging past it — `tier_battery_limit` writes
+  the mode and adds a floor.
+- [x] **Two live inputs rescued, not deleted.** `pkgs/gortex.nix` was grepped by
+  `tier_gortex` on every box for the version to install — a Nix file as a POSIX
+  provisioning input. Now `provision/gortex.version`, and `update-gortex.sh` no
+  longer needs `nix store prefetch-file` for a hash nothing verified (it had been
+  unrunnable fleet-wide while the pin it maintained was still being read).
+- [x] **A real bug fixed.** `touches_nix` was the only gate treating `fleet.json`
+  as a reprovision trigger, so it fired on one box while NixOS existed and on
+  **none** afterwards: adding a fleet member wrote ok, advanced `converged-rev`,
+  and never reached any box's `~/.ssh/config`. Now in `_touches_driver`, asserted
+  on both tiers.
+- [x] **28 of 33 justfile recipes pruned**, and `scripts/quick-check.sh` with them
+  — `just quick` *hard-exited 1* without a flake.nix, so the documented gate did
+  not degrade, it failed.
+- [x] **`rustdesk-config.nix`'s peer identity map preserved** in the harvest — the
+  only module holding data not derivable from anything else (RustDesk IDs are
+  assigned, not chosen). The relay key is left in the tag, not copied.
+- [x] AGENTS.md, README.md and `.claude/memory/project.md` rewritten. AGENTS.md's
+  Hardware Context had been describing the NixOS install's LUKS root, ZRAM swap
+  and S3 sleep — none of which survived the reinstall.
+
+Still open, small: `agents/bootstrap.sh` keeps an inert `[ -e /etc/NIXOS ]` skip,
+and `converge.sh` still *detects* a `nixos` class on purpose (folding it into
+`linux` would run the apt driver on a Nix box and abort). Both are fail-safe if
+Nix ever returns. Leave them.
 
 ## P2 — Finish the `server` (g513ie) decommission.
 
@@ -209,7 +233,7 @@ decommission cannot finish without the same decision. Do them together.
 
 ---
 
-## P4 — Green the test suite. It is now the only gate.
+## P4 — Green the test suite. It is the only gate, and `just test` runs it.
 
 - [ ] **Three failures, all pre-existing** — they reproduce at HEAD in a clean
   worktree and are *not* fallout from the fleet-ssh work:
@@ -217,22 +241,22 @@ decommission cannot finish without the same decision. Do them together.
   `agents/tests/orca-profile-harvest.test.sh`,
   `agents/tests/orca-profile-link.test.sh`.
   With the Nix gate gone the bash suite is all the validation the repo has, and
-  a red suite gives no signal at all. Whole suite:
-  ```bash
-  for t in provision/tests/*.test.sh provision/*.test.sh \
-           agents/tests/*.test.sh scripts/converge.test.sh; do bash "$t"; done
-  ```
-- [ ] **No recipe runs the suite.** `just test` is `nixos-rebuild test` and dies
-  with the flake. Give the bash suite a recipe as part of P1.
+  a red suite gives no signal at all. Run it with `just test`.
+- [x] **`just test` now runs the suite** (landed with P1). It globs every
+  `*.test.sh` — 27 suites, up from the 4 globs documented here — so a new suite is
+  picked up without editing the recipe. `just test` previously meant
+  `nixos-rebuild test`, one typo away from the suite; that footgun is gone.
 
 ---
 
 ## P5 — Documentation drift.
 
-- [ ] **`AGENTS.md`** still leads its Common Commands with Nix, and its
-  "Fleet migration in flight" banner predates the migration finishing.
-- [ ] **`.claude/memory/project.md` ~359–368** still discusses `latitude5520`
-  NixOS builds as live facts.
+- [x] **`AGENTS.md`** rewritten with P1 — the Nix-first Common Commands, the stale
+  migration banner and a Hardware Context block claiming LUKS/ZRAM/S3-sleep are all
+  gone. README.md too.
+- [x] **`.claude/memory/project.md`** — the entries that stated *current* facts
+  wrongly are fixed. Bullets explicitly marked HISTORY were left alone on purpose;
+  they are records, not claims.
 - [ ] **45 plans under `docs/superpowers/plans/`, none marked done.** Their
   checkboxes are unchecked even where fully executed, so the directory cannot be
   read as a backlog — worth a status line at the top of each, or at least of the

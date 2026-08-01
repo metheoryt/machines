@@ -14,21 +14,36 @@ global + per-host). One bullet per fact under a topical heading.
   mode** (Orca worktrees): the `worktree-workflow` SessionStart hook injects the
   live rules — commit on the branch (never `main`), auto-sync `main`→branch, offer
   a fast-forward merge-back into `main` from the base checkout at checkpoints.
-- `just quick` (`scripts/quick-check.sh`) treats `nix flake check` failures as
-  non-fatal and only hard-gates on required-file presence + a one-host dry-build
-  — can pass green while `nix flake check` is red. For reliable per-host
-  validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
-- **THE NIX GATE IS GONE — there is no Nix host left in the fleet (verified live
-  2026-08-01).** latitude was reinstalled as **Debian 13 trixie**
-  (`PRETTY_NAME="Debian GNU/Linux 13 (trixie)"`); `nix` is not on the box at any
-  path. So `just quick`, `just test`, `nix flake check` and every
-  `nix build --dry-run` are unrunnable fleet-wide, while `flake.nix` still builds
-  `latitude5520` — a machine that no longer exists. The flake's fate is still
-  undecided; decide it before the next change that touches `modules/`.
-- **Do NOT reason about latitude as a NixOS box.** `hosts/latitude/nixos/`,
-  `modules/`, and `modules/home/ssh.nix` all describe a machine that was wiped.
-  This single stale fact produced two confidently-wrong turns in one session, so
-  the concrete consequences, all observed live:
+- **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
+  globs every `*.test.sh` in the repo — 27 suites — and exits nonzero on failure.
+  Three fail at HEAD and have for a while: `provision-wsl.test.sh`,
+  `orca-profile-harvest.test.sh`, `orca-profile-link.test.sh`. They reproduce in a
+  clean worktree; a red suite gives no signal, so greening them is roadmap P4.
+- **THE NIX TREE IS GONE — deleted 2026-08-01 in `fb6a014`, tag `nixos-final`.**
+  `flake.nix`, `flake.lock`, 22 modules, `hosts/latitude/nixos/` and `pkgs/`:
+  10.3k lines describing a machine that no longer existed. It was reviewed on the
+  way out — **read `docs/2026-08-01-nixos-harvest.md` before restoring anything.**
+  What that review found, which is the reusable part:
+  - `modules/system/ssh-server.nix` was the only written spec for the `ssh-server`
+    role (still a stub). Its firewall shape — port 22 on `tailscale0` only plus one
+    explicit `192.168.8.0/24` iptables carve-out — is not guessable.
+  - **Two files in that tree were live POSIX provisioning inputs, not packaging.**
+    `pkgs/gortex.nix` was grepped by `tier_gortex` on every box for the version to
+    install; it is now `provision/gortex.version`, and `update-gortex.sh` no longer
+    needs `nix store prefetch-file` for a hash nothing verified. `fleet.json` was a
+    reprovision trigger only in `touches_nix`, so it fired on one box while NixOS
+    existed and on **none** afterwards — adding a fleet member never reached any
+    box's `~/.ssh/config`. Now in `_touches_driver`, asserted on both tiers.
+  - The Nix modules were WRONG where Debian disagreed, twice: `laptop.nix` set
+    `HandleLidSwitch = "suspend"` (which on today's services host would drop immich
+    and every backup timer on a lid close), and the battery module wrote
+    `charge_control_end_threshold` without the Dell EC's Custom charge mode, so it
+    displayed a ceiling it was not enforcing. Both are handled correctly on Debian.
+  - `just quick` and `scripts/quick-check.sh` went too: it **hard-exited 1** with no
+    `flake.nix`, so the documented gate did not degrade, it failed.
+- **Do NOT reason about latitude as a NixOS box.** This single stale fact produced
+  two confidently-wrong turns in one session, so the concrete consequences, all
+  observed live:
   - `/etc/fstab` is hand-managed and edits stick (nothing regenerates it).
   - Packages come from `apt` (`sudo apt-get install -y exfatprogs`), not the flake.
   - `~/.ssh/config` is a real file that DOES carry `metheoryt.github.com` and
@@ -38,11 +53,10 @@ global + per-host). One bullet per fact under a topical heading.
   - **`/usr/sbin` and `/sbin` are not on the non-interactive ssh PATH.** Scripts
     run over `ssh latitude '…'` must `export PATH=/usr/sbin:/sbin:/usr/bin:/bin`
     or `mkfs.*`, `blkid`, `findmnt` and `wipefs` all come back "command not found".
-- **The test suite is plain bash and no recipe runs it.** `provision/tests/*.test.sh`
-  (17 files), `provision/*.test.sh`, `agents/tests/*.test.sh`,
-  `scripts/converge.test.sh`. Run one with `bash provision/tests/roles.test.sh` —
-  it prints `ALL PASS` and exits nonzero on failure. **`just test` is
-  `nixos-rebuild test`, not this** — an easy and costly misread.
+- **The test suite is plain bash; `just test` runs all of it.** One file directly:
+  `bash provision/tests/roles.test.sh` prints `ALL PASS` and exits nonzero on
+  failure. (Until 2026-08-01 `just test` was `nixos-rebuild test` and the suite had
+  no recipe at all — an easy and costly misread, now closed.)
 
 ## Fleet convergence & auto-sync
 
@@ -1113,11 +1127,11 @@ global + per-host). One bullet per fact under a topical heading.
   mangles the absolute backslash path (`C:\Users\methe\machines` →
   `C:Usersmethemachines`); `just` runs recipes with cwd = justfile dir, so relative
   works.
-- **`scripts/quick-check.sh` (the `just quick` gate) hardcodes the host label** —
-  `hosts/latitude/…` paths and `.#nixosConfigurations.latitude…` as literal strings,
-  NOT via the justfile's decoupled `nixos_attr` var. A future host-label rename
-  silently breaks `just quick` even though `nixos-rebuild`/`nix build` keep working;
-  update quick-check.sh in the same rename.
+- **`scripts/quick-check.sh` and `just quick` no longer exist** (deleted
+  2026-08-01 with the flake). It hardcoded `hosts/latitude/…` and
+  `.#nixosConfigurations.latitude…` as literal strings, and hard-exited 1 without a
+  `flake.nix` — so the documented gate did not degrade to a skip, it failed. `just
+  test` (the bash suite) is the gate now.
 - **`agents/statusline-command.sh` probes `python3 → python → py` in that order** —
   on fresh Windows boxes `python3`/`python` on PATH are usually Microsoft Store stubs
   that fail silently (blank statusline); the `py` launcher resolves real installs via
@@ -1138,15 +1152,22 @@ global + per-host). One bullet per fact under a topical heading.
   **not** touch the shared, symlinked `agents/settings.json` (there is no
   `--no-settings` flag, but none is needed). So the wiring step is safe to re-run.
   Idempotency guard: skips when the profile is already wired (`gortex` present in
-  `settings.local.json`); `GORTEX_REWIRE=1` forces it. Skipped under nix activation
-  (`[ -e /etc/NIXOS ]`) — run it on latitude via `just gortex-setup`.
+  `settings.local.json`); `GORTEX_REWIRE=1` forces it. The `[ -e /etc/NIXOS ]` skip
+  is still in `bootstrap.sh` but INERT — no Nix host exists. `just gortex-setup` is
+  now the REWIRE path (what you want after `just update-gortex`), not a NixOS
+  escape hatch.
 - **Note:** the settings-normalizer (Claude Code itself, on `/config`/model changes)
   rewrites `~/.claude/settings.json` **through the symlink** into the committed
   `agents/settings.json`, reordering keys — a recurring source of a spurious
   `M agents/settings.json`. It's cosmetic (no semantic change); not caused by gortex.
-- **`just update-gortex`** (`scripts/update-gortex.sh`, wired into `just update`) bumps
-  `pkgs/gortex.nix` version+hash — the NixOS half of the "float" story (Windows floats
-  via the installer). Resolves its target as `<scripts>/../pkgs/gortex.nix`.
+- **`just update-gortex`** (`scripts/update-gortex.sh`) bumps
+  `provision/gortex.version` — a plain semver file, rehomed there 2026-08-01 from
+  `pkgs/gortex.nix`. It used to need `nix store prefetch-file` for a hash, which made
+  it unrunnable fleet-wide once Nix was gone while `tier_gortex` still read the pin;
+  it is curl + jq only now. No hash is verified (none ever was at install time:
+  `tier_gortex` untars the GitHub release over HTTPS). `just update` is gone, so this
+  is a standalone bump — commit and push it and convergence carries it, because the
+  pin is a reprovision trigger in `_touches_driver`.
 - **Editors: PyCharm + Zed removed entirely 2026-07-21** (unused; PyCharm 2026.2 also
   broke on nixpkgs auto-patchelf for `libjawt.so`/`libudev.so.1`). `zed-bin.nix`,
   `pycharm-bin.nix`, `update-zed.sh`, `update-pycharm.sh` all deleted; the built-in
@@ -1225,7 +1246,7 @@ global + per-host). One bullet per fact under a topical heading.
 ## Pending follow-ups
 
 - **Profile-aware `touches_linux` (deferred by decision 2026-07-25).** The regex is
-  profile-blind, so a routine `pkgs/gortex.nix` bump re-runs hub's whole tier list on
+  profile-blind, so a routine `provision/gortex.version` bump re-runs hub's whole tier list on
   a box that never runs gortex. Cheap now that the list is lean (8 tiers, all
   idempotent), so it was left as-is rather than teaching `converge.sh` about
   profiles. Fix only if the churn starts costing something.
@@ -1248,14 +1269,12 @@ global + per-host). One bullet per fact under a topical heading.
   .git/hooks/pre-push`. Otherwise once `.envrc` is gone the `.direnv/` root drops
   on next `cd` → the next weekly `nix-collect-garbage` reaps the pinned tooling →
   the stale hook fails to exec and **aborts every commit/push** on that box.
-  SCOPE CORRECTION: the hook only ever exists where `nix develop` ran — i.e. a
-  NixOS/nix dev box. In this fleet that is **only latitude5520** (Windows
-  desktop/server + the now-Windows-only g16 + the Debian hub + WSL leaves have no
-  nix, so never had the hook). Latitude5520 is DONE (cleaned this session); nothing
-  else is pending. Trade-off accepted:
-  lint/format (alejandra/deadnix/statix/shellcheck) is now a MANUAL gate
-  (`just fmt` / `just check`), no longer enforced on commit; and `cd` no longer
-  auto-loads the dev shell (`.envrc` gone) — use `just shell` / `nix develop`.
+  SCOPE CORRECTION: the hook only ever existed where `nix develop` ran — i.e. a
+  nix dev box, which in this fleet was only latitude5520. That box was cleaned, then
+  reinstalled as Debian, and the whole Nix tree was deleted 2026-08-01 — so this item
+  is CLOSED and cannot recur. `just fmt` / `just check` / `just shell` no longer
+  exist either; there is no Nix lint gate to restore. Shell linting is unenforced:
+  if that ever matters, `shellcheck` in `just test` is the shape to add.
 
 - **VPS base-machine reproducibility (idea, NOT started — 2026-07-11).** Goal:
   bring a fresh cloud VM back to the VPS baseline reproducibly. Blocked because
