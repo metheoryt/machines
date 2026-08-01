@@ -18,17 +18,26 @@ global + per-host). One bullet per fact under a topical heading.
   non-fatal and only hard-gates on required-file presence + a one-host dry-build
   — can pass green while `nix flake check` is red. For reliable per-host
   validation prefer `nix build --dry-run '.#nixosConfigurations.<host>…'`.
-- **The Windows fleet boxes have no Nix.** Any `nix eval` / `nix build --dry-run` /
-  `nix flake check` step must be deferred to a NixOS member (currently only
-  `latitude5520`) after a `git pull` — Windows-side work can reason about Nix diffs
-  but never execute the gate.
-- **That Nix gate is on borrowed time (2026-08-01).** `fleet.json` already declares
-  latitude `platform: debian` / `profile: server` (`380cb55`, `0aa4eb9`), and
-  `docs/superpowers/plans/2026-07-28-latitude-wipe-harvest.md` (status: open)
-  retires NixOS on it. When that lands there is **no Nix host left**: `just quick`,
-  `nix flake check` and every `nix build --dry-run` become unrunnable fleet-wide,
-  and `flake.nix` builds a host that no longer exists. Decide the flake's fate in
-  the same change that wipes the box.
+- **THE NIX GATE IS GONE — there is no Nix host left in the fleet (verified live
+  2026-08-01).** latitude was reinstalled as **Debian 13 trixie**
+  (`PRETTY_NAME="Debian GNU/Linux 13 (trixie)"`); `nix` is not on the box at any
+  path. So `just quick`, `just test`, `nix flake check` and every
+  `nix build --dry-run` are unrunnable fleet-wide, while `flake.nix` still builds
+  `latitude5520` — a machine that no longer exists. The flake's fate is still
+  undecided; decide it before the next change that touches `modules/`.
+- **Do NOT reason about latitude as a NixOS box.** `hosts/latitude/nixos/`,
+  `modules/`, and `modules/home/ssh.nix` all describe a machine that was wiped.
+  This single stale fact produced two confidently-wrong turns in one session, so
+  the concrete consequences, all observed live:
+  - `/etc/fstab` is hand-managed and edits stick (nothing regenerates it).
+  - Packages come from `apt` (`sudo apt-get install -y exfatprogs`), not the flake.
+  - `~/.ssh/config` is a real file that DOES carry `metheoryt.github.com` and
+    `cyphy671.github.com` aliases — the opposite of what `ssh.nix` would render.
+  - `sqlite3`, `lsof`, `fuser` are absent from the base install; use
+    `python3 -c "import sqlite3…"` and `umount`-fails-if-busy instead.
+  - **`/usr/sbin` and `/sbin` are not on the non-interactive ssh PATH.** Scripts
+    run over `ssh latitude '…'` must `export PATH=/usr/sbin:/sbin:/usr/bin:/bin`
+    or `mkfs.*`, `blkid`, `findmnt` and `wipefs` all come back "command not found".
 - **The test suite is plain bash and no recipe runs it.** `provision/tests/*.test.sh`
   (17 files), `provision/*.test.sh`, `agents/tests/*.test.sh`,
   `scripts/converge.test.sh`. Run one with `bash provision/tests/roles.test.sh` —
@@ -1365,3 +1374,51 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   hermes step. The 980M install on desktop (`%LOCALAPPDATA%\hermes`, plus a user
   PATH entry) was a manual one, removed by hand. So "wipe it from provisioning"
   and "delete it from the fleet" are genuinely two jobs here, not one.
+
+## latitude storage layout (settled 2026-08-01)
+
+Nothing here is derivable from the repo — latitude is Debian and its disks are
+hand-mounted. **Always identify a drive by UUID or bridge serial; `/dev/sdX`
+reshuffles on every boot** (five bus-powered USB drives plus a card reader race
+to enumerate, and `sde`/`sdf` show as 0 B card-reader slots).
+
+| mount | dev | UUID | fs / label | holds |
+|---|---|---|---|---|
+| `/mnt/immich` | nvme0n1p1 | `d0dd3972-d279-4b57-8ab4-35d17f37b955` | ext4 `immich` | `ImmichMedia` (live upload tier), `ServarrConfig`, `xs-keepers` |
+| `/mnt/servarr` | sdb2 | `fd0b0662-d574-40f5-930d-de8dc0fc5082` | ext4 `servarr` | `ServarrMedia` — 526 GiB, 1843 files, 350 hardlinked |
+| `/mnt/immich-2024` | sdc2 | `63c1de22-0607-40bc-aa35-168bf78927fb` | ext4 `immich-2024` | 663 G / 20456 files, immich's external library |
+| `/mnt/immich-mirror` | sdd2 | `a7d7b61e-94b1-4673-af71-81152061199f` | ext4 `immich-mirror` | `mirror-refresh.sh` destination |
+| `/mnt/spare320` | sdg1 | `3a78fd88-deb0-4c1a-a576-14abd0631d57` | ext4 `spare320` | music 89 G, Downloads 30 G (staging) |
+| `/mnt/xs` | sda3 | `FBED-BCAA` | **exfat** `xs700` | empty scratch, 700 G |
+
+- **Drive serials**, since letters move: sda `50026B72833E0877` (Kingston XS2000
+  Ventoy stick), sdb `JD100ACC2V5ZVK`, sdc `WD-WX91E575272W`, sdd `S2U5J9ECA34541`,
+  sdg `W047MMKS`, nvme0 `50026B76861AC433`.
+- **sdc is device-managed SMR** (`WDC WD10SPZX-21Z10T0`) and holds the 2024
+  archive *on purpose* — write-once-read-rarely is its best case. It measured
+  36 MB/s on the 663 G write vs sdb's 86 MB/s. Never give it the torrent tree.
+- **sdg is the most worn spindle** — 36202 power-on hours, `Command_Timeout 299`.
+  Fine for a redundant copy, wrong for a sole copy.
+- **`ServarrMedia`'s four dirs share inodes.** `movies/`, `tv/`, `xxx/` are
+  hardlink views of `torrents/`: 526 GiB actual vs **1.03 TB apparent**
+  (rsync reported `speedup 1.83`). Any move MUST be a single `rsync -aHAX`
+  invocation over all four — split it or drop `-H` and it will not even fit.
+- **The rename `Media` → `ServarrMedia` was invisible to every app** because
+  sonarr/radarr/qbittorrent/jellyfin store *container* paths (`/data/movies`,
+  `/data/torrents/sonarr`). Only `DATA_ROOT` / `CONFIG_ROOT` in
+  `vps/homeserver/servarr/.env` changed. Same trick applies to any future move.
+- **sda1 `Boot` (exfat, Ventoy ISOs) + sda2 `VTOYEFI` are Ventoy — never
+  reformat them.** sda3 is an independently added data partition; wiping it
+  leaves the stick bootable. It is exfat so all three OSes can write it (NTFS is
+  read-only on macOS); the cost is no journal, so treat it as scratch only.
+- **`mirror-refresh.sh` mirrors `/mnt/immich` → `/mnt/immich-mirror` only.** Its
+  four `--exclude=/Media/*` lines stay correct until `/mnt/immich/Media` is
+  deleted, then become dead. `ServarrMedia` is now out of scope entirely (wrong
+  disk); `ServarrConfig` and `xs-keepers` are picked up automatically, which is
+  what we want — *arr configs are not re-derivable.
+- **`xs-keepers`** holds what was rescued off the Ventoy stick before it was
+  wiped: `repos/` (all four published — `airdrome`, `nix`, `vasya`, and
+  `qaz-law`, whose remote is now `metheoryt/qaz-code`), `home/` (the g513ie
+  Windows profile, still un-enumerated against the dotfiles branch), plus
+  `qaz-code-feature-sync-dashboard.bundle` — 236 K holding 19 commits from
+  2026-05-02/03 that reached no remote. Unbundle before deleting `repos/`.
