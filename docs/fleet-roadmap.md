@@ -472,6 +472,20 @@ be diffed against a remembered failure count.
   `repos-deploy`, and neither runs on Debian. The bots are fine without it — they
   just never self-update, so every deploy is a manual `git pull` in `src/` plus
   `up -d --build`. Spec to reproduce: `vps/homeserver/DEPLOYING-A-REPO.md`.
+- [~] **Headscale ACLs — DEFERRED BY DECISION 2026-08-01, do not re-raise as an
+  oversight.** *"it doesn't burn right now."* The tailnet stays default-open.
+  Recorded with what was on the table, so it can be reopened on new information
+  rather than re-argued: `restic-server` runs `--no-auth`, so on a default-open
+  tailnet **reachability is authorisation** for every repo on the REST hub — any
+  tailnet node can read or write latitude's and desktop-wsl's backups. The natural
+  trigger to revisit is a node joining that is not ours, which has never happened.
+- [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its
+  services already work over the tailnet. Remove once nothing depends on
+  `10.0.0.6`, then drop the peer on hub.
+- [ ] Enumerate `xs-keepers/home`'s ~20 config dirs; unbundle
+  `qaz-code-feature-sync-dashboard.bundle`; decide
+  `windows-reinstall-runbook.md`'s fate; confirm immich still has "Hardware
+  decoding" ticked.
 
 ---
 
