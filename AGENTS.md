@@ -226,6 +226,15 @@ The Windows hosts (`g614jv`/`ME-G614JV`, `homeserver`) carry no NixOS
 configuration — they carry install/reinstall + backup scripts under
 `hosts/<name>/windows/`.
 
+**`hosts/latitude/debian/`** — latitude's post-reinstall ops scripts, same
+`hosts/<name>/<platform>/` convention. Currently `mirror-refresh.sh`
+(`/mnt/immich` → `/mnt/immich-mirror`, manual, no timer). It lived untracked in
+latitude's `$HOME` until 2026-08-01; its header carries decisions that are not
+re-derivable from the code (why live PGDATA is excluded, why `-H` is mandatory,
+why `--delete` is off), which is precisely why it belongs in the repo. Run it
+from the checkout — it uses absolute paths and needs no particular cwd:
+`~/machines/hosts/latitude/debian/mirror-refresh.sh -n`.
+
 ### Home Manager integration
 
 Runs at system level (`nixosModules.default`) with `useGlobalPkgs = true` and `useUserPackages = true`. User packages share the system nixpkgs — do not add a separate `nixpkgs` input in home-manager configs.
