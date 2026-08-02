@@ -30,7 +30,7 @@
 
 **A parallel worktree was missed by every worker.** `git worktree list` shows `/Users/me/orca/workspaces/machines/machines-cleanup` on `metheoryt/machines-cleanup`, three commits ahead, touching exactly `provision/lib/tiers.sh` (+32/−3) and `provision/README.md` (+10/−2) — two `rewrite` rows. One of its commits refutes a drift finding (see below).
 
-**Boxes examined:** latitude (ssh, read-only), air (local), hub (ssh, read-only), desktop-native (Git Bash via PowerShell), desktop-wsl (ssh). All four fleet members plus the WSL child were reached. `server`/g513ie was deliberately not examined — the C: review is the user's. One prescribed check was never run despite the worker being on the box: `git config core.symlinks` and `file CLAUDE.md` on desktop, which decides whether the repo's agent-instruction contract functions at all on the Windows checkout. That is a one-command gap, not an unreachable one.
+**Boxes examined:** latitude (ssh, read-only), air (local), hub (ssh, read-only), desktop-native (Git Bash via PowerShell), desktop-wsl (ssh). All four fleet members plus the WSL child were reached. `server`/g513ie was deliberately not examined — the C: review is the user's. One prescribed check was skipped by the worker on the box and run afterwards by hand: `core.symlinks` on desktop-native. It came back **false** — see Tier 2 item 10b.
 
 ---
 
@@ -414,6 +414,18 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 *Why:* the revocation is correct in the repo and has not propagated. Latent while sshd is off; live the moment `ssh-server` is implemented — and `server` is still powered on at 100.64.0.3.
 *Cost:* one run. *Breaks:* nothing; the span rewrite is wholesale and idempotent.
 
+**10b. `CLAUDE.md` is inert on the desktop-native checkout — every agent session there loads nothing.**
+*Evidence, measured 2026-08-03 over Git Bash:*
+```
+core.symlinks=false
+-rw-r--r-- 1 methe 197121 9 CLAUDE.md          # 9 bytes, a regular file
+head -c 80 CLAUDE.md  →  AGENTS.md            # the literal target path, as text
+git ls-files -s       →  120000 47dc3e3d …    # the index still says symlink
+```
+*Why:* the repo's whole agent-instruction contract is `CLAUDE.md` → `AGENTS.md`, and `AGENTS.md:3-5` mandates the symlink shape. With `core.symlinks=false` git checks the link out as a text file whose content is the target's path, so memory discovery on desktop reads nine bytes of nothing. This makes the ledger's `keep` on `CLAUDE.md` a portability finding rather than a clean row, and it means every agent that has ever run in `~/machines` on that box operated with no repo instructions at all — silently, because a 9-byte file is not an error.
+*Changes:* three options, in order of preference. (a) Set `core.symlinks=true` on that clone and re-checkout the path — works only if the account has SeCreateSymbolicLinkPrivilege or Windows Developer Mode is on, which is the thing to check first. (b) Ship a `.gitattributes` rule, or a `windows.ps1` step, that materialises `CLAUDE.md` as a copy on Windows checkouts — diverges the two files, so it needs a guard. (c) Accept it and make `AGENTS.md` the discovered filename on that platform.
+*Cost:* (a) is one command if the privilege is there. *Breaks:* nothing measured; verify by re-reading the file, not by re-running the checkout.
+
 **11. Clear the junk, and decide the authkey.**
 *Changes:* delete `statix.toml` (a Nix linter, zero `.nix` files, and neither invocation path it names exists) and the stray `.pyc`. Shred `provision/secrets/authkey` if the key is spent — Headscale pre-auth keys are revocable on hub and re-mintable per `provision/README.md:352`.
 *Cost:* minutes. *Breaks:* nothing.
@@ -487,7 +499,7 @@ What to build instead of a framework: **the live-vs-declared sweep, as a script,
 ## What this review did not establish
 
 - **Backups DID get its first-class pass, on the re-run** — the section above is that pass, three-way verified. Its own residual unknowns are listed at the end of it rather than here. The one correction worth carrying: the placeholder's "hub down since 10:53" read a UTC stamp as local; latitude is UTC+5.
-- **The desktop `core.symlinks` question is still open** even though a worker was on the box. If symlinks are off, `CLAUDE.md` materialises as a text file containing the string `AGENTS.md`, the ledger's `keep` verdict on it becomes a real portability finding, and agents on that checkout load nothing. One command.
+- ~~The desktop `core.symlinks` question is still open.~~ **Closed 2026-08-03, and it is a fault — see Tier 2 item 10b.**
 - **`metheoryt/machines-cleanup` was discovered only in this final pass.** Its three commits were not reviewed; its `tiers.sh` diff (+32/−3) is unexamined against the ledger's `rewrite` scope, and its `node` commit already refutes one drift claim. There may be more in it.
 - **The ledger and the drift reports were produced independently and this document is the first place they meet.** I folded the defects I could see; there may be others where a `keep` row and a live finding disagree and neither worker knew.
 - **`hosts/` unit ExecStart paths were not verified against latitude's actual checkout path.** All four systemd units hardcode `/home/me/machines/hosts/latitude/debian/...`; nobody confirmed the match.
