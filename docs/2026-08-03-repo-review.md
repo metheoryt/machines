@@ -1,7 +1,8 @@
 <!-- Produced 2026-08-03 by a 24-agent review workflow on branch repo-review-cleanup.
      Coverage was enforced mechanically: 240 tracked paths in, 240 ledger rows out, 0 gaps.
-     One agent (the `backups` suspicion) failed its schema-retry cap and was re-run separately;
-     see the Backups section for which text came from which pass. -->
+     One agent (the `backups` suspicion) failed its schema-retry cap; that section was re-run on
+     2026-08-03 as a dedicated 5-agent pass (investigate + three adversarial verifiers + merge)
+     and now supersedes the placeholder. It is the one section produced by a second workflow. -->
 
 # machines — whole-repo review
 
@@ -63,19 +64,246 @@ The three ~10-minute jobs are three genuinely different jobs that share a cadenc
 
 If the intended target was "a homegrown periodic mechanism an off-the-shelf tool could replace," the live candidate is the timer triad above — and the answer there is also no.
 
-### Backups — **PARTIAL, and the most alarming section in this document.**
+### Backups — **CONFIRMED, and the largest live-fault surface in this document.**
 
-No first-class pass ran. What four other workers found incidentally:
+*Produced 2026-08-03 ~02:15 +05 by a dedicated first-class pass across `machines` and `~/my/vps`, plus read-only probes of latitude, air, hub, desktop-wsl and desktop-native, then re-verified three times on independent lenses (live claims, the gap list, the `machines`/`vps` boundary). This section supersedes the "PARTIAL" placeholder. Where it corrects that block, or corrects its own first draft, it says so. Latitude's local time is **UTC+5**; the placeholder's "10:53" is the UTC stamp read as local.*
 
-- **The `backup-hub` role's own service is down.** `restic-server` on latitude exited 255 at 2026-08-02T10:53:17Z with `failed to bind host port 100.64.0.8:8001/tcp: cannot assign requested address` — a boot race where docker starts before tailscaled assigns the CGNAT address. **RestartCount is 0** after 10.5 hours, disproving the `restart: unless-stopped` comment in the vps compose file that claims to cover exactly this. Every other container on the box started at 10:53:20 and is up. Timing matters: desktop-wsl's last *successful* backup was 06:00 that same morning, before the hub died — the 2026-08-03 06:00 run is the first that would fail, and nothing alerts.
-- **hub carries `backup-client` and nothing backs it up, on either side of the boundary.** No restic/resticprofile/borg/rclone binary, no timer, no cron, no `~/.config/restic*`; and `~/my/vps/backup/` holds profiles for `homeserver` (a retired name), `latitude` and `wsl` only. What is unprotected: `/var/lib/headscale/db.sqlite` — the only copy of the fleet's tailnet control plane — plus `derp_server_private.key`, `noise_private.key`, the AWG peer configs, and an undeclared `proxy-config` volume. Losing that VPS loses the tailnet's identity.
-- **air has no backup at all** and no profile in vps `backup/`. It is the primary dev box. No worker flagged this; it falls out of the profile listing.
-- **desktop-wsl backs up successfully under a role its `fleet.json` entry does not declare**, and its snapshots land under `/g614jv` because `{{ .Hostname }}` on WSL expands to the Windows hostname — the exact templating gotcha `CLAUDE.md` documents, live in a backup path.
-- **latitude's backup-client works and is entirely undeclared in `machines`**: a hand-placed 21 MB `/usr/local/bin/resticprofile` plus four systemd units generated from the vps profile. Local repo `/mnt/spare320/restic/latitude`, 3 snapshots, last clean at 04:30.
-- **`backup-hub` has no executor anywhere**, and `provision.sh`'s fallback arm never sets `rc`, so `just provision --machine latitude --apply` reports success while doing nothing for the role that names the box.
-- `mirror-refresh` (daily 03:30) and `archive-mirror` (monthly) are healthy and their units are byte-identical to the repo copies — but `/mnt/xs`, the archive target, is **95% full with 36 GB free**, recorded nowhere.
+**The suspicion is confirmed, but not in the shape it was posed.** There are not three mechanisms — there are **seven**, and the three that were designed together are demonstrably the only three that were. Everything below is A–F of that question.
 
-A backups pass spanning both repos — every client/target pair, last successful snapshot, reconciled against the `backup-hub`/`backup-client` role declarations — is still owed.
+---
+
+#### A. What is backed up, from where, to where, on what schedule, by which mechanism
+
+| # | Mechanism | Source | Target | Schedule | Last run (evidence) | Size |
+|---|---|---|---|---|---|---|
+| 1 | **immich's own internal `pg_dump`** (app setting, declared in neither repo) | immich postgres, in-container | `/data/backups` → bind → `/var/backups/immich-db` (root fs, nvme1n1p3) | daily 02:00 | `docker logs immich_server`: `[Microservices:DatabaseBackupService] Database Backup Starting` 02:00:00 → `Database Backup Success` 02:00:39, today; `DB_BACKUPS_LOCATION=/var/backups/immich-db` | **14** `.sql.gz` + a marker, **2.9 G**; newest `…20260803T020000-v3.1.0-pg14.19.sql.gz`, 223,022,181 B |
+| 2 | **`mirror-refresh.sh`** (machines, system timer) | `/mnt/immich` (nvme0n1p1) **+** `/var/backups/immich-db` | `/mnt/immich-mirror` (sdd2, `a7d7b61e-…`) | daily **03:30**, `Persistent=true`, `RandomizedDelaySec=15m` | `LastTriggerUSec=Sun 2026-08-02 03:30:25 +05`, `Result=success`; journal 265,816,677,471 B total / 213,858,619 B transferred | src **249 G** → dst **291 G** |
+| 3 | **resticprofile `latitude`** (vps profile, machines-side box) | `/var/backups/immich-db`, `/mnt/immich/ServarrConfig`, `/mnt/immich/xs-keepers`, `/home/me/my/vps` | `/mnt/spare320/restic/latitude` (sdg1, `3a78fd88-…`) | daily **04:30** system scope; `check` **Sun 06:00** @ `read-data-subset: 5%` | backup `Sun 2026-08-02 04:30:00 +05`, `Result=success`; check `Sun 2026-08-02 06:00`, `Result=success`, `read 5.0% of data packs / no errors were found` | **3 snapshots**, latest `92532d61` 2026-08-02 04:30:01, **6.594 GiB** logical; repo **2.360 GiB** raw-data (1.84×), 2.4 G on disk |
+| 4 | **`archive-mirror.sh`** (machines, system timer) | `/mnt/immich-2024/admin` (sdc2, `63c1de22-…`) | `/mnt/xs/immich-2024-archive` (sda3 exfat, `FBED-BCAA`) | monthly, **1st at 05:00** ± `RandomizedDelayUSec=30min`, `Persistent=true` | **NEVER FIRED — see §E.** `LastTriggerUSec=Sat 2026-08-01 18:07:38 +05` is the *enable* stamp; `NEXT = Tue 2026-09-01 05:01:54` | src **663 G** → dst **665 G**; `/mnt/xs` **95 % full, 36 G free** |
+| 5 | **resticprofile `wsl`** on desktop-wsl → **the REST hub** | all of `/home/me` on the `desktop-wsl` distro (minus `backup/wsl/.resticignore`) | `rest:http://100.64.0.8:8001/g614jv` → `/mnt/spare320/restic-rest/g614jv` (**same sdg1 as #3**) | daily **06:00**, `schedule-permission: user_logged_on`, `Linger=yes`, timer `Persistent=true` | last **success** `41a19b13` **2026-08-02 06:00:28 +05**, `Result=success`; next `Mon 2026-08-03 06:00:00 +05` — **that run fails, the hub is down** | **2 snapshots**, 8.819 GiB logical; repo **4.972 GiB** raw-data (2.60×), 5.0 G on disk |
+| 6 | **The dotfiles bare repo on latitude** (`~/.dotfiles`, branch `latitude`) — a backup nobody calls one | **45 tracked paths**, of which the 18-path `~/g513ie-prod-config/**` subtree (152 K) is the prod-config half | git remote, via the 10-min sync timer | 10 min, debounced | `dotfiles-sync.timer` last `2026-08-03 01:57:12 +05`; `0 0` vs `origin/latitude` | incl. **the restic password** and every prod `.env`; the other 27 paths are the `.claude/` memory set, `pure/backend-api/.claude/memory/project.md`, `.config/{bash,zed}`, `.gitattributes` |
+| 7 | **The dotfiles bare repo on air** (branch `air`) — **air's only mechanism, of any kind** | 26 allow-listed `$HOME` paths | git remote `origin/air` | 10 min, debounced | clean, `## air...origin/air`, `0 0`; last auto-commit `2026-08-02 13:03:51 +0500 6f48b9e auto(air): .gitconfig`; no `conflict` marker | 26 paths (listed in §B) |
+| — | **Hand-made migration copies** (no script, no schedule, no owner — not a mechanism, but it is what protects 129 G) | `~/staging/music`, `~/staging/Настя Стас GoPro` | `/mnt/spare320/music-from-g513ie`, `/mnt/immich-mirror/staging` | **none — one-shot, 2026-07-29/31** | `~/staging/pull-music.sh` (558 B, Jul 29 20:46) + `music-copy.log`, `gopro-copy.log`, `checksum-verify.log` | 89 G + 40 G, each duplicated |
+
+**Row 1 was drafted as inference and has been discharged.** `system_metadata.'system-config'` on `immich_postgres` has no `backup` block, so immich's defaults are in force — but the producer names itself in the container log with a start time, an exit code and a destination env var, which settles identity, destination and the fact that it ran at 02:00:00–02:00:39 today. What remains unread is only immich's literal default cron expression. **Note the binary:** `latitude/profiles.yaml:63` and the retired `homeserver` profile both call this `pg_dumpall`; the line the container actually logs is `/usr/lib/postgresql/14/bin/pg_dump exited (0)`. The log is primary — it is `pg_dump`, and the profile comment is loose.
+
+**Snapshots key on OS hostnames, not fleet names.** The two repos hold `latitude5520` and `g614jv`. A restore-time operator searching for `latitude` or `desktop-wsl` finds **nothing**, and for `g614jv` it is worse — that is the *Windows* host, not the distro. `backup/wsl/profiles.yaml:25-34` predicts this precisely and accepts it; `restic forget` output reads `snapshots for (host [g614jv], paths [/home/me])`.
+
+---
+
+#### B. What is NOT backed up by any of them
+
+**On latitude:**
+
+| Data | Size | Status |
+|---|---|---|
+| `telegrind_pgdata` docker volume | 55 M | **In no source.** Live postgres holding user conversation data — `select count(*) from chat` → **62**, confirmed first-hand. Not re-derivable. Its *config* is protected: `g513ie-prod-config/telegrind/{.env,.env.prod,compose.override.yml}` are dotfiles-tracked on branch `latitude`. Only the database is exposed. |
+| `embedthat_redis_data` | 1.4 M | **In no source**, and it is durable state, not cache: `info keyspace` → `db0:keys=5358,expires=1222`, i.e. **4,136 keys with no TTL**. |
+| `tugtainer_tugtainer_data` | 52 K | **In no source.** Holds the per-container `check_enabled/update_enabled` toggles; losing it re-arms tugtainer on immich, telegrind and embedthat — the failure `~/my/vps/.claude/memory/project.md` records happening twice. Downgraded from the draft's "not re-derivable": both the toggle set and the query that reads it are written down in that same project.md, which is restic'd *and* on private GitHub. Call it ~20 minutes of re-derivation, not a loss. |
+| `immich_pgdata` docker volume | 803 M | **Not what the draft called it.** Live PGDATA is a *bind* at `/mnt/immich/ImmichMedia/postgres` (`docker inspect immich_postgres`), inside mirror-refresh's source tree and correctly excluded at `mirror-refresh.sh:39`. The named volume has **no container attached** — migration leftover, i.e. orphaned state nobody has decided about. Smaller finding than "the live DB is unbacked", and a different one. |
+| `immich_model-cache` | 9.0 G | Re-downloadable. Not a gap. |
+| `~/.ssh/config` | 1,274 B | **Unprotected and load-bearing.** Hand-written; `dotfiles ls-files --error-unmatch .ssh/config` on branch `latitude` → untracked (air tracks its own; latitude does not), and no restic source covers `/home/me` outside `my/vps`. Its `Host g513ie server` block is latitude's only route to `server` for the pending C: review. |
+| `~/.config/gh/hosts.yml` | 208 B, 0600 | Untracked — while `.config/gh/config.yml` *is* tracked. The same "the file with the token is the one not tracked" failure as on air (§B, air). Fleet-wide, not air-specific. |
+| `~/machines/.machines/` | 226 B | Untracked here, but **not a gap.** `scripts/converge.sh:58-67`: an absent `converged-rev` makes `range_low` empty, `changed_paths()` falls back to `git ls-files`, every path counts as changed and a full reprovision runs. Costs one extra convergence and fails safe. (It is also *present* in desktop-wsl's snapshot — see the scope note below.) |
+| `~/staging/music` + `/mnt/spare320/music-from-g513ie` | 89 G ×2 | Two copies, two drives, **one machine**, no schedule. |
+| `~/staging/Настя Стас GoPro` + `/mnt/immich-mirror/staging` | 40 G ×2 | Same. `mirror-refresh.sh:27-29` calls the mirror copy "the only second copy of the GoPro video" — it is the second of two, both on latitude. |
+| `/mnt/servarr` | 632 G | **Deliberately** unbacked (`mirror-refresh.sh:16-18`: seeded, re-acquirable torrent data). Not a gap — but 632 G that no reader of the fleet docs would know is a decision. |
+| `/mnt/immich-mirror/Media` | 514 M | Orphaned pre-move copy; `--delete` is off so it persists. Noted at `mirror-refresh.sh:31-33`. |
+
+**Scope correction, on direct evidence.** The draft's "`~/machines/.machines/` is in no source **on any box**" is false. desktop-wsl's profile backs up all of `/home/me` and `.resticignore` excludes nothing under `machines/`:
+
+```
+$ restic -r /mnt/spare320/restic-rest/g614jv ls 41a19b13 --no-lock /home/me/machines/.machines
+/home/me/machines/.machines/converged-rev
+/home/me/machines/.machines/last-converge
+```
+
+A cross-check that concluded otherwise enumerated `latitude/profiles.yaml:62-66`'s four sources only and never looked at the wsl profile's `/home/me`; the `restic ls` is dispositive. The claim is true of the **latitude and air** copies of `~/machines`, and of those alone.
+
+**On hub — still the worst exposure, but a third smaller than the placeholder said:**
+
+- `restic`, `resticprofile`, `borg`, `rclone`, `duplicity`, `kopia` — **all absent.** No `*restic*` or `*backup*` unit beyond stock `dpkg-db-backup`; no user timer; `crontab -l` empty for both `debian` and `root`; `/etc/cron.d/` holds only `e2scrub_all`; no `~/.config/restic`. No `hub` profile exists in `~/my/vps/backup/` either (it holds `homeserver`, `latitude`, `wsl`).
+- **`/etc/caddy` and `/etc/headscale` come off the unprotected list.** `sha256sum` says `/etc/headscale/config.yaml` (`967ef075…`) and `/etc/caddy/Caddyfile` (`637e5daa…`) are byte-identical to `vps/headscale/config.yaml` and `vps/caddy/Caddyfile`, which are tracked in the private `metheoryt/vps`, cloned on air and latitude, and inside restic source #4.
+- What is genuinely unprotected, and sharper for being shorter: **`/var/lib/headscale/db.sqlite`** — 86,016 B with a **4,120,032 B WAL**, the only copy of the tailnet's control plane, and a naive file copy of it is torn; `derp_server_private.key` (72 B); `noise_private.key` (72 B); **`/etc/wireguard/wg0.conf`** (1,122 B — the repo carries only `vps/wg/wg0.dist.conf`, whose `PrivateKey = VPS_PRIVATE_KEY` is a placeholder); `/etc/amnezia/amneziawg/wg0.conf`; and the `proxy-config` volume behind the undeclared `mtproto-proxy` container.
+- **Losing that VPS loses the fleet's identity**, and re-keying every node is the recovery path.
+
+**On air (this box, the primary dev box) — one mechanism, and it covers 26 files:**
+
+No restic. `restic`/`resticprofile`/`borg`/`rclone`/`kopia`/`duplicacy` all "not found". `tmutil destinationinfo` → **`No destinations configured.`** — no Time Machine, ever. No Arq/Backblaze/CCC/Chronosync in `/Applications`. `~/Library/LaunchAgents/` holds six plists: three Google updaters and the three fleet sync jobs. iCloud Drive holds **308 K**.
+
+Mechanism 7 is genuinely live, not merely installed — clean tree, `0 0` against `origin/air`, an auto-commit from 2026-08-02 13:03, no conflict marker, state dir touched 02:11 today. (Its plist is still dated **2026-07-28 18:38** against the other two at 2026-08-01 10:28 — the committed review's `tier_dotfiles_sync`-in-no-tier-list finding. Stale-but-firing, not dead.) **Protected — the complete list:**
+
+```
+.claude/CLAUDE.md            .claude/skills/dotfiles-promote/SKILL.md
+.claude/balance-refresh.py   .claude/skills/dotfiles-sync/SKILL.md
+.claude/host-memory.md       .claude/skills/gortex-align/SKILL.md
+.claude/memory/global.md     .claude/skills/gortex-align/type-governance-reference.md
+.claude/memory/personality/{habits,practices,tone,values}.md
+.claude/skills/update-balance/{SKILL.md,update-balance.py}
+.claude/skills/worktree-agent/SKILL.md
+.claude/statusline-command.sh
+.config/gh/config.yml   .config/zed/settings.json
+.gitconfig  .gitignore  .ssh/config  .tmux.conf  CLAUDE.md  README.md
+.local/bin/{wt-setup,wt-teardown}
+```
+
+What is left unprotected on air is narrower than the draft claimed, and one of its three headline items is dead:
+
+- **`~/machines/provision/secrets/authkey` is not a live credential — delete that alarm.** It prefix-matches Headscale key **id=7**: `Reusable false | Used true | Expiration 2026-07-28 17:56:18` — single-use, already consumed, expired six days ago. Only id=5 is live-and-reusable (expires 2026-10-14) and it is a different key. The draft's "it exists on no other box" was inferred from `provision/secrets/` being absent on latitude; that inference fails too — latitude holds its own persisted pre-auth key at `/etc/headscale/authkey` (89 B, `root:root 0600`, Jul 29), the path `provision/tailscale-wsl.sh:52` writes, with a different value. And any key is one `headscale preauthkeys create` away while hub's DB lives, so this exposure is *subsumed* by the hub-DB loss above.
+- `~/orca/workspaces/machines/machines-cleanup` is **`[ahead 2]`** of `origin/metheoryt/machines-cleanup` — two commits of unpushed work on an unbacked box, on the branch the committed review flags as unreviewed and blocking two `rewrite` rows.
+- **This review has no off-box copy either.** `git rev-parse --abbrev-ref repo-review-cleanup@{upstream}` → `no upstream configured`; `git rev-list --count origin/main..repo-review-cleanup` → **1** (`5d585d5`, the review plus the 240-row ledger). Same class as the point above, same box.
+- **`~/.config/gh/hosts.yml` (84 B, mtime 2026-08-03 01:26) is present and NOT tracked** — `check-ignore -v` → `.gitignore:7:*`. `$HOME/CLAUDE.md`'s Secrets section names it explicitly among the rotatable credentials "tracked on purpose". It is not, on this branch. (`.netrc`, `.npmrc`, `.aws/credentials` do not exist here, so those are not gaps.)
+- **`~/machines` / `~/my` / `~/orca` are not unprotected wholesale**, contra the draft. All three remotes are GitHub (`metheoryt/{machines,vps,dotfiles}`). `~/my/vps` is `0 0` against `origin/main` with an empty `git status --short --ignored` — nothing under air's `~/my` is unique to the box. `~/machines` is `0 0` on `main`; its air-unique content is exactly four ignored paths (`.claude/settings.local.json` 50 B, `.machines/`, `provision/secrets/`, one `__pycache__`) plus the two branch states above.
+
+**`metheoryt/machines` is a PUBLIC repo** (`gh api repos/metheoryt/machines --jq .private` → `false`; `vps` and `dotfiles` are both private). Two consequences inside this lens: the one off-site copy of `machines` is world-readable — fleet topology, tailnet IPs, drive UUIDs, the `--no-auth` posture, the autologin + NOPASSWD pairing — and `docs/fleet-roadmap.md:388-419`, already on `origin/main`, states which telegrind credentials leaked and that they are deliberately unrotated. No secret *values* are in that entry. This document would publish the same class of detail on push.
+
+**On desktop-native (Windows):** zero backup tasks. `schtasks /query /fo CSV /v` returns only `dotfiles-sync`, `fleet-selfpull`, `git-autofetch` (`Last Result = -196608` = the known phantom) and `machines-converge`, plus vendor/OneDrive noise. OneDrive is installed and its updater tasks run; nothing in either repo treats it as the Windows backup and its synced set was not enumerated.
+
+**On desktop-wsl:** covered by mechanism 5 — and it also carries a plaintext credential its own config argues against. See §F, seam 1; the short version is that `~/my/vps/backup/wsl/pass.txt` (12 B, Apr 27) and a 231,702-byte `resticprofile-wsl.backup.log` sit inside the git work tree, and both are covered by `~/my/vps/.gitignore:13-14` (`**/pass.txt`, `**/*.log`), confirmed by `git check-ignore -v`. The same pattern exists on latitude, unmentioned by the draft: `backup/latitude/` holds root-owned `resticprofile-latitude.backup.log` (7,974 B) and `latitude.check.log` (1,154 B) inside the vps checkout.
+
+**The ignored-but-load-bearing state, resolved precisely — and the two repos differ:**
+
+- `~/my/vps` **is** a restic source (`latitude/profiles.yaml:66`), and restic copies the *filesystem*, not the git index. Its excludes are `**/.git/`, `**/node_modules/`, `**/.DS_Store`, `**/*.tmp` plus `exclude-caches: true` (`:72`, missing from the draft's list and load-bearing for this argument). So on latitude **every gitignored `.env` is backed up** — 8 live `.env`/`.env.prod` files under `homeserver/` (`beat, embedthat, immich, navidrome, restic-server, servarr, tugtainer`, plus `telegrind/.env.prod`), plus `.claude/settings.local.json`. That is the profile header's stated purpose (`:17-18`), and it works — though the header says *seven*, so it is stale by one.
+- `~/machines` is in **no** restic source on latitude or air; on desktop-wsl it is, via `/home/me`.
+- **Silent skip nobody has connected to the hardware.** `base.yaml:21` sets `schedule-ignore-on-battery: true`. The behaviour itself *is* documented — vps `CLAUDE.md:201` says "Backups skip when on battery power" — so the draft's "nobody has connected" is too strong; what nobody has connected is the consequence. latitude is a laptop-as-server with **no UPS**, so a mains cut at 04:30 silently skips the backup with nothing reporting it — and `resticprofile show` proves the flag is live on **both** of latitude's system schedules, so it takes out the weekly `check` too. The flag is inherited by the `wsl` profile as well, on an actual laptop, where 06:00-on-battery is far likelier. Its timer is `Persistent=true`, so a missed *boot* catches up; a battery skip is an exit-0 no-op with no catch-up. Both boxes are on AC right now (`/sys/class/power_supply/AC*/online` = `1`, latitude battery 84 %), so nothing below is pre-empted by it.
+
+---
+
+#### C. Overlap
+
+**It is large, and — for the latitude trio — it is deliberate and argued.**
+
+Three of restic's four sources sit **entirely inside** `mirror-refresh.sh`'s tree:
+
+| Path | In mirror-refresh? | In restic? |
+|---|---|---|
+| `/var/backups/immich-db` (2.9 G) | yes — explicit second rsync, `mirror-refresh.sh:53` | yes — `profiles.yaml:63` |
+| `/mnt/immich/ServarrConfig` (590 M) | yes — under `$S`, unexcluded | yes — `:64` |
+| `/mnt/immich/xs-keepers` (3.5 G) | yes — under `$S`, unexcluded | yes — `:65` |
+| `/home/me/my/vps` (35 M) | **no** | yes — `:66` |
+
+The latest snapshot's logical size is **6.594 GiB**, of which `~/my/vps` contributes ~35 M — so essentially the entire restic profile is a second logical copy of bytes rsync already mirrored, stored in a 2.360 GiB repo. Only `~/my/vps` is restic-exclusive.
+
+**This is not accidental duplication, and the header says why** (`backup/latitude/profiles.yaml:20-24`, verbatim):
+
+> WHY THIS EARNS ITS KEEP ON TOP OF THE RSYNC MIRRORS: the mirrors give a second copy and nothing else. They cannot answer "restore yesterday's DB, today's is corrupt" — a corrupt source rsyncs straight over the mirror. restic adds versioned history, integrity you can verify (`check --read-data-subset`), and a format that can be shipped off-site as-is.
+
+That is a correct argument, and the retention proves it was thought through: `keep-daily: 30` against `base.yaml:27`'s 7, justified at `:83-85` by "the dumps are ~220 MB each and dedupe well."
+
+**A side effect nobody intended:** `base.yaml:11` (`lock:`) and `:20` (`schedule-log:`) are *relative* paths, resolved against the generated unit's `WorkingDirectory=/home/me/my/vps/backup/latitude` — which is restic source #4, with no `*.log` exclude. So restic backs up its own logs, and `skip-if-unchanged` (`base.yaml:23`) can never fire for this profile.
+
+**The other overlaps are not argued:**
+
+- `~/staging/music` (89 G) vs `/mnt/spare320/music-from-g513ie` (89 G) — a hand-made duplicate on the same box, on the same drive as both restic repos.
+- `~/staging/Настя Стас GoPro` (40 G) vs `/mnt/immich-mirror/staging` (40 G) — same.
+- **Both restic repos live on one physical drive.** `/mnt/spare320/restic/latitude` (2.4 G) and `/mnt/spare320/restic-rest/g614jv` (5.0 G) are both on sdg1, UUID `3a78fd88-deb0-4c1a-a576-14abd0631d57`, a 298 G drive that also holds 89 G of unrelated migration music (96 G used in total). `profiles.yaml:31-34` argues for that drive on *contention* grounds — different physical drive from every source, different USB bus from the archive target — and it is right about that. It never considers that the fleet's only two restic repositories then share one spindle and one enclosure.
+
+---
+
+#### D. The role-vs-reality question, per box
+
+**The role system provides nothing.** `provision/roles/` contains exactly six files — `agents.{sh,ps1}`, `dotfiles.{sh,ps1}`, `repos.{sh,ps1}`. There is **no `backup-client.sh`, no `backup-hub.sh`** (nor `.ps1`, nor `base`, nor `ssh-server`). `provision.sh:83-88` handles the miss by printing `✗ <role> — apply: not yet implemented (skipped)` and never setting `rc`. latitude declares `base, ssh-server, agents, dotfiles, repos, backup-hub, backup-client`, so `just provision --machine latitude --apply` prints **four** crosses — `base`, `ssh-server`, `backup-hub`, `backup-client` — and exits 0. (The draft said two; it counted only the backup pair.)
+
+| Box | Declares | What actually backs it up | Verdict |
+|---|---|---|---|
+| **latitude** | `backup-hub`, `backup-client` | **`backup-client`: real, and entirely undeclared in `machines`.** A hand-placed `/usr/local/bin/resticprofile` (21,020,834 B, Aug 1 16:01) + apt `restic` 0.18.0, plus four units in `/etc/systemd/system` generated by `resticprofile schedule` with `WorkingDirectory=/home/me/my/vps/backup/latitude` — driven from the *sibling* repo. Working: 3 snapshots, weekly check green. **`backup-hub`: DOWN — §E.** | **Both roles are provided by hand, neither by the role system.** The one that works does so from the other repo. |
+| **hub** | `backup-client` | **Nothing.** No binary, no unit, no timer, no cron, no `~/.config/restic`, no `hub` profile in vps. | **A box carrying a backup role with no backup running.** |
+| **desktop-wsl** | **cannot declare anything** — self-declared WSL host, no `fleet.json` entry, only a `fleet.local.json` nickname | **The fleet's only working REST client**, and the most comprehensively backed-up box in the fleet (all of `/home/me`). `resticprofile-backup@profile-wsl.timer` under `systemctl --user`, `Linger=yes`, binaries at `~/.local/bin/`. | **The inversion.** The one box actually exercising the hub is structurally incapable of declaring the role, because the role system reads `fleet.json` and this host is deliberately absent from it. |
+| **air** | no backup role | Mechanism 7 only: 26 `$HOME` paths to a git remote. | Role-consistent — and it is the **primary dev box**, holding the only copy of this review and two unpushed commits. Consistency is not correctness. |
+| **desktop** (Windows-native) | no backup role | Nothing (OneDrive unassessed). | Role-consistent. |
+
+**Answer to "is there a box carrying a backup role with no backup running?"** — **Yes: `hub`.** It declares `backup-client` and has no backup mechanism of any kind, while holding the only copy of the tailnet control plane. And separately: **latitude declares `backup-hub`, and that role's service is down** — so latitude is simultaneously the box where a backup role works (client, by hand) and the box where one is broken (hub).
+
+---
+
+#### E. Live faults
+
+**1. The hub is down. Confirmed — and the committed review is wrong on both the clock and the shape of the failure.**
+
+```
+docker ps -a --filter name=restic     →  restic-server   Exited (255) 10 hours ago
+docker inspect restic-server          →  ExitCode=255  RestartCount=0  RestartPolicy=unless-stopped
+  Error=failed to set up container networking: driver failed programming external
+    connectivity on endpoint restic-server: failed to bind host port
+    100.64.0.8:8001/tcp: cannot assign requested address
+  StartedAt=2026-08-01T11:33:50.944016992Z   FinishedAt=2026-08-02T10:53:17.547240599Z
+ss -lntp | grep 8001                  →  (nothing)
+tailscale ip -4                       →  100.64.0.8   (the address exists now)
+```
+
+- **Service was lost at ~15:30 +05 on 2026-08-02, not 15:53, and there *was* a crash — the host's.** The previous boot's last journal entry is `Sun 2026-08-02 15:30:18 +05` and `last -x` records that boot as **`crash`**, not a clean shutdown. The box came back at `15:53:09`, and `FinishedAt` (`10:53:17Z` = `15:53:17 +05`) is the **failed restart eight seconds after boot**. So the draft's "a boot-time failure, not a mid-life crash" is wrong as written: there was a crash, it just was not the container's, and the outage is ~23 minutes longer than either the draft or the committed review says. The committed review's "10:53" needs correcting on both axes — UTC read as local, *and* the true service-loss time.
+- **`RestartCount=0` after 10+ hours.** `restart: unless-stopped` does not retry when the failure is at network-setup time — the container never entered `running`, so the policy is never engaged. `homeserver/restic-server/compose.yml` both **predicted the symptom and asserted a mitigation that does not exist**: "*`restart: unless-stopped` covers the boot race — docker retries the bind and succeeds once the interface exists. If this container is ever found dead after a reboot, that race is the first thing to check, not the last.*" The diagnosis half is correct and cost one command; the mitigation half is refuted by `RestartCount=0`.
+- **Exactly one client points at it, by enumeration.** `grep -rn 'repository:' ~/my/vps/backup/` returns five lines: one `rest:` URL (`wsl/profiles.yaml:35`), one local path (`latitude/profiles.yaml:48`), and three `G:\`/`H:\` Windows paths in `homeserver/profiles.yaml` belonging to the retired box, whose drives were reformatted. The REST hub's entire client population is desktop-wsl's `wsl` profile.
+- **Nothing has failed yet, and the window is closing.** desktop-wsl's `41a19b13` landed `2026-08-02 06:00:28 +05` = `01:00 UTC`, well inside the hub's up-window. The next fire is **2026-08-03 06:00 +05**, and it is the first that fails.
+- **How loudly would it fail? Silently.** The only signal is a `systemctl --user` unit on a WSL distro that this same review found **28 commits behind under a green timer with 185 consecutive `SKIP dirty` lines**. No `OnFailure=` on any of the four latitude units either, no alert, no push, no statusboard row. `--prometheus` is set in the hub's `OPTIONS`, so it *emits* metrics — and nothing scrapes them. The likely discovery path is somebody running `restic snapshots` months later.
+- **The vps repo's own memory says it is down on purpose.** `~/my/vps/.claude/memory/project.md:79` — "Down on purpose: navidrome, **restic-server**, forgejo…". That line is from the 2026-08-01 bring-up and went stale within hours (the container's `StartedAt` is exactly commit `99bc734`, 2026-08-01 16:33 +05), but was never corrected. An operator consulting vps memory today gets a wrong answer about the hub, which compounds the silence.
+- **Correction to the committed review's Tier-1 item 1, on evidence:** it offers "either bind `0.0.0.0:8001` … or add an ordering dependency on `tailscaled`." Binding `0.0.0.0` is the wrong branch and the compose file already argues why — that was the g513ie posture, and "publishing on 0.0.0.0 actually exposed it to every device on the wifi, guests included." The ordering fix is the only one consistent with the file's own reasoning. **And verify by rebooting, not by `docker start`** — this repo's own rule, "verify a scheduled job by firing its schedule, not by running the script," applies verbatim to a boot race.
+
+**2. `archive-mirror.timer` has never fired once.** The airtight form is that no fire window has ever existed: `install-timers.sh -go` enabled it at `2026-08-01 18:07:38 +05`, *after* that month's 05:00 trigger point on the 1st, and `Persistent=yes` writes the stamp at enable time, so there is no catch-up run. `systemctl show -p LastTriggerUSec` returns exactly that enable timestamp; `/var/lib/systemd/timers/stamp-archive-mirror.timer` **and its parent directory** carry the same mtime. Corroboration: `journalctl -u archive-mirror.service` → `-- No entries --` while `mirror-refresh.service`'s `Aug 02 03:31` lines survive in the same journal across the same reboot — **but that contrast only reproduces under `sudo`**; run as `me` (in neither `adm` nor `systemd-journal`) both come back empty and a re-checker gets a false refutation. The 665 G at `/mnt/xs/immich-2024-archive` was placed by the hand-run `nohup` the script header describes. **First real fire: `Tue 2026-09-01 05:01:54`.**
+
+The committed review calls both mirrors "healthy." One of them is. The other is an untested monthly timer whose first execution is four weeks out, guarding the fleet's largest irreplaceable dataset, onto a target that is **95 % full with 36 G free** — and that target is **partition 3 of a Ventoy installer stick**: `blkid` gives `/dev/sda1 LABEL="Boot"` exfat 253.8 G (Ventoy's ISO partition, not user data), `/dev/sda2 LABEL="VTOYEFI"`, `/dev/sda3 LABEL="xs700" UUID="FBED-BCAA"` → `/mnt/xs`. The only second copy of the 663 G 1970–2024 archive shares a device with bootable install media. `archive-mirror.sh:26-28` stakes the 37 GiB of slack on 1970–2024 being a closed set — a correct bet, but the free space is now inside the noise of a single large import.
+
+**3. The `g614jv` repository has never been integrity-checked — and the config that says it should be is inert.** `check-before: true` is declared at `base.yaml:14` and *is* inherited: `resticprofile --config profiles.yaml -n wsl show` resolves `check-before: true`. It never runs. The 3,284-line / 231,702-byte `resticprofile-wsl.backup.log` spanning 2026-04-27 → 2026-08-02 logs every invocation (`DEBUG starting command:`) and the sequence is always `init` → `backup` → `forget`; `grep -c -i check` over it returns **0**. Same on latitude's backup log. A placement bug in `base.yaml` was hypothesised and disproved by the `show` output, so **the mechanism is unresolved — report it as declared-and-inert, not as a config error.** Either way `show` emits only `schedule backup@wsl` for wsl, versus both `schedule backup@latitude` and `schedule check@latitude` for latitude. So the draft's "the base's `check-before: true` is the only integrity touch that repo ever gets" is wrong: it gets none. `/mnt/spare320/restic-rest/g614jv` has been verified zero times since it was created on 2026-08-01, and it is the repo behind the down hub.
+
+**4. latitude's `~/my/vps` is 11 commits behind `origin/main`, and nothing pulls it.** `## main...origin/main [behind 11]`; latitude is at `99bc734`, air at `24babcc`. This is the committed review's hub-`~/vps` finding repeating on the **backup host**, whose four root-scope system units run out of that work tree. Sized honestly, it is forward-looking risk rather than a stale-config fault: `md5sum` of `backup/base.yaml`, `backup/latitude/profiles.yaml` and `homeserver/restic-server/compose.yml` match air byte-for-byte, and `git diff --stat HEAD..origin/main -- backup/latitude backup/base.yaml homeserver/restic-server` is empty. All four backup-touching commits it lacks are `backup/wsl/profiles.yaml` only — including `0fff181 fix(backup): point the WSL profile's password outside the repo work-tree`. desktop-wsl's own checkout *is* at `24babcc`, so the running wsl profile is the current one; the drift is latitude-only. **Reproducibility caveat:** on latitude, `grep -rn 'repository:' ~/my/vps/backup/` does *not* return the five lines quoted above — it returns the pre-repoint `wsl/profiles.yaml:12: rest:http://server.gg.ez:8001/wsl` plus two log lines. Every `wsl/profiles.yaml:12-16 / :25-34 / :35 / :37-47` citation in this section resolves against air's and desktop-wsl's 78-line file, not latitude's 25-line one.
+
+---
+
+#### F. Were they designed together?
+
+**Three of the seven were, and it shows in the code. The system was not, because the set is seven and the other four have no owner.**
+
+**The designed core — `mirror-refresh` + `archive-mirror` + resticprofile `latitude`.** Built as one thing on 2026-08-01; each header cites the others by name and by clock:
+
+- `backup/latitude/profiles.yaml:5-11` — "THIS DELIBERATELY DOES NOT COVER THE PHOTO LIBRARIES. /mnt/immich (242 G) and /mnt/immich-2024/admin (663 G) are protected by whole-filesystem rsync mirrors instead — `machines/hosts/latitude/debian/{mirror-refresh,archive-mirror}.sh`. There is no drive left in the fleet with 815 G free for a restic repo, so pretending otherwise would produce a config that fails every night."
+- `:20-24` — the versioned-history argument for why restic overlaps the mirrors on purpose (quoted in §C).
+- `:31-34` — repo placement chosen for physical-drive *and* USB-bus separation, "so a scheduled backup does not contend with a mirror run."
+- `:77-80` — "03:30 mirror-refresh, 04:30 this. Separated so the backup reads a filesystem the mirror is no longer walking."
+- `archive-mirror.timer` — 05:00 on the 1st "to clear mirror-refresh at 03:30"; `archive-mirror.sh:52-53` — "Do not run this at the same time as mirror-refresh.sh — both read from drives in the same dock, and contention is what provokes the resets"; the two services share `/var/lock/latitude-mirror.lock`.
+- `install-timers.sh:7-19` records the scope decision (system, not the user scope the three git-sync timers use, because `rsync -aHAX` must reproduce `root:root` on immich's dump) and the copy-not-symlink decision.
+
+Those five files form a genuine, argued, mutually-aware design with a **staggered clock (02:00 → 03:30 → 04:30 → 05:00), an explicit division of labour (rsync for the bulk that will not fit, restic for the small-and-irreplaceable), and hardware-level contention reasoning.** It is the best-documented thing in either repo, and it is why "they accreted" is the wrong answer to the question as posed.
+
+**The four that have no owner:**
+
+1. **The REST hub is a g513ie-generation artifact, repointed rather than redesigned.** `git show --stat 99bc734` → 27 insertions, 1 deletion; the sole functional change is `- "8001:8000"` → `- "100.64.0.8:8001:8000"`, and the other 26 lines are same-day rationale. The client side matches: `backup/wsl/profiles.yaml:12-16` — "Repointed off g513ie 2026-08-01. The old target was `rest:http://server.gg.ez:8001/wsl` … Nothing to migrate; this starts a fresh repo." The 06:00 schedule was **inherited, not chosen**: nothing argues it against latitude's stagger, it merely happens to land after all four. **One draft claim reversed here:** `--no-auth` and the absence of `--append-only` are *not* argued from a home-LAN threat model — the compose comments repudiate one. `restic-server/compose.yml:9-12`: "On g513ie that was papered over by 'it's a home LAN'; publishing on 0.0.0.0 actually exposed it to every device on the wifi, guests included." Commit `99bc734`'s body: "'it's a home LAN' was doing load-bearing work it cannot do." Both were written for latitude, that day, and the `--append-only` paragraph reasons about *latitude's* retention chore.
+2. **immich's `pg_dump` is a load-bearing input that the live design does not declare — and it used to.** `mirror-refresh.sh:53` copies its output; `profiles.yaml:63` makes it restic source #1 and calls it "immich's own nightly pg_dumpall — albums, faces, people, stacks. No pile of JPEGs rebuilds this." Two of the three designed mechanisms depend on a producer that exists in no file in either repo, on no schedule either repo can see, and that no test verifies is still running. The sharper version of this than the draft found: the *retired* `backup/homeserver/profiles.yaml:8-18` declared it explicitly —
+   ```yaml
+   immich-postgres:
+     backup:
+       stdin-command: "docker exec -i immich_postgres pg_dumpall --clean --if-exists --username=postgres"
+       run-before:    "docker exec immich_postgres pg_isready"
+   ```
+   — so the 2026-08-01 design **replaced a declared producer with an undeclared one**, and `latitude/profiles.yaml:26-29` justifies dropping the homeserver design on *drive* grounds only. It never records that the in-config dump went with it. Toggle immich's backup off in the web UI today and both downstream mechanisms keep succeeding — rsync and restic will happily copy a directory that has stopped gaining files, and every unit stays green. The ownership split in that directory is a small warning of the same class: files through `2026-07-15` are `me:me`, files from `2026-07-31` are `root:root`, a producer change nothing recorded.
+3. **The dotfiles bare repo is doing backup work nobody assigned it.** It is a config-sync mechanism; on latitude it is the only thing protecting the restic password and every prod `.env`, and on air it is the only backup of any kind. Nothing in either repo's backup documentation mentions it. It has no retention policy, no integrity check, and — per `$HOME/CLAUDE.md` — an **allow-only** `.gitignore` in which adding a new file does not track it, so its coverage silently fails to grow. `~/.config/gh/hosts.yml` is that failure mode already realised, on two boxes.
+4. **The hand-made migration copies are not a mechanism at all** — 129 G of one-shot rsync output from `~/staging/pull-music.sh` that has quietly become the only protection for two datasets.
+
+**The seams, named:**
+
+- **One password, both repos, never rotated — and it is inside the repo it unlocks.** `~/my/vps/backup/homeserver/pass.txt` is a symlink → `~/g513ie-prod-config/vps/backup/homeserver/pass.txt`, dotfiles-tracked on branch `latitude`; restic stores the symlink as a symlink, so the backup does not contain the password. Correct — but it makes **the git bare repo the sole off-box copy of the key**, and nothing in either repo says so. Three plaintext copies exist and the obvious check says they are three different secrets: `~/my/vps/backup/wsl/pass.txt` is 12 B ending `\n`, while `~/.config/restic/pass.txt` and latitude's tracked `homeserver/pass.txt` are 13 B ending `\r\n`, so `sha256sum` and `cmp` report three distinct files. **That check is the false negative** — restic trims the terminator, and the same **11 characters** are underneath all three. Two links are demonstrated and one is inferred, so take them separately: the work-tree copy is confirmed byte-identical to the live *operational* password after `tr -d '\r\n'` (`cmp` exit 0, 11 chars each), and the tracked homeserver copy's 11 chars are confirmed to open the latitude repo (`RESTIC_PASSWORD_COMMAND='head -c 11 …' restic cat config` → `"id": "14f4eab544d36684…"`). The remaining pairing — operational ≡ homeserver, the one that closes "one password, *both* repos" — rests on the two being the identical 13 B `\r\n` form against the work-tree copy's 12 B `\n`, not on a direct comparison. So the Apr-27 file left in the work tree is not stale material: it is the g513ie-era password, unchanged, and **both repos created from zero on 2026-08-01 as "a fresh repo … nothing to migrate" reuse the secret that also protected the old `G:\`/`H:\` repos** — the ones `archive-mirror.sh:11-13` says went in the same reshuffle and that `plans/2026-07-28-latitude-wipe-harvest.md` §11 still lists as an open decision on the shelved ST320LT020. `wsl/profiles.yaml:37-47` sets the password path outside the tree precisely to avoid a checkout copy, and designates `~/.config/restic/pass.txt` as "an OPERATIONAL copy, deliberately untracked and expendable" — so the second copy is intended; only the work-tree leftover is not, and `.gitignore:13` does guard it from an accidental commit. And `.resticignore` does not exclude `~/.config`, so `restic ls 41a19b13 /home/me/.config/restic` returns `pass.txt`: the live password is **inside the repository it unlocks**. Encrypted at rest, so not a leak — but a restore of the wsl snapshot re-materialises the key to both repos on disk.
+- **The most comprehensively backed-up box in the fleet ships to the least-verified, currently-unreachable repository.** desktop-wsl backs up all of `/home/me` — its `~/machines` clone, its `.machines/` state, its operational password — into `g614jv`, which has **never been integrity-checked** (§E.3), sits on the same spindle as the only other repo, and whose server has been down since yesterday afternoon with the next run due to fail. None of those four facts is visible from any single file or any single box.
+- **The key leaves the box every ten minutes; the data it unlocks never leaves at all.** Only the two dotfiles mechanisms cross a machine boundary in a working state, and between them they carry 45 paths and 26 files. Every byte of the ~1.5 TB they are the key to is latitude-local — source and target on the same box, sometimes the same enclosure. The single machine-crossing *data* path is desktop-wsl → the REST hub, and it is down. So a latitude-level loss — fire, theft, the flaky `usb 4-2` dock taking two bays with it — destroys the immich library, the mirror, the archive, both restic repos and 129 G of migration data, and leaves you holding the password to all of it. `profiles.yaml:23` names "a format that can be shipped off-site as-is" as a reason to run restic; nothing ships it.
+- **The `machines`/`vps` boundary cuts the backup system in half, mid-mechanism.** `machines` owns the two rsync scripts and their units; `vps` owns the restic profiles, the REST hub compose, and the only password. The generated systemd units on latitude carry `WorkingDirectory=/home/me/my/vps/backup/latitude` — a `machines`-managed box running root-scope timers out of the sibling repo's work tree. Defensible as a boundary call, but **no single file, in either repo, lists what is backed up.** Reconstructing §A needed both repos plus four live boxes.
+- **The one document that tries to be that list is wrong in four places.** vps `CLAUDE.md`'s Backups section says at `:200` "Password file: `pass.txt` in each profile directory (not committed)" — false for both live profiles (`latitude/profiles.yaml:49` is an absolute path to the dotfiles symlink, `wsl/profiles.yaml:48` points at `~/.config/restic/`), and that is precisely the belief that makes the work-tree `pass.txt` look like a dead file. Its `:178-183` Repositories table lists four repos, three of them dead `G:\`/`H:\` paths, and **omits `/mnt/spare320/restic/latitude`** — the fleet's primary working repo is absent from vps's own repository index. `:199` documents base retention that both live profiles override (`latitude:86-89` 30/12/24/10, `wsl:74-77` 14/8/12/5), so it applies to no running profile; `:202` points at an `install-tasks.*` that does not exist in `backup/latitude/`; `:154` says "two subdirectories" where there are three; `:170-174` omits the Sunday 06:00 check. `README.md:19,68` repeat two of these.
+- **`install-timers.sh` installs two of the seven and knows about none of the other five.** Its `UNITS` array (line 26) is exactly the four mirror/archive files. Nothing installs the resticprofile units — `resticprofile schedule` does, by hand. Nothing in `machines` even mentions restic.
+- **The role system is decorative here** (§D), and every mechanism bypasses it.
+- **Nothing verifies anything.** No `OnFailure=`, no alert, no statusboard row, no test in `provision/tests/` touching a backup. The weekly `restic check --read-data-subset 5%` on the `latitude` repo is the entire scheduled integrity story for the fleet, and `schedule-ignore-on-battery` can silently skip even that. Combined with a never-checked second repo and a down hub, the failure this system is most exposed to is not corruption — it is **not noticing it stopped**, which is exactly the failure the 2026-08-01 session existed to fix ("a backup job nobody was watching failed for 13 days," `restic-server/compose.yml`).
+
+**The one-line answer:** the latitude trio was designed together, carefully, in one sitting, and reads that way. The other four arrived from a retired machine, from inside a container, from a config-sync tool doing backup work by accident, and from a migration nobody closed out — and because no file lists all seven, the seams between them are invisible from any single place you would look.
+
+---
+
+#### What could not be established
+
+- **Why `check-before: true` never executes.** It parses, it inherits, `show` resolves it — and no `check` has ever run under `run-schedule` for either profile. Mechanism unknown; the placement hypothesis was tested and disproved.
+- **Whether OneDrive on desktop-native protects anything.** Its updater tasks run; the synced set and its state were not enumerated. If it is covering `C:\Users\methe`, that is an eighth mechanism and it is in neither repo.
+- **Immich's literal backup cron expression.** Established by effect and by the container's own log line, not read out of immich's config — the `system-config` row has no `backup` key.
+- **`server`/g513ie was not probed** (out of scope by instruction). It may still hold restic repos or `~/g513ie-prod-config` originals; `archive-mirror.sh:11-13` says the old `G:`/`H:` repos went in the migration reshuffle.
+- **No restore was tested from either repo.** Snapshot listing, `stats --mode raw-data` and one `cat config` succeeded read-only against both, which proves the repos are readable and that one password opens them; it does not prove a restore produces a working immich DB.
+- **The 4.1 MB headscale WAL was observed, not checkpointed or copied** — whether a consistent copy is possible without stopping headscale is unverified.
+- **`/mnt/xs`'s 36 G of free space came from `df`**, not from a fresh `archive-mirror.sh -verify`; that run is read-only but walks 20 k files across the flaky source dock, and provoking a bus reset during an unattended review was not worth the confirmation. `/dev/sda1` was identified by label, not mounted.
+- **`~/staging/music` vs `/mnt/spare320/music-from-g513ie` were matched by size only** (89 G each) — "duplicate" there is an inference from the migration logs, not a checksum comparison.
+- **Disclosure:** the first two reads of the `latitude` repo (`snapshots`, `stats`) ran without `--no-lock` and each created and released a shared lock file. No repository content was altered. Every subsequent restic read used `--no-lock`. The authkey match was done by prefix comparison, printing only the key ID; no key or token file contents were printed. Nothing was written to any box, to either repo, to `/mnt/xs`, or to the 6 TB drive.
 
 ---
 
@@ -256,7 +484,7 @@ What to build instead of a framework: **the live-vs-declared sweep, as a script,
 
 ## What this review did not establish
 
-- **Backups never got a first-class pass.** The dedicated worker returned nothing. Everything in that section is second-hand from four other workers, and no reconciliation of client/target pairs against the role declarations exists. This is the largest single hole.
+- **Backups DID get its first-class pass, on the re-run** — the section above is that pass, three-way verified. Its own residual unknowns are listed at the end of it rather than here. The one correction worth carrying: the placeholder's "hub down since 10:53" read a UTC stamp as local; latitude is UTC+5.
 - **The desktop `core.symlinks` question is still open** even though a worker was on the box. If symlinks are off, `CLAUDE.md` materialises as a text file containing the string `AGENTS.md`, the ledger's `keep` verdict on it becomes a real portability finding, and agents on that checkout load nothing. One command.
 - **`metheoryt/machines-cleanup` was discovered only in this final pass.** Its three commits were not reviewed; its `tiers.sh` diff (+32/−3) is unexamined against the ledger's `rewrite` scope, and its `node` commit already refutes one drift claim. There may be more in it.
 - **The ledger and the drift reports were produced independently and this document is the first place they meet.** I folded the defects I could see; there may be others where a `keep` row and a live finding disagree and neither worker knew.
