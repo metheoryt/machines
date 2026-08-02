@@ -356,10 +356,12 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 ### Tier 1 — live faults
 
 **1. Restore the restic REST hub on latitude, and fix the bind race properly.**
-*Changes:* in the vps repo, either bind `0.0.0.0:8001` and let the tailnet ACL/firewall scope it, or add an ordering dependency on `tailscaled` (a systemd drop-in or an entrypoint retry loop). Then restart the container.
-*Why:* `backup-hub` is the role that names latitude; it has been down since 2026-08-02 10:53 and `restart: unless-stopped` demonstrably does not cover the boot race.
+*Changes:* in the vps repo, add an ordering dependency on `tailscaled` — a systemd drop-in or an entrypoint retry loop.
+*Why:* `backup-hub` is the role that names latitude; it has been down since **2026-08-02 10:53 UTC = 15:53 +05** and `restart: unless-stopped` demonstrably does not cover the boot race (`RestartCount=0`).
 *Cost:* one compose edit plus a restart.
-*Breaks:* binding `0.0.0.0` widens exposure on a LAN-attached box — prefer the ordering fix. Verify by rebooting and checking the container comes up, not by restarting it by hand.
+*Breaks:* nothing. **Do not take the `0.0.0.0` branch** — an earlier draft of this list offered it and the backups pass refuted it from the compose file's own comments: that was the g513ie posture, and "publishing on 0.0.0.0 actually exposed it to every device on the wifi, guests included." Verify by **rebooting**, not by `docker start` — this repo's own rule about firing a job's schedule rather than the script applies verbatim to a boot race.
+
+**1b. The rest of the backup surface, from the dedicated pass — read that section before acting on any of it.** Four faults sit alongside the hub and none was in the first draft of this list: `archive-mirror.timer` has **never fired once** (enabled after August's trigger point; first real fire `2026-09-01 05:01:54`) and its target `/mnt/xs` is 95% full **on partition 3 of a Ventoy installer stick**; the `g614jv` repository has **never been integrity-checked** despite `check-before: true` resolving true, so the repo behind the down hub is unverified; **one 11-character password unlocks both repos**, is the g513ie-era secret both "fresh" repos reused, and lives inside the wsl snapshot it unlocks; and **no backup data ever leaves latitude** — a single-box loss takes the library, both mirrors, both restic repos and 129 G of migration data together, while the only thing crossing a machine boundary every ten minutes is the key.
 
 **2. Add `.zed/` to `.gitignore`, and clear the untracked file on desktop-wsl.**
 *Changes:* one `.gitignore` line; `rm -rf ~/machines/.zed` on the box (or commit it — it is a zero-byte file).
