@@ -82,4 +82,53 @@ for r in provision-mac provision-wsl provision test health update-gortex; do
     || die "help does not list '$r'"
 done
 
+# ── the gate must reach EVERY suite in the repo ────────────────────────────────
+# The recipe's own comment says to keep a glob "rather than a hand-listed set: a
+# new *.test.sh must be picked up without editing this recipe, or coverage
+# silently stops growing." The four-directory glob it shipped with IS a
+# hand-listed set, and coverage did silently stop growing: ten suites lived
+# outside those directories and were run by nothing, for weeks, while the gate
+# reported "all N suites passed" and everyone read that as the repo.
+#
+# So assert the property the comment claims, mechanically: ask the gate what it
+# will run, and diff that against every tracked *.test.sh.
+#
+# `_test-suites` exists so this can be asked instead of inferred. Parsing the
+# glob out of the recipe was the first version and it was worse in both
+# directions: it broke whenever the loop changed shape, and it verified a copy of
+# the recipe's intent rather than the recipe. A private recipe that emits the
+# list, consumed by both `test` and this assertion, has exactly one source.
+#
+# Not done by running `just test` itself: this file is one of the suites it runs,
+# so that recurses forever.
+reached="$(cd "$REPO" && just --justfile "$JUSTFILE" _test-suites 2>/dev/null | sort -u)"
+tracked="$(cd "$REPO" && git ls-files '*.test.sh' 2>/dev/null | sort -u)"
+if [ -z "${reached// /}" ]; then
+  die "'just _test-suites' produced nothing — the gate cannot say what it runs"
+else
+  # tracked - reached. The other direction is deliberately allowed: an untracked
+  # suite in a working tree SHOULD run, and must not fail the gate for existing.
+  unreached="$(comm -23 <(printf '%s\n' "$tracked") <(printf '%s\n' "$reached"))"
+  if [ -z "$unreached" ]; then
+    pass "the gate reaches every tracked *.test.sh ($(printf '%s\n' "$tracked" | wc -l | tr -d ' ') suites)"
+  else
+    die "suites tracked but never run by the gate:
+$(printf '%s\n' "$unreached" | sed 's/^/    /')"
+  fi
+fi
+
+# One naming convention, so the glob above can be exhaustive. A test script named
+# test_*.sh is invisible to a *.test.sh glob no matter how wide the directory
+# list gets — widening the glob and leaving the name is a half-fix that reads as
+# a whole one. (test_distill.py is deliberately exempt: it needs pytest, which is
+# not in the fleet toolchain. That is a judgement call recorded in the review,
+# not an oversight — hence the .sh restriction here.)
+strays="$(cd "$REPO" && git ls-files '*test_*.sh' 2>/dev/null)"
+if [ -z "$strays" ]; then
+  pass "no test_*.sh strays — every shell suite is named *.test.sh"
+else
+  die "shell suites named test_*.sh, which no *.test.sh glob can reach:
+$(printf '%s\n' "$strays" | sed 's/^/    /')"
+fi
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

@@ -42,9 +42,29 @@ repo_dir := justfile_directory()
 # and AGENTS.md had to warn readers that the obvious name did something else
 # entirely. Both problems close here.
 #
-# Runs every suite in the repo. Keep the glob rather than a hand-listed set: a
-# new *.test.sh must be picked up without editing this recipe, or coverage
-# silently stops growing.
+# The gate's suite list, in one place. `test` consumes it and
+# provision/tests/justfile.test.sh asserts against it, so "what the gate runs"
+# has exactly one definition instead of a recipe plus a test's idea of it.
+#
+# A find, not a list of directories. The four-directory glob this replaced came
+# with a comment saying to keep a glob "or coverage silently stops growing" —
+# and then silently stopped growing, because four hand-listed directories ARE a
+# hand-listed set: ten suites under agents/plugin/**/tests/ and
+# agents/git-hooks/ were run by nothing for weeks while the gate printed "all 28
+# suites passed" and every reader took that for the repo. All ten were green
+# when finally run, so the cost was the false confidence, not a hidden
+# regression — this time.
+#
+# Untracked suites are picked up on purpose: a test you just wrote should run
+# before it is committed.
+[private]
+_test-suites:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    cd {{repo_dir}}
+    find . -name '*.test.sh' -not -path './.git/*' | sed 's|^\./||' | LC_ALL=C sort
+
+# Runs every suite in the repo — see _test-suites for how they are found.
 [group('dev')]
 [doc('Run the bash test suite (the repo validation gate)')]
 test:
@@ -52,13 +72,12 @@ test:
     set -uo pipefail
     cd {{repo_dir}}
     fail=0; ran=0
-    for t in provision/tests/*.test.sh provision/*.test.sh \
-             agents/tests/*.test.sh scripts/*.test.sh; do
+    while IFS= read -r t; do
       [ -f "$t" ] || continue
       ran=$((ran + 1))
       printf '\n\033[1m== %s\033[0m\n' "$t"
       bash "$t" || { fail=$((fail + 1)); printf '\033[31mFAILED: %s\033[0m\n' "$t"; }
-    done
+    done < <(just --justfile {{justfile()}} _test-suites)
     printf '\n────────────────────────────\n'
     if [ "$fail" = 0 ]; then
       printf '\033[32m✅ all %s suites passed\033[0m\n' "$ran"

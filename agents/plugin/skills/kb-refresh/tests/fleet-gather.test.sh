@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agents/plugin/skills/kb-refresh/tests/test_fleet_gather.sh
+# agents/plugin/skills/kb-refresh/tests/fleet-gather.test.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../fleet-gather.sh"
@@ -160,4 +160,4 @@ else
   echo "SKIP: main() WSL block test (jq not installed)"
 fi
 
-echo "PASS: test_fleet_gather.sh"
+echo "ALL PASS"
