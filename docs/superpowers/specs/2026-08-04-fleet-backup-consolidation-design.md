@@ -101,6 +101,34 @@ home. Under D3 it has a home — a declared prune timer per repo, generated from
 the manifest's retention block. This is a case where the consolidation makes a
 previously-unaffordable protection affordable.
 
+**But it collides with the per-client credential design, and the collision has to
+be resolved rather than noticed later.** `rest-server --append-only` refuses
+deletes over HTTP, so the prune must run on latitude against
+`/mnt/spare320/restic-rest/<client>/` on the filesystem, bypassing the server.
+That part works. What does not follow automatically: **`forget --prune` needs the
+client's repo *encryption* password**, and per-client passwords escrowed on each
+machine's own dotfiles branch are unreadable from latitude.
+
+So the resolution is explicit: **a repo password is escrowed twice — on the
+client's branch, for the client's own restore, and on latitude's branch, for the
+prune of the repo latitude hosts.** The manifest records which host prunes which
+target, so the requirement is declared rather than discovered when a prune timer
+first fails.
+
+That is a real trust statement and it belongs in writing: **`--append-only`
+protects against a compromised or confused *client*, not against the backup
+host.** latitude holds the data and the keys of every repo it maintains, so a
+latitude compromise reads everything. That is not a regression — today one
+11-character password on latitude opens both repos — but it is the boundary this
+design keeps rather than closes, and the offsite copy on hub is what limits its
+blast radius.
+
+**`--private-repos` changes the on-disk path of a repo that already has history.**
+It scopes each client to `/<htpasswd-user>/`, so `g614jv` moves from `/data/g614jv`
+to `/data/<user>/g614jv`. Phase 1 **moves the directory server-side** and does not
+re-init: those two snapshots (2026-08-01 and 2026-08-02) are the only history that
+repository has, and re-initialising discards it to save a filesystem `mv`.
+
 `0.0.0.0` was explicitly argued against in `restic-server/compose.yml:6-12`, and
 that argument was correct **while `--no-auth` was set**: on g513ie it "exposed it
 to every device on the wifi, guests included," and latitude has **no host
@@ -147,19 +175,19 @@ machine's private business. Sources are per-machine and reference them by id.
                          "offsite": false,
                          "retention": { "keep-daily": 30, "keep-weekly": 12,
                                         "keep-monthly": 24, "keep-yearly": 10 },
-                         "check": "weekly read-data-subset=5%" },
+                         "check": { "every": "weekly", "read-data-subset": "5%" } },
     "latitude-rest":   { "host": "latitude", "kind": "restic-rest",
                          "url": "http://latitude.gg.ez:8001",
                          "append-only": true, "offsite": false,
                          "retention": { "keep-daily": 14, "keep-weekly": 8,
                                         "keep-monthly": 12, "keep-yearly": 5 },
-                         "check": "weekly read-data-subset=5%" },
+                         "check": { "every": "weekly", "read-data-subset": "5%" } },
     "hub-rest":        { "host": "hub", "kind": "restic-rest",
                          "url": "http://hub.gg.ez:8001",
                          "append-only": true, "offsite": true,
                          "retention": { "keep-daily": 14, "keep-weekly": 8,
                                         "keep-monthly": 12, "keep-yearly": 5 },
-                         "check": "weekly read-data-subset=5%" },
+                         "check": { "every": "weekly", "read-data-subset": "5%" } },
     "immich-mirror":   { "host": "latitude", "kind": "rsync",
                          "path": "/mnt/immich-mirror",
                          "drive-uuid": "a7d7b61e-…", "offsite": false,
@@ -347,6 +375,26 @@ system drawn before the instrument that measures it exists.
 `.resticignore` excludes `~/.config/restic`, the declared prune timer append-only
 requires. This **is** the hub durable fix — not a throwaway patch. No manifest
 needed. Until it lands, the next reboot can still take the hub down.
+
+**Phase 1 exit criteria, because it rewrites the fleet's only machine-crossing
+data path before the report exists to watch it.** Its client is a
+`systemd --user` timer on a box this review already found silently frozen for ~35
+hours under a green unit, so a half-landed Phase 1 is a silent outage with no
+instrument yet built to catch it. Therefore, in the same session as the change:
+
+1. `docker inspect` shows a published port and `ss -lntp` shows something
+   listening — the `up -d` trap is that a reused container returns with
+   `HostConfig.PortBindings` intact and `NetworkSettings.Ports` empty, running and
+   reachable by nobody. `--force-recreate` is required.
+2. From desktop-wsl, `resticprofile ... -n wsl snapshots` lists **both**
+   pre-existing snapshots at their new path — proving the directory move preserved
+   history and the new credential works.
+3. One `restic restore` of a single file to a temp dir, diffed. This is also the
+   first restore ever performed from this repository.
+4. **Reboot latitude and re-check 1–2.** The failure being fixed is a boot race,
+   and this repo's own rule is to verify a scheduled job by firing its schedule,
+   not by running the script. A `docker compose up` that works proves nothing
+   about the next boot.
 
 **Phase 2 — manifest + report, read-only.** The `fleet.json` backup block
 describing what exists *today*; `just backup-report` verifying it; nothing
