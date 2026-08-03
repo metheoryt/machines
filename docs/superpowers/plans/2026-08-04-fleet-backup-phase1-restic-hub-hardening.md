@@ -220,7 +220,7 @@ existing comment at `backup/wsl/profiles.yaml:25-34` already documents this.
 - [ ] **Step 1: Confirm the file is empty (the failing state)**
 
 ```bash
-ssh latitude 'sudo -n wc -c < /mnt/spare320/restic-rest/.htpasswd'
+ssh latitude 'sudo -n sh -c "wc -c < /mnt/spare320/restic-rest/.htpasswd"'
 ```
 
 Expected: `0`. This is why auth cannot simply be switched on.
@@ -264,7 +264,7 @@ same path `$PASSWORD_FILE` names, so the server reads exactly this file.
 - [ ] **Step 4: Verify one bcrypt line landed, and that the server is reading that exact path**
 
 ```bash
-ssh latitude 'sudo -n cut -d: -f1 /mnt/spare320/restic-rest/.htpasswd; sudo -n wc -l < /mnt/spare320/restic-rest/.htpasswd'
+ssh latitude 'sudo -n cut -d: -f1 /mnt/spare320/restic-rest/.htpasswd; sudo -n sh -c "wc -l < /mnt/spare320/restic-rest/.htpasswd"; sudo -n sh -c "grep -c \"^g614jv:[\$]2y[\$]\" /mnt/spare320/restic-rest/.htpasswd"'
 ssh latitude 'docker inspect restic/rest-server:latest --format "{{range .Config.Env}}{{println .}}{{end}}" | grep PASSWORD_FILE'
 ```
 
