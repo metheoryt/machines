@@ -127,4 +127,89 @@ if [ -f "$nixmod" ]; then
     || die "nix module must run the script via bash, not exec it (mode 644 = 126)"
 fi
 
+# ── a dirty tree must stop being silent once it PERSISTS ─────────────────────
+# THE BUG: desktop-wsl sat 28 commits behind for ~35 hours because one untracked
+# zero-byte .zed/tasks.json tripped the dirty gate. The journal held 185
+# consecutive `SKIP dirty` lines and zero OK, while the timer, the service and
+# .machines/last-converge all reported success. A revoked SSH key stayed trusted
+# on the box as a direct result.
+#
+# A skip is still not an error — that contract is deliberate (see the script
+# header) and one dirty tick is normal, mid-edit. What is NOT normal is the same
+# repo skipping for hours while the fleet moves. So the escalation is on
+# PERSISTENCE, not on the skip: it refines the contract rather than reversing it,
+# the same way dotfiles-sync commits anyway once a tree has been dirty >2h.
+state="$tmp/state"
+export FLEET_SELFPULL_STATE="$state"
+export FLEET_SELFPULL_DIRTY_LIMIT=3
+
+echo dirt > "$live/f"
+
+st="$(selfpull_one "$live" 2>/dev/null)"; rc=$?
+eqt "1st dirty tick is an ordinary skip" "$st" "SKIP dirty"
+eqt "1st dirty tick exits 0" "$rc" "0"
+
+st="$(selfpull_one "$live" 2>/dev/null)"; rc=$?
+eqt "2nd dirty tick still an ordinary skip (under the limit)" "$st" "SKIP dirty"
+eqt "2nd dirty tick exits 0" "$rc" "0"
+
+# The 3rd hits the limit: a distinct token, a non-zero status, and a stderr line
+# naming the repo — the journal grep that 185 identical lines never gave anyone.
+err="$tmp/stale.err"
+st="$(selfpull_one "$live" 2>"$err")"; rc=$?
+case "$st" in
+  STALE*) pass "3rd dirty tick escalates to a distinct token ($st)" ;;
+  *)      die "3rd dirty tick still reported '$st' — the streak is invisible" ;;
+esac
+[ "$rc" -ne 0 ] \
+  && pass "a persistently dirty repo exits non-zero" \
+  || die "a persistently dirty repo still exits 0 — the timer stays green forever"
+grep -q "$live" "$err" \
+  && pass "stderr names the stuck repo" \
+  || die "stderr does not name the stuck repo: $(cat "$err")"
+grep -qi 'dirty' "$err" \
+  && pass "stderr says why it is stuck" \
+  || die "stderr does not say why: $(cat "$err")"
+
+# Recovery must reset the streak, or one historical stall poisons the repo's
+# status forever and the signal becomes noise to be ignored — which is how the
+# original 185 lines came to be unread.
+git -C "$live" checkout -q -- f
+st="$(selfpull_one "$live" 2>/dev/null)"; rc=$?
+case "$st" in
+  OK*) pass "a recovered repo pulls normally again ($st)" ;;
+  *)   die "a recovered repo did not pull: $st" ;;
+esac
+eqt "a recovered repo exits 0" "$rc" "0"
+
+echo dirt > "$live/f"
+st="$(selfpull_one "$live" 2>/dev/null)"; rc=$?
+eqt "the streak reset: dirty after a clean run is an ordinary skip again" "$st" "SKIP dirty"
+eqt "and exits 0 again" "$rc" "0"
+git -C "$live" checkout -q -- f
+
+# not-main must NEVER escalate, however long it lasts. Working on a feature
+# branch is a deliberate, visible choice — `machines` on air is on one right now.
+# Escalating it would paint the timer red for the whole life of any branch, which
+# is the false-alarm failure that makes people stop reading the signal.
+git -C "$live" checkout -q -b feature-branch
+for _ in 1 2 3 4 5; do st="$(selfpull_one "$live" 2>/dev/null)"; rc=$?; done
+eqt "not-main never escalates, even past the limit" "$st" "SKIP not-main"
+eqt "not-main keeps the exit status clean" "$rc" "0"
+git -C "$live" checkout -q main
+
+# State must be per-repo: a second stuck repo must not inherit the first's count,
+# and must not clear it either.
+other="$tmp/other"; git init -q "$other"; git -C "$other" checkout -q -b main
+git -C "$other" config user.email t@t; git -C "$other" config user.name t
+git -C "$other" remote add origin "$upstream"
+: > "$other/g"; git -C "$other" add .; git -C "$other" -c commit.gpgsign=false commit -qm c1
+git -C "$other" fetch -q origin main 2>/dev/null
+git -C "$other" branch --set-upstream-to=origin/main main >/dev/null 2>&1
+echo dirt > "$other/g"
+st="$(selfpull_one "$other" 2>/dev/null)"
+eqt "a different repo starts its own streak at 1" "$st" "SKIP dirty"
+
+unset FLEET_SELFPULL_STATE FLEET_SELFPULL_DIRTY_LIMIT
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

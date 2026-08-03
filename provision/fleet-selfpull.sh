@@ -12,7 +12,14 @@
 # credential indistinguishable from "everything current" — the same silent
 # failure that let latitude sit 23 commits behind while systemd reported
 # success. Deliberate skips (not-main, dirty, diverged) are NOT errors and keep
-# the exit status clean.
+# the exit status clean — with ONE refinement added 2026-08-03: a repo that skips
+# as dirty for FLEET_SELFPULL_DIRTY_LIMIT consecutive ticks reports `STALE dirty`
+# and exits non-zero. The skip is still not the error; the streak is. See the
+# dirty-streak block below for the incident that motivated it.
+#
+# NOTE the Windows counterpart provision/fleet-selfpull.ps1 has NOT been given
+# this, and has no test coverage at all (review item 20). desktop's clone can
+# still freeze silently.
 #
 # Testable: `FLEET_SELFPULL_LIB_ONLY=1 source` loads helpers without scanning.
 set -u
@@ -24,6 +31,49 @@ export GIT_SSH_COMMAND
 
 # Scan roots — same shape as fleet-pull.sh's REMOTE_SCRIPT.
 FLEET_ROOTS="${FLEET_ROOTS:-$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exactly}"
+
+# ── dirty-streak state ────────────────────────────────────────────────────────
+# A single dirty tick is normal (someone is mid-edit) and stays a skip. A repo
+# dirty for HOURS while the fleet moves is a fault, and it used to be invisible:
+# desktop-wsl sat 28 commits behind for ~35 hours on one untracked zero-byte
+# .zed/tasks.json, with 185 consecutive `SKIP dirty` lines in the journal and a
+# green unit the whole time. One of the unpulled commits revoked an SSH key.
+#
+# So this counts CONSECUTIVE dirty ticks per repo and escalates on persistence.
+# That refines the "skips are not errors" contract above rather than reversing
+# it — the error is the streak, not the skip.
+#
+# Outside the repo on purpose (XDG state, like dotfiles-sync's): a state file
+# inside a checkout would make the tree dirty, which is the condition being
+# measured.
+FLEET_SELFPULL_STATE="${FLEET_SELFPULL_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/fleet-selfpull}"
+# 36 ticks ≈ 6h at the 10-minute cadence. Deliberately generous: a false alarm
+# teaches people to ignore the signal, which is how 185 lines went unread.
+: "${FLEET_SELFPULL_DIRTY_LIMIT:=36}"
+
+# _streak_file <dir> — one state file per repo, name-mangled to a safe basename.
+_streak_file() {
+  local safe="${1//[^A-Za-z0-9._-]/_}"
+  printf '%s/dirty-%s' "$FLEET_SELFPULL_STATE" "$safe"
+}
+
+# _streak_bump <dir> — increment and echo this repo's consecutive-dirty count.
+# Unwritable state must not break pulling, so a failure degrades to "1" (never
+# escalates) rather than aborting the run.
+_streak_bump() {
+  local f n
+  f="$(_streak_file "$1")"
+  mkdir -p "$FLEET_SELFPULL_STATE" 2>/dev/null || { echo 1; return 0; }
+  n="$(cat "$f" 2>/dev/null || echo 0)"
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  n=$((n + 1))
+  printf '%s\n' "$n" > "$f" 2>/dev/null || { echo 1; return 0; }
+  echo "$n"
+}
+
+# _streak_clear <dir> — a repo that is no longer dirty starts over. Without this
+# one historical stall would mark a repo forever and the signal becomes noise.
+_streak_clear() { rm -f "$(_streak_file "$1")" 2>/dev/null || :; }
 
 # is_fleet_repo <dir>: git repo, origin not thepureapp/, has a tracked upstream.
 is_fleet_repo() {
@@ -45,8 +95,24 @@ is_fleet_repo() {
 # the exit status.
 selfpull_one() {
   local d="$1" before after
+  # not-main deliberately does NOT feed the dirty streak and never escalates:
+  # working on a feature branch is a visible choice the user made, and painting
+  # the unit red for the life of every branch is the false alarm that teaches
+  # people to ignore the signal.
   [ "$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)" = main ] || { echo "SKIP not-main"; return 0; }
-  [ -z "$(git -C "$d" status --porcelain 2>/dev/null)" ] || { echo "SKIP dirty"; return 0; }
+
+  if [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ]; then
+    local n; n="$(_streak_bump "$d")"
+    if [ "$n" -ge "$FLEET_SELFPULL_DIRTY_LIMIT" ]; then
+      printf 'fleet-selfpull: %s dirty for %s consecutive ticks — still not pulling. Clean the tree or ignore the stray path.\n' \
+        "$d" "$n" >&2
+      echo "STALE dirty ${n}t"
+      return 1
+    fi
+    echo "SKIP dirty"
+    return 0
+  fi
+  _streak_clear "$d"
 
   # Retry once: git-autofetch fetches the same repos on its own timer, and two
   # concurrent fetches make the loser die with
