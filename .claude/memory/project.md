@@ -24,9 +24,10 @@ global + per-host). One bullet per fact under a topical heading.
   rotation question; the lookup failure is the durable part, not the example.)
   See `docs/fleet-roadmap.md` P5.
 - **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
-  runs **29** suites and exits nonzero on failure — it does NOT glob the whole
-  repo: 39 `*.test.sh` are tracked, its four-directory glob reaches 29, and the
-  10 under `agents/plugin/**/tests/` are run by nothing (they pass by hand).
+  exits nonzero on failure but does NOT glob the whole repo: it names four
+  directories, so the 10 suites under `agents/plugin/**/tests/` are run by
+  nothing (they pass by hand). Don't record the suite count here — it moved three
+  times on 2026-08-03 and `just test` prints the real one.
   **It is GREEN as of 2026-08-03; keep it that way.** A red suite gives no signal,
   and that is not theoretical: `provision-wsl.test.sh` sat red for weeks while
   correctly reporting a real bug in shipped code, and nobody read it because the

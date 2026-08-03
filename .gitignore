@@ -1,6 +1,11 @@
-# IDE directories
+# IDE directories. An editor dir missing from this list is not untidiness: a
+# single stray file makes the clone permanently dirty, and fleet-selfpull's dirty
+# gate then skips the box on every tick, silently, under a green timer. A missing
+# `.zed/` held desktop-wsl 28 commits behind for ~35 hours — one of them a key
+# revocation. Guarded by provision/tests/gitignore-editor-dirs.test.sh.
 .idea/
 .vscode/
+.zed/
 *.sublime-*
 
 # Nix build artifacts

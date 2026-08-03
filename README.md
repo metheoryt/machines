@@ -60,7 +60,7 @@ agent config + CLI tools) — a peer of `install-media/`.
 
 | Command | Description |
 |---|---|
-| `just test` | **The validation gate** — 29 suites (not every `*.test.sh`; see below) |
+| `just test` | **The validation gate** — not every `*.test.sh`; see below |
 | `just provision --machine <m> --dry-run` | Show a machine's provisioning plan |
 | `just provision-mac <machine>` | Provision THIS Mac end to end |
 | `just provision-wsl <nickname>` | Self-declare THIS WSL distro as a fleet host |
@@ -72,10 +72,11 @@ agent config + CLI tools) — a peer of `install-media/`.
 | `just hardware` / `just logs` / `just monitor` | Hardware, recent logs, live monitor |
 
 `just test` used to be `nixos-rebuild test`, so the suite had no recipe at all.
-All 29 suites pass as of 2026-08-03 (roadmap P4). Keep it green — it is the
-repo's only gate, and a red suite gives no signal. **29 is not the whole repo:**
-39 `*.test.sh` files are tracked and the recipe's four-directory glob reaches 29,
-leaving 10 under `agents/plugin/**/tests/` that nothing runs (they pass by hand).
+Green as of 2026-08-03 (roadmap P4). Keep it green — it is the repo's only gate,
+and a red suite gives no signal. **It is not the whole repo:** the recipe globs
+four directories, so the 10 suites under `agents/plugin/**/tests/` are run by
+nothing (they pass by hand). `just test` prints the count it ran — trust that
+rather than a number written here.
 
 ## Architecture
 
