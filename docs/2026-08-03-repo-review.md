@@ -14,6 +14,8 @@
 
 ## Coverage
 
+> The full 240-row table lives at **`review/2026-08-03-path-ledger.md`** — deliberately outside `docs/`, because it is reference data and this review's own finding is that `docs/` is 2.1 MB nobody reads.
+
 **240 tracked paths, 240 ledger rows, zero gaps.** I reconciled this by subtree rather than taking it on trust: 14 root-config (9 root files + 3 `.claude/` + `.gemini/` + `.superpowers/`), 26 `agents/` non-plugin, 31 `agents/plugin/`, 4 top-level `docs/`, 1 handoff, 45 plans, 44 specs, 58 `provision/`, 11 `hosts/`, 3 `install-media/`, 3 `scripts/`. Each count matches `git ls-files` exactly. **No tracked path went unreviewed.**
 
 | Verdict | Count |

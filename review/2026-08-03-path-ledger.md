@@ -1,7 +1,11 @@
 # machines — full path ledger (240/240)
 
 Every tracked path at `repo-review-cleanup`, one row each, sorted most-actionable first.
-Companion to `2026-08-03-repo-review.md`. Produced 2026-08-03.
+Companion to `docs/2026-08-03-repo-review.md`. Produced 2026-08-03.
+
+Kept out of `docs/` on purpose: this is reference data, and the review it belongs
+to found that `docs/` is 2.1 MB of prose nobody reads. Grep it when you need a
+path's verdict; do not read it front to back.
 
 **Tally:** delete 6, needs-decision 11, merge 2, rewrite 86, keep 135
 
