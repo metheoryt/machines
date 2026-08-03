@@ -79,7 +79,7 @@ All commands run from repo root. `just --list` is the full menu (16 recipes,
 down from 33 — the other 28 were `nixos-rebuild`/`nix-store` wrappers).
 
 ```bash
-# THE validation gate. Runs every *.test.sh in the repo (27 suites).
+# THE validation gate. 29 suites — NOT every *.test.sh in the repo (see below).
 # NOTE: `just test` used to be `nixos-rebuild test`. It is the suite now.
 just test
 
@@ -129,7 +129,14 @@ for t in provision/tests/*.test.sh provision/*.test.sh \
          agents/tests/*.test.sh scripts/*.test.sh; do bash "$t"; done
 ```
 
-**The suite is GREEN as of 2026-08-01 — 28 suites, 0 failures.** Keep it that way:
+**The glob above is NOT the whole repo, and that gap is measured.** 39 `*.test.sh`
+files are tracked; those four directories reach **29** of them. The other 10 live
+under `agents/plugin/**/tests/` and no recipe runs them — plus two more named
+`test_*` rather than `*.test.sh`, which no glob would catch either. All ten pass
+by hand. Widening the glob is review item 7; until then, "the gate is green" means
+29 suites, not the repo.
+
+**The suite is GREEN as of 2026-08-03 — 29 suites, 0 failures.** Keep it that way:
 it is the only validation the repo has since the Nix gate went, and a red suite
 gives no signal at all. The three long-standing failures were fixed that day, and
 what they turned out to be is worth knowing: `provision-wsl.test.sh` had been

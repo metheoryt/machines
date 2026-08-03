@@ -1229,7 +1229,10 @@ UNIT
     [ -n "$roots" ] && cron_env="FLEET_ROOTS='$roots' "
     if crontab -l 2>/dev/null | grep -qF "$FSP"; then
       ok "fleet-selfpull cron already present"
-    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); %s/usr/bin/env bash %s >/dev/null 2>&1\n' "$cron_env" "$FSP"; } \
+    # `\%`, not `%`: crontab(5) ends the command at an unescaped % and feeds the
+    # rest to it as stdin, so a bare one truncates this line at `sleep $((RANDOM`
+    # and the job silently never runs. See provision/tests/cron-escaping.test.sh.
+    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM \\%% 120)); %s/usr/bin/env bash %s >/dev/null 2>&1\n' "$cron_env" "$FSP"; } \
            | crontab - >/dev/null 2>&1; then
       ok "fleet-selfpull cron installed"
     else
@@ -1369,7 +1372,8 @@ UNIT
   elif have crontab; then
     if crontab -l 2>/dev/null | grep -qF "$DFS"; then
       ok "dotfiles-sync cron already present"
-    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM %% 120)); /usr/bin/env bash %s >/dev/null 2>&1\n' "$DFS"; } \
+    # `\%` — see the identical note in tier_selfpull's cron arm.
+    elif { crontab -l 2>/dev/null; printf '*/10 * * * * sleep $((RANDOM \\%% 120)); /usr/bin/env bash %s >/dev/null 2>&1\n' "$DFS"; } \
            | crontab - >/dev/null 2>&1; then
       ok "dotfiles-sync cron installed"
     else
