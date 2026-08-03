@@ -112,7 +112,15 @@ tier_apt_min() {
 # ── BEST-EFFORT: the dev apt layer + shell niceties ───────────────────────────
 # The workstation-only half of the old CORE apt block plus everything that
 # decorates an interactive dev box: fd/fzf/ripgrep, fish/direnv/delta/bat,
-# starship, uv, gh. A lean server profile (hub) skips this entirely.
+# starship, uv, gh, nodejs. A lean server profile (hub) skips this entirely.
+#
+# `nodejs` is here for the AGENT config, not for the toolchain — the same reason
+# tier_brew_dev carries `node`. Nothing this provisioner runs needs it, but a
+# Claude Code plugin may ship JS hooks invoked as a bare `node …`, and on a box
+# with no node every such hook fails at every session start. Because it rides in
+# this tier, the `hub` profile — which skips tier_apt_dev entirely — still has no
+# node. That is deliberate: hub is a 960MB VPS, and a broken plugin hook is not
+# worth the footprint there.
 tier_apt_dev() {
   # Same contract as tier_apt_min: with no reachable root non-interactively
   # (a detached converge on a box needing an interactive sudo password) this is
@@ -143,7 +151,7 @@ tier_apt_dev() {
   have fdfind && ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
 
   # apt extras — present in most repos, but tolerate absence.
-  for p in fish direnv git-delta bat; do
+  for p in fish direnv git-delta bat nodejs; do
     if $SUDO apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1; then
       ok "$p"
     else
@@ -152,6 +160,16 @@ tier_apt_dev() {
   done
   # bat installs as `batcat` on Debian/Ubuntu — friendly name.
   have batcat && ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+
+  # nodejs: the third friendly-name case, and the one that usually needs no
+  # action. Debian's `nodejs` package has shipped /usr/bin/node itself since
+  # buster (the old nodejs-legacy package that provided it is long gone), so the
+  # `have node` guard normally short-circuits. The link is the safety net for a
+  # distro that ships only `nodejs` — a JS hook invokes a bare `node`, and
+  # `nodejs`-only is indistinguishable from not-installed to that hook.
+  if have nodejs && ! have node; then
+    ln -sf "$(command -v nodejs)" "$HOME/.local/bin/node"
+  fi
 
   # starship prompt (matches the fleet's prompt tool).
   if have starship; then
@@ -577,11 +595,19 @@ tier_brew_min() {
 #     would shadow the real binary with a stale link at worst.
 #   • starship/uv come from brew rather than their curl installers — same
 #     binaries, but brew can then upgrade them with everything else.
+#   • `node` is here for the AGENT config, not for the toolchain. Nothing this
+#     provisioner runs needs it (the `claude` CLI is the native installer, and
+#     agents/bootstrap.sh is bash+python3) — but a Claude Code plugin may ship
+#     JS hooks, invoked as a bare `node …`. On a Mac with no node every such
+#     hook fails at every session start with `node: command not found`
+#     (caveman's SessionStart hook did exactly that on air, 2026-08-01).
+#     Best-effort, not CORE: a missing node degrades a plugin, it does not
+#     break a provision.
 tier_brew_dev() {
   have brew || { warn "Homebrew not found — skipping the dev brew layer"; return 0; }
   info "Installing dev packages (brew)…"
   local p
-  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh; do
+  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh node; do
     if brew list --formula "$p" >/dev/null 2>&1; then
       ok "$p already installed"
     elif brew install "$p" >/dev/null 2>&1; then
