@@ -334,7 +334,7 @@ Interactively on latitude:
 ```bash
 mkdir -p ~/.config/restic
 umask 077
-openssl rand -base64 32 | tr -d '\n' > ~/.config/restic/g614jv.pass.txt
+openssl rand -hex 32 | tr -d '\n' > ~/.config/restic/g614jv.pass.txt
 chmod 600 ~/.config/restic/g614jv.pass.txt
 ```
 
