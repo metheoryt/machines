@@ -56,6 +56,17 @@ the private `dotfiles` bare repo for credential escrow.
 - **A non-interactive ssh PATH on Debian excludes `/usr/sbin` and `/sbin`**, and on
   desktop-wsl it excludes `~/.local/bin` where `restic` and `resticprofile` live.
   Export PATH explicitly in every remote command.
+- **No secret is ever printed, echoed, or interpolated into a command line.** Every
+  credential in this plan is generated straight into a mode-600 file and moved
+  between boxes by piping that file into a reader on the far side. That is what
+  makes Tasks 2-4 safe for a non-interactive executor to run: nothing lands in a
+  transcript, a scrollback, or `ps`. Verifications assert byte counts, modes and
+  redacted shapes — never values. If a step ever seems to need the value on a
+  terminal, the step is wrong.
+- **Task 9 Step 4 reboots latitude and needs its own explicit approval**, separate
+  from approval to execute this plan. It takes immich, servarr, the backup timers
+  and the REST hub down. Tasks 1-8 and Task 9 Steps 1-3 are safe under ordinary
+  review checkpoints; stop at Step 4 and ask.
 - **`just test` in `machines` must stay green** (41 suites, 0 failures at
   `49497bd`). This phase adds no `machines` code, so it should not move; confirm
   anyway before the final commit.
@@ -214,30 +225,41 @@ ssh latitude 'sudo -n wc -c < /mnt/spare320/restic-rest/.htpasswd'
 
 Expected: `0`. This is why auth cannot simply be switched on.
 
-- [ ] **Step 2: Generate the transport password on latitude, into the clipboardless path**
-
-Run this **in an interactive shell on latitude** (`ssh -t latitude`), not through
-a captured command — the value must not land in any transcript or in `ps`:
+- [ ] **Step 2: Generate the transport password straight into a file — never onto a terminal**
 
 ```bash
-openssl rand -base64 24
+ssh latitude 'umask 077; mkdir -p ~/.config/restic
+openssl rand -hex 32 > ~/.config/restic/g614jv.transport.txt
+chmod 600 ~/.config/restic/g614jv.transport.txt
+wc -c < ~/.config/restic/g614jv.transport.txt'
 ```
 
-Keep the output for Steps 3 and Task 4. It is a transport credential: rotating it
-is one `create_user` call and one file, which is why a long random string costs
-nothing here.
+Expected: `65` (64 hex characters plus the newline).
 
-- [ ] **Step 3: Create the user with the interactive prompt — never with the password in argv**
+**Hex, not base64, and this is not cosmetic.** Task 6 puts this password inside a
+URL's userinfo (`rest:http://g614jv:<pw>@host:8001/g614jv`) — base64's alphabet
+includes `/`, `+` and `=`, and a `/` there truncates the URL. Hex is URL-safe with
+no escaping, which removes a whole class of "works on one box" failure. 32 bytes
+of entropy is plenty for a credential whose rotation cost is one `htpasswd` call.
+
+Note the value is never printed, so it never enters a transcript, a scrollback, or
+`ps`. Every step that needs it reads the file.
+
+- [ ] **Step 3: Register the user by piping the file into `htpasswd -i` — no argv, no prompt**
 
 ```bash
-ssh -t latitude 'docker exec -it restic-server create_user g614jv'
+ssh latitude 'docker exec -i restic-server htpasswd -B -i /data/.htpasswd g614jv < ~/.config/restic/g614jv.transport.txt'
 ```
 
-It prompts twice. `create_user` with a second positional argument would pass the
-password to `htpasswd -b` on the command line, visible in `ps` on the host; the
-one-argument form runs `htpasswd -B "$PASSWORD_FILE" g614jv` and prompts. This
-mirrors the decision recorded at `provision/tailscale-mac.sh:13-16` about
-`--authkey` in argv.
+Three forms exist and only this one is both safe and scriptable. `create_user
+<user> <pass>` puts the password in argv, visible in `ps` on the host — the same
+hazard recorded at `provision/tailscale-mac.sh:13-16` about `--authkey`.
+`create_user <user>` prompts, which is safe but cannot be scripted or handed to a
+non-interactive executor. `create_user` is a two-line wrapper over `htpasswd -B`
+anyway, and the image ships real apache2-utils, whose `-i` reads the password from
+stdin without prompting (verified: `htpasswd [-cimB25dpsDv]`, `-i  Read password
+from stdin without verification (for script usage)`). `/data/.htpasswd` is the
+same path `$PASSWORD_FILE` names, so the server reads exactly this file.
 
 - [ ] **Step 4: Verify one bcrypt line landed, and that the server is reading that exact path**
 
@@ -383,16 +405,22 @@ ssh desktop-wsl.gg.ez 'git --git-dir=$HOME/.dotfiles --work-tree=$HOME rev-parse
 Expected: branch `desktop-wsl`, count `0`. The client's only copy of the password
 is on the client — which is the failure mode being closed.
 
-- [ ] **Step 2: Write the client's two files (interactively on desktop-wsl)**
+- [ ] **Step 2: Pipe both secrets from latitude to desktop-wsl without printing either**
 
 ```bash
-umask 077
-mkdir -p ~/.config/restic
-# the ENCRYPTION password from Task 3 Step 3 — no trailing newline
-printf '%s' '<encryption-password>' > ~/.config/restic/pass.txt
-# the full repository URL, carrying the TRANSPORT password from Task 2 Step 2
-printf '%s\n' 'rest:http://g614jv:<transport-password>@100.64.0.8:8001/g614jv' > ~/.config/restic/repo.txt
-chmod 600 ~/.config/restic/pass.txt ~/.config/restic/repo.txt
+# the ENCRYPTION password (Task 3 Step 3) -> the client's password file.
+# No trailing newline: restic takes the whole file content as the password, and a
+# stray newline is a "wrong password on one box only" bug.
+ssh latitude 'cat ~/.config/restic/g614jv.pass.txt' \
+  | ssh desktop-wsl.gg.ez 'umask 077; mkdir -p ~/.config/restic; cat > ~/.config/restic/pass.txt; chmod 600 ~/.config/restic/pass.txt'
+
+# the TRANSPORT password (Task 2 Step 2) -> assembled into the repository URL on
+# the receiving side, so the secret is read from stdin and never appears in a
+# command line on either box.
+ssh latitude 'cat ~/.config/restic/g614jv.transport.txt' \
+  | ssh desktop-wsl.gg.ez 'umask 077; IFS= read -r TP
+      printf "rest:http://g614jv:%s@100.64.0.8:8001/g614jv\n" "$TP" > ~/.config/restic/repo.txt
+      chmod 600 ~/.config/restic/repo.txt'
 ```
 
 Two secrets in two files, on purpose. `repo.txt` exists so the transport
@@ -401,6 +429,27 @@ restic's REST backend accepts credentials only inside the URL, and
 `RESTIC_REPOSITORY_FILE` is the one way to supply that URL from outside both.
 `repo.txt` **keeps** its trailing newline (restic strips it when reading a
 repository file); `pass.txt` must **not** have one.
+
+Verify the shapes without revealing the values:
+
+```bash
+ssh desktop-wsl.gg.ez 'wc -c < ~/.config/restic/pass.txt; sed -E "s|//g614jv:[^@]+@|//g614jv:REDACTED@|" ~/.config/restic/repo.txt; stat -c %a ~/.config/restic/pass.txt ~/.config/restic/repo.txt'
+```
+
+Expected: the encryption password's byte count with no trailing newline,
+`rest:http://g614jv:REDACTED@100.64.0.8:8001/g614jv`, and `600` twice.
+
+- [ ] **Step 2b: Shred latitude's copy of the transport password**
+
+```bash
+ssh latitude 'shred -u ~/.config/restic/g614jv.transport.txt 2>/dev/null || rm -f ~/.config/restic/g614jv.transport.txt
+ls ~/.config/restic/'
+```
+
+Expected: only `g614jv.pass.txt` remains. latitude needs the bcrypt *hash* in
+`.htpasswd`, never the plaintext — keeping it would leave a second secret on a box
+that has no reason to hold it and no escrow declared for it. The escrowed copy is
+the one inside desktop-wsl's `repo.txt`, tracked in Step 4.
 
 - [ ] **Step 3: Verify the deny block does not silently swallow either file, then allow them**
 
@@ -1091,16 +1140,32 @@ Expected: `RESTORE VERIFIED: byte-identical`. If `restic` needs the plain form,
 run it directly with `RESTIC_REPOSITORY_FILE` and `RESTIC_PASSWORD_FILE` exported
 — the assertion is the diff, not the invocation style.
 
-- [ ] **Step 5: Verify a client-side delete is still refused after all of this**
+- [ ] **Step 5: Verify an authenticated client-side delete is still refused — against an object that does not exist**
+
+Run it from desktop-wsl, which already holds the credentialed URL — so nothing has
+to be re-typed or interpolated:
 
 ```bash
-ssh desktop-wsl.gg.ez 'export PATH=$HOME/.local/bin:$PATH; cd ~/my/vps/backup/wsl
-resticprofile -c profiles.yaml -n wsl -- forget --keep-last 1 --prune 2>&1 | tail -6'
+ssh desktop-wsl.gg.ez 'URL=$(cat ~/.config/restic/repo.txt); URL=${URL#rest:}
+ZERO=0000000000000000000000000000000000000000000000000000000000000000
+curl -s -o /dev/null -w "delete-nonexistent-snapshot=%{http_code}\n" -X DELETE "$URL/snapshots/$ZERO"
+curl -s -o /dev/null -w "read-config-still-works=%{http_code}\n" "$URL/config"'
 ```
 
-Expected: failure with a 403 from the server. This is the protection working —
-confirm it *after* the restore, so a surprise here cannot cost you the restore
-evidence.
+Expected: `delete-nonexistent-snapshot=403` and `read-config-still-works=200` —
+deletes refused, reads unaffected.
+
+**Do not test this with `forget --keep-last 1 --prune`.** That is the obvious
+command and it is the wrong one: if append-only is working it returns 403, but if
+it is *not* working — the exact case the test exists to detect — it deletes 2 of 3
+snapshots, including both pre-existing ones. The failure mode of the test is the
+disaster the test is for.
+
+The object ID above is 64 zeros: it matches rest-server's `BlobPathRE` so the
+request is well-formed, and it names nothing. Append-only's check runs *before* the
+path is resolved (`repo.go:737`, ahead of `getObjectPath`), so a 403 comes back
+whether or not the object exists — and without append-only the same request would
+404 instead. Nothing can be destroyed on either branch.
 
 - [ ] **Step 6: No commit** — repo-internal key state and a verification. Record
   the restore result in the plan's completion note.
@@ -1192,10 +1257,21 @@ check "listening on 0.0.0.0:$PORT" "listening" "$s"
 code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$PORT/$REPO/config" 2>/dev/null)"
 check "unauthenticated refused" "401" "$code"
 
-# 6. Append-only enforced. Asserted unauthenticated on purpose: this script
-#    holds no credentials, and 401-before-403 still proves a delete cannot land.
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X DELETE "http://127.0.0.1:$PORT/$REPO/config" 2>/dev/null)"
-check "unauthenticated DELETE refused" "401" "$code"
+# 6. Append-only and private-repos actually enabled, read from what the process
+#    reported at startup. This script holds no credentials, so it CANNOT test
+#    append-only behaviourally: an unauthenticated DELETE returns 401, which
+#    proves auth and would keep passing green with --append-only removed. The
+#    startup log is the honest credential-free assertion. The behavioural proof
+#    is an authenticated DELETE of a nonexistent snapshot object returning 403
+#    (403 comes before path resolution, repo.go:737) -- run at Task 8 Step 5 of
+#    the plan, not here.
+logs="$(docker logs restic-server 2>&1)"
+printf '%s' "$logs" | grep -q 'Append only mode enabled' && s=enabled || s=DISABLED
+check "append-only enabled" "enabled" "$s"
+printf '%s' "$logs" | grep -q 'Private repositories enabled' && s=enabled || s=DISABLED
+check "private repos enabled" "enabled" "$s"
+printf '%s' "$logs" | grep -q 'Authentication disabled' && s=DISABLED || s=enabled
+check "authentication enabled" "enabled" "$s"
 
 # 7. Freshness, which is the only assertion a lying exit status cannot fake. Read
 #    from snapshot-file mtimes, so it needs no password and no cooperation from
@@ -1221,7 +1297,7 @@ exit "$rc"
 cd ~/my/vps && chmod +x homeserver/restic-server/selfcheck.sh
 git add homeserver/restic-server/selfcheck.sh && git commit -m "feat(restic-server): post-boot selfcheck for the fault that hid twice
 
-Asserts the seven things that were each individually false at some point in
+Asserts every property that was individually false at some point in
 the last three days: drive by UUID, repo config present, port published (not
 merely bound), something listening, auth enforced, DELETE refused, newest
 snapshot under 26 h.
@@ -1238,7 +1314,8 @@ git push origin main
 ssh latitude 'cd ~/my/vps && git pull --ff-only origin main && bash homeserver/restic-server/selfcheck.sh; echo "exit=$?"'
 ```
 
-Expected: seven `ok` lines, `exit=0`.
+Expected: every line `ok`, `exit=0`. Do not write the check count into prose
+anywhere — the script prints what it ran.
 
 - [ ] **Step 3: Prove the selfcheck can fail — do not trust a check you have only seen pass**
 
@@ -1247,18 +1324,21 @@ ssh latitude 'cd ~/my/vps/homeserver/restic-server && docker compose stop && bas
 ```
 
 Expected: with the container stopped, `FAIL` on the port/listening/auth checks and
-`exit=1`; after `--force-recreate`, seven `ok` and `exit=0`. A check only ever
+`exit=1`; after `--force-recreate`, all `ok` and `exit=0`. A check only ever
 observed passing is not evidence.
 
-- [ ] **Step 4: Reboot latitude**
+- [ ] **Step 4: STOP — get explicit approval, then reboot latitude**
+
+**Do not run this on the approval that authorized the plan.** It is the one
+hard-to-reverse action here: latitude never sleeps by design and runs immich,
+servarr, the backup timers and the REST hub, so a reboot takes all of them down and
+any surprise on the way back up is discovered live. Ask, then run:
 
 ```bash
 ssh latitude 'sudo -n systemctl reboot' || true
 ```
 
-This box never sleeps and runs immich, servarr and the backup timers, so the
-reboot is the notable operation in this plan — do it deliberately, not at the end
-of a long session. Wait for it to come back:
+Do it deliberately and not at the end of a long session. Wait for it to come back:
 
 ```bash
 until ssh -o ConnectTimeout=5 latitude 'uptime -p' 2>/dev/null; do sleep 10; done
@@ -1271,7 +1351,7 @@ ssh latitude 'uptime -p; cd ~/my/vps && bash homeserver/restic-server/selfcheck.
 ssh latitude 'docker inspect restic-server --format "Started={{.State.StartedAt}} RestartCount={{.RestartCount}} Ports={{.NetworkSettings.Ports}}"'
 ```
 
-Expected: seven `ok`, `exit=0`, and `Ports` **non-empty on a fresh boot with
+Expected: all `ok`, `exit=0`, and `Ports` **non-empty on a fresh boot with
 `RestartCount=0`** — meaning the bind succeeded outright rather than being
 retried. That is the difference between this fix and the old comment's claim.
 
