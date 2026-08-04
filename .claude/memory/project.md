@@ -1665,3 +1665,61 @@ to enumerate, and `sde`/`sdf` show as 0 B card-reader slots).
   Windows profile, still un-enumerated against the dotfiles branch), plus
   `qaz-code-feature-sync-dashboard.bundle` — 236 K holding 19 commits from
   2026-05-02/03 that reached no remote. Unbundle before deleting `repos/`.
+
+## The pre-arr torrents: `F:\qb` is gone, `torrents/xxx` is not (2026-08-05)
+
+Recurring question — "where are the old torrents from before the arr stack?" —
+and the answer is two different answers, which is why it keeps getting re-asked.
+
+- **`F:\qb` (60 G, 1749 files, 63900157812 B) no longer exists anywhere.** Both
+  copies died within 18 hours: the original when the ST320LT020 was reformatted
+  ext4 → `/mnt/spare320` (2026-07-31 18:17), and the safety copy made that
+  morning (`overnight.log` 02:40 `qb TALLY OK`, re-verified 18:07 in
+  `public-reformat.log`) when the HGST that held it was consumed as
+  `/mnt/servarr` for the servarr migration on 2026-08-01. `archive-mirror.sh:10-12`
+  records the second event. The storage baseline spec had classified `qb` "drop —
+  replaceable downloads"; whether the reformat reaped it deliberately or
+  overlooked it is not recoverable from the trail. **Do not go looking for it
+  again** — it is not on any attached drive, and g513ie has only `C:` (no media).
+- **But the old pre-arr corpus partly survived inside the arr stack.**
+  `ServarrMedia/torrents/xxx` (24 G, 312 files — `realdrunkengirls.com` 18 G,
+  `studentsexparties.com` 3.4 G, `RIP.avi`, `Kseniya (vkontakt)`, `Valerija`) is
+  old content carried into the new stack, not new downloads. **The tell is the
+  mtime: every one of the 312 reads exactly 2026-07-20**, the day the stack went
+  live — a copy event resetting mtimes. Mtimes are otherwise preserved on this
+  path (`music-from-g513ie` spans 2015→2026), so a single uniform stamp means
+  carried-over, not downloaded.
+- **A Jellyfin library holding only `*.trickplay/` dirs and zero media means the
+  hardlinks were dropped, not that the media is gone.** `ServarrMedia/xxx` was
+  exactly that — 337 orphan trickplay JPEGs mirroring a tree whose files all sat
+  unlinked in `torrents/xxx`. Re-linking restored 299 videos. Check
+  `find torrents -type f -links 1` before concluding anything is missing.
+
+### Importing orphaned downloads — what works and what bites
+
+Done 2026-08-05: all 465 media orphans (68 GiB) hardlinked into the libraries,
+`df` grew 64 KB total. Verify a hardlink job by `df --output=used` before/after —
+a copy would silently succeed, there is 246 G free.
+
+- **`DownloadedEpisodesScan` rescans the WHOLE release folder, not just the file
+  you want**, re-importing episodes already present and deleting their existing
+  library file. Harmless to the media (same inode) but it **deleted 44
+  `-thumb.jpg` sidecars** in the 3 seasons touched. Those are **Jellyfin's**
+  artwork, not sonarr's — every sonarr metadata consumer is `enable=False`.
+  Restore with `POST /Items/{id}/Refresh?imageRefreshMode=FullRefresh`, not with
+  anything sonarr-side.
+- **`Invalid season or episode` on import means TVDB lacks the episode, and
+  `RefreshSeries` will not fix it.** Hit on Simpsons S36E19-21 / S37E16-17 and
+  Solar Opposites S05E12 — releases that carry more episodes than TVDB lists.
+  The only route is a direct hardlink into the season dir; Jellyfin then shows
+  them by filename, with no title or artwork from the provider.
+- **Hardlink rather than add-series for content sonarr does not track.** Azumanga
+  Daioh (26 eps + 52 `.mka` + 52 `.ass`), Devil May Cry, Digital Circus and
+  I Fought the Law went straight into `tv/<Series>/Season 01/`; Jellyfin matched
+  all 46 on its own — and matched them under RUSSIAN titles (`Адзуманга Дайо`,
+  `Я боролась с законом`), so **search the library by the Russian name before
+  concluding a series failed to index**.
+- **`/Shows/{id}/Episodes` returns 0 without a `userId`.** It is not evidence the
+  import failed. Count by `Items?IncludeItemTypes=Episode&Fields=Path` instead.
+- Sonarr's 44-record queue of stale entries was left alone — it is the user's
+  library and their call (`progress.md:632-639`).
