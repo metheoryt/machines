@@ -33,7 +33,7 @@ four live boxes. Every fault below is a consequence of that absence.
 | Fault | Evidence |
 |---|---|
 | `archive-mirror.timer` has **never fired once** | Enabled 2026-08-01 18:07:38 +05, after that month's trigger point; `Persistent=yes` stamps at enable time so there is no catch-up. `journalctl -u archive-mirror.service` → `-- No entries --` (reproduces only under `sudo`). First real fire **2026-09-01 05:01:54**. It guards the 663 G 1970–2024 archive, onto a target that is **95 % full with 36 G free** and is **partition 3 of a Ventoy installer stick** (`/dev/sda3 LABEL="xs700"`). |
-| The `g614jv` repo has **never been integrity-checked** | `check-before: true` is declared at `base.yaml:14`, inherited, and resolved by `resticprofile show`. `grep -c -i check` over the 3,284-line backup log spanning 2026-04-27 → 2026-08-02 returns **0**. Mechanism unknown — a placement hypothesis was tested and disproved. |
+| The `g614jv` repo has **never been integrity-checked** | `check-before: true` was declared at `base.yaml:14`, inherited, and resolved by `resticprofile show`. `grep -c -i check` over the 3,284-line backup log spanning 2026-04-27 → 2026-08-02 returns **0**. **Cause found 2026-08-05: the placement hypothesis was right all along** — see open question 1, which is now closed. Fixed for `latitude`; `g614jv` is still unchecked, because its client could not be reached to test the change. |
 | hub declares `backup-client` and has **no backup of any kind** | No restic/borg/rclone/kopia binary, no unit, no timer, empty crontab for both users, no `hub` profile in `vps`. It holds `/var/lib/headscale/db.sqlite` — the only copy of the tailnet control plane. |
 | immich's `pg_dump` is an **undeclared producer** two mechanisms depend on | It is an immich web-UI setting, in no file in either repo. `mirror-refresh.sh:53` copies its output; `profiles.yaml:63` makes it restic source #1. Toggle it off and both downstream mechanisms keep reporting success over a directory that stopped gaining files. The *retired* `homeserver/profiles.yaml:8-18` declared it explicitly as a `stdin-command`; the 2026-08-01 redesign replaced a declared producer with an undeclared one and recorded only the drive-space reason for the change. |
 | One 11-character password opens **both** repos, and lives **inside** the snapshot it unlocks | Three plaintext copies differ by line terminator, so `sha256sum` and `cmp` call them three files — restic trims the terminator and the same 11 characters are underneath. `.resticignore` does not exclude `~/.config`, so `restic ls 41a19b13 /home/me/.config/restic` returns `pass.txt`. Encrypted at rest, so not a leak — but restoring the wsl snapshot re-materialises the key to both repos. |
@@ -345,13 +345,22 @@ Three properties worth stating because they are not obvious:
   snapshot files on latitude's filesystem, so `snapshots/` mtimes answer "when did
   `g614jv` last land" with no decryption and no cooperation from the client. **The
   box that failed cannot hide the failure.**
-- **`schedule-ignore-on-battery: true` stops being a silent hazard.** It is the
-  right flag for a laptop with no UPS. The report makes its consequence visible
-  instead of an exit-0 no-op with no catch-up.
-- **`check-before: true` is replaced, not fixed.** It is declared, inherited,
-  resolved by `show`, and has never run on either profile; the mechanism is
-  unknown. The design substitutes an explicit scheduled `check` per repo and the
-  report shows its age.
+- **`schedule-ignore-on-battery` stops being a silent hazard.** It is the right
+  flag for a laptop with no UPS, and the wrong one for a host with the sleep
+  targets masked. **Set false on `latitude` 2026-08-05**, after it fired for real
+  at 2026-08-04 18:35 and returned exit 0 for a run that produced nothing; the
+  `run-before` mount assertion is what makes that safe, converting an outage into
+  a loud failure rather than a silent success. It stays `true` in `base.yaml` for
+  genuine laptops. Generation must therefore key it off the host, not the base —
+  and the report still covers the case, because a battery skip and a dead timer
+  are indistinguishable by exit status and identical by snapshot age.
+- **`check-before: true` is fixed, and the scheduled `check` still earns its
+  keep.** The cause was placement (open question 1, closed 2026-08-05): the key
+  belongs under `backup:`, and `latitude` now runs `init → check → backup`. That
+  does not make the per-repo scheduled `check` redundant — a pre-backup check only
+  runs when a backup runs, so the repo that most needs verifying (the one whose
+  client has stopped) is exactly the one it stops covering. Generation should emit
+  both, and the report shows the age of the scheduled one.
 
 Surfaces: `just backup-report` (source, target, last snapshot age, last check age,
 verdict), a statusboard row carrying worst-case age and red count, and a
@@ -447,10 +456,20 @@ Prefer behavioural assertions; where a static one is the honest choice, say why 
 
 These are unresolved, not deferred — each needs an answer during implementation.
 
-1. **Why `check-before: true` never executes.** It parses, inherits, and `show`
-   resolves it; no `check` has ever run under `run-schedule` for either profile. A
-   placement hypothesis was tested and disproved. The design routes around it, but
-   the cause is unknown and may affect other inherited keys.
+1. ~~**Why `check-before: true` never executes.**~~ **CLOSED 2026-08-05 — it was
+   the placement, and the earlier test was disproved by the wrong instrument.**
+   `check-before` belongs under `backup:`. At profile level resticprofile 0.33.1
+   parses it, stores it, and echoes it back from `show` — and never runs it. So
+   `show` cannot distinguish correct placement from inert placement, and using it
+   as the oracle is what "disproved" the right hypothesis. **The instrument that
+   works is counting issued `restic` commands**, which is falsifiable where `show`
+   is not: 4 scheduled runs of `latitude` issued 4 `init`, 4 `backup`, 4 `forget`
+   and 0 `check`; moving the key under `backup:` in the same harness produced
+   `init → check → backup`, confirmed live at 01:55:19.
+   No other inherited key is implicated — the failure is specific to a key
+   declared at the wrong level, not to inheritance.
+   **The lesson generalises past this key:** `resticprofile show` reports what was
+   *parsed*, never what will *run*. Any guard verified only by `show` is unverified.
 2. **Whether the headscale DB can be copied consistently without stopping
    headscale.** The 4.1 MB WAL was observed, not checkpointed or copied.
 3. **Whether OneDrive on desktop-native protects anything.** Its updater tasks
