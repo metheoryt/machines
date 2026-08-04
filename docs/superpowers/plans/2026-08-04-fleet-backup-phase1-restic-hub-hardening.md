@@ -2,8 +2,39 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: OPEN** — Phase 1 of
+**Status: COMPLETE** (2026-08-05) — Phase 1 of
 `docs/superpowers/specs/2026-08-04-fleet-backup-consolidation-design.md`.
+
+All four exit criteria met, each proven rather than asserted:
+
+1. **Server authenticated, append-only, private-repos, wildcard bind.** Proof
+   matrix observed live: `unauth=401`, `tailnet=200`, `lan=200`,
+   `otherpath=401`, `delete=403` — the last with an unauthenticated control
+   returning 401 and an authenticated `GET /config` returning 200, because a
+   bare 403 would not distinguish append-only from auth.
+2. **The client sees its pre-existing history.** `c2c05a9f` and `41a19b13`
+   listed over the credentialed URL, from the box that had been failing daily
+   and silently since 2026-08-01.
+3. **A restore works.** `/home/me/.bashrc` recovered from `e3f8bcfb` over REST,
+   `diff` empty, sha256 identical, size and mode preserved. The first time this
+   repository's contents had ever been read back.
+4. **The hub survives a boot.** After a real reboot: all 9 selfcheck assertions
+   `ok`, `exit=0`, and `Ports` non-empty with `RestartCount=0` — the bind
+   succeeded outright rather than being retried. That is the exact state the
+   old configuration could never reach: it came up `Up` with `Ports: map[]`,
+   never having exited, so its restart policy never fired and never could.
+
+Delivered: `vps` `16e627b` (server), `e95bdb7`/`433696e`/`3051da4` (client),
+`35597cd` (prune), `ceb6af7` (selfcheck); dotfiles `613d53c` + `95fba6a`
+(credential escrow, two branches).
+
+**Four guards in this phase turned out to be decoration**, which is the lesson
+worth carrying into Phase 2: a `restart: unless-stopped` that could never fire;
+an `initialize: false` silently inert under a global `true`; a comment asserting
+a prune that had never been configured; and a post-boot check that would have
+reported two false failures for want of `sudo`. Only the last was caught before
+it could mislead anyone, and only because the plan required proving the check
+could fail. Assume a guard does nothing until you have watched it fail.
 
 **Goal:** Restore the fleet's only machine-crossing backup path in its target
 shape — authenticated, append-only, per-client-credentialed, bound on a wildcard
