@@ -33,7 +33,7 @@ four live boxes. Every fault below is a consequence of that absence.
 | Fault | Evidence |
 |---|---|
 | `archive-mirror.timer` has **never fired once** | Enabled 2026-08-01 18:07:38 +05, after that month's trigger point; `Persistent=yes` stamps at enable time so there is no catch-up. `journalctl -u archive-mirror.service` → `-- No entries --` (reproduces only under `sudo`). First real fire **2026-09-01 05:01:54**. It guards the 663 G 1970–2024 archive, onto a target that is **95 % full with 36 G free** and is **partition 3 of a Ventoy installer stick** (`/dev/sda3 LABEL="xs700"`). |
-| The `g614jv` repo has **never been integrity-checked** | `check-before: true` was declared at `base.yaml:14`, inherited, and resolved by `resticprofile show`. `grep -c -i check` over the 3,284-line backup log spanning 2026-04-27 → 2026-08-02 returns **0**. **Cause found 2026-08-05: the placement hypothesis was right all along** — see open question 1, which is now closed. Fixed for `latitude`; `g614jv` is still unchecked, because its client could not be reached to test the change. |
+| ~~The `g614jv` repo has **never been integrity-checked**~~ **CLOSED 2026-08-05** | `check-before: true` was declared at `base.yaml:14`, inherited, and resolved by `resticprofile show`. `grep -c -i check` over the 3,284-line backup log spanning 2026-04-27 → 2026-08-02 returns **0**. **Cause found: the placement hypothesis was right all along** (open question 1, closed). Now checked weekly by `resticprofile-check@profile-g614jv-maintenance.timer` **on latitude, not on the client** — see the placement rule under Monitoring. Proven by firing the schedule: `run-before` → `restic check` → 3/3 snapshots, 97/97 packs, `no errors were found`, 15 s, `Result=success`. |
 | hub declares `backup-client` and has **no backup of any kind** | No restic/borg/rclone/kopia binary, no unit, no timer, empty crontab for both users, no `hub` profile in `vps`. It holds `/var/lib/headscale/db.sqlite` — the only copy of the tailnet control plane. |
 | immich's `pg_dump` is an **undeclared producer** two mechanisms depend on | It is an immich web-UI setting, in no file in either repo. `mirror-refresh.sh:53` copies its output; `profiles.yaml:63` makes it restic source #1. Toggle it off and both downstream mechanisms keep reporting success over a directory that stopped gaining files. The *retired* `homeserver/profiles.yaml:8-18` declared it explicitly as a `stdin-command`; the 2026-08-01 redesign replaced a declared producer with an undeclared one and recorded only the drive-space reason for the change. |
 | One 11-character password opens **both** repos, and lives **inside** the snapshot it unlocks | Three plaintext copies differ by line terminator, so `sha256sum` and `cmp` call them three files — restic trims the terminator and the same 11 characters are underneath. `.resticignore` does not exclude `~/.config`, so `restic ls 41a19b13 /home/me/.config/restic` returns `pass.txt`. Encrypted at rest, so not a leak — but restoring the wsl snapshot re-materialises the key to both repos. |
@@ -373,8 +373,37 @@ Three properties worth stating because they are not obvious:
   belongs under `backup:`, and `latitude` now runs `init → check → backup`. That
   does not make the per-repo scheduled `check` redundant — a pre-backup check only
   runs when a backup runs, so the repo that most needs verifying (the one whose
-  client has stopped) is exactly the one it stops covering. Generation should emit
-  both, and the report shows the age of the scheduled one.
+  client has stopped) is exactly the one it stops covering.
+
+- **A repo's scheduled check belongs on the host that HOLDS it, not the client
+  that writes it.** This is the same principle as reading freshness from
+  `snapshots/` mtimes — *the box that failed cannot hide the failure* — and it is
+  now a rule with a worked example rather than an inference. For `g614jv` the
+  obvious move was `check-before` on the wsl client, and it is affordable:
+  **measured 22 s over the tailnet** for a 5 % sample against a backup that takes
+  6 s–14 min. Affordable and still wrong — desktop-wsl was already found frozen
+  ~35 h under a green unit, and a client-side check goes dark at precisely that
+  moment. Running it on latitude is independent of the client, **cheaper (15 s
+  local, same sample, same 97 packs)**, needs no network, and reuses the password
+  already escrowed there for the prune. **So generation emits `check-before` for
+  local repos and a host-side scheduled `check` for every repo, and it must not
+  emit a client-side check for a remote target.**
+
+- **The `run-before` mount assertion guards every command path, verified.** Phase
+  1 added it at profile level and proved it for `backup`; on 2026-08-05 it was
+  confirmed live for `check` (02:02:05) and `forget` (02:34:16) as well, and
+  proved to abort *before* `initialize` fires, with `check-before` present and
+  absent — 0 `restic` commands issued, no repository created. So generation must
+  emit a `run-before` per profile, not per schedule, and every new schedule added
+  to a guarded profile inherits the guard. This is what makes
+  `schedule-ignore-on-battery: false` safe on latitude.
+
+- **Scheduling a check is a lock-ordering decision, not a cosmetic one.**
+  `restic check` takes an **exclusive** lock. On `g614jv` that makes three writers
+  on one repo: the client's backup at 06:00 (up to 14 min), the prune at 07:30,
+  and the check. It is scheduled `Sun 08:30` — *after* the prune, deliberately: a
+  check holding the lock at 07:25 would make the prune wait out its `10m` and then
+  fail. Generation must order checks after prunes, not merely avoid the backup.
 
 Surfaces: `just backup-report` (source, target, last snapshot age, last check age,
 verdict), a statusboard row carrying worst-case age and red count, and a
