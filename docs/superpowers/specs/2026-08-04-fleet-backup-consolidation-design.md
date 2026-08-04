@@ -355,12 +355,19 @@ Three properties worth stating because they are not obvious:
   and the report still covers the case, because a battery skip and a dead timer
   are indistinguishable by exit status and identical by snapshot age.
   **This supersedes `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`
-  Step 3 ("Do not remove it"), whose premise is measurably wrong**: it argued that
-  "a power cut should not start a multi-hour restic run on battery," but this
-  profile's run is *six seconds* — 3 s of backup plus 4 s of check against a 2.6 G
-  repo. The cost it was protecting against does not exist, and `statusboard.sh`
-  already takes the opposite position in code: "on an always-on box wired to the
-  wall, running on battery IS the alert."
+  Step 3 ("Do not remove it") — for `latitude` only, and the scope matters.** That
+  step argued "a power cut should not start a multi-hour restic run on battery,"
+  which is a sound reason on the machine it was written about and a false one
+  here: latitude's whole job is *eleven seconds* — 3 s backup, 4 s pre-backup
+  check, 5 s weekly check, measured 2026-08-05 over a 2.6 G local repo. **Do not
+  carry that number to the other client.** The `wsl` profile's slowest observed
+  run is **14 minutes** over the tailnet, which is why its prune sits at 07:30 —
+  there the multi-hour worry is merely exaggerated, not void, and `base.yaml`
+  stays `true`. Two verifications make the flip safe rather than merely cheap:
+  profile-level `run-before` fires for **both** the backup and the check schedule
+  (confirmed live 02:02:05), so an absent drive aborts either one loudly; and
+  `statusboard.sh:2477` already takes the same position in code — "on an
+  always-on box wired to the wall, running on battery IS the alert."
 - **`check-before: true` is fixed, and the scheduled `check` still earns its
   keep.** The cause was placement (open question 1, closed 2026-08-05): the key
   belongs under `backup:`, and `latitude` now runs `init → check → backup`. That
