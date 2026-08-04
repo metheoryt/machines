@@ -1407,13 +1407,20 @@ until ssh -o ConnectTimeout=5 latitude 'uptime -p' 2>/dev/null; do sleep 10; don
 - [ ] **Step 5: Re-verify after the reboot — this is the actual exit criterion**
 
 ```bash
-ssh latitude 'uptime -p; cd ~/my/vps && bash homeserver/restic-server/selfcheck.sh; echo "exit=$?"'
+ssh latitude 'uptime -p; cd ~/my/vps && sudo -n bash homeserver/restic-server/selfcheck.sh; echo "exit=$?"'
 ssh latitude 'docker inspect restic-server --format "Started={{.State.StartedAt}} RestartCount={{.RestartCount}} Ports={{.NetworkSettings.Ports}}"'
 ```
 
 Expected: all `ok`, `exit=0`, and `Ports` **non-empty on a fresh boot with
 `RestartCount=0`** — meaning the bind succeeded outright rather than being
 retried. That is the difference between this fix and the old comment's claim.
+
+**`sudo -n` is required and is not optional.** The repository directories under
+`/mnt/spare320/restic-rest` are `root:root` mode 0700, because the container
+writes them as root, so an unprivileged run cannot stat the snapshot mtimes or
+the repo `config`. Without it two checks report failure on a perfectly healthy
+server — a false alarm on the one run whose whole purpose is to be believed.
+This was caught while testing the script, before the reboot rather than after it.
 
 - [ ] **Step 6: Confirm the client still works against the rebooted server**
 
