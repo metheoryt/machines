@@ -684,7 +684,16 @@ Expected: `unauth=401`, `tailnet=200`, `lan=200`, `otherpath=401`, `delete=403`.
 **If `delete` returns anything but 403, stop** — the rest of this plan moves
 retention off the client on the assumption that the server refuses deletes.
 
-- [ ] **Step 6: Commit (in `vps`)**
+- [ ] **Step 6: Commit (in `vps`) — run this BEFORE Step 4**
+
+latitude recreates the container out of its own `~/my/vps` work tree, so the new
+options only reach the box that runs the service once this commit is pushed and
+pulled there. Applying Step 4 first recreates the container from latitude's
+*stale* file, which presents as the change silently not working. The real
+sequence is: edit (2, 3) → commit and push (6) → pull on latitude → apply and
+verify (4, 5). The message below therefore states what the change *does*, and
+asserts no verification result — at the moment it is written, nothing has been
+verified yet. Record the proof matrix in the task report, not in git history.
 
 ```bash
 cd ~/my/vps
@@ -703,8 +712,7 @@ sat where it belongs. The spec's server-side mv is unnecessary; that repo's
 two snapshots were never at risk.
 
 --append-only refuses every DELETE but locks, so forget --prune moves to a
-declared root-scope job on latitude. Verified live: unauth 401, authed 200
-on both the tailnet and LAN addresses, other-user path 401, DELETE 403.
+declared root-scope job on latitude.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 git push origin main
