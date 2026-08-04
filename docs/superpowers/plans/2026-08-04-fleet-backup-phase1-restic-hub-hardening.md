@@ -125,9 +125,22 @@ gains a real suite.
 `backup/base.yaml`. If the drive is ever absent at boot, docker bind-mounts an
 empty directory, the client finds no repo, and — under append-only, since
 `saveConfig` creates a *new* config — silently initialises a **fresh empty repo**,
-starting history from zero. Task 6 sets `initialize: false` on the client to close
-it at the source; Task 9's selfcheck asserts the repo's `config` object exists so
-the failure is loud either way.
+starting history from zero. Task 6 closes it at the source; Task 9's selfcheck
+asserts the repo's `config` object exists so the failure is loud either way.
+
+**Corrected during execution — `initialize: false` alone does NOT close it.**
+On resticprofile 0.33.1 a profile-level `false` is Go's zero value and cannot
+override a global `true`, so the key is silently inert and `restic init` still
+runs before every command. Proved with a four-config matrix: a profile `true`
+*can* override a global `false`; a profile `false` *cannot* override a global
+`true`. The real fix is to remove `initialize` from `base.yaml`'s `global:`
+block entirely and make it opt-in per profile — which also means any profile
+added later, including Task 7's, inherits the safe default for free. Task 6
+does this. **A `false` sitting under a global `true` is decoration.**
+
+The same hazard still applies to latitude's *own* repo, which lives on the same
+`nofail` mount and legitimately needs `initialize: true`. A flag cannot fix that
+one; it needs a mount assertion, and Task 7 adds it.
 
 ---
 
@@ -793,11 +806,15 @@ exclusion.
   env:
     RESTIC_PASSWORD_FILE: "/home/me/.config/restic/pass.txt"
     RESTIC_REPOSITORY_FILE: "/home/me/.config/restic/repo.txt"
-  # The repo exists and must never be silently recreated. base.yaml sets
-  # initialize: true globally; if /mnt/spare320 is ever absent on latitude at
-  # boot (it is mounted `nofail`) docker bind-mounts an empty directory, and an
-  # initialising client would start a FRESH repo and report success. Explicit
-  # false turns that silent data loss into a loud failure.
+  # The repo exists and must never be silently recreated. Init is opt-in per
+  # profile and this profile deliberately does not opt in: if /mnt/spare320 is
+  # ever absent on latitude at boot (it is mounted `nofail`) docker
+  # bind-mounts an empty directory, and an
+  # initialising client would start a FRESH repo and report success. Not
+  # opting in turns that silent data loss into a loud failure. The explicit
+  # false below is belt-and-braces and documentation -- the load-bearing part
+  # is that base.yaml's global no longer sets it, because a profile-level
+  # false cannot override a global true on resticprofile 0.33.1.
   initialize: false
   pack-size: 4
 ```
@@ -817,11 +834,14 @@ this tracked file.
     # get 403 - and with after-backup: true inherited from base.yaml that 403
     # fails the whole backup run, not just the retention step.
     #
-    # Retention did not disappear, it MOVED: latitude prunes this repo from the
-    # filesystem, bypassing the server, in backup/latitude/profiles.yaml. The
-    # keep-* numbers below are the ones this profile used to declare and are now
-    # declared there verbatim - keep-daily 14, keep-weekly 8, keep-monthly 12,
-    # keep-yearly 5. If you change them, change them there.
+    # Retention does not disappear, it MOVES -- but read the tense: as of this
+    # commit it has NOT moved yet, and this repo has NO pruning path at all.
+    # Server-side is forbidden by --append-only, client-side is the `false`s
+    # below, and the latitude-side job does not exist until Task 7 writes it in
+    # backup/latitude/profiles.yaml. Do not read this comment as coverage.
+    # The numbers Task 7 must declare, carried over verbatim from what this
+    # profile used to declare: keep-daily 14, keep-weekly 8, keep-monthly 12,
+    # keep-yearly 5. Once Task 7 lands, change them there, not here.
     before-backup: false
     after-backup: false
     prune: false
@@ -953,7 +973,22 @@ ssh latitude 'systemctl list-timers --all --no-pager | grep -iE "g614jv|maintena
 Expected: `NO PRUNE JOB`. With the client's retention now off (Task 6), this repo
 has no retention at all until this task lands.
 
-- [ ] **Step 2: Append the maintenance profile**
+- [ ] **Step 2: Append the maintenance profile, and guard the `latitude` profile too**
+
+**Two profiles get a mount assertion, not one.** The new `g614jv-maintenance`
+profile below carries a `run-before` that aborts if its repository's `config`
+object is not visible. The pre-existing `latitude` profile in this same file
+sits on the **same `nofail` mount** and, unlike the client, legitimately needs
+`initialize: true` — so it is the one profile left where a missing drive can
+still silently produce a fresh empty repository that reports success. A flag
+cannot fix that; only an assertion can. Add the same `run-before` to it,
+pointing at its own repository path (`/mnt/spare320/restic/latitude/config`,
+not `g614jv`'s — they are different repositories with different retention).
+
+Verify both assertions actually bite before trusting them: with the drive
+mounted the profiles must resolve and run normally, and a `run-before` pointed
+at a deliberately wrong path must abort the run. A guard only ever observed
+passing is not a guard.
 
 Add to `backup/latitude/profiles.yaml`:
 
@@ -988,6 +1023,23 @@ g614jv-maintenance:
   password-file: "/home/me/.config/restic/g614jv.pass.txt"
   env:
     RESTIC_PASSWORD_FILE: "/home/me/.config/restic/g614jv.pass.txt"
+
+  # MOUNT ASSERTION. /mnt/spare320 is mounted `nofail`, so when the drive is
+  # absent the mountpoint is simply an empty directory on the root filesystem
+  # and every path below still "exists" as far as the shell is concerned. On
+  # 2026-08-04 that was not hypothetical: a blackout dropped the dock and this
+  # drive was gone for four and a half hours while the container happily served
+  # the empty directory underneath it.
+  #
+  # Testing the repo's own `config` object covers both failure modes in one
+  # check -- if the drive is missing the file is absent, and if the drive is
+  # present but the repo is not, it is absent too. A prune that cannot see its
+  # repository must abort, not proceed against whatever is at that path.
+  # This profile does NOT opt into `initialize`, so without this assertion a
+  # missing drive would surface as a confusing restic error rather than a
+  # clear one; with it, the job fails on a line that names the cause.
+  run-before:
+    - test -f /mnt/spare320/restic-rest/g614jv/config
 
   # A `forget` SECTION, not a scheduled `retention` one: resticprofile 0.33.1
   # deprecates a schedule on `retention` and tells you to move it here. This
