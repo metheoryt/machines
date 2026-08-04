@@ -354,6 +354,13 @@ Three properties worth stating because they are not obvious:
   genuine laptops. Generation must therefore key it off the host, not the base —
   and the report still covers the case, because a battery skip and a dead timer
   are indistinguishable by exit status and identical by snapshot age.
+  **This supersedes `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`
+  Step 3 ("Do not remove it"), whose premise is measurably wrong**: it argued that
+  "a power cut should not start a multi-hour restic run on battery," but this
+  profile's run is *six seconds* — 3 s of backup plus 4 s of check against a 2.6 G
+  repo. The cost it was protecting against does not exist, and `statusboard.sh`
+  already takes the opposite position in code: "on an always-on box wired to the
+  wall, running on battery IS the alert."
 - **`check-before: true` is fixed, and the scheduled `check` still earns its
   keep.** The cause was placement (open question 1, closed 2026-08-05): the key
   belongs under `backup:`, and `latitude` now runs `init → check → backup`. That
