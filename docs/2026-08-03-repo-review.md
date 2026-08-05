@@ -448,6 +448,24 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 > unit pointing at an absolute script path — idempotent, no checkout, nothing to
 > consent to. Added to `macos.sh`'s workstation list and `linux.sh`'s hub list.
 >
+> **Verified by firing the tier, not by reading the list.** `just test` only
+> exercises the dry-run tier *list*; the deliverable here is a refreshed agent on
+> air. Ran `tier_dotfiles_sync` standalone: the plist mtime moved from **Jul 28**
+> to now — which is the "untouched across three reprovisions" evidence this item
+> cited, sitting on disk — and a second run was a clean no-op with the agent
+> still loaded exactly once. The timer itself was never frozen: air's dotfiles
+> branch carries `auto(air):` commits from 2026-08-04.
+>
+> **Ordering check, because the deviation creates a case the old path could not
+> reach.** `tier_dotfiles_sync` was previously only ever reached *through*
+> `role_dotfiles`, which enrolls the box first. Listing it in the driver means a
+> fresh Mac or a rebuilt hub now schedules a 10-minute job before `~/.dotfiles`
+> exists. Simulated that (`DOTFILES_GIT_DIR`/`WORK_TREE`/`STATE_DIR` pointed at
+> an empty temp tree): exit 0, nothing written, clean skip. So no guard is
+> needed — but note this is the one hazard the prescribed fix would have dodged
+> by doing the enrollment, i.e. by pre-empting the gate. Worth re-checking if
+> `dotfiles-sync.sh` ever grows a hard failure on a missing repo.
+>
 > The `wsl` hardcode is fixed too, and it was **worse than "harmless today"**:
 > the item assumes `tier_dotfiles` is WSL-only, as its own comment claims, but
 > `linux.sh`'s workstation AND server lists both end in it — so latitude
