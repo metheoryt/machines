@@ -72,4 +72,24 @@ else
     die ".zed/tasks.json is NOT ignored: this is the literal file that held a fleet member 28 commits behind"
 fi
 
+# agents/.gitignore's own patterns, asked of git rather than read. That file's
+# header calls everything it lists untrackable — secrets, transcripts, caches —
+# so a pattern that parses but matches nothing is the same silent failure as the
+# missing `.zed/` above, with a worse tail: this one leaks instead of freezing.
+#
+# THE BUG THIS CAUGHT (review item 9):
+#     settings.local.json   # machine-local per profile — never commit
+# gitignore does not strip inline comments, so the pattern was the whole line,
+# trailing comment included, and matched no path at all. The single line in that
+# file carrying an inline comment was the one its own comment calls secret-bearing
+# (gortex hooks plus a work Sentry token).
+for p in agents/settings.local.json agents/.credentials.json agents/.env \
+         agents/remote-settings.json agents/policy-limits.json; do
+    if ignored "$p"; then
+        pass "$p is ignored"
+    else
+        die "$p is NOT ignored — agents/.gitignore names it untrackable and git disagrees"
+    fi
+done
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

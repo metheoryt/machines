@@ -6,7 +6,11 @@
 # Secrets & machine-local
 .credentials.json
 .env
-settings.local.json   # machine-local per profile (gortex hooks / Sentry secret) — never commit
+# machine-local per profile (gortex hooks / Sentry secret) — never commit.
+# Keep this comment on its own line: gitignore does NOT strip a trailing inline
+# comment, so `pattern   # why` is one pattern INCLUDING the comment and matches
+# nothing. Guarded by provision/tests/gitignore-editor-dirs.test.sh.
+settings.local.json
 remote-settings.json
 policy-limits.json
 
