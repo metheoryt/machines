@@ -391,10 +391,38 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 
 ### Tier 2 — cheap, safe, mechanical
 
+> **STATUS 2026-08-05 — items 6, 8, 9, 10 and 11 are DONE** (branch
+> `repo-review-cleanup`, gate green at 41 suites). Item 7 landed earlier. **10b
+> is the only one left**, and it needs the desktop Windows box.
+>
+> Two of the five did not land as written; both deviations are annotated inline
+> below. One correction to the ranking, worth more than either: **item 9 was
+> mis-tiered.** It sits under "cheap, safe, mechanical" because the *fix* is one
+> line — but the pattern that silently matched nothing was the one guarding a
+> file holding gortex hooks and a work Sentry token. Cost of the fix is not the
+> same axis as cost of the failure, and this list sorts by the first.
+
 **6. `provision.sh`'s fallback arm sets `rc=1` under `--apply`.**
 *Changes:* two lines at `provision.sh:83-88`, plus an explicit opt-out (e.g. a `"planned"` list) so a known stub is a deliberate declaration rather than a silent one.
 *Why:* `just provision --machine latitude --apply` reports success while doing nothing for four of seven roles. `provision.sh:43-47` already fixed this exact class one level up for an unknown *machine*, with a comment naming the failure; the guard was never applied to roles.
 *Cost:* trivial. *Breaks:* every `--apply` on latitude/hub/air now exits non-zero until the opt-out list is populated — do both in the same commit.
+
+> **DONE 2026-08-05.** `PLANNED_ROLES` names the four roles with no executor
+> (`base`, `ssh-server`, `backup-hub`, `backup-client` — this item said "four of
+> seven" but listed only three by name elsewhere; `backup-hub` is the fourth).
+> Both halves in one commit as instructed, so today's fleet still exits 0.
+>
+> One thing the item's two-line estimate would have shipped broken: the obvious
+> spelling, `[ "$MODE" = "apply" ] && rc=1`, is fatal here. `provision.sh` runs
+> under `set -e`, where a trailing test evaluating false is a failed command —
+> the **dry-run** path would have aborted at the first undeclared role. Same
+> class as the unbraced expansion `provision-wsl.test.sh` caught on 2026-08-03.
+> `rc=1` is scoped to `--apply`; a dry run prints the identical message on
+> stderr and still exits 0, since it writes nothing.
+>
+> Also note where the guard had to be exercised: `air` carries neither backup
+> role, so asserting all four against it passes vacuously for two. The test runs
+> `latitude` as well.
 
 **7. Widen the `just test` glob from 28 to all 38 suites.**
 *Changes:* replace the four hand-listed directories at `justfile:55-56` with a recursive find; rename `agents/plugin/skills/kb-refresh/tests/test_fleet_gather.sh` to `*.test.sh`; add the assertion to `provision/tests/justfile.test.sh` so this cannot silently regress again.
@@ -406,15 +434,50 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 *Why:* convergence runs the driver, never the role dispatcher, so on those two boxes the timer is installed once and never maintained — the air plist has not been touched in three reprovisions.
 *Cost:* two lines. *Breaks:* **coupled edit** — `provision/tests/tiers.test.sh:35-38,57-60` pin both lists by exact string and go red otherwise. Also note `tier_dotfiles:1258` hardcodes the platform as `wsl`; harmless today, worth fixing while you are there.
 
+> **DONE 2026-08-05, but NOT as prescribed — `dotfiles_sync`, not `dotfiles`.**
+> Adding the `dotfiles` tier collides with a documented decision this item did
+> not account for: `tier_dotfiles` performs the bare-repo **checkout**, and spec
+> 2026-07-28 deliberately keeps enrollment behind the dispatcher's `Apply
+> dotfiles? [y/N]` gate for every `fleet.json` member. That is *why* `macos.sh`
+> has no `tier_dotfiles` — stated in `tiers.test.sh`'s `strip_pkg` note — and
+> `provision-mac.sh` runs tiers BEFORE roles, so listing it would enroll the box
+> before the human was asked.
+>
+> `tier_dotfiles_sync` is the narrower fix and matches this item's own stated
+> goal ("it reaches `tier_dotfiles_sync` transitively"): it writes a scheduler
+> unit pointing at an absolute script path — idempotent, no checkout, nothing to
+> consent to. Added to `macos.sh`'s workstation list and `linux.sh`'s hub list.
+>
+> The `wsl` hardcode is fixed too, and it was **worse than "harmless today"**:
+> the item assumes `tier_dotfiles` is WSL-only, as its own comment claims, but
+> `linux.sh`'s workstation AND server lists both end in it — so latitude
+> (debian) came through claiming to be WSL on every converge. Harmless only
+> because the argument is used once, as a gate accepting
+> `nixos|wsl|debian|darwin`. A gate you satisfy with a wrong answer still passes.
+
 **9. Fix `agents/.gitignore:9`.**
 *Changes:* move the trailing comment onto its own line above the pattern.
 *Why:* gitignore does not strip inline comments, so the pattern is the whole line. Verified: `git check-ignore -v agents/settings.local.json` returns **NOT IGNORED**, and the root `.gitignore:39` rule covers a different path. It is the one line in that file with an inline comment, and it is the one the comment itself calls secret-bearing.
 *Cost:* one line. *Breaks:* nothing.
 
+> **DONE 2026-08-05.** Comment moved above the pattern, and the outcome is now
+> asserted the way this item verified it — by asking `git check-ignore`, not by
+> reading the file — in `provision/tests/gitignore-editor-dirs.test.sh`, whose
+> header already cited this bug as its reason for existing. The other four
+> patterns in that block were correct and got coverage too. A sweep of both
+> gitignores confirms this was the only inline-comment pattern in the repo.
+
 **10. Force `tier_ssh_trust` on air to drop `methe@server`.**
 *Changes:* re-run the tier (or the whole macos driver) on air; desktop-wsl gets it from item 2.
 *Why:* the revocation is correct in the repo and has not propagated. Latent while sshd is off; live the moment `ssh-server` is implemented — and `server` is still powered on at 100.64.0.3.
 *Cost:* one run. *Breaks:* nothing; the span rewrite is wholesale and idempotent.
+
+> **DONE 2026-08-05.** Ran `tier_ssh_trust` standalone on air (minimal harness —
+> the full `macos.sh` driver would have re-run brew). Diff was exactly one line
+> removed, `methe@server`; the four declared keys and everything outside the
+> managed span were untouched, mode stayed 600, and a second run reported
+> "already trusts the fleet". Also confirmed the review's "latent while sshd is
+> off": nothing is listening on port 22 on air, so this was pre-emptive.
 
 **10b. `CLAUDE.md` is inert on the desktop-native checkout — every agent session there loads nothing.**
 *Evidence, measured 2026-08-03 over Git Bash:*
@@ -431,6 +494,26 @@ git ls-files -s       →  120000 47dc3e3d …    # the index still says symlink
 **11. Clear the junk, and decide the authkey.**
 *Changes:* delete `statix.toml` (a Nix linter, zero `.nix` files, and neither invocation path it names exists) and the stray `.pyc`. Shred `provision/secrets/authkey` if the key is spent — Headscale pre-auth keys are revocable on hub and re-mintable per `provision/README.md:352`.
 *Cost:* minutes. *Breaks:* nothing.
+
+> **DONE 2026-08-05, including the authkey — the condition was verified, not
+> assumed.** Matched the local file against `headscale preauthkeys list` on hub
+> **by prefix only**, so no secret was printed: it is key id 7 — single-use,
+> `Used=true`, and expired 2026-07-28. Spent on all three counts, so it was
+> shredded. Two findings the item did not anticipate:
+>
+> - The file sat at mode **644**. A world-readable credential is worse than a
+>   stale one, and nothing in the repo sets that mode — `provision/secrets/` is
+>   gitignored, so no test or tier ever looks at what lands there.
+> - Hub currently holds **9 pre-auth keys, and key id 5 is reusable, unused, and
+>   valid until 2026-10-14.** That one is live. It is out of this item's scope
+>   and is NOT a finding against it, but a reusable unexpired key nobody is
+>   tracking is the thing worth a decision — not the expired file that prompted
+>   the look.
+>
+> `statix.toml` was re-verified before deletion rather than trusted from the
+> ledger: still zero `.nix` files, still no `check` recipe, still no pre-commit
+> hook. The `.pyc` was already covered by `agents/.gitignore:48` — on-disk cruft
+> only, never in the index.
 
 **12. Resolve `metheoryt/machines-cleanup` before editing `provision/lib/tiers.sh` or `provision/README.md`.**
 *Why:* it is 3 commits ahead and already editing exactly those two files. Merging it also closes the `node` gap the air drift report reports as open.

@@ -307,9 +307,13 @@ Nix ever returns. Leave them.
   drifting. The failure mode is silent rather than loud: latitude has **no
   GitHub account block at all**, so a `cyphy671` repo cloned there would fall
   back to default identity resolution and quietly offer the wrong key.
-- [ ] **The `ssh-server` role executor is still an unimplemented stub** — it
-  prints "not yet implemented (skipped)", as do `base` and `backup-client`.
-  (`provision/roles/` holds only `agents`, `dotfiles`, `repos`.) The capability
+- [ ] **The `ssh-server` role has no executor**, and neither do `base`,
+  `backup-hub` or `backup-client` — `provision/roles/` holds only `agents`,
+  `dotfiles`, `repos`. (Corrected 2026-08-05: they were never "stubs that print
+  a message"; there is no file for them at all. They fall through
+  `provision.sh`'s fallback arm, which now names them in `PLANNED_ROLES` and
+  fails `--apply` for any role NOT on that list — review item 6. Implementing
+  one means deleting its name from that list.) The capability
   exists three separate hand-rolled ways — the now-dead NixOS module,
   `windows.ps1` step 6, and `tier_ssh_trust` for POSIX tier boxes — which is why
   AGENTS.md reads as though the role is done. It is not, and with the NixOS

@@ -182,11 +182,19 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
   darwin_arm64, darwin_amd64).
 
-The `ssh-server`, `base` and `backup-client` role executors under
-`provision/roles/` are **unimplemented stubs** that print "not yet implemented
-(skipped)"; only `agents`, `dotfiles` and `repos` are real. The capability exists
-in hand-rolled forms elsewhere (`windows.ps1` step 6, `tier_ssh_trust`), which is
-why this can read as done. It is not — roadmap P3.
+**Four roles have no executor at all**: `base`, `ssh-server`, `backup-hub` and
+`backup-client`. `provision/roles/` holds only `agents`, `dotfiles` and `repos` —
+there is no stub file for the other four, they fall through `provision.sh`'s
+fallback arm. The capability exists in hand-rolled forms elsewhere
+(`windows.ps1` step 6, `tier_ssh_trust`), which is why this can read as done. It
+is not — roadmap P3.
+
+Since 2026-08-05 that gap is **declared, not silent**: `provision.sh` carries a
+`PLANNED_ROLES` list naming those four, and a role that is neither implemented
+nor named there makes `--apply` exit 1. Before that, `just provision --machine
+latitude --apply` reported success while doing nothing for four of its seven
+roles. **Implementing a role means DELETING its name from `PLANNED_ROLES`** —
+leave it in and the new executor is never demanded of a box that lacks it.
 
 ### Fleet networking / tailnet architecture
 
