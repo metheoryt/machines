@@ -92,4 +92,51 @@ printf '%s\n' "$out" | grep -q 'Cannot iterate over null' \
   && die "provision.sh still leaks the raw jq error" \
   || pass "provision.sh no longer leaks a raw jq error"
 
+# ── The same guard, one level down: an unknown ROLE (review item 6) ───────────
+# fleet_has_machine stops a typo'd MACHINE from provisioning nothing and exiting
+# 0. The role loop had the identical hole and no guard: a role with no executor
+# printed "not yet implemented (skipped)" and left rc untouched, so
+# `just provision --machine latitude --apply` reported success while doing
+# nothing for four of its seven roles.
+#
+# The fix is a DECLARED opt-out, not a silent one: PLANNED_ROLES names the roles
+# known to have no executor yet. In it → skipped, rc unchanged. Not in it → rc=1.
+# So the guard fires for exactly the case worth catching: a role added to
+# fleet.json, or renamed, with nothing behind it.
+#
+# Every prompt is answered `n`, so the implemented roles are skipped and the exit
+# code can only come from the fallback arm.
+prov_apply() { printf 'n\nn\nn\nn\nn\nn\nn\n' | bash "$PROV" --machine "$1" --apply 2>&1; }
+
+out="$(prov_apply air)"; rc=$?
+eq "$rc" "0" "provision.sh exits 0 when every executor-less role is DECLARED planned"
+
+out="$(MACHINES_PLANNED_ROLES="" prov_apply air)"; rc=$?
+eq "$rc" "1" "provision.sh exits 1 for a role with no executor and no declaration"
+printf '%s\n' "$out" | grep -q 'no executor' \
+  && pass "provision.sh names the undeclared role's missing executor" \
+  || die "provision.sh names the undeclared role's missing executor"
+
+out="$(prov_apply air)"
+printf '%s\n' "$out" | grep -q 'no executor yet (declared)' \
+  && pass "a declared role reports itself as declared, not as a failure" \
+  || die "a declared role reports itself as declared, not as a failure"
+
+# The declaration must cover today's stubs on EVERY machine, or the commit that
+# adds the guard turns the whole fleet's --apply red. air carries base and
+# ssh-server; latitude is the only member carrying the two backup roles, so it
+# has to be exercised separately — asserting all four against air would pass
+# vacuously for the two air does not have.
+out="$(prov_apply latitude)"; rc=$?
+eq "$rc" "0" "provision.sh exits 0 on latitude, whose seven roles include both backup stubs"
+for r in backup-hub backup-client; do
+  printf '%s\n' "$out" | grep -q "$r — apply: no executor yet (declared)" \
+    && pass "'$r' is declared, not silently skipped" \
+    || die "'$r' is declared, not silently skipped"
+done
+# And the guard still bites there: a future executor lands by DELETING a name
+# from the declaration, and that deletion is what this asserts stays reviewable.
+out="$(MACHINES_PLANNED_ROLES="base ssh-server" prov_apply latitude)"; rc=$?
+eq "$rc" "1" "dropping the backup roles from the declaration fails latitude's --apply"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

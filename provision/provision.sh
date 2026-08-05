@@ -54,6 +54,20 @@ echo "▸ Roles:"
 roles=()
 while IFS= read -r role; do roles+=("$role"); done < <(fleet_roles "$MACHINE")
 
+# Roles with no executor under provision/roles/, declared unimplemented ON
+# PURPOSE. This list is the whole difference between "we know" and "nobody
+# noticed": a role NOT named here and with no executor makes `--apply` exit 1,
+# the same way fleet_has_machine above makes an unknown MACHINE exit 2, and for
+# the same reason — "provisioned nothing, reported success" is the failure mode
+# both guards exist to kill. Before this list, `just provision --machine
+# latitude --apply` did nothing for four of its seven roles and exited 0.
+#
+# A future executor lands by DELETING its name from here. That deletion is the
+# reviewable event; adding one back is a deliberate declaration, not a shrug.
+# Overridable so the guard itself is testable (provision/tests/fleet-profile.test.sh)
+# and so a human can demand a strict run: MACHINES_PLANNED_ROLES= just provision …
+PLANNED_ROLES="${MACHINES_PLANNED_ROLES-base ssh-server backup-hub backup-client}"
+
 rc=0
 for role in "${roles[@]}"; do
     fn="role_${role//-/_}"
@@ -80,11 +94,30 @@ for role in "${roles[@]}"; do
             "$fn" dry-run "$platform" "$MACHINE"
         fi
     else
-        if [ "$MODE" = "apply" ]; then
-            echo "  ✗ $role — apply: not yet implemented (skipped)"
-        else
-            echo "  • $role — plan: would converge via the $platform executor for '$role'"
-        fi
+        # Declared-planned or not? The padded-substring match is deliberate:
+        # `*"$role"*` alone would let a role named `ssh` match the declaration
+        # of `ssh-server`.
+        case " $PLANNED_ROLES " in
+            *" $role "*)
+                if [ "$MODE" = "apply" ]; then
+                    echo "  – $role — apply: no executor yet (declared); skipped"
+                else
+                    echo "  • $role — plan: no executor yet (declared)"
+                fi
+                ;;
+            *)
+                # rc=1 under --apply ONLY. A dry run is a preview: it writes
+                # nothing, so it reports loudly and still exits 0, leaving the
+                # nonzero status to mean "an apply did not do what it said".
+                # The message is identical in both modes so the preview is the
+                # warning you get BEFORE the run that fails.
+                echo "  ✗ $role — no executor, and not declared in PLANNED_ROLES" >&2
+                # An `if`, not `[ … ] && rc=1`: this script runs under `set -e`,
+                # where a trailing test that evaluates false is a failed command
+                # and kills the run — so the dry-run path would abort here.
+                if [ "$MODE" = "apply" ]; then rc=1; fi
+                ;;
+        esac
     fi
 done
 
