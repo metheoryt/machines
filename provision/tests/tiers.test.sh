@@ -216,8 +216,46 @@ grep -q 'KillMode=process' "$TIERS" \
 # makes these assertions possible at all; if someone moves the precondition
 # above the dry-run exit, every case below starts failing with "targets macOS".
 eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_brew_min tier_brew_dev tier_brew_cask tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust " \
+   "tier_brew_min tier_brew_dev tier_brew_cask tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_fleet_ssh tier_selfpull tier_ssh_trust tier_dotfiles_sync " \
    "macos workstation tier list and order"
+
+# ── The sync TIMER must be reachable from the DRIVER, on every box ───────────
+# Review item 8. Convergence runs the driver (linux.sh / macos.sh); it never runs
+# provision.sh's role dispatcher. On linux workstation/server that is harmless:
+# their lists end in tier_dotfiles, which calls role_dotfiles, which calls
+# tier_dotfiles_sync — so the timer is re-asserted every converge. macOS and hub
+# had NEITHER, so their timer was installed once by a hand-run role and never
+# maintained again; air's LaunchAgent went untouched across three reprovisions.
+#
+# The fix is tier_dotfiles_SYNC, not tier_dotfiles, and the distinction is the
+# whole point. tier_dotfiles performs the bare-repo CHECKOUT — enrolling the box
+# — and the 2026-07-28 spec deliberately keeps that behind the dispatcher's
+# `Apply dotfiles? [y/N]` gate on every fleet.json member (see the strip_pkg note
+# below, which is why macos.sh has no tier_dotfiles). tier_dotfiles_sync only
+# writes a scheduler unit pointing at an absolute script path: idempotent, no
+# checkout, nothing to consent to. So the timer converges without the enrollment
+# gate being pre-empted.
+# tier_dotfiles passed a LITERAL `wsl` as role_dotfiles' platform argument. It
+# was harmless only by luck: the role uses that argument once, as a gate
+# (`nixos|wsl|debian|darwin`), and every box reaching the tier happened to be
+# inside the accepted set. It was still a lie in the one place a reader checks
+# what platform the code thinks it is on — and the tier is NOT WSL-only despite
+# its comment: linux.sh's workstation and server lists both end in tier_dotfiles,
+# so latitude (debian) reached it with `wsl` on every converge.
+dbody="$(awk '/^tier_dotfiles\(\)/,/^}/' "$TIERS")"
+hasnt "$dbody" 'role_dotfiles apply wsl' "tier_dotfiles no longer hardcodes the platform as wsl"
+has   "$dbody" '_is_darwin'               "tier_dotfiles resolves darwin"
+has   "$dbody" 'WSL_DISTRO_NAME'          "tier_dotfiles resolves a WSL distro"
+
+has   "$mac" '^tier_dotfiles_sync$' "macos converges the dotfiles sync timer"
+has   "$hub" '^tier_dotfiles_sync$' "hub converges the dotfiles sync timer"
+# The linux workstation/server lists must NOT gain it: they reach it through
+# tier_dotfiles already, and a second call would reinstall the unit twice per run.
+hasnt "$ws"  '^tier_dotfiles_sync$' "workstation reaches the sync timer via tier_dotfiles, not directly"
+hasnt "$srv" '^tier_dotfiles_sync$' "server reaches the sync timer via tier_dotfiles, not directly"
+# And the enrollment tier stays off the boxes whose gate it would pre-empt.
+hasnt "$mac" '^tier_dotfiles$'      "macos still never enrolls at tier time"
+hasnt "$hub" '^tier_dotfiles$'      "hub still never enrolls at tier time"
 
 # tier_fleet_ssh is darwin-only ON PURPOSE. NixOS gets its fleet client config
 # from modules/home/ssh.nix and a WSL distro from provision/ssh-wsl.sh; only
@@ -265,7 +303,14 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 #
 # tier_brew_cask is the third exception, and the least interesting one: Homebrew
 # Cask ships macOS .app bundles, so there is no Linux counterpart to forget.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles)$' | tr '\n' ' '; }
+#
+# tier_dotfiles_sync is the fourth, and it is the MIRROR of the second rather
+# than a new idea: both drivers converge the sync timer, but they reach it by
+# different routes. Linux gets there through tier_dotfiles (which macOS must not
+# have, per the exception above); macOS therefore lists tier_dotfiles_sync
+# directly. Same timer, same script, one entry each — so the two lists are still
+# equivalent, just not textually equal. Asserted positively above.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

@@ -75,9 +75,19 @@ fi
 # would be inventing a machine that does not exist.
 case "$PROFILE" in
   workstation)
+    # dotfiles_sync is LAST, and it is deliberately the sync TIER, not the
+    # dotfiles tier linux.sh ends with. Convergence runs this driver and never
+    # provision.sh, so without an entry here the sync timer is installed once by
+    # a hand-run role and never maintained again — air's LaunchAgent went
+    # untouched across three reprovisions. tier_dotfiles is still absent on
+    # purpose: it performs the bare-repo CHECKOUT, which spec 2026-07-28 keeps
+    # behind the dispatcher's `Apply dotfiles? [y/N]` gate for every fleet.json
+    # member, and provision-mac.sh runs tiers BEFORE roles, so listing it here
+    # would enroll the box before the human was asked. The sync tier only writes
+    # a LaunchAgent pointing at an absolute script path — nothing to consent to.
     TIERS=(brew_min brew_dev brew_cask agents_config git_base gortex
            "agent_clis claude" shell_init autofetch
-           ssh_accounts fleet_ssh selfpull ssh_trust) ;;
+           ssh_accounts fleet_ssh selfpull ssh_trust dotfiles_sync) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — macos.sh supports workstation only" ;;
 esac

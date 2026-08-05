@@ -73,9 +73,15 @@ case "$PROFILE" in
     # Lean server tier. Deliberately absent: apt_dev, gortex, and
     # ssh_accounts — the last would overwrite hub's ~/.ssh/config with
     # IdentitiesOnly on a fresh unregistered key and kill its GitHub auth.
+    # dotfiles_sync closes the same gap macos.sh has: convergence runs this
+    # driver, never provision.sh, so hub's sync timer was installed once by a
+    # hand-run role and never re-asserted. The SYNC tier, not `dotfiles` —
+    # hub is a fleet.json member and reaches role_dotfiles through the
+    # dispatcher's `Apply dotfiles? [y/N]` gate, which listing the enrollment
+    # tier here would pre-empt. This one only writes a timer unit.
     TIERS=(apt_min agents_config git_base "agent_clis claude"
            "shell_init --no-fish" autofetch
-           "selfpull %h/machines" ssh_trust) ;;
+           "selfpull %h/machines" ssh_trust dotfiles_sync) ;;
   server)
     # The always-on services box. NOT the hub tier: hub is lean because it is a
     # 960MB VPS, whereas this box has 24GB and 470GB and is SSHed into by a

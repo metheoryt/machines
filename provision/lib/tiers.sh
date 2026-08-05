@@ -1282,9 +1282,23 @@ tier_dotfiles() {
     warn "no logical fleet name (no fleet.local.json nickname, no fleet.json match) — skipping dotfiles"
     return 0
   fi
+  # Derive the platform rather than asserting one. role_dotfiles uses this
+  # argument once, as a gate (`nixos|wsl|debian|darwin`), so the old literal
+  # `wsl` was harmless — but only by luck, and it was false on the box that
+  # reaches this tier most: linux.sh's workstation AND server lists both end in
+  # tier_dotfiles, so latitude (debian) came through here claiming to be WSL on
+  # every converge. A gate you satisfy with a wrong answer still passes.
+  local platform
+  if _is_darwin; then
+    platform=darwin
+  elif [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
+    platform=wsl
+  else
+    platform=debian
+  fi
   # shellcheck source=provision/roles/dotfiles.sh
   source "$REPO/provision/roles/dotfiles.sh"
-  role_dotfiles apply wsl "$name" || warn "dotfiles bootstrap reported an error"
+  role_dotfiles apply "$platform" "$name" || warn "dotfiles bootstrap reported an error"
   return 0
 }
 
