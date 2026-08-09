@@ -64,11 +64,15 @@
 #        load-bearing half.
 #
 #      Kernel-global, not per-distro: WSL2 runs one kernel for the whole utility
-#      VM, so these settings also cover the docker-desktop distro, which we do
-#      not provision. That is a benefit here, but it does mean a SECOND
-#      provisioned distro would run a second earlyoom against the same memory
-#      and could double-kill on one pressure event. Only one Ubuntu distro is
-#      provisioned as of 2026-08-09; revisit this if that changes.
+#      VM, so these settings also cover every other distro without provisioning
+#      them — verified 2026-08-09: Ubuntu-24.04 reports vm.min_free_kbytes =
+#      262144 having never run this script. That is a benefit for the sysctls,
+#      but earlyoom is per-distro: a SECOND distro running it would watch the
+#      same kernel-global memory and could double-kill on one pressure event.
+#      Three distros run on this box (desktop-wsl, Ubuntu-24.04, docker-desktop)
+#      and only desktop-wsl has earlyoom active, so there is no double-kill
+#      today. Check `systemctl is-active earlyoom` in the others before
+#      provisioning them.
 #
 #      NOT covered here, because this script runs inside the distro: the
 #      host-side `.wslconfig` (autoMemoryReclaim=disabled, swap=16GB). That
