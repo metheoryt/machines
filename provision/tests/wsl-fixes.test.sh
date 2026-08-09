@@ -178,4 +178,78 @@ ac="$(printf '%s\n' "$tmr" | sed -n 's/^AccuracySec=//p')"
 [ -n "$ac" ] && [ "$(secs "$ac")" -le 5 ] && pass "accuracy does not inflate the window (got $ac)" \
   || die "AccuracySec must be <= 5s — it adds to the outage window (got '${ac:-unset}')"
 
+# ── the memory guard ──────────────────────────────────────────────────────────
+# 2026-08-09: the VM wedged after anon memory hit ~15.8 GB of the 16 GB cap AND
+# swap reached zero, at which point an order-6 GFP_KERNEL allocation failed
+# inside vmbus_alloc_ring <- hvs_probe and killed the vsock transport the WSL
+# relay needs. No OOM killer fired — a kernel high-order allocation fails
+# gracefully — so the distro went unreachable with nothing killed and nothing
+# logged in userspace.
+
+sc="$(wsl_fixes_memory_sysctl)"
+
+# The default is 45056 KB (44 MB) and that is what failed. The number matters
+# less than it being far above the default, because what it really buys is
+# high-order blocks in the buddy allocator, not free bytes.
+mf="$(printf '%s\n' "$sc" | sed -n 's/^vm.min_free_kbytes = //p')"
+[ -n "$mf" ] && [ "$mf" -ge 262144 ] && pass "min_free_kbytes reserves >= 256 MB (got $mf)" \
+  || die "vm.min_free_kbytes must be >= 262144 — 45056 is the default that failed (got '${mf:-unset}')"
+
+# Default 10 = 0.1% of the zone, i.e. reclaim starts at the cliff edge. At the
+# failure the log read `free:33960kB min:34060kB` — free was already BELOW min.
+ws="$(printf '%s\n' "$sc" | sed -n 's/^vm.watermark_scale_factor = //p')"
+[ -n "$ws" ] && [ "$ws" -gt 10 ] && pass "reclaim starts before the cliff (got $ws)" \
+  || die "vm.watermark_scale_factor must exceed the default 10 (got '${ws:-unset}')"
+
+ea="$(wsl_fixes_earlyoom_args)"
+
+# BOTH thresholds are required. -m alone fires under ordinary page-cache
+# pressure and kills for no reason; -s alone fires only once swap is gone, which
+# is already too late to matter.
+case "$ea" in
+  *"-m "*) pass "earlyoom keys on available memory" ;;
+  *) die "earlyoom args must set -m: $ea" ;;
+esac
+case "$ea" in
+  *"-s "*) pass "earlyoom keys on free swap" ;;
+  *) die "earlyoom args must set -s — memory alone fires far too early: $ea" ;;
+esac
+
+# Killing PID 1 or the container runtime converts a recoverable memory event
+# into a broken distro; sshd/tailscaled are how a wedged box is reached at all.
+case "$ea" in
+  *"--avoid"*) pass "earlyoom protects the processes recovery depends on" ;;
+  *) die "earlyoom args must set --avoid: $ea" ;;
+esac
+for critical in systemd init dockerd sshd; do
+  case "$ea" in
+    *"$critical"*) pass "earlyoom avoids $critical" ;;
+    *) die "earlyoom --avoid must cover $critical: $ea" ;;
+  esac
+done
+
+# The whole point is that something in userspace dies before the kernel does.
+# If nothing is preferred, earlyoom picks by heuristic and may well take a shell
+# instead of the multi-GB job that caused the pressure.
+case "$ea" in
+  *"--prefer"*python3*) pass "earlyoom prefers the long-running hogs" ;;
+  *) die "earlyoom --prefer must name python3 — a killed sync is re-drivable, a wedged VM is not: $ea" ;;
+esac
+
+# earlyoom matches /proc/<pid>/comm, which contains no path. A pattern written
+# with slashes (the shape used for path matching elsewhere) silently matches
+# nothing, and a --prefer that matches nothing is indistinguishable from absent.
+case "$ea" in
+  */*) die "earlyoom patterns must not contain '/' — comm carries no path: $ea" ;;
+  *) pass "earlyoom patterns match comm, not paths" ;;
+esac
+
+# The defaults file is sourced by the unit, so the args must land in the
+# variable the package actually reads.
+ed="$(wsl_fixes_earlyoom_defaults)"
+case "$ed" in
+  *"EARLYOOM_ARGS="*) pass "defaults file sets EARLYOOM_ARGS" ;;
+  *) die "defaults file must set EARLYOOM_ARGS — the unit reads nothing else" ;;
+esac
+
 exit "$fail"
