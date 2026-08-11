@@ -166,7 +166,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
        default=me
        ```
      - **Make the VHD sparse so it auto-shrinks and doesn't bloat the SSD:** `wsl --shutdown` first (the whole WSL VM must release the disk — `--terminate <distro>` alone hits `ERROR_SHARING_VIOLATION` while other distros/Docker Desktop hold the VM), then `wsl --manage <distro> --set-sparse true --allow-unsafe`. Verify: the distro's `Flags` under `HKCU\...\Lxss\<guid>` gains the `+8` bit (7 → 15). For *new* distros instead, set `[experimental] sparseVhd=true` in `.wslconfig`.
-   - **`.wslconfig` — the VM caps and the freeze guard (host-side; nothing inside the distro can set these).** The restored `.wslconfig` from step 2 should already carry this, but verify it, because getting it wrong wedges the VM:
+   - **`.wslconfig` — the VM caps and the freeze guard (host-side; nothing inside the distro can set these).** Since 2026-08-12 this file is **tracked in the dotfiles repo on the `desktop` branch** — restore it from there, not by hand, and treat that copy as the source of truth (it carries the per-setting reasoning as comments, and the sync timer keeps it current). The block below is illustrative, like the `R:\backup` drive letters above: it is what the file should contain, so you can verify the restore, because getting it wrong wedges the VM:
      ```ini
      [wsl2]
      processors=8
