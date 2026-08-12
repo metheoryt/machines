@@ -6,7 +6,7 @@
         "mcp"
       ],
       "env": {
-        "GORTEX_INDEX_WORKERS": "${GORTEX_WORKERS:-8}"
+        "GORTEX_INDEX_WORKERS": "8"
       }
     }
   }
