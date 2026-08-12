@@ -180,8 +180,21 @@ ga_sync_state() {
 
 # ga_push: ALWAYS 0. Offline or an expired token is not a malfunction — the
 # commit is safe locally and the next tick's ahead-pin path retries it.
+#
+# It re-checks pin-only HERE rather than trusting ga_sync_state's verdict, which
+# was computed BEFORE the commit and therefore a few seconds stale. This is the
+# line that hands commits to the branch every box reprovisions from, so the
+# property "this timer pushes nothing but a pin bump" has to hold at the moment
+# of the push. `HEAD:<branch>` for the same reason: it pushes the exact commit
+# just verified rather than whatever the local branch ref names by now.
 ga_push() {
-    if g push -q origin "$GORTEX_AUTOUPDATE_BRANCH" 2>/dev/null; then
+    local changed
+    changed="$(g diff --name-only FETCH_HEAD..HEAD 2>/dev/null | sort -u | tr '\n' ' ')"
+    if [ -n "$changed" ] && [ "$changed" != "$GORTEX_PIN_PATH " ]; then
+        ga_log "refusing to push: HEAD differs from the fetched remote in more than ${GORTEX_PIN_PATH} (${changed})"
+        return 0
+    fi
+    if g push -q origin "HEAD:$GORTEX_AUTOUPDATE_BRANCH" 2>/dev/null; then
         ga_log "pushed ${GORTEX_AUTOUPDATE_BRANCH} to origin"
     else
         ga_log 'push failed (offline or auth) — retrying next tick'

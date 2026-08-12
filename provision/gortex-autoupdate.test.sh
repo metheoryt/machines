@@ -283,4 +283,23 @@ printf '%s\n' "$code" | grep -qE 'gortex (upgrade|install|init)' \
   && die "case14 script runs no gortex subcommand" \
   || pass "case14 script runs no gortex subcommand"
 
+# ── Case 15: the pin-only check holds AT the push, not seconds earlier ─────────
+# ga_sync_state classifies the checkout BEFORE the commit, so its verdict is
+# stale by the time the push runs. Case 8 proves the tick declines to publish
+# somebody's unpushed work; this proves the push itself declines too, which is
+# what makes the property hold against a commit landing in between.
+T="$(setup 0.61.4)"
+git -C "$T/repo" fetch -q origin main
+printf 'wip\n' > "$T/repo/provision/other.sh"
+git -C "$T/repo" add provision/other.sh
+git -C "$T/repo" commit -qm "not a pin bump"
+before="$(remote_tip "$T")"
+out="$(MACHINES_REPO="$T/repo" GORTEX_AUTOUPDATE_LIB_ONLY=1 \
+       bash -c 'source "$1"; ga_push' _ "$SCRIPT" 2>&1)"
+eq "case15 remote untouched" "$(remote_tip "$T")" "$before"
+printf '%s\n' "$out" | grep -q 'refusing to push' \
+  && pass "case15 the push itself refuses a non-pin diff" \
+  || die "case15 the push itself refuses a non-pin diff"
+rm -rf "$T"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"
