@@ -12,6 +12,14 @@
 # reprovision trigger so a bump actually reaches every box. Writer:
 # scripts/update-gortex.sh (`just update-gortex`).
 #
+# It is also written UNATTENDED, by exactly one box: provision/gortex-autoupdate.sh
+# runs weekly on latitude (tier_gortex_autoupdate, `server` profile only) and
+# commits a bump here when upstream has a newer release that is at least 48h old.
+# So a commit touching only this file may not have a human behind it — and
+# reverting that commit is the fleet-wide rollback, which is why the bump is a
+# commit rather than a box mutation. Two writers would race on the push; if you
+# ever want a different box to publish, MOVE the tier, never copy it.
+#
 # The reader takes the first bare semver on a non-comment line, so this header is
 # safe. Do NOT add a `v`.
 0.63.2

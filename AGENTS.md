@@ -168,7 +168,23 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   a start/floor threshold so the cell holds steady instead of cycling.
 - **`tier_gortex`** — installs the release named in `provision/gortex.version`
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
-  darwin_arm64, darwin_amd64).
+  darwin_arm64, darwin_amd64). It untars the pinned release **unconditionally,
+  with no version comparison**, so the pin is authoritative: a box updated out of
+  band (`gortex upgrade`) is silently reverted to the pin by the next provision
+  run for any reason. Fix a drift by bumping the pin, never by teaching the tier
+  to disobey it.
+- **`tier_gortex_autoupdate`** — the counterpart, and the only tier in the
+  `server` profile that workstation lacks. It installs a weekly timer running
+  `provision/gortex-autoupdate.sh`, which bumps `provision/gortex.version` to the
+  newest upstream release (≥48h old) and pushes the commit; every other box then
+  installs it through its own `tier_gortex`, because the pin is a
+  `_touches_driver` trigger in `converge.sh`. **It installs no binary anywhere** —
+  publisher and installer are deliberately separate, which is what keeps the fleet
+  on one version and makes rollback a `git revert`. It is on **latitude only**:
+  two writers race on the push and strand a commit, so if a different box should
+  publish, MOVE the tier rather than copying it. Pinned by
+  `provision/gortex-autoupdate.test.sh` (14 cases, all about what it can commit
+  or push) and the single-writer assertions in `provision/tests/tiers.test.sh`.
 
 The `ssh-server`, `base` and `backup-client` role executors under
 `provision/roles/` are **unimplemented stubs** that print "not yet implemented

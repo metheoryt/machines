@@ -92,7 +92,12 @@ deleted, where behaviour lives.
   implemented; `ssh-server`, `base` and `backup-client` are stubs that print a
   plan (roadmap P3).
 - `gortex.version` — the pinned gortex release, installed by `tier_gortex` into
-  `~/.local/bin` on every box.
+  `~/.local/bin` on every box. **Bumped automatically**, weekly, by
+  `gortex-autoupdate.sh` on latitude alone (`tier_gortex_autoupdate`): it commits
+  a new pin and pushes it, and every other box installs that release through its
+  own `tier_gortex` on the next ff-pull + converge. So the fleet auto-updates
+  without any box self-updating — rollback is `git revert` of the pin commit.
+  `just update-gortex` is the same bump by hand, with no 48h-old-release gate.
 - `statusboard/` — the console dashboard (a local VT/tmux board, Linux-only).
 
 See `provision/README.md` for usage and base-distro guidance.
