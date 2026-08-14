@@ -4,6 +4,18 @@ This file provides guidance to Claude Code and other agents working in this
 repository. The repo-root `CLAUDE.md` is a **symlink to this file** — edit
 `AGENTS.md`, never create a second real file at the `CLAUDE.md` path.
 
+**On a Windows-native checkout, check that the link survived before trusting
+anything below.** `git` refuses to check a symlink out while `core.symlinks` is
+false — Git for Windows' installer default, in the *system* config, so every
+fresh clone inherits it — and renders it instead as a **9-byte regular file
+holding the text `AGENTS.md`**. Nothing reports this: `git status` calls such a
+tree clean, because index and worktree agree under that mode. So an agent there
+loads nine bytes and no instructions, silently (it did, for four weeks, until
+2026-08-03). `provision/windows.ps1` step 2 now sets `core.symlinks` and repairs
+an already-broken link; `provision/tests/windows-core-symlinks.test.sh` guards
+the tracked shape. The one-command check is `wc -c CLAUDE.md` — it must match
+`AGENTS.md`, not read 9.
+
 ## Repository Overview
 
 Config, provisioning, and data-backup for a small machine fleet — **Debian,
@@ -126,16 +138,27 @@ just update-gortex                      # bump provision/gortex.version
 ```bash
 bash provision/tests/roles.test.sh      # prints ALL PASS, nonzero on failure
 
-for t in provision/tests/*.test.sh provision/*.test.sh \
-         agents/tests/*.test.sh scripts/*.test.sh; do bash "$t"; done
+for t in $(just _test-suites); do bash "$t"; done   # the gate's own suite list
 ```
 
-**The glob above is NOT the whole repo, and the gap is structural, not a number.**
-The four directories it names are the whole of what runs. Everything under
-`agents/plugin/**/tests/` is run by nothing — 10 suites as of 2026-08-03, all
-passing by hand — plus two files named `test_*` rather than `*.test.sh`, which no
-glob here would catch either. Widening the glob is review item 7. Until then,
-"the gate is green" means those four directories, not the repo.
+**Ask `_test-suites`, never a glob of your own.** That private recipe is the one
+definition of what the gate runs — a recursive `find` for `*.test.sh` — and both
+`just test` and `provision/tests/justfile.test.sh` consume it, so they cannot
+disagree. Untracked suites are included on purpose: a test you just wrote should
+run before you commit it.
+
+This replaced a hand-listed set of four directories in `49497bd` (review item 7),
+and the failure it fixed is worth remembering: the four dirs reached 30 of 40
+tracked suites, while the gate printed "all 28 suites passed" and **every reader
+took that for the repo — this file included, which is why it said so until
+2026-08-13.** The ten unreached suites were all green when finally run, so the
+cost was false confidence rather than a hidden regression. That is the argument
+for the assertion, not against it: ten passing was luck, and luck is what a gate
+exists to replace.
+
+One file is still outside the gate by decision: `test_distill.py` needs pytest,
+which is not in the fleet toolchain. Hence `justfile.test.sh`'s stray-name
+assertion covers `.sh` only.
 
 Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in

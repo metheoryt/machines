@@ -120,6 +120,46 @@ if (-not $GitBash) { throw "Git Bash (bash.exe) not found under any Git install 
 Info "git:  $(git --version)"
 Info "bash: $GitBash"
 
+# core.symlinks - the other half of step 1. Developer Mode only lets `ln -s`
+# succeed; git refuses to check a symlink out until this says otherwise, and Git
+# for Windows' installer writes core.symlinks=false into the SYSTEM config. The
+# repo tracks exactly one symlink, CLAUDE.md -> AGENTS.md, and under that default
+# it lands as a 9-byte regular file holding the literal text "AGENTS.md" - so
+# every agent session in the clone loads nine bytes of nothing. Measured live on
+# the desktop box 2026-08-03; it went 4 weeks unnoticed because `git status`
+# calls such a tree CLEAN (index and worktree agree under that mode) and a
+# 9-byte file raises no error. Set at --global so it outlives this clone and
+# covers every future one; guarded by provision/tests/windows-core-symlinks.test.sh.
+if ((git config --global --get core.symlinks 2>$null) -eq 'true') {
+    Info "core.symlinks: already true (global)."
+} else {
+    git config --global core.symlinks true
+    Info "core.symlinks: set true (global) - overrides the installer's system false."
+}
+Push-Location $RepoDir
+try {
+    # A per-clone false beats the global true, and every clone made before this
+    # step ran has one, copied from the system value at clone time.
+    if ((git config --local --get core.symlinks 2>$null) -eq 'false') {
+        git config --local --unset core.symlinks
+        Info "core.symlinks: cleared this clone's stale false."
+    }
+    # Re-materialise anything already checked out as a plain file. Reading the
+    # INDEX (mode 120000), not the worktree, is what makes this work at all -
+    # the worktree is precisely what is lying.
+    foreach ($row in (git ls-files -s | Where-Object { $_ -like '120000 *' })) {
+        $rel  = ($row -split "`t", 2)[1]
+        $path = Join-Path $RepoDir $rel
+        if (-not (Test-Path $path)) { continue }
+        $isLink = ((Get-Item $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)
+        if (-not $isLink) {
+            Remove-Item -Force $path
+            git checkout-index -f -- $rel
+            Warn "re-materialised $rel as a symlink (was a plain file)."
+        }
+    }
+} finally { Pop-Location }
+
 # Python (real, non-Store) - kb-refresh's distill.py and agents/statusline-command.sh
 # need a python that Git Bash can exec. The Microsoft Store python/python3/py aliases
 # under ...\WindowsApps are execve-hostile from Git Bash ("Permission denied") AND

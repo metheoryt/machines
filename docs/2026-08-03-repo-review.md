@@ -391,9 +391,9 @@ Windows-native is in the best shape of the fleet: clone clean on main at origin 
 
 ### Tier 2 — cheap, safe, mechanical
 
-> **STATUS 2026-08-05 — items 6, 8, 9, 10 and 11 are DONE** (branch
-> `repo-review-cleanup`, gate green at 41 suites). Item 7 landed earlier. **10b
-> is the only one left**, and it needs the desktop Windows box.
+> **STATUS 2026-08-13 — every Tier 2 item is now DONE**, 10b included (branch
+> `repo-review-cleanup`, gate green at 42 suites). Items 6, 8, 9, 10 and 11
+> closed 2026-08-05; item 7 landed earlier; 10b closed 2026-08-13.
 >
 > Two of the five did not land as written; both deviations are annotated inline
 > below. One correction to the ranking, worth more than either: **item 9 was
@@ -508,6 +508,58 @@ git ls-files -s       →  120000 47dc3e3d …    # the index still says symlink
 *Why:* the repo's whole agent-instruction contract is `CLAUDE.md` → `AGENTS.md`, and `AGENTS.md:3-5` mandates the symlink shape. With `core.symlinks=false` git checks the link out as a text file whose content is the target's path, so memory discovery on desktop reads nine bytes of nothing. This makes the ledger's `keep` on `CLAUDE.md` a portability finding rather than a clean row, and it means every agent that has ever run in `~/machines` on that box operated with no repo instructions at all — silently, because a 9-byte file is not an error.
 *Changes:* three options, in order of preference. (a) Set `core.symlinks=true` on that clone and re-checkout the path — works only if the account has SeCreateSymbolicLinkPrivilege or Windows Developer Mode is on, which is the thing to check first. (b) Ship a `.gitattributes` rule, or a `windows.ps1` step, that materialises `CLAUDE.md` as a copy on Windows checkouts — diverges the two files, so it needs a guard. (c) Accept it and make `AGENTS.md` the discovered filename on that platform.
 *Cost:* (a) is one command if the privilege is there. *Breaks:* nothing measured; verify by re-reading the file, not by re-running the checkout.
+
+> **DONE 2026-08-13 — option (a), plus the repo-side half this item did not
+> identify.** Both preconditions were measured before touching anything:
+> Developer Mode is already **on** (`AllowDevelopmentWithoutDevLicense = 0x1`),
+> and a non-elevated `ln -s` on that box produced a real `lrwxrwxrwx` with
+> correct readback. So (a) was viable, and (b) — which the item ranked second —
+> was never needed. Good: (b) diverges the two files, which is the outcome the
+> symlink shape exists to prevent.
+>
+> **The item's diagnosis stopped one level short.** It read `core.symlinks=false`
+> as a property of that clone. It is not:
+>
+> ```
+> git config --show-origin --get core.symlinks  →  file:.git/config  false
+> git config --system     --get core.symlinks   →  false
+> git config --global     --get core.symlinks   →  (unset)
+> ```
+>
+> The **system** config carries it — Git for Windows' installer default — so the
+> clone's value was inherited at clone time and **every future clone on that box
+> reproduces the fault.** Fixing only the clone would have fixed only this
+> instance. So: `--global core.symlinks true` (outlives the clone, beats the
+> system value), the clone's stale explicit `false` unset so it inherits, then
+> re-materialise from the index.
+>
+> Verified by content rather than mode, as the item asks: 18778 bytes through the
+> link, byte-identical to `AGENTS.md`, a real `lrwxrwxrwx`, and
+> `git status --porcelain` **empty** — so a later pull cannot churn it back.
+>
+> Two things worth carrying forward:
+>
+> - **`provision/windows.ps1` step 1 enables Developer Mode expressly so
+>   symlinks work, and never told git to honour them.** Developer Mode only lets
+>   `ln -s` succeed; git refuses to *check out* a symlink until `core.symlinks`
+>   says otherwise. Half a fix, and the half that was missing is the half that
+>   mattered on a fresh clone. The step now does both, with the re-materialise
+>   pass reading the **index** (`git ls-files -s`, mode 120000) rather than the
+>   worktree — the worktree is precisely what lies.
+> - **`git status` reports such a tree CLEAN.** Under `core.symlinks=false` the
+>   index and worktree agree, so nothing anywhere flags it; that plus a 9-byte
+>   file raising no error is why it went four weeks unnoticed. A test that reads
+>   the worktree would therefore have passed on the broken box —
+>   `provision/tests/windows-core-symlinks.test.sh` reads the index, so it gives
+>   the same verdict on every platform including the one where the bug lived.
+>
+> The PowerShell block was fired on the box, not just grepped by the bash suite:
+> `CLAUDE.md` was deliberately replaced with git's 9-byte rendering, the real
+> block (extracted from `windows.ps1`, never retyped) repaired it to 18778 bytes,
+> and a second run was a silent no-op. Note the broken state showed as `T` in
+> porcelain there — a *typechange* against an index that still said 120000, which
+> is the signal the original fault lacked because that clone had been checked out
+> that way from the start.
 
 **11. Clear the junk, and decide the authkey.**
 *Changes:* delete `statix.toml` (a Nix linter, zero `.nix` files, and neither invocation path it names exists) and the stray `.pyc`. Shred `provision/secrets/authkey` if the key is spent — Headscale pre-auth keys are revocable on hub and re-mintable per `provision/README.md:352`.
