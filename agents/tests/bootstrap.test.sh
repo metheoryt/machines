@@ -256,6 +256,60 @@ JSON
   i="$tmp/gx-empty"; mkdir -p "$i"; printf '{}\n' > "$i/settings.json"
   out9e="$(gortex_merge_hooks "$i")"; rc9e=$?
   check "missing settings.local.json is a silent no-op" '[ -z "$out9e" ] && [ "$rc9e" -eq 0 ]'
+
+  # (f) THE POSTURE CASE. Append-only + exact-equality dedup is not enough once
+  # the hook command carries a flag: `gortex install --hook-mode nudge` rewrites
+  # settings.local.json to `gortex hook --mode=nudge`, which does not equal the
+  # `gortex hook` already in settings.json, so a naive append leaves BOTH. Claude
+  # Code then applies the most restrictive verdict of the two, the bare one
+  # defaults to deny, and the loosening silently does nothing — the same class of
+  # silent no-op as the settings.local.json inertness this function exists for.
+  #
+  # So the merge must CONVERGE on the source's posture: same binary + same hook
+  # event ⇒ the source entry replaces the stale one rather than joining it.
+  # Measured 2026-08-17 before this case existed: the merge produced two
+  # PreToolUse gortex hooks, `gortex hook` and `gortex hook --mode=nudge`.
+  p="$tmp/gx-posture"; mkdir -p "$p"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"/gx/gortex hook --mode=nudge"}]}]}}' > "$p/settings.local.json"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"/gx/gortex hook"}]},{"matcher":"*","hooks":[{"type":"command","command":"orca hook"}]}]}}' > "$p/settings.json"
+  gortex_merge_hooks "$p" >/dev/null
+  check "exactly one gortex PreToolUse hook survives a posture change" \
+    '[ "$(jq "[.hooks.PreToolUse[].hooks[].command | select(test(\"gortex hook\"))] | length" "$p/settings.json")" = 1 ]'
+  check "the surviving gortex hook carries the new posture" \
+    '[ "$(jq -r "[.hooks.PreToolUse[].hooks[].command | select(test(\"gortex hook\"))][0]" "$p/settings.json")" = "/gx/gortex hook --mode=nudge" ]'
+  check "a posture change does not disturb the Orca hook beside it" \
+    '[ "$(jq "[.hooks.PreToolUse[].hooks[].command | select(. == \"orca hook\")] | length" "$p/settings.json")" = 1 ]'
+
+  # (g2) The posture must reach the installer, not just be converged afterwards.
+  # gortex install writes the hooks (with their --mode flag) into
+  # settings.local.json; the merge can only converge on what that call requested.
+  # So assert the wiring command carries --hook-mode, defaulting to nudge and
+  # honouring an override. DRY_RUN makes the command line the observable — a real
+  # run would hit the network and rewrite the live profile.
+  gxdir="$tmp/gx-wire"; mkdir -p "$gxdir"
+  printf '#!/bin/sh\nexit 0\n' > "$gxdir/gortex"; chmod +x "$gxdir/gortex"
+  wire_cmd() {
+    ( PATH="$gxdir:$PATH"; CLAUDE_DIR="$tmp/gx-profile"; mkdir -p "$CLAUDE_DIR"
+      DRY_RUN=1 GORTEX_REWIRE=1 ensure_gortex_wired 2>&1 )
+  }
+  out9g2="$(GORTEX_HOOK_MODE=nudge wire_cmd)"
+  check "the wiring call passes --hook-mode nudge by default" \
+    'printf "%s" "$out9g2" | grep -q -- "--hook-mode nudge"'
+  out9g3="$(GORTEX_HOOK_MODE=deny wire_cmd)"
+  check "GORTEX_HOOK_MODE overrides the posture" \
+    'printf "%s" "$out9g3" | grep -q -- "--hook-mode deny"'
+  # The flag is useless if the installer never sees the profile it targets.
+  check "the wiring call still targets the profile dir" \
+    'printf "%s" "$out9g2" | grep -q -- "--claude-config-dir\|/gx-profile"'
+
+  # (g) …and converging must stay idempotent: once settings.json already carries
+  # the source's exact command, a second run reports already-merged and rewrites
+  # nothing. Without this, (f)'s replace could churn the file on every bootstrap.
+  snap9g="$(jq -S -c . "$p/settings.json")"
+  out9g="$(gortex_merge_hooks "$p")"
+  check "a converged posture is reported already-merged" \
+    'printf "%s" "$out9g" | grep -q "already merged"'
+  check "a converged posture is not rewritten" '[ "$(jq -S -c . "$p/settings.json")" = "$snap9g" ]'
 else
   echo "skip - gortex_merge_hooks cases (jq not installed)"
 fi

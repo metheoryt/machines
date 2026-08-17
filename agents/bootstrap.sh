@@ -416,12 +416,31 @@ gortex_merge_hooks() {
   fi
   tmp="$(mktemp "$dst.XXXXXX")" || return 0
   if ! jq -s '
+        # A gortex hook entry, identified by its command rather than its position.
+        def isgx: [(.hooks // [])[] | .command // ""] | any(test("gortex hook"));
         .[0] as $dst | .[1] as $src
         | ($dst.hooks // {}) as $d | ($src.hooks // {}) as $s
         | $dst
         | .hooks = (reduce ($s | keys_unsorted[]) as $k ($d;
-            .[$k] = ((.[$k] // [])
-                     + [ $s[$k][] | select(. as $e | (($d[$k] // []) | any(. == $e)) | not) ])))
+              ($s[$k] // [])                       as $new
+            | ($new | map(select(isgx)))           as $newgx
+            | ($d[$k] // [])                       as $cur
+            # CONVERGE, do not merely append: a gortex hook whose command differs
+            # only in its flags (`gortex hook` vs `gortex hook --mode=nudge`) is
+            # the SAME hook with a different posture, so it must replace the stale
+            # entry in place rather than join it. Appending leaves both, Claude
+            # Code applies the most restrictive verdict, and the default deny of
+            # the bare entry silently wins — see bootstrap.test.sh case 9f.
+            # (No apostrophes in this comment: the jq program is single-quoted in
+            # bash, so one would close the string. It did, on the first run.)
+            # Replacing in place (not remove-then-append) keeps hook order stable.
+            | ($cur | map(if isgx and (($newgx | length) > 0) then $newgx[0] else . end)) as $conv
+            # Collapse the exact duplicates that replacement can create when the
+            # profile somehow accumulated more than one gortex entry for an event.
+            | ($conv | reduce .[] as $e ([]; if any(. == $e) then . else . + [$e] end)) as $uniq
+            # Entries the source has and this event lacks entirely — how a hook
+            # event only gortex declares (PreCompact) gets created at all.
+            | .[$k] = ($uniq + [ $new[] | select(. as $e | ($uniq | any(. == $e)) | not) ])))
       ' "$dst" "$src" >"$tmp" 2>/dev/null; then
     rm -f "$tmp"
     printf '  ✗ could not merge gortex hooks into %s\n' "$dst"
@@ -441,6 +460,103 @@ gortex_merge_hooks() {
   fi
   chmod 644 "$tmp" 2>/dev/null || true
   mv "$tmp" "$dst" && printf '  + merged gortex hooks into %s\n' "$dst"
+}
+
+# ── gortex: code-intelligence engine / MCP server ────────────────────────────
+# Two concerns, split by platform (see docs/superpowers/specs/2026-07-20-gortex-
+# bootstrap-wiring-design.md):
+#   binary — NixOS gets it declaratively (pkgs/gortex.nix + development.nix);
+#            Windows installs it here if missing. Other off-nix platforms are
+#            left to the user (no automated installer wired for them yet).
+#   wiring — `gortex install --no-claude-md` regenerates the machine-local
+#            skills/agents/hooks + user MCP config for the profile being
+#            provisioned. --no-claude-md is LOAD-BEARING: it keeps gortex's rule
+#            block OUT of the shared, git-tracked agents/AGENTS.md (reached via
+#            the ~/.claude/CLAUDE.md symlink), so bootstrap never mutates the
+#            fleet-synced instruction file. Generated artefacts stay machine-local
+#            and are never committed (see commit 4a4ec52). The daemon is NOT
+#            started here — `gortex mcp` (from .mcp.json) brings it up per session.
+
+# Hook posture, fleet-wide. `nudge` since 2026-08-17, chosen over the installer
+# default `deny` after measuring all four on air:
+#
+#   deny           PreToolUse refuses Grep/Glob anywhere under a tracked repo, and
+#                  Read of any file with indexed symbols. The installer default.
+#   nudge          soft-denies once per burst of consecutive non-symbolic calls,
+#                  then lets the next through (measured: calls 1,2 pass, 3 denied,
+#                  4,5 pass). A speed bump that cannot become a wall.
+#   enrich         never denies; the same guidance arrives as context afterwards.
+#   consult-unlock advertised as deny-until-first-graph-query. NOT USED: the
+#                  unlock could not be reproduced on air 2026-08-17 (a source read
+#                  stayed denied after a real mcp__gortex__search in the same
+#                  session, via both PreToolUse and PostToolUse). Its whole value
+#                  is a transition that does not demonstrably happen.
+#
+# Why loosen at all: `deny` blocks by TARGET, not by whether the graph would
+# actually answer better — `grep -n foo AGENTS.md` is refused while `Read` of the
+# same file is allowed, and a literal that collides with indexed doc symbols
+# needs a regex metachar to get through. The graph is still the better tool for
+# symbol work and nudge keeps saying so; it just stops arguing after once.
+#
+# Override per run: GORTEX_HOOK_MODE=deny just gortex-setup. Note the "Native
+# Gortex MCP is mandatory" sentence is compiled into the binary and rides every
+# posture — the wording does not soften with the mechanism.
+: "${GORTEX_HOOK_MODE:=nudge}"
+
+# Resolve the gortex binary: PATH first, then the known Windows install dir (the
+# PS installer's user-PATH edit isn't visible to the already-running shell).
+gortex_bin() {
+  if command -v gortex >/dev/null 2>&1; then command -v gortex; return 0; fi
+  local win="${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/gortex/gortex.exe"
+  [ -x "$win" ] && { printf '%s' "$win"; return 0; }
+  return 1
+}
+
+# Windows only: install the binary if missing. Install-if-missing (never on every
+# run) so a plain `git pull`-triggered bootstrap doesn't re-download. Upgrades:
+# re-run the installer by hand — it floats to latest.
+ensure_gortex_binary() {
+  [ "$IS_WINDOWS" -eq 1 ] || return 0   # NixOS/macOS/other-Linux: not installed here
+  gortex_bin >/dev/null 2>&1 && { printf '  = gortex binary present\n'; return 0; }
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would install gortex (PowerShell installer)\n'; return 0
+  fi
+  printf '  + installing gortex (PowerShell installer)…\n'
+  powershell.exe -NoProfile -Command "irm https://get.gortex.dev/install.ps1 | iex" \
+    || printf '  ✗ gortex install failed — run manually: irm https://get.gortex.dev/install.ps1 | iex\n'
+}
+
+# All platforms except nix activation: regenerate machine-local wiring for the
+# profile in $CLAUDE_DIR. Idempotent — skips a profile already wired unless
+# GORTEX_REWIRE=1 forces a refresh (e.g. after a binary upgrade).
+ensure_gortex_wired() {
+  # nix activation also runs bootstrap.sh; keep that fast/offline. On NixOS the
+  # wiring runs from a login shell via `just gortex-setup` (GORTEX_ALLOW_NIX_WIRE
+  # overrides the skip if ever needed).
+  if [ -e /etc/NIXOS ] && [ -z "${GORTEX_ALLOW_NIX_WIRE:-}" ]; then
+    printf '  = skipping gortex wiring under NixOS (run: just gortex-setup)\n'; return 0
+  fi
+  local gx; gx="$(gortex_bin)" || { printf '  ! gortex not installed — skipping wiring\n'; return 0; }
+  # Marker: gortex hooks land in this profile's settings.local.json (default
+  # posture installs hooks). Cheap, robust across gortex versions.
+  #
+  # The marker deliberately does NOT check the posture. A mode change is a change
+  # to already-wired profiles, so gating on it would make every bootstrap re-run
+  # the installer; `just gortex-setup` (GORTEX_REWIRE=1) is the way to push a new
+  # posture out, and gortex_merge_hooks converges settings.json on whatever the
+  # last install wrote.
+  if [ -z "${GORTEX_REWIRE:-}" ] && grep -q gortex "$CLAUDE_DIR/settings.local.json" 2>/dev/null; then
+    printf '  = gortex already wired: %s (GORTEX_REWIRE=1 to refresh)\n' "$CLAUDE_DIR"; return 0
+  fi
+  if [ -n "${DRY_RUN:-}" ]; then
+    printf '  ~ would wire gortex: %s install --yes --agents claude-code --no-claude-md --hook-mode %s (%s)\n' \
+      "$gx" "$GORTEX_HOOK_MODE" "$CLAUDE_DIR"
+    return 0
+  fi
+  printf '  + wiring gortex for %s (hook posture: %s)…\n' "$CLAUDE_DIR" "$GORTEX_HOOK_MODE"
+  "$gx" install --yes --agents claude-code --no-claude-md --hook-mode "$GORTEX_HOOK_MODE" \
+    --claude-config-dir "$CLAUDE_DIR" \
+    || printf '  ✗ gortex install failed for %s\n' "$CLAUDE_DIR"
 }
 
 # Lib-only mode: `BOOTSTRAP_LIB_ONLY=1 . bootstrap.sh` loads the helper functions
@@ -526,69 +642,6 @@ link_entries_into "$SRC_DIR/subagents" "$CLAUDE_DIR/agents"
 # plugin's hooks.json still takes the config dir as an argument rather than
 # deriving it, which is what made a second agent deployable at all; keep that
 # shape if another one ever arrives.
-
-# ── gortex: code-intelligence engine / MCP server ────────────────────────────
-# Two concerns, split by platform (see docs/superpowers/specs/2026-07-20-gortex-
-# bootstrap-wiring-design.md):
-#   binary — NixOS gets it declaratively (pkgs/gortex.nix + development.nix);
-#            Windows installs it here if missing. Other off-nix platforms are
-#            left to the user (no automated installer wired for them yet).
-#   wiring — `gortex install --no-claude-md` regenerates the machine-local
-#            skills/agents/hooks + user MCP config for the profile being
-#            provisioned. --no-claude-md is LOAD-BEARING: it keeps gortex's rule
-#            block OUT of the shared, git-tracked agents/AGENTS.md (reached via
-#            the ~/.claude/CLAUDE.md symlink), so bootstrap never mutates the
-#            fleet-synced instruction file. Generated artefacts stay machine-local
-#            and are never committed (see commit 4a4ec52). The daemon is NOT
-#            started here — `gortex mcp` (from .mcp.json) brings it up per session.
-
-# Resolve the gortex binary: PATH first, then the known Windows install dir (the
-# PS installer's user-PATH edit isn't visible to the already-running shell).
-gortex_bin() {
-  if command -v gortex >/dev/null 2>&1; then command -v gortex; return 0; fi
-  local win="${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/gortex/gortex.exe"
-  [ -x "$win" ] && { printf '%s' "$win"; return 0; }
-  return 1
-}
-
-# Windows only: install the binary if missing. Install-if-missing (never on every
-# run) so a plain `git pull`-triggered bootstrap doesn't re-download. Upgrades:
-# re-run the installer by hand — it floats to latest.
-ensure_gortex_binary() {
-  [ "$IS_WINDOWS" -eq 1 ] || return 0   # NixOS/macOS/other-Linux: not installed here
-  gortex_bin >/dev/null 2>&1 && { printf '  = gortex binary present\n'; return 0; }
-  if [ -n "${DRY_RUN:-}" ]; then
-    printf '  ~ would install gortex (PowerShell installer)\n'; return 0
-  fi
-  printf '  + installing gortex (PowerShell installer)…\n'
-  powershell.exe -NoProfile -Command "irm https://get.gortex.dev/install.ps1 | iex" \
-    || printf '  ✗ gortex install failed — run manually: irm https://get.gortex.dev/install.ps1 | iex\n'
-}
-
-# All platforms except nix activation: regenerate machine-local wiring for the
-# profile in $CLAUDE_DIR. Idempotent — skips a profile already wired unless
-# GORTEX_REWIRE=1 forces a refresh (e.g. after a binary upgrade).
-ensure_gortex_wired() {
-  # nix activation also runs bootstrap.sh; keep that fast/offline. On NixOS the
-  # wiring runs from a login shell via `just gortex-setup` (GORTEX_ALLOW_NIX_WIRE
-  # overrides the skip if ever needed).
-  if [ -e /etc/NIXOS ] && [ -z "${GORTEX_ALLOW_NIX_WIRE:-}" ]; then
-    printf '  = skipping gortex wiring under NixOS (run: just gortex-setup)\n'; return 0
-  fi
-  local gx; gx="$(gortex_bin)" || { printf '  ! gortex not installed — skipping wiring\n'; return 0; }
-  # Marker: gortex hooks land in this profile's settings.local.json (default
-  # posture installs hooks). Cheap, robust across gortex versions.
-  if [ -z "${GORTEX_REWIRE:-}" ] && grep -q gortex "$CLAUDE_DIR/settings.local.json" 2>/dev/null; then
-    printf '  = gortex already wired: %s (GORTEX_REWIRE=1 to refresh)\n' "$CLAUDE_DIR"; return 0
-  fi
-  if [ -n "${DRY_RUN:-}" ]; then
-    printf '  ~ would wire gortex: %s install --yes --agents claude-code --no-claude-md (%s)\n' "$gx" "$CLAUDE_DIR"
-    return 0
-  fi
-  printf '  + wiring gortex for %s…\n' "$CLAUDE_DIR"
-  "$gx" install --yes --agents claude-code --no-claude-md --claude-config-dir "$CLAUDE_DIR" \
-    || printf '  ✗ gortex install failed for %s\n' "$CLAUDE_DIR"
-}
 
 printf '\nGortex\n'
 ensure_gortex_binary
