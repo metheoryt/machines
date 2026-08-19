@@ -1073,6 +1073,18 @@ global + per-host). One bullet per fact under a topical heading.
   reports only POPULATED LUNs — nothing appears at `u4-1:1` until a disk goes in — which
   is the opposite of the card reader (`u2-1.3:0/1`, on the same hub), whose two slots
   exist as 0B nodes with no card in them.
+- **An sd letter is NOT an identity — never cache anything keyed by one** (2026-08-19).
+  The kernel hands out `sd?` lowest-free, so unplugging a dock frees its letters and the
+  next plug gives the SAME letter to a DIFFERENT disk: on latitude `sdd` was the
+  ST1000LM024 in bay `u4-2:0` at 04:34 on 2026-08-16 and the ST320LT020 in `u4-1:0` six
+  hours later. The status board cached the bay label per node on the written assumption
+  that a replug yields a new node, so the long-running kiosk painted `dockB0` on two rows
+  at once while a fresh `--once` run was correct — which is also the diagnostic: a live
+  board disagreeing with `--once` on the same box means CACHED STATE, not a map error.
+  Fixed by `sb_bays_resolve` rebuilding the whole store every probe (rebuild = prune).
+  latitude's docks are told apart by bridge serial in the kernel log: `670200210032` on
+  port 4-1 (dockA), `6702002103E1` on 4-2 (dockB); LUN 0 is the FRONT bay, dockA is the
+  one holding the 320G — confirmed in the room, and NOT derivable from sysfs.
 - **A 0B disk is an empty card slot, not a disk** (2026-08-01). latitude carries a
   two-slot reader (`SD/MMC` + `Micro SD/M2`, one serial, `sde`/`sdf`) whose block nodes
   exist with no card in them, so the board permanently warned `disks unmounted` about
