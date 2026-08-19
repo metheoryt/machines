@@ -356,6 +356,15 @@ apart mattered:
 change broke two suites, a green baseline made that obvious instead of something to
 be diffed against a remembered failure count.
 
+**Re-opened on latitude, 2026-08-19 — one suite, and it is the STALE-TEST kind.**
+`provision/tests/expansion-multibyte.test.sh` fails on latitude's pristine checkout:
+`unbraced expansion no longer fails under C.utf8 — bash changed; re-check this rule`.
+Note which way round this is: the 2026-08-01 pair above was a red test reporting a
+real bug in shipped code. This is the inverse — the test asserts a property of bash
+that its version no longer has, and the guarded code is fine. It still has to be
+resolved rather than remembered as a baseline, which is the whole point of P4. Not
+reproduced on air or desktop yet; the bash version is the first thing to compare.
+
 ## P5 — Documentation drift.
 
 - [x] **`AGENTS.md`** rewritten with P1 — the Nix-first Common Commands, the stale
@@ -378,6 +387,17 @@ be diffed against a remembered failure count.
 ---
 
 ## P6 — Housekeeping.
+
+- [ ] **`SB_PARKS` in the status board is still keyed by sd node**, which
+  2026-08-19 established is not an identity: `sb_series_keep` prunes a node that
+  vanishes and does nothing when the letter survives onto a DIFFERENT disk, so
+  after a replug a drive can carry the previous drive's park verdict. That verdict
+  gates which spinner gets woken for smartctl, so getting it wrong costs load
+  cycles on a drive already past 639k of them. NOT fixable the way the bay store
+  was: `sb_drive_parks` is a smartctl fork, which is why it is cached at all — it
+  needs a stable identity (serial, from `lsblk -no SERIAL` or sysfs) to invalidate
+  against. `SB_TEMPS` has a milder version of the same: between round-robin visits
+  a reused node shows the previous drive's temperature.
 
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
   desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh

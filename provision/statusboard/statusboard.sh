@@ -969,6 +969,10 @@ sb_bay_label() {
 # three lines above the caller.
 sb_bays_resolve() {
   local map="${1:-}" out="" d
+  # No drives is not an error — a box with nothing mounted has no bays. Guarded rather
+  # than left to "${@:2}", whose behaviour on a single argument under `set -u` differs
+  # by bash version and this script still claims to run on macOS's 3.2.
+  [ "$#" -gt 1 ] || { printf ''; return; }
   for d in "${@:2}"; do
     [ -n "$d" ] || continue
     out="$(sb_series_set "$out" "$d" "$(sb_bay_label "$(sb_bay_tag "$d")" "$map" "$d")")"

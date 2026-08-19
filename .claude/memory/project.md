@@ -1085,6 +1085,9 @@ global + per-host). One bullet per fact under a topical heading.
   latitude's docks are told apart by bridge serial in the kernel log: `670200210032` on
   port 4-1 (dockA), `6702002103E1` on 4-2 (dockB); LUN 0 is the FRONT bay, dockA is the
   one holding the 320G — confirmed in the room, and NOT derivable from sysfs.
+  **The rule is not fully applied yet**: `SB_PARKS` (and, more mildly, `SB_TEMPS`)
+  is still keyed by node, and cannot be fixed the same way because it caches a
+  smartctl fork — `docs/fleet-roadmap.md` P6 carries it.
 - **A 0B disk is an empty card slot, not a disk** (2026-08-01). latitude carries a
   two-slot reader (`SD/MMC` + `Micro SD/M2`, one serial, `sde`/`sdf`) whose block nodes
   exist with no card in them, so the board permanently warned `disks unmounted` about
