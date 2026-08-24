@@ -15,7 +15,14 @@
 #
 # Per-repo opt-out: an empty .claude/memory/.skip file silences the case-2 nudge
 # permanently for that repo. Stays completely silent outside a git repo.
+#
+# A store that fits is inlined; a large one is emitted as a section index and read
+# on demand. See lib-memory.sh for why (the harness truncates a large hook's
+# stdout to a preview, so a 22 KB project.md never reached the model).
 set -u
+
+# shellcheck source=lib-memory.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-memory.sh"
 
 # Claude passes the session JSON on stdin; pull cwd from it, fall back to $PWD.
 cwd="$(jq -r '.cwd // empty' 2>/dev/null)"
@@ -29,8 +36,14 @@ mem="$root/.claude/memory/project.md"
 
 # --- Case 1: repo-local memory exists → load it into the session --------------
 if [ -f "$mem" ]; then
-  printf '%s\n\n' "Repo-local Claude memory for this project ($mem) — git-tracked in the repo and merged here with the user's global + per-host memory. Treat it like the rest of your loaded memory:"
-  cat "$mem"
+  if [ "$(mem_size "$mem")" -le "$MEM_INLINE_MAX" ]; then
+    out="$(mem_emit_full "$mem" "Repo-local Claude memory for this project ($mem) — git-tracked in the repo and merged here with the user's global + per-host memory. Treat it like the rest of your loaded memory:")"
+  else
+    out="$(printf '%s\n' "Repo-local Claude memory for this project — git-tracked in the repo, merged with the user's global + per-host memory. Read a section on demand (sed -n '<L>,<next L>p') when the task touches it:"
+           mem_emit_index "$mem" "  $mem")"
+  fi
+  printf '%s\n' "$out"
+  mem_warn_if_over "$out" "project-memory-check.sh"
   exit 0
 fi
 
