@@ -31,7 +31,8 @@
     "sentry@claude-plugins-official": true,
     "pure-connectors@pure-team": true,
     "pure-dev@pure-team": true,
-    "caveman@caveman": true
+    "caveman@caveman": false,
+    "atlassian@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "pure-team": {
