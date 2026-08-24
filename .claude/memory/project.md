@@ -1677,3 +1677,52 @@ to enumerate, and `sde`/`sdf` show as 0 B card-reader slots).
   Windows profile, still un-enumerated against the dotfiles branch), plus
   `qaz-code-feature-sync-dashboard.bundle` — 236 K holding 19 commits from
   2026-05-02/03 that reached no remote. Unbundle before deleting `repos/`.
+
+## A USB drop leaves latitude broken in TWO places (incident 2026-08-23)
+
+At **Aug 23 15:58:27** both UGREEN docks (`usb 4-1` and `usb 4-2`) disconnected
+within one second of each other — a mains blip on two externally-powered docks,
+not a bus fault. All four spindles went with them, mid-write (`device offline
+error ... op 0x1:(WRITE)` on the then-current `sdd`/`sdf`/`sdg`/`sdh`). They
+re-enumerated cleanly at **16:02:03**, ~3.5 minutes later, with new letters. The
+box never rebooted (uptime spanned the whole event).
+
+**Nothing brought them back, and the damage was in two layers — fix both:**
+
+1. **Host layer.** The fstab entries are `nofail`, so when the devices vanished
+   systemd *stopped* the mount units and they sat `inactive dead` — not `failed`.
+   Nothing re-pulls a plain fstab mount when its device reappears (that is what
+   `x-systemd.automount` would buy), so `nofail` is exactly why this was silent:
+   **`systemctl --failed` was clean the entire 20 hours.** Recover with
+   `systemctl start /mnt/<name>`; journal replay takes ~15-35 s per 931 G disk.
+2. **Container layer — the one that is easy to miss.** Docker resolves a bind
+   mount at container *start*, so eight containers went on holding the **dead**
+   device nodes inside their own mount namespaces long after the host let go:
+   `immich_server` on `sdh2`, the servarr stack (`sonarr` `radarr` `bazarr`
+   `whisparr` `qbittorrent` `jellyfin`) on `sdf2`, and **`restic-server` on
+   `sdd1`**. They were not down — they were serving `error -5` in a loop for
+   ~20 h. Remounting the host does **not** reach them; only a restart does.
+
+Find them by device liveness, never by guessing which app uses which disk:
+
+```sh
+for c in $(docker ps -q); do pid=$(docker inspect -f '{{.State.Pid}}' $c)
+  for d in $(sudo grep -oE '/dev/sd[a-z][0-9]*' /proc/$pid/mountinfo | sort -u); do
+    [ -b "$d" ] || echo "$(docker inspect -f '{{.Name}}' $c) STALE $d"; done; done
+```
+
+- **`restic-server`'s repo is `/mnt/spare320/restic-rest`** — so a spare320 drop
+  takes the whole fleet's backup hub down with it. That is what the two failed
+  `resticprofile-*` units meant; they were the only *loud* symptom, and they
+  pointed at the wrong machine.
+- **`ConditionPathIsMountPoint=/mnt/immich-mirror` on `mirror-refresh.service`
+  did its job** — the 03:39 run logged "skipped, unmet condition check" instead
+  of rsyncing 254 G of immich into the root filesystem. Keep that condition on
+  any unit whose destination is a removable disk; it is the guard that turned a
+  disk outage into an inconvenience.
+- **The statusboard was right and was the only thing that noticed.** "unmounted"
+  was the true state, not a display bug — do not go looking for a resolver bug
+  (`f759459`, `96b3bb1`) before checking `findmnt` on the box.
+- Residual `EXT4-fs (sdX): I/O error while writing superblock` lines timed to the
+  container restarts are the stale filesystems being *released*, not new damage.
+  Expect one pair per stale device, then silence.
