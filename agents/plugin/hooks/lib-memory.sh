@@ -31,8 +31,14 @@ mem_has_content() {
 
 # mem_strip_comments <file> — drop <!-- --> blocks; they are notes to the human
 # curating the store, and they are charged against the hook's budget.
+#
+# Self-closing comments are deleted FIRST, and the order is load-bearing: a sed
+# range /<!--/,/-->/ looks for its end pattern from the NEXT line onward, so a
+# one-line `<!-- X -->` opens a range that swallows every following line up to
+# the next `-->`. That silently ate the block between the REGISTER-REINJECT
+# markers (and would eat content after any one-line comment in any store).
 mem_strip_comments() {
-  sed '/<!--/,/-->/d' "$1"
+  sed -e '/<!--.*-->/d' -e '/<!--/,/-->/d' "$1"
 }
 
 # mem_emit_full <file> <header>
