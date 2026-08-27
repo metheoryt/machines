@@ -6,6 +6,9 @@
 # ~/.config/gh/config.yml in tier_apt_dev, which runs BEFORE the dotfiles role, so
 # every freshly provisioned box hits it (air 2026-07-28, latitude 2026-07-29).
 #
+# It also covers the role's other unattended-failure guard: the clone must never
+# sit at ssh's host-key prompt (see the last section).
+#
 # This suite builds a REAL bare repo with a REAL work-tree in a temp directory and
 # points $HOME at it. Nothing here touches the live $HOME, the live ~/.dotfiles, or
 # the network — but the git behaviour being relied on (an empty index after a bare
@@ -162,6 +165,64 @@ eq "$?" '0' 'role: sets the branch upstream after checkout'
 git --git-dir="$GITDIR" --work-tree="$HOME" branch --quiet --set-upstream-to=origin/main main >/dev/null 2>&1
 eq "$(git --git-dir="$GITDIR" rev-parse --abbrev-ref 'main@{upstream}' 2>/dev/null)" 'origin/main' \
   'upstream: the command the role runs does resolve an upstream'
+
+# --- The clone must never sit at ssh's host-key prompt -----------------------
+# A fresh box has no github.com in known_hosts, so ssh asks the operator to
+# confirm the host key. Provisioning has no TTY: the prompt is never answered and
+# never times out, so the run HANGS instead of failing. On g15-wsl 2026-08-27 the
+# clone sat for 12 minutes and read as a network stall.
+#
+# Behavioural, not a grep: a PATH-shimmed `git` records the environment it was
+# handed and exits nonzero, which returns the role at the clone line before any
+# other git call is reached. $HOME points at an empty dir so the `[ ! -d $gitdir ]`
+# arm is the one taken.
+SHIM="$TMP/shim"; CLONE_LOG="$TMP/clone-env"; CLONE_HOME="$TMP/clone-home"
+mkdir -p "$SHIM" "$CLONE_HOME"
+cat > "$SHIM/git" <<EOS
+#!/usr/bin/env bash
+{
+  echo "argv=\$*"
+  echo "GIT_SSH_COMMAND=\${GIT_SSH_COMMAND-<unset>}"
+  echo "GIT_TERMINAL_PROMPT=\${GIT_TERMINAL_PROMPT-<unset>}"
+} > "$CLONE_LOG"
+exit 128
+EOS
+chmod +x "$SHIM/git"
+
+# `env -u` both variables first: a developer shell can already carry
+# GIT_TERMINAL_PROMPT=0, and inheriting it would make the assertion below pass
+# without the role setting anything (it did, on the box this was written on).
+# Sourcing into a fresh bash is what makes that clearing reachable at all.
+OUT="$(env -u GIT_SSH_COMMAND -u GIT_TERMINAL_PROMPT HOME="$CLONE_HOME" PATH="$SHIM:$PATH" \
+  bash -c 'source "$1"; role_dotfiles apply debian g15' _ "$REPO/provision/roles/dotfiles.sh" 2>&1)"; rc=$?
+eq "$rc" '1' 'clone: a failing clone fails the role'
+ENVLOG="$(cat "$CLONE_LOG" 2>/dev/null)"
+has "$ENVLOG" 'argv=clone' 'clone: the shim intercepted the clone'
+has "$ENVLOG" 'BatchMode=yes' \
+  'clone: BatchMode=yes - a prompt becomes an exit code instead of a hang'
+has "$ENVLOG" 'StrictHostKeyChecking=accept-new' \
+  'clone: accept-new - a FIRST-time host key still passes unattended'
+has "$ENVLOG" 'GIT_TERMINAL_PROMPT=0' "clone: git's own credential prompt is off too"
+# The three causes now share one exit code, so the message has to separate them.
+has "$OUT" 'host key CHANGED' 'clone: the failure names the changed-host-key cause'
+
+# A caller's own GIT_SSH_COMMAND wins - that override is how a box with a
+# non-default key path gets through, and it is what unblocked g15-wsl by hand.
+env HOME="$CLONE_HOME" PATH="$SHIM:$PATH" GIT_SSH_COMMAND='ssh -i /custom/key' \
+  bash -c 'source "$1"; role_dotfiles apply debian g15' _ "$REPO/provision/roles/dotfiles.sh" >/dev/null 2>&1
+has "$(cat "$CLONE_LOG")" 'ssh -i /custom/key' 'clone: an explicit GIT_SSH_COMMAND is honoured'
+
+# ...and it must not leak into the caller's environment: `local -x`, not `export`.
+# An exported GIT_SSH_COMMAND would silently retune every later git call in the
+# provision run, including tier_selfpull's pulls of unrelated repos.
+grep -q 'local -x GIT_SSH_COMMAND' "$REPO/provision/roles/dotfiles.sh"
+eq "$?" '0' 'clone: the ssh posture is function-scoped, not exported'
+
+# The Windows executor clones over the same ssh and prompts identically, so the
+# posix fix alone would leave `desktop` and `g15` hanging on a fresh provision.
+PS1_SRC="$(cat "$REPO/provision/roles/dotfiles.ps1")"
+has "$PS1_SRC" 'BatchMode=yes' 'ps1: the Windows executor sets the same non-interactive posture'
+has "$PS1_SRC" 'StrictHostKeyChecking=accept-new' 'ps1: ...including accept-new'
 
 bash -n "$REPO/provision/roles/dotfiles.sh"; eq "$?" '0' 'role: syntax is valid'
 

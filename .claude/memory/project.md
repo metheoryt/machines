@@ -1758,9 +1758,12 @@ the code does not say and a re-read of the diff would not tell you.
   github.com entry). `ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T
   git@github.com` is the one-line probe: it returns `Permission denied
   (publickey)` in a second and seeds `known_hosts`, after which the clone fails
-  fast instead of hanging. Worth hardening `role_dotfiles`' clone with that
-  `GIT_SSH_COMMAND` — an unattended provision that stalls forever is the same
-  silent-failure class this repo keeps getting bitten by.
+  fast instead of hanging. **Fixed 2026-08-27**: `role_dotfiles` (both the `.sh`
+  and the `.ps1`) now sets that posture itself, `local -x` rather than `export` so
+  it does not retune git for the rest of the run. Both options are load-bearing and
+  pull opposite ways — `BatchMode=yes` alone REJECTS an unknown host key, which is
+  the fresh-box case; `accept-new` alone still prompts for a password. A caller's
+  own `GIT_SSH_COMMAND` still wins.
 - **`ssh-wsl.sh` needs `jq` but runs BEFORE the `linux.sh` tier that installs
   it.** On a fresh distro it dies at step 2. `apt-get install -y jq git curl` as
   root first; do not reorder the chain.
@@ -1803,15 +1806,24 @@ the code does not say and a re-read of the diff would not tell you.
   `agents/quick-tasks.md`, `skills/{update-balance,gortex-align}` and
   `host-memory.md` were dead too, i.e. the memory-loading hooks on that box had
   been inert for weeks.
-- **`agents/bootstrap.sh`'s `skipped=N` counter hides exactly this.** It reported
-  `linked=0 skipped=4 backed-up=0 failed=0` — clean-looking — because a dangling
-  symlink is *an existing entry* to it. When a box's agent config behaves oddly,
-  run `find ~/.claude -xtype l` before trusting a bootstrap summary.
+- **Why bootstrap never cleared them — and it is NOT `link()`.** Checked on
+  2026-08-27: `link()` handles a dangling link correctly (`-L` true, readlink
+  mismatch, `rm -f`, relink). The gap is `retire_link`, whose ownership test is
+  PATH-based — it drops a link only if it points into `$SRC_DIR`, so links from an
+  era when the checkout lived somewhere else (here `/mnt/c/.../GitHub/nix/claude/`)
+  read as *someone else's link* and live forever. It cannot recognise its own past.
+  And `~/.claude/hooks/*` is owned by nothing at all since hooks moved into
+  `plugin/` — no code path even looks at it. A clean `linked=0 skipped=4 failed=0`
+  summary is therefore not evidence of a healthy profile: run
+  `find ~/.claude -xtype l` before trusting one.
 - Removing them is safe: a broken symlink holds no data, and the target root
   (`/mnt/c/Users/methe/GitHub`) does not exist at all on that box. Verified before
   deleting, not assumed.
-- **Still NOT fixed, deliberately:** the clone in `role_dotfiles` has no
-  `GIT_SSH_COMMAND` hardening, so on a box with no registered GitHub key it still
-  hangs on ssh's host-key prompt rather than failing. This run passed
-  `GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'` in
-  the environment as a workaround.
+- **The clone hang is fixed too (same day).** `role_dotfiles` sets
+  `GIT_SSH_COMMAND` + `GIT_TERMINAL_PROMPT=0` before the clone — and before the
+  `fetch` and the new-branch `push`, which reach the remote the same way and would
+  hang the same way; `|| true` on the fetch prevents a failure, not a hang.
+  Pinned behaviourally in `dotfiles-collisions.test.sh` by a PATH-shimmed `git`
+  that records the environment it was handed (7 assertions fail without the fix).
+  The test `env -u`s `GIT_TERMINAL_PROMPT` first: a dev shell can already export
+  `0`, which made that one assertion pass vacuously until it was cleared.
