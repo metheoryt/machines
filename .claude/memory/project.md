@@ -1726,3 +1726,53 @@ for c in $(docker ps -q); do pid=$(docker inspect -f '{{.State.Pid}}' $c)
 - Residual `EXT4-fs (sdX): I/O error while writing superblock` lines timed to the
   container restarts are the stale filesystems being *released*, not new damage.
   Expect one pair per stale device, then silence.
+
+## `server` back in the fleet + the WSL-host provisioning traps (2026-08-27)
+
+State is in `AGENTS.md` and `docs/fleet-roadmap.md` P2; what follows is only what
+the code does not say and a re-read of the diff would not tell you.
+
+- **`tier_dotfiles` resolves the WRONG logical name on a WSL host's first run.**
+  `provision-wsl.sh` runs `linux.sh` (step 3) BEFORE `fleet-local.sh` (step 4),
+  so at tier time there is no `fleet.local.json` and `fleet_logical_name` falls
+  through to the `fleet.json` hostname match — which on a WSL distro is the
+  **Windows parent's** entry (`uname -n` = `g513ie` → `server`, `g614jv` →
+  `desktop`). So a first run tries to check out the *parent's* dotfiles branch
+  into the distro's `$HOME`. Every re-run is correct, because by then
+  `fleet.local.json` exists. Re-adding `server` to `fleet.json` is what made this
+  reachable on g513ie — before that the hostname matched nothing and the tier
+  merely skipped. If you provision a new WSL host: expect the dotfiles step to be
+  wrong or skipped on pass 1, and run `linux.sh` again afterwards.
+- **A dotfiles clone on a box with no registered GitHub key HANGS, it does not
+  fail.** `git clone --bare git@github.com:metheoryt/dotfiles.git` sat for 12
+  minutes with `provision-wsl.sh` blocked behind it. Not auth — ssh was at the
+  interactive **host-key** prompt with no TTY to answer it (`known_hosts` had no
+  github.com entry). `ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T
+  git@github.com` is the one-line probe: it returns `Permission denied
+  (publickey)` in a second and seeds `known_hosts`, after which the clone fails
+  fast instead of hanging. Worth hardening `role_dotfiles`' clone with that
+  `GIT_SSH_COMMAND` — an unattended provision that stalls forever is the same
+  silent-failure class this repo keeps getting bitten by.
+- **`ssh-wsl.sh` needs `jq` but runs BEFORE the `linux.sh` tier that installs
+  it.** On a fresh distro it dies at step 2. `apt-get install -y jq git curl` as
+  root first; do not reorder the chain.
+- **`FLEET_WIN_USER=methe` is mandatory on `server`.** `ssh-wsl.sh` auto-detects
+  the Windows key store by globbing `/mnt/c/Users` and requires **exactly one**
+  non-system dir; g513ie has `methe` AND `WsiAccount`, so the detect yields
+  empty, key persistence is skipped, and the only symptom is one warning. The
+  loss shows up later as a lost `id_fleet` after a `wsl --unregister`.
+- **The distro's sudo needs a password and the `workstation` profile is asserted
+  never to grant NOPASSWD** (`tiers.test.sh`). To drive a provision from another
+  box, `wsl -d <distro> -u root` gives unauthenticated root from Windows anyway —
+  install a `/etc/sudoers.d/` NOPASSWD drop-in, run, then REMOVE it and assert
+  `sudo -n true` fails. `provision-wsl.sh` `die`s on any step failure, so the
+  removal must be its own invocation, not a trailing line.
+- **Driving a WSL distro over ssh: the remote shell on the Windows boxes is
+  PowerShell.** `&`, `|` and `$(…)` inside the ssh command line are parsed by
+  PowerShell, not bash. Base64 the whole script and `echo <b64> | base64 -d |
+  bash` — anything else eventually breaks on quoting.
+- **The initial clone came from a `git bundle` over `scp`, not from GitHub.**
+  The box had no registered key and `gh` here lacks `admin:public_key`, so the
+  repo was bundled on another member, scp'd to `C:\Users\methe`, cloned from the
+  bundle, and `origin` reset to the ssh URL. No token ever touched the box. Same
+  trick works for any fleet box whose GitHub identity is not live yet.
