@@ -1727,7 +1727,15 @@ for c in $(docker ps -q); do pid=$(docker inspect -f '{{.State.Pid}}' $c)
   container restarts are the stale filesystems being *released*, not new damage.
   Expect one pair per stale device, then silence.
 
-## `server` back in the fleet + the WSL-host provisioning traps (2026-08-27)
+## `g15` (ex-`server`) back in the fleet + the WSL-host provisioning traps (2026-08-27)
+
+**Renamed `server` -> `g15` the same day**, and its WSL host `server-wsl` ->
+`g15-wsl`. Reason: `server` also names the `linux.sh` PROFILE latitude runs, so
+one token meant two things in one manifest — and the role the name claimed had
+moved to latitude. The tailnet nodes, the dotfiles branch and
+`fleet-authorized-keys` all moved in the same change; that set is the checklist
+for any future rename. Below, `server-wsl` in the trap descriptions means the box
+now called `g15-wsl`.
 
 State is in `AGENTS.md` and `docs/fleet-roadmap.md` P2; what follows is only what
 the code does not say and a re-read of the diff would not tell you.

@@ -72,13 +72,15 @@ fleet_has_machine no-such-box && die "fleet_has_machine accepts a non-member" \
   || pass "fleet_has_machine rejects a non-member"
 fleet_has_machine "" && die "fleet_has_machine accepts an empty name" \
   || pass "fleet_has_machine rejects an empty name"
-# `server` by name. It was pinned as REJECTED from 2026-08-01 (the decommission)
-# until 2026-08-27, when the box was brought back as the personal-projects host —
-# so this line has been both polarities and the assertion is the manifest, not the
-# history. The unknown-machine regression it once guarded is covered above by
-# `no-such-box` and the empty name, which is where it belonged all along.
-fleet_has_machine server && pass "fleet_has_machine accepts the returned 'server'" \
-  || die "fleet_has_machine accepts the returned 'server'"
+# The G15 by both its names. It was `server` until 2026-08-27 — pinned REJECTED
+# from the 2026-08-01 decommission, then accepted when the box came back, then
+# renamed because `server` also names the linux.sh profile latitude runs. Both
+# arms are asserted: the manifest is the truth, and the OLD name must NOT quietly
+# keep working, or a stale `--machine server` reads as a successful no-op.
+fleet_has_machine g15 && pass "fleet_has_machine accepts 'g15'" \
+  || die "fleet_has_machine accepts 'g15'"
+fleet_has_machine server && die "fleet_has_machine still accepts the pre-rename 'server'" \
+  || pass "fleet_has_machine rejects the pre-rename 'server'"
 
 # The exit CODE is the assertion: a nonzero status is what stops `just provision
 # --machine typo --apply` from reading as a successful no-op.

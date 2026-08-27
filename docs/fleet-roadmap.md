@@ -6,7 +6,8 @@ the "where to head next" companion. For any item worth real work, run
 `superpowers:brainstorming` → `writing-plans` and drop the plan under
 `docs/superpowers/plans/`.
 
-_Last updated: 2026-08-27 — `server` returned to the fleet (P2 reversed).
+_Last updated: 2026-08-27 — `server` returned to the fleet (P2 reversed) and was
+renamed `g15` the same day.
 Previously 2026-08-01, rewritten after the latitude-server migration. The
 previous revision (2026-07-14) had gone materially wrong: retired node names,
 latitude at the wrong tailnet IP, and done items still open. If you find
@@ -21,12 +22,12 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| `server` | `100.64.0.3` | Windows 11 (`g513ie`) | **back in `fleet.json` 2026-08-27** — the personal-projects host. Windows kept on purpose; its Linux side is the WSL host `server-wsl` below. `C:` is still ~416 GB used and unreviewed, but nothing is waiting on that review any more. Reach it as `methe@server.gg.ez` |
+| `g15` | `100.64.0.3` | Windows 11 (`g513ie`) | **back in `fleet.json` 2026-08-27**, renamed from `server` the same day — the personal-projects host. Windows kept on purpose; its Linux side is the WSL host `g15-wsl` below. `C:` is still ~416 GB used and unreviewed, but nothing is waiting on that review any more. Reach it as `methe@g15.gg.ez` |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
 
-`desktop-wsl` (`100.64.0.6`) and `server-wsl` (`100.64.0.9`) are self-declared
+`desktop-wsl` (`100.64.0.6`) and `g15-wsl` (`100.64.0.9`) are self-declared
 WSL hosts: no `fleet.json` entry, a gitignored `fleet.local.json` instead. Both
 are `dispatch:direct` — each owns its own tailnet node, distinct from the
 Windows parent's.
@@ -199,7 +200,7 @@ and `converge.sh` still *detects* a `nixos` class on purpose (folding it into
 `linux` would run the apt driver on a Nix box and abort). Both are fail-safe if
 Nix ever returns. Leave them.
 
-## P2 — ✅ DONE 2026-08-01, ↩ REVERSED 2026-08-27. `server` (g513ie) left the fleet, then came back.
+## P2 — ✅ DONE 2026-08-01, ↩ REVERSED 2026-08-27. `server` (g513ie) left the fleet, then came back as `g15`.
 
 > **Reversed 2026-08-27 — the box is back in `fleet.json` as the
 > personal-projects host.** Read this section as a record of what was *removed*,
@@ -207,8 +208,11 @@ Nix ever returns. Leave them.
 > still wiped, the Caddy repoint still holds. What came back is the manifest
 > entry, the `methe@server` trust line (the SAME key — the box was never
 > reinstalled) and the `tier_fleet_ssh` member block, plus a new self-declared
-> WSL host `server-wsl` at `100.64.0.9`. The wipe this section kept gating never
+> WSL host `g15-wsl` at `100.64.0.9`. The wipe this section kept gating never
 > happened and is now off the table, so `C:` being unreviewed blocks nothing.
+> **The box is `g15`, not `server`, since the same day** — `server` also names
+> latitude's `linux.sh` profile, and one word for two things in one manifest is
+> how the last revision of this file rotted.
 
 **The hardware is NOT retired** — see the Forgejo item below before wiping it.
 
@@ -305,10 +309,12 @@ Nix ever returns. Leave them.
   question to answer before wiping or returning the machine — and it is a
   filesystem review, not a volume audit.
 
-- [ ] The `server` **profile** name survives the `server` **machine** — latitude
-  uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
-  `plan server`. Not a bug, but the two now mean different things; do not "clean
-  up" the profile thinking it is the retired box.
+- [x] **The `server` profile / `server` machine collision is gone** — resolved
+  2026-08-27 by renaming the MACHINE to `g15`, not by touching the profile.
+  `profile: server` on latitude and `plan server` in `provision/tests/tiers.test.sh`
+  are now the only meaning of the word, which is what this item wanted. Renaming
+  the profile instead would have churned every tier list for a name that is
+  accurate.
 
 ---
 
