@@ -59,12 +59,20 @@ _dotfiles_key_material() {
 # -C "$HOME" is not cosmetic: `ls-files` is cwd-scoped, and this role runs with
 # the cwd inside ~/machines, so without it the index listing would cover only
 # paths under machines/ and every other collision would be missed.
+#
+# `-e || -L` is the other half of that, and it is not belt-and-suspenders: `-e`
+# FOLLOWS symlinks, so a DANGLING symlink at a tracked path tests false and was
+# skipped — while git, which only lstat()s, refused the checkout over it anyway.
+# The backup pass then moved nothing and the role failed with "checkout refused"
+# and no explanation. Hit live on g15-wsl 2026-08-27: ~/.claude was full of links
+# into /mnt/c/.../GitHub/nix/claude, a layout deleted with the NixOS tree, so
+# EVERY collision there was invisible to this function.
 _dotfiles_collisions() {
     local gitdir="$1" ref="$2" p idx
     idx="$(git --git-dir="$gitdir" --work-tree="$HOME" -C "$HOME" ls-files 2>/dev/null)"
     git --git-dir="$gitdir" --work-tree="$HOME" ls-tree -r --name-only "$ref" 2>/dev/null |
         while IFS= read -r p; do
-            [ -e "$HOME/$p" ] || continue
+            [ -e "$HOME/$p" ] || [ -L "$HOME/$p" ] || continue
             printf '%s\n' "$idx" | grep -qxF -- "$p" && continue
             printf '%s\n' "$p"
         done
@@ -84,7 +92,7 @@ _dotfiles_backup_collisions() {
             echo "  dotfiles: keys are never tracked; resolve this by hand before re-running." >&2
             refused=1; continue
         fi
-        if [ -e "$HOME/$p.pre-dotfiles" ]; then
+        if [ -e "$HOME/$p.pre-dotfiles" ] || [ -L "$HOME/$p.pre-dotfiles" ]; then
             echo "  dotfiles: ~/$p collides and ~/$p.pre-dotfiles already exists — refusing to overwrite it." >&2
             echo "  dotfiles: move or delete the old backup, then re-run." >&2
             refused=1; continue

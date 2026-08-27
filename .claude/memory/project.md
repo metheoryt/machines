@@ -1784,3 +1784,34 @@ the code does not say and a re-read of the diff would not tell you.
   repo was bundled on another member, scp'd to `C:\Users\methe`, cloned from the
   bundle, and `origin` reset to the ssh URL. No token ever touched the box. Same
   trick works for any fleet box whose GitHub identity is not live yet.
+
+## The dotfiles checkout guard was blind to dangling symlinks (fixed 2026-08-27)
+
+- **`_dotfiles_collisions` used `[ -e ]`, which FOLLOWS symlinks.** A dangling
+  symlink at a tracked path therefore tested false and was skipped, while git —
+  which only `lstat`s — refused the checkout over it anyway. Net effect: the
+  backup pass moved nothing, and `role_dotfiles` failed with "checkout refused —
+  untracked files in $HOME already occupy tracked paths" listing paths that the
+  guard had just declared absent. Fixed with `[ -e ] || [ -L ]` in both
+  `_dotfiles_collisions` and the `.pre-dotfiles` name check; regression case in
+  `provision/tests/dotfiles-collisions.test.sh` (6 assertions fail without it).
+- **What made it reachable: `~/.claude` on g15-wsl was a graveyard of 12 links
+  into `/mnt/c/Users/methe/GitHub/nix/claude/`** — a Windows checkout of the old
+  `nix` repo layout, gone since the NixOS tree was deleted. Not just the four
+  dotfiles-tracked paths: `hooks/global-memory-load.sh`,
+  `hooks/project-memory-check.sh`, `hooks/gortex-onboard-check.sh`,
+  `agents/quick-tasks.md`, `skills/{update-balance,gortex-align}` and
+  `host-memory.md` were dead too, i.e. the memory-loading hooks on that box had
+  been inert for weeks.
+- **`agents/bootstrap.sh`'s `skipped=N` counter hides exactly this.** It reported
+  `linked=0 skipped=4 backed-up=0 failed=0` — clean-looking — because a dangling
+  symlink is *an existing entry* to it. When a box's agent config behaves oddly,
+  run `find ~/.claude -xtype l` before trusting a bootstrap summary.
+- Removing them is safe: a broken symlink holds no data, and the target root
+  (`/mnt/c/Users/methe/GitHub`) does not exist at all on that box. Verified before
+  deleting, not assumed.
+- **Still NOT fixed, deliberately:** the clone in `role_dotfiles` has no
+  `GIT_SSH_COMMAND` hardening, so on a box with no registered GitHub key it still
+  hangs on ssh's host-key prompt rather than failing. This run passed
+  `GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'` in
+  the environment as a workaround.

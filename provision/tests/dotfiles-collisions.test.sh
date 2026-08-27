@@ -22,7 +22,11 @@ hasnt() { case "$1" in *"$2"*) fail "$3 (unexpected '$2')" ;; *) pass "$3" ;; es
 # Path predicates get their own helpers rather than `[ -e x ]; eq "$?"`: the inline
 # form is correct but trips shellcheck's SC2319 on every use.
 exists() { if [ -e "$1" ]; then pass "$2"; else fail "$2 (missing $1)"; fi; }
-absent() { if [ -e "$1" ]; then fail "$2 (unexpected $1)"; else pass "$2"; fi; }
+absent() { if [ -e "$1" ] || [ -L "$1" ]; then fail "$2 (unexpected $1)"; else pass "$2"; fi; }
+# A dangling symlink is present-but-unreadable: `-e` is false for it, `-L` true.
+# The whole point of the case below is that the two differ, so the helper that
+# asserts presence must not be written with `-e` alone.
+is_link() { if [ -L "$1" ]; then pass "$2"; else fail "$2 (not a symlink: $1)"; fi; }
 
 command -v git >/dev/null 2>&1 || { echo 'SKIP: no git'; exit 0; }
 
@@ -72,12 +76,21 @@ mkdir -p "$HOME/.config/gh"
 printf 'version: 1\n# a newer gh comment\n' > "$HOME/.config/gh/config.yml"
 printf 'untracked\n'                        > "$HOME/.config/gh/hosts.yml"
 
+# ...and a DANGLING symlink at another tracked path. This is not a contrived
+# case: g15-wsl arrived on 2026-08-27 with ~/.claude full of links into
+# /mnt/c/.../GitHub/nix/claude, a layout deleted with the NixOS tree. `-e`
+# follows symlinks and so tests FALSE here, while git lstat()s and refuses the
+# checkout — so the collision was invisible to the guard and the role failed
+# with "checkout refused" having moved nothing.
+ln -s "$TMP/target-that-does-not-exist" "$HOME/.bashrc"
+
 # ── _dotfiles_collisions ──────────────────────────────────────────────────────
 OUT="$(_dotfiles_collisions "$GITDIR" refs/remotes/origin/main)"
 has "$OUT" '.config/gh/config.yml' 'collisions: reports the file that exists in $HOME'
-hasnt "$OUT" '.bashrc'             'collisions: does not report a tracked path absent from $HOME'
+has "$OUT" '.bashrc'               'collisions: reports a DANGLING symlink at a tracked path'
+hasnt "$OUT" '.ssh/config'         'collisions: does not report a tracked path absent from $HOME'
 hasnt "$OUT" 'hosts.yml'           'collisions: does not report an untracked file at an untracked path'
-eq "$(printf '%s\n' "$OUT" | grep -c .)" '1' 'collisions: exactly one collision'
+eq "$(printf '%s\n' "$OUT" | grep -c .)" '2' 'collisions: exactly two collisions'
 
 # ── _dotfiles_backup_collisions, then the checkout git previously refused ──────
 # The premise first: without the guard, this is the failure every fresh box hits.
@@ -94,6 +107,8 @@ has "$(cat "$HOME/.config/gh/config.yml.pre-dotfiles")" 'a newer gh comment' \
   'backup: the backup holds the LOCAL content, not the repo content'
 absent "$HOME/.config/gh/config.yml" 'backup: the tracked path is now free for git'
 exists "$HOME/.config/gh/hosts.yml" 'backup: an untracked path is left alone'
+is_link "$HOME/.bashrc.pre-dotfiles" 'backup: the dangling symlink was moved aside, not deleted'
+absent "$HOME/.bashrc" 'backup: the dangling symlink no longer occupies the tracked path'
 
 git --git-dir="$GITDIR" --work-tree="$HOME" checkout --quiet -B main --track origin/main 2>/dev/null
 eq "$?" '0' 'checkout: git accepts it once the collisions are cleared'
