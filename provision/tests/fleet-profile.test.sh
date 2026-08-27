@@ -72,10 +72,13 @@ fleet_has_machine no-such-box && die "fleet_has_machine accepts a non-member" \
   || pass "fleet_has_machine rejects a non-member"
 fleet_has_machine "" && die "fleet_has_machine accepts an empty name" \
   || pass "fleet_has_machine rejects an empty name"
-# `server` by name, because muscle memory outlives a manifest edit and this is the
-# regression that would make a retired member silently look provisionable again.
-fleet_has_machine server && die "fleet_has_machine still accepts the retired 'server'" \
-  || pass "fleet_has_machine rejects the retired 'server'"
+# `server` by name. It was pinned as REJECTED from 2026-08-01 (the decommission)
+# until 2026-08-27, when the box was brought back as the personal-projects host —
+# so this line has been both polarities and the assertion is the manifest, not the
+# history. The unknown-machine regression it once guarded is covered above by
+# `no-such-box` and the empty name, which is where it belonged all along.
+fleet_has_machine server && pass "fleet_has_machine accepts the returned 'server'" \
+  || die "fleet_has_machine accepts the returned 'server'"
 
 # The exit CODE is the assertion: a nonzero status is what stops `just provision
 # --machine typo --apply` from reading as a successful no-op.
