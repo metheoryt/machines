@@ -215,8 +215,17 @@ has "$(cat "$CLONE_LOG")" 'ssh -i /custom/key' 'clone: an explicit GIT_SSH_COMMA
 # ...and it must not leak into the caller's environment: `local -x`, not `export`.
 # An exported GIT_SSH_COMMAND would silently retune every later git call in the
 # provision run, including tier_selfpull's pulls of unrelated repos.
+# Behavioural, because the grep below only tests that the source LOOKS right:
+# read the variable back in the caller after the role returns. PATH=/nonexistent
+# makes git unresolvable, so the role fails at the clone without a shim.
+LEAK="$(env -u GIT_SSH_COMMAND HOME="$TMP/leak-home" bash -c '
+  source "$1"
+  mkdir -p "$HOME"
+  PATH=/nonexistent role_dotfiles apply debian g15 >/dev/null 2>&1
+  printf "%s" "${GIT_SSH_COMMAND-<unset>}"' _ "$REPO/provision/roles/dotfiles.sh")"
+eq "$LEAK" '<unset>' 'clone: GIT_SSH_COMMAND does not survive the role returning'
 grep -q 'local -x GIT_SSH_COMMAND' "$REPO/provision/roles/dotfiles.sh"
-eq "$?" '0' 'clone: the ssh posture is function-scoped, not exported'
+eq "$?" '0' 'clone: ...because it is declared local -x, not exported'
 
 # The Windows executor clones over the same ssh and prompts identically, so the
 # posix fix alone would leave `desktop` and `g15` hanging on a fresh provision.
