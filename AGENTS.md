@@ -27,22 +27,26 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   (WSL hostname `g614jv`, native `ME-G614JV`), tailnet `100.64.0.4`. Its former
   NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
   `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
-- **server / g513ie** — ASUS ROG **G15** 2023 (model G513IE), RTX 3050 Ti,
-  Windows 11, was tailnet `100.64.0.3`. **Removed from `fleet.json` 2026-08-01**,
-  along with `hosts/server/` and its `methe@server` trust line — the decommission
-  is done (`docs/fleet-roadmap.md` P2). It is **not** retired hardware: still
-  powered on and on the tailnet. Forgejo, which used to be the stated reason to
-  keep it intact, was **wiped 2026-08-01** after inspection found zero
-  repositories — it was never used. Its Docker state was audited 2026-08-01 and holds
-  **nothing unique** — every remaining volume is either duplicated on latitude or a
-  `CACHEDIR.TAG`-marked virtualenv. What still gates a wipe is `C:`: it is the only
-  drive left, ~430 GB in use, and unreviewed (`docs/fleet-roadmap.md` P2). **Reach it as `methe@server.gg.ez`, naming the
-  user**: bare
-  `ssh server.gg.ez` works from air only until `tier_fleet_ssh` next rewrites its
-  span and drops the member block, after which the FQDN hits the `Host *.gg.ez`
-  catch-all's `User me` and is refused (server's user is `methe`). Both air and
-  latitude reach it that way, verified — so a pull-based migration can be driven
-  from either.
+- **server / g513ie** — ASUS ROG **G15** 2023 (model G513IE), Ryzen 7 4800H,
+  31 GB, RTX 3050 Ti, Windows 11 Pro, tailnet `100.64.0.3`. **Back in
+  `fleet.json` since 2026-08-27** as the **personal-projects host**, roles `base,
+  ssh-server, agents, dotfiles, repos` — its own `~/.claude` is the point, so a
+  personal Claude account needs no Orca profile juggling. The 2026-08-01
+  decommission (`docs/fleet-roadmap.md` P2) is history; what it did is not undone
+  — `hosts/server/` stays deleted and Forgejo stays wiped (inspection found zero
+  repositories; it was never used).
+- **The Linux side of `server` is a WSL distro, not a reinstall.** Windows 11 was
+  deliberately kept: C: holds ~416 GB nobody has reviewed, so a native Debian
+  install would have to start with that review, and the box already had an empty
+  `Ubuntu-26.04` WSL2 distro and 607 GB free. It is provisioned as the
+  self-declared fleet host **`server-wsl`** (`dispatch:direct`, its own tailnet
+  node — Windows `server` keeps node 3), so it never appears in `fleet.json`. If
+  the Windows layer turns out to be friction, the target is Debian 13 trixie like
+  latitude; that decision is now deferrable rather than blocking.
+- **Reach `server` as `methe@server.gg.ez`, naming the user** — its Windows user
+  is `methe`, and with the member block restored the bare `ssh server` alias works
+  again from any box that has re-provisioned since. Reach the Linux side directly
+  at `server-wsl.gg.ez` (user `me`).
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
