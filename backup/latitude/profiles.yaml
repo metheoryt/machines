@@ -33,10 +33,22 @@
 # is on a different USB bus from the archive-mirror target, so a scheduled backup
 # does not contend with a mirror run. It is NOT one of the two flaky dock bays.
 #
-# PASSWORD: the single tracked byte-source. ~/my/vps/backup/homeserver/pass.txt
-# is a symlink at ~/g513ie-prod-config/vps/backup/homeserver/pass.txt, which is
-# the dotfiles-tracked file. Absolute path here so resticprofile does not resolve
-# it relative to this directory and make someone create a second copy.
+# PASSWORD: one byte-source, reached through one symlink, and the hop is
+# deliberate -- do not "simplify" it away.
+#
+# The tracked file is ~/g513ie-prod-config/vps/backup/homeserver/pass.txt, a real
+# file in the dotfiles bare repo's work-tree (that directory is NOT its own git
+# repo). Every word in that path is now wrong: this is not the vps repo, and
+# there has been no homeserver since the 2026-08 migration. Renaming it is a
+# dotfiles change on latitude's branch and is deliberately not coupled to this
+# move, so instead ~/machines/backup/latitude/pass.txt symlinks to it and the
+# committed config below names only the correct path. Re-point the symlink if
+# that file is ever renamed; nothing else has to change.
+#
+# The symlink itself is host-local and gitignored (`**/pass.txt`), so it is one
+# of the things a rebuilt latitude must recreate by hand. Absolute path below so
+# resticprofile does not resolve it relative to this directory and make someone
+# create a second copy.
 
 version: "1"
 
@@ -77,12 +89,12 @@ latitude:
     - test -f /mnt/spare320/restic/latitude/config
 
   repository: "/mnt/spare320/restic/latitude"
-  password-file: "/home/me/my/vps/backup/homeserver/pass.txt"
+  password-file: "/home/me/machines/backup/latitude/pass.txt"
   # base-job sets RESTIC_PASSWORD_FILE to a relative "pass.txt"; the flag above
   # would win, but leaving a wrong env var set is how someone later "fixes" the
   # wrong thing. Point them at the same file.
   env:
-    RESTIC_PASSWORD_FILE: "/home/me/my/vps/backup/homeserver/pass.txt"
+    RESTIC_PASSWORD_FILE: "/home/me/machines/backup/latitude/pass.txt"
   # On, unlike the base default: these are sqlite, XML and JSON. The .sql.gz
   # dumps are already compressed and simply will not shrink further, which costs
   # a little CPU and no correctness.
