@@ -299,9 +299,7 @@ wsl --unregister <name>          # nuke a disposable distro back to zero
 
 Enroll a WSL2 distro as its own Headscale tailnet node so it's reachable across
 the fleet — its repos live natively on the distro's Linux filesystem, not across
-the slow `\\wsl.localhost` 9P boundary. (Orca itself now runs on the Windows host
-and opens the WSL project directly; the old per-distro `orca serve` runtime was
-removed 2026-07-21.)
+the slow `\\wsl.localhost` 9P boundary.
 
 Run **both scripts inside each distro**, in order:
 
@@ -320,6 +318,15 @@ Run **both scripts inside each distro**, in order:
     # 2. Fleet SSH: key-only sshd + persisted fleet key + client config (needs sudo)
     bash ~/machines/provision/ssh-wsl.sh
 
+    # 3. OPTIONAL — a headless Orca runtime on :6768, for reaching this distro
+    #    from ANOTHER machine's Orca (needs sudo; run step 1 first)
+    bash ~/machines/provision/orca-serve.sh
+
+Then read the pairing URL and add it on each client machine:
+
+    journalctl --user -u orca-serve -f                  # prints orca://pair?… (SECRET)
+    orca environment add --name <distro> --pairing-code '<orca://pair?…>'
+
 Notes:
 
 - **Per-distro identity.** Exactly one distro per Windows host runs `tailscaled`
@@ -329,6 +336,19 @@ Notes:
   through WSL's NAT.
 - **Hostname** defaults to `wsl-<sanitized $WSL_DISTRO_NAME>`; override with
   `ORCA_TS_HOSTNAME`.
+- **Step 3 is only for CROSS-MACHINE access.** Windows Orca opens its own host's
+  distro directly, so a distro reached only from its own Windows host needs no
+  runtime. Restored 2026-08-29 for `g15-wsl`, which `air` and `desktop` drive
+  over the tailnet. Version defaults to `latest`; pin with `ORCA_VERSION`.
+- **Serve needs an X display, and under WSLg it cannot make its own.** Orca
+  starts an Xvfb on `:99` when `DISPLAY` is unset, but WSLg mounts
+  `/tmp/.X11-unix` **read-only**, so Xvfb never binds its socket and Electron
+  dies with `Missing X server or $DISPLAY` — a crash loop, not a degraded pane.
+  The generated `orca-serve-start` hands it WSLg's own `:0` instead.
+- **The runtime lives only while the distro does.** A WSL distro exits about a
+  minute after the last `wsl.exe` client detaches, taking the runtime with it —
+  a Windows `wsl-keepalive` scheduled task (ONLOGON, `wsl -d <distro> -u root --
+  /bin/sleep infinity`) is what keeps a `dispatch:direct` host answering.
 - **Self-service enrollment.** `--enroll` SSHes to the control server
   (`$HEADSCALE_SSH`, default `debian@cyphy.kz`) and mints a reusable, expiring
   pre-auth key (`$HEADSCALE_KEY_EXPIRY`, default `2160h`/90d; `$HEADSCALE_USER_ID`,

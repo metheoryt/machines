@@ -152,7 +152,22 @@ set -u
 export PATH="\$HOME/.local/bin:\$PATH"
 addr="\$(tailscale ip -4 2>/dev/null | head -1)"
 [ -n "\$addr" ] || { echo "orca-serve-start: no tailnet IPv4 (is tailscaled up?)" >&2; exit 1; }
-exec ${RUN_PREFIX}orca serve --port 6768 --pairing-address "\$addr"
+# Serve needs an X display: Electron's browser panes abort with "Missing X server
+# or \$DISPLAY" and take the whole runtime down. Orca starts its own Xvfb on :99
+# when DISPLAY is unset — but under WSLg /tmp/.X11-unix is a READ-ONLY tmpfs, so
+# Xvfb cannot bind its socket there and never becomes ready. WSLg already serves
+# :0 on that same tmpfs, so hand it to serve instead of fighting for :99.
+if [ -z "\${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then export DISPLAY=:0; fi
+# Serve prints the banner and the PAIRING URL on stdout, and Electron flushes a
+# non-tty stdout only at exit — so under systemd the journal shows nothing until
+# the process dies, and the documented "read the pairing URL from the journal"
+# never works. Give it a pty when stdout is not one; script -e still returns the
+# child's exit status, so Restart=on-failure keeps working. (No backticks in this
+# heredoc: it is unquoted, so they would run as a command substitution HERE.)
+if [ -t 1 ]; then
+  exec ${RUN_PREFIX}orca serve --port 6768 --pairing-address "\$addr"
+fi
+exec script -qefc "${RUN_PREFIX}orca serve --port 6768 --pairing-address \$addr" /dev/null
 EOF
 chmod +x "$SERVE"
 ok "serve wrapper → ~/.local/bin/orca-serve-start"
