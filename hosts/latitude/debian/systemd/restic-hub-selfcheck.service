@@ -1,0 +1,17 @@
+[Unit]
+Description=Verify the restic REST backup hub
+Documentation=file:/home/me/machines/hosts/latitude/debian/restic-hub-selfcheck.sh
+# No ConditionPathIsMountPoint here, unlike the mirror units. An absent
+# /mnt/spare320 is precisely what this checks for -- skipping the run because the
+# drive is gone would silence the alarm it exists to raise.
+
+[Service]
+Type=oneshot
+# Root: the .htpasswd it stats is root:root 0640 on the drive, and `docker`
+# needs the socket. It holds no restic credentials and reads no repository data.
+User=root
+ExecStart=/home/me/machines/hosts/latitude/debian/restic-hub-selfcheck.sh
+# A nonzero exit leaves this unit `failed`, which `just health` already reports.
+# That is the entire notification path on purpose: alerting is deferred (roadmap
+# P0), and a failed unit is the cheapest thing that ends the silence.
+TimeoutStartSec=5m
