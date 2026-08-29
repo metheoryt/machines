@@ -887,6 +887,45 @@ global + per-host). One bullet per fact under a topical heading.
   `sb_docker_alerts`) — a `sb_backup_alerts` keyed on newest-snapshot age is the
   right home for this, and is not built yet.
 
+### The backup system moved from `vps` into `machines` (2026-08-29)
+
+Tasks 1–2 of `docs/superpowers/plans/2026-08-29-backup-relocation-vps-to-machines.md`
+are done: `machines/backup/` now holds the tree (`wsl` → `desktop-wsl`,
+`homeserver` → `_retired-homeserver`) and **latitude runs from it** — four timers,
+same names, `WorkingDirectory=/home/me/machines/backup/latitude`, snapshot
+`2d7cc63e` proving it. `vps/backup/` is still present and is removed in Task 6.
+
+- **A resticprofile systemd unit bakes `Environment="RESTIC_PASSWORD_FILE=…"` in
+  at `schedule` time.** Editing `profiles.yaml` changes nothing until the schedule
+  is reinstalled, and the env var is not a fallback the `password-file:` flag
+  merely overrides — it is copied verbatim into `/etc/systemd/system`. That is why
+  moving a password path means moving *both* keys and then re-running `schedule`.
+- **`resticprofile schedule --all` ignores `-n` and schedules every profile in the
+  config.** One invocation does the whole file; a second `-n <other>` run is the
+  same command twice.
+- **Unit names derive from the profile name, not the directory** —
+  `resticprofile-backup@profile-latitude`. So relocating the config directory
+  overwrites the same unit files rather than creating a second set. Renaming a
+  *profile* is what strands a timer and orphans snapshots, which is why the
+  relocation freezes every profile name and every repository URL.
+- **latitude's password is one file reached through one symlink, deliberately.**
+  The dotfiles-tracked byte-source is still
+  `~/g513ie-prod-config/vps/backup/homeserver/pass.txt` — every word of which is
+  now false — and `~/machines/backup/latitude/pass.txt` symlinks to it so the
+  committed config names only the correct path. The symlink is gitignored and
+  host-local: a rebuilt latitude must recreate it by hand.
+- **`g614jv-maintenance` holds desktop-wsl's key, not latitude's**
+  (`~/.config/restic/g614jv.pass.txt`, outside both repos). It prunes desktop-wsl's
+  repo on latitude's own filesystem because the REST server runs `--append-only`,
+  so no client can ever delete from it. It needed no edit in the move.
+- **A stale 12-byte `pass.txt` in `vps/backup/wsl/` was the last copy of the
+  pre-2026-08-01 repo's password** — never git-tracked, in no dotfiles branch,
+  and different from the live 64-byte one at byte 1. Deleted on the user's explicit
+  call after the drives behind that repo were confirmed reformatted. The lesson is
+  the check, not the outcome: a `pass.txt` sitting next to a profile is not
+  automatically the password that profile uses — desktop-wsl's reads
+  `/home/me/.config/restic/pass.txt` by absolute path.
+
 ## SSH key hygiene (audited 2026-07-31)
 
 - **desktop's live SSH identity is `SHA256:fFZUwTp9Ye4HukFntyjVplkAJxczc7GWz6ssWlcyg40`
@@ -1827,3 +1866,188 @@ the code does not say and a re-read of the diff would not tell you.
   that records the environment it was handed (7 assertions fail without the fix).
   The test `env -u`s `GIT_TERMINAL_PROMPT` first: a dev shell can already export
   `0`, which made that one assertion pass vacuously until it was cleared.
+
+## Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)
+
+Context: qaz-code (and its 186 GB pgvector DB) migrated from desktop-wsl to
+g15-wsl. The move itself was routine; four things about WSL as a fleet host
+were not, and all four will recur for the next project moved there.
+
+- **A WSL distro lives only while a `wsl.exe` client from Windows is attached to
+  it.** There is no config switch for "stay running" — `vmIdleTimeout` governs
+  the utility VM, not the distro. g15-wsl therefore self-terminated about a
+  minute after every command returned and kept dropping off the tailnet, which
+  reads as a flaky host. desktop-wsl looks immune only because Docker Desktop's
+  `docker-desktop-user-distro proxy --distro-name desktop-wsl` runs inside it and
+  is exactly such an attached client. **Consequence for the "drop Docker Desktop,
+  install native docker" plan: removing DD removes the thing holding desktop-wsl
+  up.** Fix on g15 is a Windows scheduled task `wsl-keepalive` (ONLOGON,
+  `/RL HIGHEST`) running `wsl -d Ubuntu-26.04 -u root -- /bin/sleep infinity`.
+  `provision-wsl` installs nothing of the sort — a real gap for a `dispatch:direct`
+  host that is supposed to be reachable.
+- **Docker Desktop leaves a dpkg diversion behind.** On a distro that ever had DD
+  integration, `/usr/bin/docker` is diverted to `/usr/bin/docker.native`, so
+  installing `docker.io` yields a working daemon and no CLI at all —
+  `docker: command not found` with `dockerd` active. Undo with
+  `dpkg-divert --rename --remove /usr/bin/docker`. Re-enabling DD integration
+  will re-divert it.
+- **Windows cannot open TCP to its own WSL distro's NAT address on g15**
+  (172.26.x:22): ICMP passes, TCP does not, and it stays broken with an explicit
+  Hyper-V firewall allow rule for 22 *and* `DefaultInboundAction Allow` on the WSL
+  VM. So `netsh portproxy` into the distro does not work there. What does work is
+  jumping through Windows: `ProxyCommand ssh methe@<g15> "wsl -d <distro> -- nc
+  127.0.0.1 22"` gives a real ssh connection (rsync runs over it normally). Note
+  desktop-wsl does not have this problem because it runs `networkingMode=mirrored`.
+- **Piping binary through Windows OpenSSH → PowerShell → `wsl.exe` does NOT
+  corrupt the stream.** Verified by sha256 over 100 MB and then 186 GB at
+  117 MB/s. PowerShell passes the stdin handle to the child rather than reading
+  it. This is the simplest fast path into a distro and needs no port plumbing.
+
+Transport, for the next time something big has to move: the two boxes' WSL
+distros reach each other over tailscale **through the DERP relay on hub
+(cyphy.kz, Kazakhstan)** — 3-4 MB/s, and not a misconfiguration, just no direct
+path between two NATed distros. g15 also associates on 2.4 GHz (channel 12,
+286 Mbps link) and its MediaTek MT7921 exposes no band-preference property, so
+it cannot be pushed to 5 GHz from software. A direct Ethernet cable between the
+two laptops, left on APIPA (169.254.x, no DHCP needed), gave 117 MB/s and turned
+an 8-hour transfer into 40 minutes.
+
+### qaz-code PGDATA landed on g15 (2026-08-29, verified)
+
+- 185.2 GB physical copy of `qaz-law_db_data` -> `g15-wsl:/data/qaz-law/pgdata`,
+  bind-mounted by a git-excluded `compose.override.yml` that also pins the image
+  by digest. Postgres starts clean there (no recovery), HNSW index present at
+  13 GB and `indisvalid`, and the plan uses it.
+- **Both sides agree**: 184 GB `pg_database_size`, 25 468 309 chunks /
+  5 545 473 with embeddings, `data_checksums on`.
+- The copy is a **chunked** tar-over-ssh (`scratchpad/xfer2.sh`): 18 batches of
+  10 GB, a marker per batch, so an interruption costs one batch and the script
+  resumes. 28 minutes at ~114 MB/s over the direct Ethernet cable.
+- **Verify a physical copy by manifest, never by `du`** — path+size for every
+  file, sorted `LC_ALL=C` on both sides. `du` totals match even when one file is
+  truncated, which is exactly the failure a killed tar produces.
+- Remote commands to a Windows fleet host go through PowerShell, which eats
+  quotes: `wsl -d <distro> -- find ... -printf "%s\t%P\n"` silently returns one
+  line. **Feed the script on stdin instead** — `printf '%s\n' ... | ssh host
+  "wsl -d <distro> -u root -- bash -s"`. Same trick as the tar pipe.
+- Nothing is deleted from the desktop yet; that stays a separate, confirmed step.
+
+### The other ten personal projects landed on g15 (2026-08-29, verified)
+
+All of `~/my/` is now on `g15-wsl` alongside qaz-code. Nothing was deleted from
+the desktop — that stays a separate, explicitly confirmed step.
+
+**Two repos have no remote at all: `DeMarket` (1 commit) and `housing` (20).**
+They are the only irreplaceable things in this migration and also the two
+smallest, which is exactly how they get skipped. They were `rsync -aH`'d
+wholesale *including `.git`*, not cloned. Verified by sha256 over every file:
+identical except `.git/index` on both — that file stores stat data (inode,
+ctime) and **differs across a correct copy**. An index-only diff is a pass, not
+a failure. No GitHub repos were created for them; that is an outward-facing
+action and was not asked for.
+
+The other eight (`airdrome`, `arbuz-concierge`, `buton`, `embedthat`, `skep`,
+`telegrind`, `vasya`, `vps`) were cloned from `git@github.com:metheoryt/…` on
+g15 — it already authenticates as `metheoryt` — then HEAD compared against the
+desktop, all eight identical.
+
+**The real payload of a repo move is what git ignores.** `git status
+--porcelain` reported every repo clean while ~50 MB of unrecoverable content sat
+on disk: `.env` × 4, `buton/google-account.json`, `buton/harvester.db` + 2 dated
+backups + `harvester.ledger.db`, `telegrind/local/telegrind-*.json` (a Google
+service-account key), `vps/backup/wsl/pass.txt` (a 12-byte restic password),
+`skep/.superpowers/sdd/` (62 files of plans and review diffs),
+`skep/SKEP_SUMMARY.md` (untracked), and `.claude/settings.local.json` × 5.
+Enumerate it with `git status --porcelain --ignored=matching` **plus** the
+untracked lines — neither alone is complete. Copied by explicit file list and
+verified by sha256: 79 files, byte-identical. Venvs (`buton` 183 MB,
+`embedthat` 725 MB) deliberately skipped — `uv sync` rebuilds them.
+
+**No named docker volumes for any of the ten.** The desktop's ~70 hex-named
+volumes are anonymous; with no containers left for those stacks they are already
+orphaned and unreachable by compose, so restarting a stack on g15 creates fresh
+ones either way. Only `qaz-law_db_data` (moved) and the `backend-api*` work
+volumes are named.
+
+**g15's WSL firewall is back to `DefaultInboundAction: Block`**, and the
+never-working `0.0.0.0:2222 → 172.26.251.77:22` portproxy plus its `wsl-ssh-2222`
+rule are gone. Tailnet SSH to `g15-wsl.gg.ez` is unaffected — tailscaled runs
+*inside* the distro, so the Hyper-V VM firewall never sat in that path. There was
+no `wsl-ssh-in` Hyper-V rule to remove.
+
+**Desktop copies deleted 2026-08-29 — except `vps`.** `~/my/` on `desktop-wsl`
+went 1.3 GB → 4.9 MB. **`~/my/vps` stays and must not be deleted:** it is the
+`WorkingDirectory` of the enabled user timer
+`resticprofile-backup@profile-wsl.service`, which backs up this WSL box daily at
+06:00 from `vps/backup/wsl/profiles.yaml`. It is live infrastructure that happens
+to live in a project checkout, not a copy. Before deleting any project directory,
+`grep -rl '/home/me/my/' ~/.config/systemd/user/ /etc/systemd/system/` — that one
+grep is the whole gate.
+
+Two things the pre-delete sweep caught that the first pass had missed, both
+because `git status --porcelain --ignored=matching` **does not recurse into an
+ignored directory** and my listing was additionally `head`-truncated:
+`buton/.superpowers/` (harmless, one empty `.gitignore`) and the fact that
+**`--ignored` without a mode is the listing you actually want**. Also compare
+*refs*, not just HEAD, before deleting a source: `git rev-list --branches --not
+--remotes` plus `git stash list` per repo. All eleven came back zero, and
+`skep`, `telegrind`, `qaz-code` and `DeMarket` each carry a second branch that
+HEAD comparison alone would never have shown.
+
+g15's `qaz-code` sits on `metheoryt/kazhackstan-2026` (0/0 against its own origin
+ref), while the desktop was on `main` — the HEADs differing was the branch, not a
+divergence. `id_cyphy671{,.pub}` removed from g15; the now-stale
+`Host cyphy671.github.com` stanza in its `~/.ssh/config` was left alone
+(dotfiles-tracked, harmless unused). g15 still authenticates to GitHub as
+`metheoryt`.
+
+**The pre-delete gate was missing `git worktree list` (2026-08-29).** Refs,
+stashes and HEAD all came back clean, and deleting `~/my/` still orphaned three
+Orca worktrees under `~/orca/workspaces/<repo>/<branch>` — their `.git` files
+point at `<repo>/.git/worktrees/<name>`, which went with the parent. **A
+worktree's uncommitted state is invisible from the main repo's `git status`, and
+its existence is invisible from `for-each-ref`.** One command would have caught
+all three. Add it to the gate:
+
+    git -C <repo> worktree list      # alongside rev-list --branches --not --remotes + stash list
+
+Recovery, if it happens again: the worktree's *files* survive the parent's
+deletion. Re-create the parent, `git worktree add <path> <branch>` (a clean
+checkout at the tip), then rsync the orphaned directory over it excluding `.git` —
+whatever `git status` then reports IS the uncommitted work, and an empty status
+proves nothing was lost. To check an orphan *without* a repo at all, compute git
+blob hashes by hand — `{ printf 'blob %d\0' $(stat -c%s "$f"); cat "$f"; } |
+sha1sum` — and diff against `git ls-tree -r --format='%(objectname) %(path)'` on
+the branch. That is how `telegrind/telegrind-spendings-analytics` was cleared: 36
+files, every blob identical to `origin/main`, so the branch had been merged and
+only its name was lost (it is not on GitHub either).
+
+**`rsync --exclude '.git'` silently strips nested repositories (2026-08-29).**
+The qaz-code Orca worktree carries `laws/` — 108 448 untracked files, 5.8 GB —
+and inside it four nested git repos (`codes`, `government`, `ministerial`,
+`local`, 139 653 commits and 1.8 GB of history between them, none with a remote).
+Excluding `.git` when copying a worktree is right — the worktree's own `.git` is
+a pointer file that must not travel — but it takes nested repositories with it,
+and the copy still reports `rc=0`.
+
+**`laws/` is regenerable from qaz-code's own database** (confirmed by Maxim
+2026-08-29), so nothing there was at risk and it need not be copied at all next
+time. What survives as the lesson is the mechanism: the omission was caught by a
+plain file-count diff after the transfer (108 336 vs 108 448), not by the exit
+status. **Count files across the boundary; an rsync that succeeded is not an
+rsync that copied what you meant.** Before excluding `.git` anywhere, run
+`find <tree> -name .git -maxdepth 4` and decide about each hit by name.
+
+**Desktop cleanup finished 2026-08-29.** `~/my/` holds only `vps` (live backup
+timer); `~/orca/workspaces/` holds only the work repos plus `vps` — 14 GB → 737 MB,
+gated on a path+size manifest of 108 610 files matching g15 exactly. The
+`qaz-law_db_data` volume and its container are gone: Docker's `Local Volumes` line
+went 200.9 GB → 2.047 GB, and the g15 copy was re-confirmed live first (184 GB,
+25 468 309 chunks, 5 545 473 embeddings, `hnsw_valid=true`).
+
+**Deleting the volume did not return one byte to Windows.** `docker_data.vhdx` is
+still 1007 GB — a dynamically-expanding VHD never shrinks on its own. Reclaiming
+it needs Docker Desktop stopped and an elevated `diskpart` (`select vdisk file=…`
+→ `attach vdisk readonly` → `compact vdisk` → `detach vdisk`), or `Optimize-VHD
+-Mode Full` where the Hyper-V module is present. Worth knowing before promising
+anyone that a volume delete freed disk space.
