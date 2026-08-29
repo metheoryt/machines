@@ -2051,3 +2051,50 @@ it needs Docker Desktop stopped and an elevated `diskpart` (`select vdisk file=�
 → `attach vdisk readonly` → `compact vdisk` → `detach vdisk`), or `Optimize-VHD
 -Mode Full` where the Hyper-V module is present. Worth knowing before promising
 anyone that a volume delete freed disk space.
+
+## Orca headless runtime back on g15-wsl (2026-08-29)
+
+`provision/orca-serve.sh` was restored from `f95cb3f^` and fixed. Why it came
+back: `orca serve` + `environment add --pairing-code` is the ONLY way `air` can
+drive g15's Linux side — Orca has no ssh-remote mode, and Windows Orca reaches
+only its own host's distro. The 2026-07-21 removal ("Orca runs on Windows now")
+was a host-local rationale, and the ABANDONED 2026-08-01 two-distro spec
+abandoned *two distros per host*, not the serve model. Don't re-read either as
+"serve was tried and rejected".
+
+- **Serve needs an X display, and under WSLg it cannot make its own.** Orca
+  starts an Xvfb on `:99` when `DISPLAY` is unset; WSLg mounts
+  `/tmp/.X11-unix` **read-only**, so Xvfb never binds its socket and Electron
+  dies with `Missing X server or $DISPLAY`. That is a crash loop (72 restarts
+  before it was caught), not the "browser panes may be unavailable" the warning
+  suggests. WSLg already serves `:0` on that same tmpfs — hand serve that.
+- **Electron flushes a non-tty stdout only at exit.** Under systemd the journal
+  showed nothing until the process died, so the documented "read the pairing
+  URL from `journalctl`" never worked. `script -qefc … /dev/null` gives it a
+  pty; `-e` preserves the exit status for `Restart=on-failure`.
+- **Most of what looked like crashes was my own test harness.** Piping serve
+  into `grep | head` or capping it with `timeout` makes Chromium tear down
+  noisily — "Network service crashed", "GPU process isn't usable. Goodbye.",
+  `SIGTRAP`. Judge a serve run by whether the unit stays active, never by the
+  shutdown lines. Two fixes were spent on that phantom (SUID `chrome-sandbox`,
+  `ELECTRON_DISABLE_SANDBOX`); both were reverted, neither was needed.
+- **Backticks inside an UNQUOTED heredoc run as a command substitution.** A
+  comment reading `` `script -e` `` in the generated wrapper executed `script`,
+  which spawned an interactive bash and hung the provisioner — leaving a
+  0-byte `orca-serve-start` behind. And a `timeout` that kills the local ssh
+  client does NOT kill the remote script: three copies raced on the same files
+  before I noticed. `pkill -f "bash /tmp/orca-serve[.]sh"` — the bracket keeps
+  the pattern from matching your own command line.
+- **State now:** unit active on g15-wsl (`:6768`, user unit + linger); BOTH
+  `desktop` and `air` paired as environment `g15-wsl`
+  (`ws://100.64.0.9:6768`) and each lists its repos over the tailnet. The same
+  pairing code worked on both clients — the runtime's identity is stable across
+  restarts, so one code is not single-use. `air` also carries a `desktop`
+  environment at `ws://100.64.0.4:6768`, i.e. desktop already served one.
+- **The three worktrees under `~/orca/workspaces/` on g15-wsl are healthy but
+  invisible.** They rsync'd over with `~/my` and their gitdir pointers are
+  correct Linux paths (`git status` clean in all three). A newly added repo
+  defaults to `externalWorktreeVisibility: hide` and the CLI cannot flip it
+  (`orca repo` has list/add/show/set-base-ref/search-refs only) — so it is a
+  per-repo UI toggle, or a destructive `worktree rm` + `create`, which would
+  drop each worktree's gitignored state.
