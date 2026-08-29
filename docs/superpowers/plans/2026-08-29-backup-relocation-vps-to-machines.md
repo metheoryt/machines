@@ -199,9 +199,25 @@ sudo restic -r /mnt/spare320/restic/latitude \
 A `repository does not exist` here means the spare320 drive is absent — that is the
 mount guard working, not a reason to touch `initialize`.
 
-**Verified 2026-08-29:** both units `Result=success`, all four timers present under
-the same names, every `WorkingDirectory` now `/home/me/machines/backup/latitude`,
-no unit left referencing `~/my/vps`, and snapshot `2d7cc63e` written at 15:47.
+**Verified 2026-08-29** — all four reinstalled units exercised, not just the two
+this step first named:
+
+- `backup@latitude` and `forget@g614jv-maintenance` and `check@latitude` all
+  `Result=success`; snapshot `2d7cc63e` written at 15:47.
+- All four timers present under the unchanged names, every `WorkingDirectory` now
+  `/home/me/machines/backup/latitude`, no unit left referencing `~/my/vps`.
+- **Invariant 4 proved live, not by indentation.** The backup log shows
+  `restic check --read-data-subset=5% --password-file=/home/me/machines/backup/latitude/pass.txt`
+  actually issued, ending `no errors were found`. Reading the YAML cannot
+  distinguish a working `check-before` from an inert one — that is the whole trap —
+  so grep the log, never the config.
+- **`schedule-log` in `base.yaml` is a RELATIVE path**, so the run logs now land
+  inside the repo at `backup/latitude/{resticprofile-latitude.backup,latitude.check}.log`.
+  The `backup/**/*.log` glob added in 1.4 already covers them and
+  `git status --short backup/` is clean. Do not "fix" this by making the path
+  absolute without checking what else reads it.
+- `check@g614jv-maintenance` is the one unit not hand-fired; it runs Sun 08:30 and
+  its sibling `forget` on the same repo and password already passed.
 
 ## Task 3 — repoint desktop-wsl's client
 
