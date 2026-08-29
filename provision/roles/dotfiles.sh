@@ -59,12 +59,20 @@ _dotfiles_key_material() {
 # -C "$HOME" is not cosmetic: `ls-files` is cwd-scoped, and this role runs with
 # the cwd inside ~/machines, so without it the index listing would cover only
 # paths under machines/ and every other collision would be missed.
+#
+# `-e || -L` is the other half of that, and it is not belt-and-suspenders: `-e`
+# FOLLOWS symlinks, so a DANGLING symlink at a tracked path tests false and was
+# skipped — while git, which only lstat()s, refused the checkout over it anyway.
+# The backup pass then moved nothing and the role failed with "checkout refused"
+# and no explanation. Hit live on g15-wsl 2026-08-27: ~/.claude was full of links
+# into /mnt/c/.../GitHub/nix/claude, a layout deleted with the NixOS tree, so
+# EVERY collision there was invisible to this function.
 _dotfiles_collisions() {
     local gitdir="$1" ref="$2" p idx
     idx="$(git --git-dir="$gitdir" --work-tree="$HOME" -C "$HOME" ls-files 2>/dev/null)"
     git --git-dir="$gitdir" --work-tree="$HOME" ls-tree -r --name-only "$ref" 2>/dev/null |
         while IFS= read -r p; do
-            [ -e "$HOME/$p" ] || continue
+            [ -e "$HOME/$p" ] || [ -L "$HOME/$p" ] || continue
             printf '%s\n' "$idx" | grep -qxF -- "$p" && continue
             printf '%s\n' "$p"
         done
@@ -84,7 +92,7 @@ _dotfiles_backup_collisions() {
             echo "  dotfiles: keys are never tracked; resolve this by hand before re-running." >&2
             refused=1; continue
         fi
-        if [ -e "$HOME/$p.pre-dotfiles" ]; then
+        if [ -e "$HOME/$p.pre-dotfiles" ] || [ -L "$HOME/$p.pre-dotfiles" ]; then
             echo "  dotfiles: ~/$p collides and ~/$p.pre-dotfiles already exists — refusing to overwrite it." >&2
             echo "  dotfiles: move or delete the old backup, then re-run." >&2
             refused=1; continue
@@ -134,12 +142,49 @@ role_dotfiles() {
         return 0
     fi
 
+    # 0. Never let a remote call sit at an interactive prompt.
+    #
+    # The clone, the fetch below and the new-branch push all talk to github over
+    # ssh. On a box whose known_hosts has no github.com entry — i.e. EVERY freshly
+    # provisioned box, which is exactly when this role runs — ssh asks the operator
+    # to confirm the host key. Provisioning has no TTY, so the prompt is never
+    # answered and never times out: the run HANGS. Hit live on g15-wsl 2026-08-27,
+    # where `git clone --bare` sat for 12 minutes before it was killed by hand,
+    # looking for all the world like a network stall or an unregistered deploy key.
+    #
+    # Both ssh options are load-bearing, and they pull in opposite directions:
+    #   BatchMode=yes                    turns every prompt into an exit code — but
+    #                                    ALONE it also rejects an unknown host key,
+    #                                    which is the fresh-box case.
+    #   StrictHostKeyChecking=accept-new accepts a FIRST-time key unattended and
+    #                                    records it, while a CHANGED key still hard-
+    #                                    fails. Trust on first use, never on a swap.
+    # ConnectTimeout bounds the handshake only; a stalled transfer is a different
+    # failure and is deliberately not capped here.
+    #
+    # GIT_TERMINAL_PROMPT=0 is git's own credential prompt (an https remote).
+    # GIT_SSH_COMMAND is simply never invoked on an https clone, so neither is
+    # conditional on the URL shape — a branch that can only be wrong.
+    #
+    # `local -x`, not `export`: this must not silently retune git for the rest of
+    # the provision run. The pre-read is the bash gotcha it looks like — inside
+    # `local x="${x:-…}"` the name is already local and unset, so the caller's
+    # override has to be captured BEFORE the declaration.
+    local _ssh_cmd="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10}"
+    local -x GIT_SSH_COMMAND="$_ssh_cmd" GIT_TERMINAL_PROMPT=0
+
     # 1. Clone the bare repo if absent. `--bare` gives no work-tree of its own;
     #    every later call must pass --work-tree explicitly.
     if [ ! -d "$gitdir" ]; then
         echo "  dotfiles: cloning $DOTFILES_REMOTE -> $gitdir ..."
         git clone --quiet --bare "$DOTFILES_REMOTE" "$gitdir" || {
-            echo "  dotfiles: clone failed — is this box's key registered for the private repo?" >&2
+            # Under BatchMode these are three different failures with one exit
+            # code, and they send you looking in three different places.
+            echo "  dotfiles: clone failed. Under BatchMode ssh never prompts, so this is one of:" >&2
+            echo "    - this box's key is not registered for the private repo (add ~/.ssh/id_*.pub there);" >&2
+            echo "    - github's host key CHANGED — accept-new does not accept a swap; check known_hosts;" >&2
+            echo "    - the remote is unreachable." >&2
+            echo "  dotfiles: reproduce with: ssh -o BatchMode=yes -T git@github.com" >&2
             return 1
         }
     fi

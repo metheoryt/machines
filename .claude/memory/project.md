@@ -890,6 +890,91 @@ global + per-host). One bullet per fact under a topical heading.
   `sb_docker_alerts`) — a `sb_backup_alerts` keyed on newest-snapshot age is the
   right home for this, and is not built yet.
 
+### The backup system moved from `vps` into `machines` (2026-08-29)
+
+Tasks 1–2 of `docs/superpowers/plans/2026-08-29-backup-relocation-vps-to-machines.md`
+are done: `machines/backup/` now holds the tree (`wsl` → `desktop-wsl`,
+`homeserver` → `_retired-homeserver`) and **latitude runs from it** — four timers,
+same names, `WorkingDirectory=/home/me/machines/backup/latitude`, snapshot
+`2d7cc63e` proving it. `vps/backup/` is still present and is removed in Task 6.
+
+- **A resticprofile systemd unit bakes `Environment="RESTIC_PASSWORD_FILE=…"` in
+  at `schedule` time.** Editing `profiles.yaml` changes nothing until the schedule
+  is reinstalled, and the env var is not a fallback the `password-file:` flag
+  merely overrides — it is copied verbatim into `/etc/systemd/system`. That is why
+  moving a password path means moving *both* keys and then re-running `schedule`.
+- **`resticprofile schedule --all` ignores `-n` and schedules every profile in the
+  config.** One invocation does the whole file; a second `-n <other>` run is the
+  same command twice.
+- **Unit names derive from the profile name, not the directory** —
+  `resticprofile-backup@profile-latitude`. So relocating the config directory
+  overwrites the same unit files rather than creating a second set. Renaming a
+  *profile* is what strands a timer and orphans snapshots, which is why the
+  relocation freezes every profile name and every repository URL.
+- **latitude's password is one file reached through one symlink, deliberately.**
+  The dotfiles-tracked byte-source is still
+  `~/g513ie-prod-config/vps/backup/homeserver/pass.txt` — every word of which is
+  now false — and `~/machines/backup/latitude/pass.txt` symlinks to it so the
+  committed config names only the correct path. The symlink is gitignored and
+  host-local: a rebuilt latitude must recreate it by hand.
+### The REST server served 401 for two days, and `Result` said success (2026-08-29)
+
+Found while reinstalling desktop-wsl's client (Task 3 of the relocation). The
+first hand-fire returned **401 Unauthorized**; a bare `restic snapshots` with the
+unchanged absolute env paths returned the same, which is what proved the config
+move innocent before anything was reverted. Last good backup **2026-08-27 10:15**,
+401 on 08-28 and 08-29 — **two days unbacked-up, silently.**
+
+- **Cause: a container bound to the *underlying* directory of a mountpoint.**
+  `restic-server` started 2026-08-27 13:11 while `/mnt/spare320` was unmounted, so
+  `${RESTIC_DATA_PATH}:/data` resolved to the empty directory beneath the
+  mountpoint; rest-server wrote a 0-byte `.htpasswd` there and kept serving it
+  after the drive returned. Third appearance of this hazard on latitude — the same
+  one `backup/latitude/profiles.yaml` warns about for `initialize`, and the same
+  shape as the 2026-08-23 USB-drop incident. **`nofail` + a bind mount means every
+  container on that drive has this failure mode.**
+- **Fix: `docker compose up -d --force-recreate`, not `docker restart`** — restart
+  reuses the existing container's mount configuration.
+- **The discriminator is `docker exec restic-server ls -la /data`**, not a
+  successful backup. Healthy shows the 68-byte `.htpasswd` and `g614jv/`; broken
+  shows a 0-byte `.htpasswd` stamped with the container's own start time. Every
+  host-side check passes in both states.
+- **`systemctl show -p Result` is only valid within one boot.** It read `success`
+  while the journal showed two consecutive failures, because the WSL distro had
+  rebooted and a never-run unit in a fresh user manager defaults to `success`. On
+  a WSL box — which reboots whenever Windows does — it is worthless as "did the
+  last scheduled run succeed". Use the journal or the profile's own
+  `schedule-log`. This narrows AGENTS.md's own recipe ("`systemctl start <unit>`
+  then `systemctl show -p Result`"): still right for a run you just fired, wrong
+  for a run you did not.
+- **The selfcheck is now on a timer, and moved into `machines`** (2026-08-29, at
+  his request). `machines/hosts/latitude/debian/restic-hub-selfcheck.sh`, deleted
+  from `vps` with a pointer left in `compose.yml`; units in `systemd/` next to it,
+  installed by `install-timers.sh` — `OnBootSec=15min` plus 09:00 daily. **Adding
+  a pair there means editing `UNITS`, `TIMERS` and the executable pre-flight
+  loop**; miss the loop and you enable a timer that fails every fire.
+  **Notification is a failed systemd unit and nothing else** — `just health`
+  reports it, and alerting proper stays deferred.
+- **Its new check 3 is the one that discriminates.** It compares the `.htpasswd`
+  **inode** the container sees against the host's — size would only say "a file of
+  the same length". Old check 2 claimed to guard the empty-bind-mount case while
+  reading the host path, where the mount always looks fine; that is precisely how
+  eight checks stayed green for two days. Check 8 (snapshot freshness) is really a
+  *client* liveness check and fires when desktop-wsl is merely asleep for a
+  weekend, so it cannot be the sentinel.
+
+- **`g614jv-maintenance` holds desktop-wsl's key, not latitude's**
+  (`~/.config/restic/g614jv.pass.txt`, outside both repos). It prunes desktop-wsl's
+  repo on latitude's own filesystem because the REST server runs `--append-only`,
+  so no client can ever delete from it. It needed no edit in the move.
+- **A stale 12-byte `pass.txt` in `vps/backup/wsl/` was the last copy of the
+  pre-2026-08-01 repo's password** — never git-tracked, in no dotfiles branch,
+  and different from the live 64-byte one at byte 1. Deleted on the user's explicit
+  call after the drives behind that repo were confirmed reformatted. The lesson is
+  the check, not the outcome: a `pass.txt` sitting next to a profile is not
+  automatically the password that profile uses — desktop-wsl's reads
+  `/home/me/.config/restic/pass.txt` by absolute path.
+
 ## SSH key hygiene (audited 2026-07-31)
 
 - **desktop's live SSH identity is `SHA256:fFZUwTp9Ye4HukFntyjVplkAJxczc7GWz6ssWlcyg40`
@@ -1076,6 +1161,21 @@ global + per-host). One bullet per fact under a topical heading.
   reports only POPULATED LUNs — nothing appears at `u4-1:1` until a disk goes in — which
   is the opposite of the card reader (`u2-1.3:0/1`, on the same hub), whose two slots
   exist as 0B nodes with no card in them.
+- **An sd letter is NOT an identity — never cache anything keyed by one** (2026-08-19).
+  The kernel hands out `sd?` lowest-free, so unplugging a dock frees its letters and the
+  next plug gives the SAME letter to a DIFFERENT disk: on latitude `sdd` was the
+  ST1000LM024 in bay `u4-2:0` at 04:34 on 2026-08-16 and the ST320LT020 in `u4-1:0` six
+  hours later. The status board cached the bay label per node on the written assumption
+  that a replug yields a new node, so the long-running kiosk painted `dockB0` on two rows
+  at once while a fresh `--once` run was correct — which is also the diagnostic: a live
+  board disagreeing with `--once` on the same box means CACHED STATE, not a map error.
+  Fixed by `sb_bays_resolve` rebuilding the whole store every probe (rebuild = prune).
+  latitude's docks are told apart by bridge serial in the kernel log: `670200210032` on
+  port 4-1 (dockA), `6702002103E1` on 4-2 (dockB); LUN 0 is the FRONT bay, dockA is the
+  one holding the 320G — confirmed in the room, and NOT derivable from sysfs.
+  **The rule is not fully applied yet**: `SB_PARKS` (and, more mildly, `SB_TEMPS`)
+  is still keyed by node, and cannot be fixed the same way because it caches a
+  smartctl fork — `docs/fleet-roadmap.md` P6 carries it.
 - **A 0B disk is an empty card slot, not a disk** (2026-08-01). latitude carries a
   two-slot reader (`SD/MMC` + `Micro SD/M2`, one serial, `sde`/`sdf`) whose block nodes
   exist with no card in them, so the board permanently warned `disks unmounted` about
@@ -1723,3 +1823,385 @@ a copy would silently succeed, there is 246 G free.
   import failed. Count by `Items?IncludeItemTypes=Episode&Fields=Path` instead.
 - Sonarr's 44-record queue of stale entries was left alone — it is the user's
   library and their call (`progress.md:632-639`).
+
+## A USB drop leaves latitude broken in TWO places (incident 2026-08-23)
+
+At **Aug 23 15:58:27** both UGREEN docks (`usb 4-1` and `usb 4-2`) disconnected
+within one second of each other — a mains blip on two externally-powered docks,
+not a bus fault. All four spindles went with them, mid-write (`device offline
+error ... op 0x1:(WRITE)` on the then-current `sdd`/`sdf`/`sdg`/`sdh`). They
+re-enumerated cleanly at **16:02:03**, ~3.5 minutes later, with new letters. The
+box never rebooted (uptime spanned the whole event).
+
+**Nothing brought them back, and the damage was in two layers — fix both:**
+
+1. **Host layer.** The fstab entries are `nofail`, so when the devices vanished
+   systemd *stopped* the mount units and they sat `inactive dead` — not `failed`.
+   Nothing re-pulls a plain fstab mount when its device reappears (that is what
+   `x-systemd.automount` would buy), so `nofail` is exactly why this was silent:
+   **`systemctl --failed` was clean the entire 20 hours.** Recover with
+   `systemctl start /mnt/<name>`; journal replay takes ~15-35 s per 931 G disk.
+2. **Container layer — the one that is easy to miss.** Docker resolves a bind
+   mount at container *start*, so eight containers went on holding the **dead**
+   device nodes inside their own mount namespaces long after the host let go:
+   `immich_server` on `sdh2`, the servarr stack (`sonarr` `radarr` `bazarr`
+   `whisparr` `qbittorrent` `jellyfin`) on `sdf2`, and **`restic-server` on
+   `sdd1`**. They were not down — they were serving `error -5` in a loop for
+   ~20 h. Remounting the host does **not** reach them; only a restart does.
+
+Find them by device liveness, never by guessing which app uses which disk:
+
+```sh
+for c in $(docker ps -q); do pid=$(docker inspect -f '{{.State.Pid}}' $c)
+  for d in $(sudo grep -oE '/dev/sd[a-z][0-9]*' /proc/$pid/mountinfo | sort -u); do
+    [ -b "$d" ] || echo "$(docker inspect -f '{{.Name}}' $c) STALE $d"; done; done
+```
+
+- **`restic-server`'s repo is `/mnt/spare320/restic-rest`** — so a spare320 drop
+  takes the whole fleet's backup hub down with it. That is what the two failed
+  `resticprofile-*` units meant; they were the only *loud* symptom, and they
+  pointed at the wrong machine.
+- **`ConditionPathIsMountPoint=/mnt/immich-mirror` on `mirror-refresh.service`
+  did its job** — the 03:39 run logged "skipped, unmet condition check" instead
+  of rsyncing 254 G of immich into the root filesystem. Keep that condition on
+  any unit whose destination is a removable disk; it is the guard that turned a
+  disk outage into an inconvenience.
+- **The statusboard was right and was the only thing that noticed.** "unmounted"
+  was the true state, not a display bug — do not go looking for a resolver bug
+  (`f759459`, `96b3bb1`) before checking `findmnt` on the box.
+- Residual `EXT4-fs (sdX): I/O error while writing superblock` lines timed to the
+  container restarts are the stale filesystems being *released*, not new damage.
+  Expect one pair per stale device, then silence.
+
+## `g15` (ex-`server`) back in the fleet + the WSL-host provisioning traps (2026-08-27)
+
+**Renamed `server` -> `g15` the same day**, and its WSL host `server-wsl` ->
+`g15-wsl`. Reason: `server` also names the `linux.sh` PROFILE latitude runs, so
+one token meant two things in one manifest — and the role the name claimed had
+moved to latitude. The tailnet nodes, the dotfiles branch and
+`fleet-authorized-keys` all moved in the same change; that set is the checklist
+for any future rename. Below, `server-wsl` in the trap descriptions means the box
+now called `g15-wsl`.
+
+State is in `AGENTS.md` and `docs/fleet-roadmap.md` P2; what follows is only what
+the code does not say and a re-read of the diff would not tell you.
+
+- **`tier_dotfiles` resolves the WRONG logical name on a WSL host's first run.**
+  `provision-wsl.sh` runs `linux.sh` (step 3) BEFORE `fleet-local.sh` (step 4),
+  so at tier time there is no `fleet.local.json` and `fleet_logical_name` falls
+  through to the `fleet.json` hostname match — which on a WSL distro is the
+  **Windows parent's** entry (`uname -n` = `g513ie` → `server`, `g614jv` →
+  `desktop`). So a first run tries to check out the *parent's* dotfiles branch
+  into the distro's `$HOME`. Every re-run is correct, because by then
+  `fleet.local.json` exists. Re-adding `server` to `fleet.json` is what made this
+  reachable on g513ie — before that the hostname matched nothing and the tier
+  merely skipped. If you provision a new WSL host: expect the dotfiles step to be
+  wrong or skipped on pass 1, and run `linux.sh` again afterwards.
+- **A dotfiles clone on a box with no registered GitHub key HANGS, it does not
+  fail.** `git clone --bare git@github.com:metheoryt/dotfiles.git` sat for 12
+  minutes with `provision-wsl.sh` blocked behind it. Not auth — ssh was at the
+  interactive **host-key** prompt with no TTY to answer it (`known_hosts` had no
+  github.com entry). `ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T
+  git@github.com` is the one-line probe: it returns `Permission denied
+  (publickey)` in a second and seeds `known_hosts`, after which the clone fails
+  fast instead of hanging. **Fixed 2026-08-27**: `role_dotfiles` (both the `.sh`
+  and the `.ps1`) now sets that posture itself, `local -x` rather than `export` so
+  it does not retune git for the rest of the run. Both options are load-bearing and
+  pull opposite ways — `BatchMode=yes` alone REJECTS an unknown host key, which is
+  the fresh-box case; `accept-new` alone still prompts for a password. A caller's
+  own `GIT_SSH_COMMAND` still wins.
+- **`ssh-wsl.sh` needs `jq` but runs BEFORE the `linux.sh` tier that installs
+  it.** On a fresh distro it dies at step 2. `apt-get install -y jq git curl` as
+  root first; do not reorder the chain.
+- **`FLEET_WIN_USER=methe` is mandatory on `server`.** `ssh-wsl.sh` auto-detects
+  the Windows key store by globbing `/mnt/c/Users` and requires **exactly one**
+  non-system dir; g513ie has `methe` AND `WsiAccount`, so the detect yields
+  empty, key persistence is skipped, and the only symptom is one warning. The
+  loss shows up later as a lost `id_fleet` after a `wsl --unregister`.
+- **The distro's sudo needs a password and the `workstation` profile is asserted
+  never to grant NOPASSWD** (`tiers.test.sh`). To drive a provision from another
+  box, `wsl -d <distro> -u root` gives unauthenticated root from Windows anyway —
+  install a `/etc/sudoers.d/` NOPASSWD drop-in, run, then REMOVE it and assert
+  `sudo -n true` fails. `provision-wsl.sh` `die`s on any step failure, so the
+  removal must be its own invocation, not a trailing line.
+- **Driving a WSL distro over ssh: the remote shell on the Windows boxes is
+  PowerShell.** `&`, `|` and `$(…)` inside the ssh command line are parsed by
+  PowerShell, not bash. Base64 the whole script and `echo <b64> | base64 -d |
+  bash` — anything else eventually breaks on quoting.
+- **The initial clone came from a `git bundle` over `scp`, not from GitHub.**
+  The box had no registered key and `gh` here lacks `admin:public_key`, so the
+  repo was bundled on another member, scp'd to `C:\Users\methe`, cloned from the
+  bundle, and `origin` reset to the ssh URL. No token ever touched the box. Same
+  trick works for any fleet box whose GitHub identity is not live yet.
+
+## The dotfiles checkout guard was blind to dangling symlinks (fixed 2026-08-27)
+
+- **`_dotfiles_collisions` used `[ -e ]`, which FOLLOWS symlinks.** A dangling
+  symlink at a tracked path therefore tested false and was skipped, while git —
+  which only `lstat`s — refused the checkout over it anyway. Net effect: the
+  backup pass moved nothing, and `role_dotfiles` failed with "checkout refused —
+  untracked files in $HOME already occupy tracked paths" listing paths that the
+  guard had just declared absent. Fixed with `[ -e ] || [ -L ]` in both
+  `_dotfiles_collisions` and the `.pre-dotfiles` name check; regression case in
+  `provision/tests/dotfiles-collisions.test.sh` (6 assertions fail without it).
+- **What made it reachable: `~/.claude` on g15-wsl was a graveyard of 12 links
+  into `/mnt/c/Users/methe/GitHub/nix/claude/`** — a Windows checkout of the old
+  `nix` repo layout, gone since the NixOS tree was deleted. Not just the four
+  dotfiles-tracked paths: `hooks/global-memory-load.sh`,
+  `hooks/project-memory-check.sh`, `hooks/gortex-onboard-check.sh`,
+  `agents/quick-tasks.md`, `skills/{update-balance,gortex-align}` and
+  `host-memory.md` were dead too, i.e. the memory-loading hooks on that box had
+  been inert for weeks.
+- **Why bootstrap never cleared them — and it is NOT `link()`.** Checked on
+  2026-08-27: `link()` handles a dangling link correctly (`-L` true, readlink
+  mismatch, `rm -f`, relink). The gap is `retire_link`, whose ownership test is
+  PATH-based — it drops a link only if it points into `$SRC_DIR`, so links from an
+  era when the checkout lived somewhere else (here `/mnt/c/.../GitHub/nix/claude/`)
+  read as *someone else's link* and live forever. It cannot recognise its own past.
+  And `~/.claude/hooks/*` is owned by nothing at all since hooks moved into
+  `plugin/` — no code path even looks at it. A clean `linked=0 skipped=4 failed=0`
+  summary is therefore not evidence of a healthy profile: run
+  `find ~/.claude -xtype l` before trusting one.
+- Removing them is safe: a broken symlink holds no data, and the target root
+  (`/mnt/c/Users/methe/GitHub`) does not exist at all on that box. Verified before
+  deleting, not assumed.
+- **The clone hang is fixed too (same day).** `role_dotfiles` sets
+  `GIT_SSH_COMMAND` + `GIT_TERMINAL_PROMPT=0` before the clone — and before the
+  `fetch` and the new-branch `push`, which reach the remote the same way and would
+  hang the same way; `|| true` on the fetch prevents a failure, not a hang.
+  Pinned behaviourally in `dotfiles-collisions.test.sh` by a PATH-shimmed `git`
+  that records the environment it was handed (7 assertions fail without the fix).
+  The test `env -u`s `GIT_TERMINAL_PROMPT` first: a dev shell can already export
+  `0`, which made that one assertion pass vacuously until it was cleared.
+
+## Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)
+
+Context: qaz-code (and its 186 GB pgvector DB) migrated from desktop-wsl to
+g15-wsl. The move itself was routine; four things about WSL as a fleet host
+were not, and all four will recur for the next project moved there.
+
+- **A WSL distro lives only while a `wsl.exe` client from Windows is attached to
+  it.** There is no config switch for "stay running" — `vmIdleTimeout` governs
+  the utility VM, not the distro. g15-wsl therefore self-terminated about a
+  minute after every command returned and kept dropping off the tailnet, which
+  reads as a flaky host. desktop-wsl looks immune only because Docker Desktop's
+  `docker-desktop-user-distro proxy --distro-name desktop-wsl` runs inside it and
+  is exactly such an attached client. **Consequence for the "drop Docker Desktop,
+  install native docker" plan: removing DD removes the thing holding desktop-wsl
+  up.** Fix on g15 is a Windows scheduled task `wsl-keepalive` (ONLOGON,
+  `/RL HIGHEST`) running `wsl -d Ubuntu-26.04 -u root -- /bin/sleep infinity`.
+  `provision-wsl` installs nothing of the sort — a real gap for a `dispatch:direct`
+  host that is supposed to be reachable.
+- **Docker Desktop leaves a dpkg diversion behind.** On a distro that ever had DD
+  integration, `/usr/bin/docker` is diverted to `/usr/bin/docker.native`, so
+  installing `docker.io` yields a working daemon and no CLI at all —
+  `docker: command not found` with `dockerd` active. Undo with
+  `dpkg-divert --rename --remove /usr/bin/docker`. Re-enabling DD integration
+  will re-divert it.
+- **Windows cannot open TCP to its own WSL distro's NAT address on g15**
+  (172.26.x:22): ICMP passes, TCP does not, and it stays broken with an explicit
+  Hyper-V firewall allow rule for 22 *and* `DefaultInboundAction Allow` on the WSL
+  VM. So `netsh portproxy` into the distro does not work there. What does work is
+  jumping through Windows: `ProxyCommand ssh methe@<g15> "wsl -d <distro> -- nc
+  127.0.0.1 22"` gives a real ssh connection (rsync runs over it normally). Note
+  desktop-wsl does not have this problem because it runs `networkingMode=mirrored`.
+- **Piping binary through Windows OpenSSH → PowerShell → `wsl.exe` does NOT
+  corrupt the stream.** Verified by sha256 over 100 MB and then 186 GB at
+  117 MB/s. PowerShell passes the stdin handle to the child rather than reading
+  it. This is the simplest fast path into a distro and needs no port plumbing.
+
+Transport, for the next time something big has to move: the two boxes' WSL
+distros reach each other over tailscale **through the DERP relay on hub
+(cyphy.kz, Kazakhstan)** — 3-4 MB/s, and not a misconfiguration, just no direct
+path between two NATed distros. g15 also associates on 2.4 GHz (channel 12,
+286 Mbps link) and its MediaTek MT7921 exposes no band-preference property, so
+it cannot be pushed to 5 GHz from software. A direct Ethernet cable between the
+two laptops, left on APIPA (169.254.x, no DHCP needed), gave 117 MB/s and turned
+an 8-hour transfer into 40 minutes.
+
+### qaz-code PGDATA landed on g15 (2026-08-29, verified)
+
+- 185.2 GB physical copy of `qaz-law_db_data` -> `g15-wsl:/data/qaz-law/pgdata`,
+  bind-mounted by a git-excluded `compose.override.yml` that also pins the image
+  by digest. Postgres starts clean there (no recovery), HNSW index present at
+  13 GB and `indisvalid`, and the plan uses it.
+- **Both sides agree**: 184 GB `pg_database_size`, 25 468 309 chunks /
+  5 545 473 with embeddings, `data_checksums on`.
+- The copy is a **chunked** tar-over-ssh (`scratchpad/xfer2.sh`): 18 batches of
+  10 GB, a marker per batch, so an interruption costs one batch and the script
+  resumes. 28 minutes at ~114 MB/s over the direct Ethernet cable.
+- **Verify a physical copy by manifest, never by `du`** — path+size for every
+  file, sorted `LC_ALL=C` on both sides. `du` totals match even when one file is
+  truncated, which is exactly the failure a killed tar produces.
+- Remote commands to a Windows fleet host go through PowerShell, which eats
+  quotes: `wsl -d <distro> -- find ... -printf "%s\t%P\n"` silently returns one
+  line. **Feed the script on stdin instead** — `printf '%s\n' ... | ssh host
+  "wsl -d <distro> -u root -- bash -s"`. Same trick as the tar pipe.
+- Nothing is deleted from the desktop yet; that stays a separate, confirmed step.
+
+### The other ten personal projects landed on g15 (2026-08-29, verified)
+
+All of `~/my/` is now on `g15-wsl` alongside qaz-code. Nothing was deleted from
+the desktop — that stays a separate, explicitly confirmed step.
+
+**Two repos have no remote at all: `DeMarket` (1 commit) and `housing` (20).**
+They are the only irreplaceable things in this migration and also the two
+smallest, which is exactly how they get skipped. They were `rsync -aH`'d
+wholesale *including `.git`*, not cloned. Verified by sha256 over every file:
+identical except `.git/index` on both — that file stores stat data (inode,
+ctime) and **differs across a correct copy**. An index-only diff is a pass, not
+a failure. No GitHub repos were created for them; that is an outward-facing
+action and was not asked for.
+
+The other eight (`airdrome`, `arbuz-concierge`, `buton`, `embedthat`, `skep`,
+`telegrind`, `vasya`, `vps`) were cloned from `git@github.com:metheoryt/…` on
+g15 — it already authenticates as `metheoryt` — then HEAD compared against the
+desktop, all eight identical.
+
+**The real payload of a repo move is what git ignores.** `git status
+--porcelain` reported every repo clean while ~50 MB of unrecoverable content sat
+on disk: `.env` × 4, `buton/google-account.json`, `buton/harvester.db` + 2 dated
+backups + `harvester.ledger.db`, `telegrind/local/telegrind-*.json` (a Google
+service-account key), `vps/backup/wsl/pass.txt` (a 12-byte restic password),
+`skep/.superpowers/sdd/` (62 files of plans and review diffs),
+`skep/SKEP_SUMMARY.md` (untracked), and `.claude/settings.local.json` × 5.
+Enumerate it with `git status --porcelain --ignored=matching` **plus** the
+untracked lines — neither alone is complete. Copied by explicit file list and
+verified by sha256: 79 files, byte-identical. Venvs (`buton` 183 MB,
+`embedthat` 725 MB) deliberately skipped — `uv sync` rebuilds them.
+
+**No named docker volumes for any of the ten.** The desktop's ~70 hex-named
+volumes are anonymous; with no containers left for those stacks they are already
+orphaned and unreachable by compose, so restarting a stack on g15 creates fresh
+ones either way. Only `qaz-law_db_data` (moved) and the `backend-api*` work
+volumes are named.
+
+**g15's WSL firewall is back to `DefaultInboundAction: Block`**, and the
+never-working `0.0.0.0:2222 → 172.26.251.77:22` portproxy plus its `wsl-ssh-2222`
+rule are gone. Tailnet SSH to `g15-wsl.gg.ez` is unaffected — tailscaled runs
+*inside* the distro, so the Hyper-V VM firewall never sat in that path. There was
+no `wsl-ssh-in` Hyper-V rule to remove.
+
+**Desktop copies deleted 2026-08-29 — except `vps`.** `~/my/` on `desktop-wsl`
+went 1.3 GB → 4.9 MB. **`~/my/vps` stays and must not be deleted:** it is the
+`WorkingDirectory` of the enabled user timer
+`resticprofile-backup@profile-wsl.service`, which backs up this WSL box daily at
+06:00 from `vps/backup/wsl/profiles.yaml`. It is live infrastructure that happens
+to live in a project checkout, not a copy. Before deleting any project directory,
+`grep -rl '/home/me/my/' ~/.config/systemd/user/ /etc/systemd/system/` — that one
+grep is the whole gate.
+
+Two things the pre-delete sweep caught that the first pass had missed, both
+because `git status --porcelain --ignored=matching` **does not recurse into an
+ignored directory** and my listing was additionally `head`-truncated:
+`buton/.superpowers/` (harmless, one empty `.gitignore`) and the fact that
+**`--ignored` without a mode is the listing you actually want**. Also compare
+*refs*, not just HEAD, before deleting a source: `git rev-list --branches --not
+--remotes` plus `git stash list` per repo. All eleven came back zero, and
+`skep`, `telegrind`, `qaz-code` and `DeMarket` each carry a second branch that
+HEAD comparison alone would never have shown.
+
+g15's `qaz-code` sits on `metheoryt/kazhackstan-2026` (0/0 against its own origin
+ref), while the desktop was on `main` — the HEADs differing was the branch, not a
+divergence. `id_cyphy671{,.pub}` removed from g15; the now-stale
+`Host cyphy671.github.com` stanza in its `~/.ssh/config` was left alone
+(dotfiles-tracked, harmless unused). g15 still authenticates to GitHub as
+`metheoryt`.
+
+**The pre-delete gate was missing `git worktree list` (2026-08-29).** Refs,
+stashes and HEAD all came back clean, and deleting `~/my/` still orphaned three
+Orca worktrees under `~/orca/workspaces/<repo>/<branch>` — their `.git` files
+point at `<repo>/.git/worktrees/<name>`, which went with the parent. **A
+worktree's uncommitted state is invisible from the main repo's `git status`, and
+its existence is invisible from `for-each-ref`.** One command would have caught
+all three. Add it to the gate:
+
+    git -C <repo> worktree list      # alongside rev-list --branches --not --remotes + stash list
+
+Recovery, if it happens again: the worktree's *files* survive the parent's
+deletion. Re-create the parent, `git worktree add <path> <branch>` (a clean
+checkout at the tip), then rsync the orphaned directory over it excluding `.git` —
+whatever `git status` then reports IS the uncommitted work, and an empty status
+proves nothing was lost. To check an orphan *without* a repo at all, compute git
+blob hashes by hand — `{ printf 'blob %d\0' $(stat -c%s "$f"); cat "$f"; } |
+sha1sum` — and diff against `git ls-tree -r --format='%(objectname) %(path)'` on
+the branch. That is how `telegrind/telegrind-spendings-analytics` was cleared: 36
+files, every blob identical to `origin/main`, so the branch had been merged and
+only its name was lost (it is not on GitHub either).
+
+**`rsync --exclude '.git'` silently strips nested repositories (2026-08-29).**
+The qaz-code Orca worktree carries `laws/` — 108 448 untracked files, 5.8 GB —
+and inside it four nested git repos (`codes`, `government`, `ministerial`,
+`local`, 139 653 commits and 1.8 GB of history between them, none with a remote).
+Excluding `.git` when copying a worktree is right — the worktree's own `.git` is
+a pointer file that must not travel — but it takes nested repositories with it,
+and the copy still reports `rc=0`.
+
+**`laws/` is regenerable from qaz-code's own database** (confirmed by Maxim
+2026-08-29), so nothing there was at risk and it need not be copied at all next
+time. What survives as the lesson is the mechanism: the omission was caught by a
+plain file-count diff after the transfer (108 336 vs 108 448), not by the exit
+status. **Count files across the boundary; an rsync that succeeded is not an
+rsync that copied what you meant.** Before excluding `.git` anywhere, run
+`find <tree> -name .git -maxdepth 4` and decide about each hit by name.
+
+**Desktop cleanup finished 2026-08-29.** `~/my/` holds only `vps` (live backup
+timer); `~/orca/workspaces/` holds only the work repos plus `vps` — 14 GB → 737 MB,
+gated on a path+size manifest of 108 610 files matching g15 exactly. The
+`qaz-law_db_data` volume and its container are gone: Docker's `Local Volumes` line
+went 200.9 GB → 2.047 GB, and the g15 copy was re-confirmed live first (184 GB,
+25 468 309 chunks, 5 545 473 embeddings, `hnsw_valid=true`).
+
+**Deleting the volume did not return one byte to Windows.** `docker_data.vhdx` is
+still 1007 GB — a dynamically-expanding VHD never shrinks on its own. Reclaiming
+it needs Docker Desktop stopped and an elevated `diskpart` (`select vdisk file=…`
+→ `attach vdisk readonly` → `compact vdisk` → `detach vdisk`), or `Optimize-VHD
+-Mode Full` where the Hyper-V module is present. Worth knowing before promising
+anyone that a volume delete freed disk space.
+
+## Orca headless runtime back on g15-wsl (2026-08-29)
+
+`provision/orca-serve.sh` was restored from `f95cb3f^` and fixed. Why it came
+back: `orca serve` + `environment add --pairing-code` is the ONLY way `air` can
+drive g15's Linux side — Orca has no ssh-remote mode, and Windows Orca reaches
+only its own host's distro. The 2026-07-21 removal ("Orca runs on Windows now")
+was a host-local rationale, and the ABANDONED 2026-08-01 two-distro spec
+abandoned *two distros per host*, not the serve model. Don't re-read either as
+"serve was tried and rejected".
+
+- **Serve needs an X display, and under WSLg it cannot make its own.** Orca
+  starts an Xvfb on `:99` when `DISPLAY` is unset; WSLg mounts
+  `/tmp/.X11-unix` **read-only**, so Xvfb never binds its socket and Electron
+  dies with `Missing X server or $DISPLAY`. That is a crash loop (72 restarts
+  before it was caught), not the "browser panes may be unavailable" the warning
+  suggests. WSLg already serves `:0` on that same tmpfs — hand serve that.
+- **Electron flushes a non-tty stdout only at exit.** Under systemd the journal
+  showed nothing until the process died, so the documented "read the pairing
+  URL from `journalctl`" never worked. `script -qefc … /dev/null` gives it a
+  pty; `-e` preserves the exit status for `Restart=on-failure`.
+- **Most of what looked like crashes was my own test harness.** Piping serve
+  into `grep | head` or capping it with `timeout` makes Chromium tear down
+  noisily — "Network service crashed", "GPU process isn't usable. Goodbye.",
+  `SIGTRAP`. Judge a serve run by whether the unit stays active, never by the
+  shutdown lines. Two fixes were spent on that phantom (SUID `chrome-sandbox`,
+  `ELECTRON_DISABLE_SANDBOX`); both were reverted, neither was needed.
+- **Backticks inside an UNQUOTED heredoc run as a command substitution.** A
+  comment reading `` `script -e` `` in the generated wrapper executed `script`,
+  which spawned an interactive bash and hung the provisioner — leaving a
+  0-byte `orca-serve-start` behind. And a `timeout` that kills the local ssh
+  client does NOT kill the remote script: three copies raced on the same files
+  before I noticed. `pkill -f "bash /tmp/orca-serve[.]sh"` — the bracket keeps
+  the pattern from matching your own command line.
+- **State now:** unit active on g15-wsl (`:6768`, user unit + linger); BOTH
+  `desktop` and `air` paired as environment `g15-wsl`
+  (`ws://100.64.0.9:6768`) and each lists its repos over the tailnet. The same
+  pairing code worked on both clients — the runtime's identity is stable across
+  restarts, so one code is not single-use. `air` also carries a `desktop`
+  environment at `ws://100.64.0.4:6768`, i.e. desktop already served one.
+- **The three worktrees under `~/orca/workspaces/` on g15-wsl are healthy but
+  invisible.** They rsync'd over with `~/my` and their gitdir pointers are
+  correct Linux paths (`git status` clean in all three). A newly added repo
+  defaults to `externalWorktreeVisibility: hide` and the CLI cannot flip it
+  (`orca repo` has list/add/show/set-base-ref/search-refs only) — so it is a
+  per-repo UI toggle, or a destructive `worktree rm` + `create`, which would
+  drop each worktree's gitignored state.

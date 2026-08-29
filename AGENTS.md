@@ -39,22 +39,29 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   (WSL hostname `g614jv`, native `ME-G614JV`), tailnet `100.64.0.4`. Its former
   NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
   `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
-- **server / g513ie** — ASUS ROG **G15** 2023 (model G513IE), RTX 3050 Ti,
-  Windows 11, was tailnet `100.64.0.3`. **Removed from `fleet.json` 2026-08-01**,
-  along with `hosts/server/` and its `methe@server` trust line — the decommission
-  is done (`docs/fleet-roadmap.md` P2). It is **not** retired hardware: still
-  powered on and on the tailnet. Forgejo, which used to be the stated reason to
-  keep it intact, was **wiped 2026-08-01** after inspection found zero
-  repositories — it was never used. Its Docker state was audited 2026-08-01 and holds
-  **nothing unique** — every remaining volume is either duplicated on latitude or a
-  `CACHEDIR.TAG`-marked virtualenv. What still gates a wipe is `C:`: it is the only
-  drive left, ~430 GB in use, and unreviewed (`docs/fleet-roadmap.md` P2). **Reach it as `methe@server.gg.ez`, naming the
-  user**: bare
-  `ssh server.gg.ez` works from air only until `tier_fleet_ssh` next rewrites its
-  span and drops the member block, after which the FQDN hits the `Host *.gg.ez`
-  catch-all's `User me` and is refused (server's user is `methe`). Both air and
-  latitude reach it that way, verified — so a pull-based migration can be driven
-  from either.
+- **g15 / g513ie** — ASUS ROG **G15** 2023 (model G513IE), Ryzen 7 4800H,
+  31 GB, RTX 3050 Ti, Windows 11 Pro, tailnet `100.64.0.3`. **Was `server` until
+  2026-08-27** — renamed because the word had stopped naming anything: latitude
+  holds the services role, and `server` is ALSO the `linux.sh` profile latitude
+  runs, so one token meant two things in one manifest. **Back in `fleet.json`
+  since 2026-08-27** as the **personal-projects host**, roles `base,
+  ssh-server, agents, dotfiles, repos` — its own `~/.claude` is the point, so a
+  personal Claude account needs no Orca profile juggling. The 2026-08-01
+  decommission (`docs/fleet-roadmap.md` P2) is history; what it did is not undone
+  — `hosts/server/` stays deleted and Forgejo stays wiped (inspection found zero
+  repositories; it was never used).
+- **The Linux side of `g15` is a WSL distro, not a reinstall.** Windows 11 was
+  deliberately kept: C: holds ~416 GB nobody has reviewed, so a native Debian
+  install would have to start with that review, and the box already had an empty
+  `Ubuntu-26.04` WSL2 distro and 607 GB free. It is provisioned as the
+  self-declared fleet host **`g15-wsl`** (`dispatch:direct`, its own tailnet
+  node — Windows `g15` keeps node 3), so it never appears in `fleet.json`. If
+  the Windows layer turns out to be friction, the target is Debian 13 trixie like
+  latitude; that decision is now deferrable rather than blocking.
+- **Reach `g15` as `methe@g15.gg.ez`, naming the user** — its Windows user is
+  `methe`, and with the member block restored the bare `ssh g15` alias works from
+  any box that has re-provisioned since. Reach the Linux side directly at
+  `g15-wsl.gg.ez` (user `me`). `server.gg.ez` no longer resolves.
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
@@ -203,7 +210,23 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   a start/floor threshold so the cell holds steady instead of cycling.
 - **`tier_gortex`** — installs the release named in `provision/gortex.version`
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
-  darwin_arm64, darwin_amd64).
+  darwin_arm64, darwin_amd64). It untars the pinned release **unconditionally,
+  with no version comparison**, so the pin is authoritative: a box updated out of
+  band (`gortex upgrade`) is silently reverted to the pin by the next provision
+  run for any reason. Fix a drift by bumping the pin, never by teaching the tier
+  to disobey it.
+- **`tier_gortex_autoupdate`** — the counterpart, and the only tier in the
+  `server` profile that workstation lacks. It installs a weekly timer running
+  `provision/gortex-autoupdate.sh`, which bumps `provision/gortex.version` to the
+  newest upstream release (≥48h old) and pushes the commit; every other box then
+  installs it through its own `tier_gortex`, because the pin is a
+  `_touches_driver` trigger in `converge.sh`. **It installs no binary anywhere** —
+  publisher and installer are deliberately separate, which is what keeps the fleet
+  on one version and makes rollback a `git revert`. It is on **latitude only**:
+  two writers race on the push and strand a commit, so if a different box should
+  publish, MOVE the tier rather than copying it. Pinned by
+  `provision/gortex-autoupdate.test.sh` (14 cases, all about what it can commit
+  or push) and the single-writer assertions in `provision/tests/tiers.test.sh`.
 
 **Four roles have no executor at all**: `base`, `ssh-server`, `backup-hub` and
 `backup-client`. `provision/roles/` holds only `agents`, `dotfiles` and `repos` —
@@ -245,8 +268,9 @@ parent — not through a `fleet.json` entry either way. The shared dispatch prim
 `fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and kb-refresh's
 `fleet-gather.sh`; it also handles the Windows-native members by dispatching
 through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
-`fleet.json` — which since 2026-08-01 means `desktop` alone, `server` having left
-the manifest.
+`fleet.json` — which since 2026-08-27 means `desktop` **and** `g15` again (`g15`
+was out of the manifest between 2026-08-01 and 2026-08-27, when `desktop` was the
+only one).
 
 **Gotcha:** a self-declared WSL host has no `fleet.json` entry, so the generated
 `~/.ssh/config` has no `Host` block for its bare name — only the catch-all
@@ -298,13 +322,20 @@ from the code.
 ### Two-layer hostname convention
 
 - **Logical name** — the fleet key / SSH alias / tailnet node / repo
-  `hosts/<dir>` — role-based and stable: `latitude` / `desktop` /
-  `hub` / `air` (and `server` until it left the manifest 2026-08-01).
+  `hosts/<dir>`: `latitude` / `desktop` / `hub` / `air` / `g15`. Role-based
+  where a role exists (`desktop`, `hub`), model-based otherwise (`latitude`,
+  `air`, `g15`) — the rule is *stable and human*, not *role*. **`g15` was
+  `server` until 2026-08-27, the only logical name ever renamed**, and it was
+  renamed precisely because the role it named had moved to latitude. A rename
+  moves the tailnet node, the dotfiles branch and `fleet-authorized-keys` in the
+  same change, or it moves nothing.
 - **OS hostname** — `detect.hostname` in `fleet.json` — the hardware model,
-  lowercased: `latitude5520`, `g614jv`, `g513ie`, `27608`.
+  lowercased: `latitude5520`, `g614jv`, `g513ie`, `27608`. Note `g15` (logical,
+  the marketing model) and `g513ie` (OS hostname, the SKU) are the two layers of
+  the same box, not a violation of the rule.
 - `hub`/`27608` is the VPS special-case: no laptop model, so its OS hostname
   is just the VPS ID, not a model code.
-- The server's *live* OS hostname is `g513ie` — renamed from `methe-server` via
+- The G15's *live* OS hostname is `g513ie` — renamed from `methe-server` via
   `Rename-Computer` + reboot on the box, verified live 2026-07-20.
 - **Self-declared WSL hosts add a third identity, outside this two-layer
   scheme entirely**: they are not a `fleet.json` member, so there's no

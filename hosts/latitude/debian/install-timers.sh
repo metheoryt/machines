@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install latitude's backup timers into systemd (system scope).
+# Install latitude's backup and mirror timers into systemd (system scope).
 #   ./install-timers.sh        show what would change
 #   ./install-timers.sh -go    install, enable, and start the timers
 #   ./install-timers.sh -off   disable and remove them
@@ -23,8 +23,9 @@ export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNIT_SRC="$HERE/systemd"
 UNIT_DST=/etc/systemd/system
-UNITS=(mirror-refresh.service mirror-refresh.timer archive-mirror.service archive-mirror.timer)
-TIMERS=(mirror-refresh.timer archive-mirror.timer)
+UNITS=(mirror-refresh.service mirror-refresh.timer archive-mirror.service archive-mirror.timer
+       restic-hub-selfcheck.service restic-hub-selfcheck.timer)
+TIMERS=(mirror-refresh.timer archive-mirror.timer restic-hub-selfcheck.timer)
 
 MODE=show
 case "${1:-}" in
@@ -38,7 +39,7 @@ say(){ echo "[install-timers] $*"; }
 
 # The scripts the units call must exist, or we would enable a timer that fails
 # every fire. Check before touching systemd, not after.
-for s in mirror-refresh.sh archive-mirror.sh; do
+for s in mirror-refresh.sh archive-mirror.sh restic-hub-selfcheck.sh; do
   [ -x "$HERE/$s" ] || { say "FATAL $HERE/$s missing or not executable"; exit 1; }
 done
 for u in "${UNITS[@]}"; do

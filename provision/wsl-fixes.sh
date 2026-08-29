@@ -6,7 +6,7 @@
 # NOT part of linux.sh: that script is shared with the Debian VPS `hub`, which
 # has no WSL and no interop.
 #
-# Two fixes:
+# Four fixes:
 #
 #   1. wslopen (+ xdg-open / wslview symlinks) — Ubuntu 26.04 dropped wslu, so
 #      nothing opens a browser from inside the distro. Without it
@@ -41,6 +41,43 @@
 #      /usr/local/bin precedes /usr/bin on PATH, so the durable one wins while
 #      both survive. Only the CLI and its plugins are installed: dockerd stays
 #      Docker Desktop's, and a second daemon would fight it for the socket.
+#
+#   4. A memory guard: kernel reserves + earlyoom. On 2026-08-09 the VM wedged
+#      with `Wsl/Service/0x8007274c` after anonymous memory reached ~15.8 GB of
+#      the 16 GB cap AND swap hit `Free swap = 0kB`. Page cache collapsed to
+#      ~28 MB, and the next order-6 (256 KB contiguous) GFP_KERNEL allocation
+#      failed inside `vmbus_alloc_ring <- hvs_probe` — the Hyper-V vsock
+#      transport the WSL relay rides on. The distro did not crash; it silently
+#      became unreachable, and no OOM killer fired, because a kernel high-order
+#      allocation fails gracefully rather than invoking the killer. Two parts:
+#
+#        vm.min_free_kbytes 44 MB -> 256 MB. Not about the megabytes: it is what
+#        keeps the buddy allocator holding HIGH-ORDER blocks. At the failure the
+#        free lists read `0*512kB 2*1024kB 0*2048kB 0*4096kB` and
+#        `free:33960kB min:34060kB` — free had fallen BELOW the watermark, with
+#        nothing held back. vm.watermark_scale_factor 10 -> 150 starts reclaim
+#        at 1.5% of the zone instead of 0.1%, i.e. before the cliff.
+#
+#        earlyoom, which does NOT prevent exhaustion — it changes the failure
+#        mode from "VM unreachable, lose the session, wsl --shutdown" to "a
+#        process died". That is the whole point, and it is why this is the
+#        load-bearing half.
+#
+#      Kernel-global, not per-distro: WSL2 runs one kernel for the whole utility
+#      VM, so these settings also cover every other distro without provisioning
+#      them — verified 2026-08-09: Ubuntu-24.04 reports vm.min_free_kbytes =
+#      262144 having never run this script. That is a benefit for the sysctls,
+#      but earlyoom is per-distro: a SECOND distro running it would watch the
+#      same kernel-global memory and could double-kill on one pressure event.
+#      Three distros run on this box (desktop-wsl, Ubuntu-24.04, docker-desktop)
+#      and only desktop-wsl has earlyoom active, so there is no double-kill
+#      today. Check `systemctl is-active earlyoom` in the others before
+#      provisioning them.
+#
+#      NOT covered here, because this script runs inside the distro: the
+#      host-side `.wslconfig` (autoMemoryReclaim=disabled, swap=16GB). That
+#      lives in hosts/desktop/windows/windows-reinstall-runbook.md. Full
+#      diagnosis: qaz-code/docs/known-issues/sync-wsl-freeze.md.
 # NOTE: This file is currently sourced only by provision/tests/wsl-fixes.test.sh
 # (with WSL_FIXES_LIB_ONLY=1). The `set -e` would leak into any other shell
 # that sources it, so this is a sourcing caveat, not a standalone-script safety.
@@ -58,6 +95,10 @@ WSL_FIXES_DOCKER_KEYRING="${WSL_FIXES_DOCKER_KEYRING:-/etc/apt/keyrings/docker.a
 WSL_FIXES_DOCKER_LIST="${WSL_FIXES_DOCKER_LIST:-/etc/apt/sources.list.d/docker.list}"
 WSL_FIXES_DOCKER_DIVERT="${WSL_FIXES_DOCKER_DIVERT:-/usr/bin/docker.native}"
 WSL_FIXES_DOCKER_SHIM="${WSL_FIXES_DOCKER_SHIM:-/usr/local/bin/docker}"
+WSL_FIXES_SYSCTL_CONF="${WSL_FIXES_SYSCTL_CONF:-/etc/sysctl.d/99-wsl-memory.conf}"
+WSL_FIXES_EARLYOOM_DEFAULTS="${WSL_FIXES_EARLYOOM_DEFAULTS:-/etc/default/earlyoom}"
+WSL_FIXES_MIN_FREE_KB="${WSL_FIXES_MIN_FREE_KB:-262144}"
+WSL_FIXES_WATERMARK_SCALE="${WSL_FIXES_WATERMARK_SCALE:-150}"
 
 # ── pure helpers (unit-tested) ────────────────────────────────────────────────
 
@@ -114,6 +155,43 @@ wsl_fixes_docker_repo_line() {
 # its target has evaporated, which is the exact state this fix exists to survive.
 wsl_fixes_docker_needs_install() {
   [ ! -x "${1:-$WSL_FIXES_DOCKER_DIVERT}" ]
+}
+
+wsl_fixes_memory_sysctl() {
+  cat <<EOF
+# Written by provision/wsl-fixes.sh. See the header for the 2026-08-09 freeze.
+# Keep the buddy allocator holding high-order blocks: the allocation that took
+# the VM down needed order-6 (256 KB contiguous) and the free lists had none.
+vm.min_free_kbytes = $WSL_FIXES_MIN_FREE_KB
+
+# Begin reclaim at ~1.5% of the zone instead of the 0.1% default, so the kernel
+# has room to work before userspace has eaten everything.
+vm.watermark_scale_factor = $WSL_FIXES_WATERMARK_SCALE
+EOF
+}
+
+# earlyoom matches these against /proc/<pid>/comm, which carries no path and is
+# truncated to 15 chars — hence bare anchored names rather than path patterns.
+#
+# --avoid: killing PID 1 or the container runtime turns a recoverable memory
+# event into a broken distro. sshd and tailscaled are how a wedged box is
+# reached at all.
+# --prefer: the long-lived memory hogs. A killed sync is re-drivable from
+# upstream by design; a wedged VM is not.
+wsl_fixes_earlyoom_args() {
+  printf -- '-m 8 -s 8 -r 60 --avoid %s --prefer %s' \
+    "'^(systemd|init|dockerd|containerd|sshd|tailscaled)\$'" \
+    "'^(python3|gortex|node|twg)\$'"
+}
+
+wsl_fixes_earlyoom_defaults() {
+  cat <<EOF
+# Written by provision/wsl-fixes.sh. See the header for the 2026-08-09 freeze.
+# Both thresholds must be crossed before earlyoom acts: the freeze needed RAM at
+# the cap AND swap at zero. Keying on memory alone would kill under ordinary
+# page-cache pressure; keying on swap alone would fire far too late.
+EARLYOOM_ARGS="$(wsl_fixes_earlyoom_args)"
+EOF
 }
 
 # ── installers (need the filesystem; not unit-tested) ─────────────────────────
@@ -196,6 +274,32 @@ wsl_fixes_install_docker_cli() {
   fi
 }
 
+wsl_fixes_install_memory_guard() {
+  wsl_fixes_memory_sysctl | sudo tee "$WSL_FIXES_SYSCTL_CONF" >/dev/null \
+    || die "cannot write $WSL_FIXES_SYSCTL_CONF"
+  sudo sysctl --system >/dev/null
+  ok "min_free_kbytes=$(sysctl -n vm.min_free_kbytes) watermark_scale_factor=$(sysctl -n vm.watermark_scale_factor)"
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "no apt-get — skipping earlyoom, the guard is only half installed"
+    return 0
+  fi
+  if ! command -v earlyoom >/dev/null 2>&1; then
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq earlyoom || die "earlyoom install failed"
+  fi
+
+  wsl_fixes_earlyoom_defaults | sudo tee "$WSL_FIXES_EARLYOOM_DEFAULTS" >/dev/null \
+    || die "cannot write $WSL_FIXES_EARLYOOM_DEFAULTS"
+  # enable --now is a no-op on an already-enabled unit, so restart to pick the
+  # defaults file up on a re-run.
+  sudo systemctl enable --now earlyoom >/dev/null 2>&1 || true
+  sudo systemctl restart earlyoom
+  sudo systemctl is-active --quiet earlyoom \
+    && ok "earlyoom active" \
+    || die "earlyoom failed to start — check 'systemctl status earlyoom'"
+}
+
 wsl_fixes_main() {
   [ -n "${WSL_DISTRO_NAME:-}" ] || warn "WSL_DISTRO_NAME unset — is this really a WSL distro?"
   info "installing wslopen…"
@@ -204,6 +308,8 @@ wsl_fixes_main() {
   wsl_fixes_install_watchdog
   info "installing the native docker CLI…"
   wsl_fixes_install_docker_cli
+  info "installing the memory guard…"
+  wsl_fixes_install_memory_guard
 }
 
 [ -n "${WSL_FIXES_LIB_ONLY:-}" ] || wsl_fixes_main "$@"

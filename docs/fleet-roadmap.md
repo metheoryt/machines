@@ -6,7 +6,9 @@ the "where to head next" companion. For any item worth real work, run
 `superpowers:brainstorming` → `writing-plans` and drop the plan under
 `docs/superpowers/plans/`.
 
-_Last updated: 2026-08-01 — rewritten after the latitude-server migration. The
+_Last updated: 2026-08-27 — `server` returned to the fleet (P2 reversed) and was
+renamed `g15` the same day.
+Previously 2026-08-01, rewritten after the latitude-server migration. The
 previous revision (2026-07-14) had gone materially wrong: retired node names,
 latitude at the wrong tailnet IP, and done items still open. If you find
 yourself copying an unchecked box forward without re-verifying it, stop — that
@@ -20,13 +22,15 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| ~~`server`~~ | ~~`100.64.0.3`~~ | Windows 11 (`g513ie`) | **out of `fleet.json` 2026-08-01** — still powered on and on the tailnet. **Docker state now holds nothing unique** (forgejo wiped; every other volume duplicated on latitude or a regenerable venv). Only `C:` attached, ~430 GB used and unreviewed — that is what gates a wipe. Reach it as `methe@server.gg.ez` |
+| `g15` | `100.64.0.3` | Windows 11 (`g513ie`) | **back in `fleet.json` 2026-08-27**, renamed from `server` the same day — the personal-projects host. Windows kept on purpose; its Linux side is the WSL host `g15-wsl` below. `C:` is still ~416 GB used and unreviewed, but nothing is waiting on that review any more. Reach it as `methe@g15.gg.ez` |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
 
-`desktop-wsl` (`100.64.0.6`) is a self-declared WSL host: no `fleet.json` entry,
-a gitignored `fleet.local.json` instead.
+`desktop-wsl` (`100.64.0.6`) and `g15-wsl` (`100.64.0.9`) are self-declared
+WSL hosts: no `fleet.json` entry, a gitignored `fleet.local.json` instead. Both
+are `dispatch:direct` — each owns its own tailnet node, distinct from the
+Windows parent's.
 
 Two separate LANs. Same-LAN pairs get direct P2P (~3ms); cross-LAN pairs relay
 through our own DERP — expected and accepted, which is why **UPnP/router
@@ -196,7 +200,19 @@ and `converge.sh` still *detects* a `nixos` class on purpose (folding it into
 `linux` would run the apt driver on a Nix box and abort). Both are fail-safe if
 Nix ever returns. Leave them.
 
-## P2 — ✅ DONE 2026-08-01. `server` (g513ie) is out of the fleet.
+## P2 — ✅ DONE 2026-08-01, ↩ REVERSED 2026-08-27. `server` (g513ie) left the fleet, then came back as `g15`.
+
+> **Reversed 2026-08-27 — the box is back in `fleet.json` as the
+> personal-projects host.** Read this section as a record of what was *removed*,
+> not of where the fleet stands: `hosts/server/` is still deleted, Forgejo is
+> still wiped, the Caddy repoint still holds. What came back is the manifest
+> entry, the `methe@server` trust line (the SAME key — the box was never
+> reinstalled) and the `tier_fleet_ssh` member block, plus a new self-declared
+> WSL host `g15-wsl` at `100.64.0.9`. The wipe this section kept gating never
+> happened and is now off the table, so `C:` being unreviewed blocks nothing.
+> **The box is `g15`, not `server`, since the same day** — `server` also names
+> latitude's `linux.sh` profile, and one word for two things in one manifest is
+> how the last revision of this file rotted.
 
 **The hardware is NOT retired** — see the Forgejo item below before wiping it.
 
@@ -293,10 +309,12 @@ Nix ever returns. Leave them.
   question to answer before wiping or returning the machine — and it is a
   filesystem review, not a volume audit.
 
-- [ ] The `server` **profile** name survives the `server` **machine** — latitude
-  uses `profile: server`, and `provision/tests/tiers.test.sh` exercises it as
-  `plan server`. Not a bug, but the two now mean different things; do not "clean
-  up" the profile thinking it is the retired box.
+- [x] **The `server` profile / `server` machine collision is gone** — resolved
+  2026-08-27 by renaming the MACHINE to `g15`, not by touching the profile.
+  `profile: server` on latitude and `plan server` in `provision/tests/tiers.test.sh`
+  are now the only meaning of the word, which is what this item wanted. Renaming
+  the profile instead would have churned every tier list for a name that is
+  accurate.
 
 ---
 
@@ -360,6 +378,15 @@ apart mattered:
 change broke two suites, a green baseline made that obvious instead of something to
 be diffed against a remembered failure count.
 
+**Re-opened on latitude, 2026-08-19 — one suite, and it is the STALE-TEST kind.**
+`provision/tests/expansion-multibyte.test.sh` fails on latitude's pristine checkout:
+`unbraced expansion no longer fails under C.utf8 — bash changed; re-check this rule`.
+Note which way round this is: the 2026-08-01 pair above was a red test reporting a
+real bug in shipped code. This is the inverse — the test asserts a property of bash
+that its version no longer has, and the guarded code is fine. It still has to be
+resolved rather than remembered as a baseline, which is the whole point of P4. Not
+reproduced on air or desktop yet; the bash version is the first thing to compare.
+
 ## P5 — Documentation drift.
 
 - [x] **`AGENTS.md`** rewritten with P1 — the Nix-first Common Commands, the stale
@@ -382,6 +409,17 @@ be diffed against a remembered failure count.
 ---
 
 ## P6 — Housekeeping.
+
+- [ ] **`SB_PARKS` in the status board is still keyed by sd node**, which
+  2026-08-19 established is not an identity: `sb_series_keep` prunes a node that
+  vanishes and does nothing when the letter survives onto a DIFFERENT disk, so
+  after a replug a drive can carry the previous drive's park verdict. That verdict
+  gates which spinner gets woken for smartctl, so getting it wrong costs load
+  cycles on a drive already past 639k of them. NOT fixable the way the bay store
+  was: `sb_drive_parks` is a smartctl fork, which is why it is cached at all — it
+  needs a stable identity (serial, from `lsblk -no SERIAL` or sysfs) to invalidate
+  against. `SB_TEMPS` has a milder version of the same: between round-robin visits
+  a reused node shows the previous drive's temperature.
 
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
   desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh

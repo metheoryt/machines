@@ -1,5 +1,14 @@
 # Machines Fleet Layout — Plan B: cross-repo backup relocation
 
+> **SUPERSEDED 2026-08-29 — do not execute.** Replaced by
+> `docs/superpowers/plans/2026-08-29-backup-relocation-vps-to-machines.md`.
+> Every path below is dead: `~/gh/vps` and `~/gh/machines` are now `~/my/vps` and
+> `~/machines`; `g16-wsl` is `desktop-wsl`; `rest:http://server.lan:8001/wsl` is a
+> credentialed REST URL held outside the repo and pointed at latitude; and
+> `homeserver/` describes a retired Windows Immich host whose `G:\`/`H:\` drives
+> were reformatted during the 2026-07/08 migration. Kept for the frozen-URL
+> reasoning in its Global Constraints, which the replacement carries forward.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move the restic backup system from the `vps` repo into `machines` as a top-level `backup/` subtree with machine-named profile dirs, without perturbing any stateful restic repository URL or profile name.

@@ -54,7 +54,7 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_rapl_read tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_rapl_read tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_gortex_autoupdate tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
 
 # sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
@@ -68,6 +68,29 @@ hasnt "$hub" '^tier_sudo_nopasswd$'    "hub NEVER grants passwordless sudo"
 hasnt "$mac" '^tier_sudo_nopasswd$'    "macOS NEVER grants passwordless sudo"
 
 hasnt "$srv" '^tier_gortex$'           "server omits tier_gortex (no indexed checkouts to serve)"
+
+# gortex_autoupdate is the fleet's ONE gortex-pin writer. Single-writer is not a
+# preference here: two boxes bumping in the same window compute the same new pin,
+# produce two different commits of it, and the loser's push is rejected
+# non-fast-forward — leaving a stranded commit to unwind by hand. So a `has` on
+# any second profile is a real fleet bug, which is what these three hasnts pin.
+has   "$srv" '^tier_gortex_autoupdate$' "server publishes the gortex pin bump"
+hasnt "$ws"  '^tier_gortex_autoupdate$' "workstation never writes the gortex pin (single writer)"
+hasnt "$hub" '^tier_gortex_autoupdate$' "hub never writes the gortex pin (single writer)"
+hasnt "$mac" '^tier_gortex_autoupdate$' "macOS never writes the gortex pin (single writer)"
+# It lands on the profile that OMITS tier_gortex, so the publisher must not also
+# be an installer — a body that reached ~/.local/bin or the release tarball would
+# make the always-on box quietly self-update off-pin, which is the exact drift the
+# pin exists to prevent.
+gbody="$(awk '/^tier_gortex_autoupdate\(\)/,/^}/' "$TIERS")"
+hasnt "$gbody" 'local/bin'          "tier_gortex_autoupdate installs no binary"
+hasnt "$gbody" 'releases/download'  "tier_gortex_autoupdate downloads no release asset"
+has   "$gbody" 'OnUnitActiveSec=1w' "tier_gortex_autoupdate schedules weekly (the cadence IS the blast radius)"
+srv_gau="$(printf '%s\n' "$srv" | grep -n '^tier_gortex_autoupdate$' | cut -d: -f1)"
+srv_acct="$(printf '%s\n' "$srv" | grep -n '^tier_ssh_accounts$' | cut -d: -f1)"
+[ "$srv_acct" -lt "$srv_gau" ] \
+  && pass "server runs ssh_accounts BEFORE gortex_autoupdate (the push needs a key)" \
+  || die "server must run ssh_accounts before gortex_autoupdate"
 has   "$srv" '^tier_apt_dev$'          "server KEEPS the dev apt layer (gh, fish, starship)"
 has   "$srv" '^tier_shell_init$'       "server keeps fish (no --no-fish, unlike hub)"
 has   "$srv" '^tier_ssh_accounts$'     "server wires the GitHub account aliases"

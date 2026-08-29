@@ -762,6 +762,29 @@ eq "$(transient /mnt)"     no  'transient: a PREFIX of the declared mount is not
 eq "$(transient '')"       no  'transient: an empty mount is not transient'
 eq "$(sb_diskmap_parse bay "$TM")" '' 'diskmap: directives do not leak into each other'
 
+# The bay store is REBUILT every probe, never filled in per node. An sd letter is
+# handed out lowest-free, so a replug gives the same letter to a different disk in a
+# different bay — latitude painted `dockB0` on two rows at once because `sdd` kept the
+# label it was given in an earlier plug cycle (2026-08-19). The stub moves sdd from
+# u4-2:0 to u4-1:0 between calls, which is exactly what the kernel log showed.
+RM="$(sb_diskmap_parse bay "$(printf '%s\n' \
+  'bay u4-1:0 dockA0' 'bay u4-1:1 dockA1' 'bay u4-2:0 dockB0' 'bay u4-2:1 dockB1')")"
+BAY_SDD=u4-2:0
+sb_bay_tag() { case "${1:-}" in sdd) printf '%s' "$BAY_SDD" ;; sdg) printf 'u4-2:0' ;; *) printf '' ;; esac; }
+eq "$(sb_series_get "$(sb_bays_resolve "$RM" sdd)" sdd)" 'dockB0' 'bays: a drive gets its slot label'
+BAY_SDD=u4-1:0
+eq "$(sb_series_get "$(sb_bays_resolve "$RM" sdd)" sdd)" 'dockA0' 'bays: a REUSED node re-resolves, it is not kept'
+# The rebuild is also the prune: a drive that is gone is simply absent from the list.
+eq "$(sb_series_get "$(sb_bays_resolve "$RM" sdg)" sdd)" '' 'bays: a vanished drive leaves no entry'
+eq "$(sb_series_get "$(sb_bays_resolve "$RM" sdg)" sdg)" 'dockB0' 'bays: the drive now in that bay owns the label'
+# Two drives can never hold one label, which is the symptom the user saw.
+BAYS_BOTH="$(sb_bays_resolve "$RM" sdd sdg)"
+eq "$(sb_series_get "$BAYS_BOTH" sdd)" 'dockA0' 'bays: one label per bay, first drive'
+eq "$(sb_series_get "$BAYS_BOTH" sdg)" 'dockB0' 'bays: one label per bay, second drive'
+# A drive whose tag cannot be derived falls back to its own node name, as before.
+eq "$(sb_series_get "$(sb_bays_resolve "$RM" sdz)" sdz)" 'sdz' 'bays: no tag falls back to the device name'
+unset -f sb_bay_tag
+
 # Eject safety: two fields, reads and writes in flight. Either one nonzero means
 # pulling the cable now loses data, which is the only thing between "nothing is
 # mounted" and "safe to unplug".

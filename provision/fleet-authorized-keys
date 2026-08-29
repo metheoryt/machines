@@ -22,12 +22,21 @@
 # rebuilds a host.
 #
 # Comments are `<login>@<logical fleet name>` — the fleet key / ssh alias /
-# tailnet node — NEVER the OS hostname. Hostnames churn and the comments go
-# stale: desktop has been DESKTOP-4PQ6V6B, then ME-G614JV, now g614jv; server
-# was methe-server until 2026-07-20; latitude still answers `uname -n` with
-# latitude5520, a machine that no longer exists. No logical name has ever
-# changed. sshd ignores the comment — every human pruning this file does not.
+# tailnet node — NEVER the OS hostname. Hostnames churn far faster: desktop has
+# been DESKTOP-4PQ6V6B, then ME-G614JV, now g614jv; g15 was methe-server, then
+# g513ie; latitude still answers `uname -n` with latitude5520, a machine that no
+# longer exists.
+#
+# ONE logical name has changed, on 2026-08-27: `server` -> `g15`. It was renamed
+# because it had stopped naming anything — latitude took the services role, and
+# `server` is ALSO the name of the linux.sh profile latitude runs, so one word
+# meant two things in one manifest. If you rename another, the tailnet node, the
+# dotfiles branch and this file all have to move in the same change.
+#
+# sshd ignores the comment — every human pruning this file does not.
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID1phM6MJjQbFKInnKyjVPYrMGs7AxTuq3+Y43V0QzQX me@latitude
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDItNXgaJyDHkiKcLnFSRFbQ1dIk4LeQjlmWBk6sTcwI me@desktop-wsl
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH15XqDE0jcoeF5H2BJP39aBjvSPMLzB0W/n/m0SSNwD methe@desktop
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@g15
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDzgLmdZv1ZYoG5wNujBWADuQlzg6xPweUa78JYW9NcW me@g15-wsl
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHC5QVL/9jlSdmswvx9KWZ6rKVT+fr97sr9zAOoFIPKG me@air

@@ -13,7 +13,9 @@
 #                 box's ~/.ssh/config and kill its only GitHub auth)
 #   server      — the always-on services box (latitude, post-NixOS): the full
 #                 interactive layer a human SSHes into, minus the code-graph and
-#                 secondary-agent tiers a box that runs services never uses
+#                 secondary-agent tiers a box that runs services never uses, plus
+#                 the one fleet-wide publisher tier (gortex_autoupdate) that wants
+#                 a box which is always on
 # Resolution order: $MACHINES_PROFILE > fleet.json "profile" by OS hostname >
 # workstation. See docs/superpowers/specs/2026-07-25-hub-fleet-enrollment-tiers-design.md.
 #
@@ -117,8 +119,15 @@ case "$PROFILE" in
     # board's power row reads the CPU's energy counter, which ships root-only, and
     # this widens it to the board's group. It is a no-op on hardware with no RAPL
     # domain. It is a REAL, if small, security decision — see the tier's comment.
+    # gortex_autoupdate is the one tier this profile has and workstation does NOT,
+    # and it is here BECAUSE gortex is not: the tier publishes a pin bump for the
+    # rest of the fleet (provision/gortex.version, which converge treats as a
+    # reprovision trigger) and installs nothing locally. It must run on exactly
+    # one box — two writers race on the push and strand a commit — so the
+    # always-on box that never runs gortex itself is the natural writer. It sits
+    # after ssh_accounts because the push needs that tier's GitHub key.
     TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit rapl_read agents_config git_base "agent_clis claude"
-           shell_init autofetch ssh_accounts selfpull ssh_trust dotfiles) ;;
+           shell_init autofetch ssh_accounts selfpull gortex_autoupdate ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;
 esac

@@ -38,11 +38,36 @@ function Invoke-RoleDotfiles {
     $git = (Get-Command git -ErrorAction SilentlyContinue).Source
     if (-not $git) { throw "dotfiles: git not found on PATH" }
 
+    # 0. Never let a remote call sit at an interactive prompt. Same trap as the
+    # posix side (provision/roles/dotfiles.sh, which carries the full note): on a
+    # box whose known_hosts has no github.com entry -- every freshly provisioned
+    # box -- ssh asks the operator to confirm the host key, provisioning has no
+    # console to answer it, and the run HANGS rather than failing. Windows
+    # OpenSSH prompts identically, so this side needs it too.
+    #
+    # BatchMode=yes turns a prompt into an exit code; StrictHostKeyChecking=accept-new
+    # is what still lets a FIRST-time key through unattended (a CHANGED key hard-fails).
+    # Both, or the outcome is broken in one direction or the other.
+    #
+    # These are process-scoped: PowerShell has no function-scoped environment, so
+    # unlike the posix side they persist for the rest of the run. That is
+    # acceptable -- every later git call here wants the same posture -- but it is
+    # the reason a caller's own GIT_SSH_COMMAND is honoured rather than replaced.
+    if (-not $env:GIT_SSH_COMMAND) {
+        $env:GIT_SSH_COMMAND = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10'
+    }
+    $env:GIT_TERMINAL_PROMPT = '0'
+
     # 1. Clone the bare repo if absent.
     if (-not (Test-Path -LiteralPath $gitDir)) {
         Write-Host "  dotfiles: cloning $remote -> $gitDir ..."
         & $git clone --quiet --bare $remote $gitDir
-        if ($LASTEXITCODE -ne 0) { throw "dotfiles: clone failed - is this box's key registered for the private repo?" }
+        if ($LASTEXITCODE -ne 0) {
+            throw ("dotfiles: clone failed. Under BatchMode ssh never prompts, so this is one of: " +
+                   "this box's key is not registered for the private repo; github's host key CHANGED " +
+                   "(accept-new does not accept a swap); or the remote is unreachable. " +
+                   "Reproduce with: ssh -o BatchMode=yes -T git@github.com")
+        }
     }
     function Df { & $git --git-dir=$gitDir --work-tree=$HOME @args }
     Df config status.showUntrackedFiles no | Out-Null

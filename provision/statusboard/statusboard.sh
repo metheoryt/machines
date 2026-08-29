@@ -952,6 +952,34 @@ sb_bay_label() {
   printf '%s' "$lab"
 }
 
+# sb_bays_resolve <bay map> <disk...>: the whole "disk=label" store, REBUILT from
+# current topology on every call.
+#
+# Built from scratch rather than filled in for drives that have no entry yet, because
+# an sd node is not an identity. The letters are handed out lowest-free, so unplugging
+# a dock frees its letters and the next plug hands the SAME letter to a DIFFERENT disk:
+# on latitude, `sdd` was the ST1000LM024 in bay u4-2:0 at 04:34 and the ST320LT020 in
+# bay u4-1:0 six hours later (kernel log, 2026-08-16). A store that resolved each node
+# once and kept it therefore painted `dockB0` on two rows at the same time — the label
+# was not stale-and-unreachable, it was live and wrong, which is worse than `sdd` was.
+#
+# Rebuilding also prunes: a drive that is gone is simply not in the list, so no
+# sb_series_keep call is needed. Cost is one readlink per mounted drive per PROBE (the
+# frame reads the store, it does not build it) — the same trade sb_disk_of already makes
+# three lines above the caller.
+sb_bays_resolve() {
+  local map="${1:-}" out="" d
+  # No drives is not an error — a box with nothing mounted has no bays. Guarded rather
+  # than left to "${@:2}", whose behaviour on a single argument under `set -u` differs
+  # by bash version and this script still claims to run on macOS's 3.2.
+  [ "$#" -gt 1 ] || { printf ''; return; }
+  for d in "${@:2}"; do
+    [ -n "$d" ] || continue
+    out="$(sb_series_set "$out" "$d" "$(sb_bay_label "$(sb_bay_tag "$d")" "$map" "$d")")"
+  done
+  printf '%s' "$out"
+}
+
 # sb_inflight_busy <contents of /sys/block/X/inflight>: 1 when the kernel still has
 # requests outstanding to this drive.
 #
@@ -2025,7 +2053,7 @@ if [ -r "$SB_DISKMAP" ]; then
   SB_TRANSIENT="$(sb_diskmap_parse transient "$SB_DISKMAP_BODY")"
   unset SB_DISKMAP_BODY
 fi
-SB_BAYS=""        # "disk=label" — resolved once per drive, read per row by the frame
+SB_BAYS=""        # "disk=label" — rebuilt every probe, read per row by the frame
 SER_PEERS=""   # "member=csv" per line — one binary online series per fleet member
 
 # Containers. SB_DK_ST is n/a (no docker on this box) / down (daemon unreachable) / up.
@@ -2310,11 +2338,6 @@ sb_sample_slow() {
   # drive doing nothing is not changing temperature quickly.
   for disk in $disks; do
     SB_ROTA="$(sb_series_set "$SB_ROTA" "$disk" "$(sb_rotational "$disk")")"
-    # The bay, resolved once per drive and kept: sysfs topology does not change under a
-    # device that stays plugged in, and a drive that is REPLUGGED comes back as a
-    # different node, so the stale entry is unreachable rather than wrong.
-    [ -n "$(sb_series_get "$SB_BAYS" "$disk")" ] || SB_BAYS="$(sb_series_set "$SB_BAYS" "$disk" \
-      "$(sb_bay_label "$(sb_bay_tag "$disk")" "$SB_BAYMAP" "$disk")")"
     cur="$(sb_hwmon_temp "$disk")"
     if [ -n "$cur" ]; then
       SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$disk" "$cur")"
@@ -2369,6 +2392,11 @@ sb_sample_slow() {
       [ -n "$cur" ] && SB_TEMPS="$(sb_series_set "$SB_TEMPS" "$cand" "$cur")"
     fi
   fi
+  # The bays, re-derived from topology every probe rather than cached per node. See
+  # sb_bays_resolve: an sd letter is reused by a different disk after a replug, so a
+  # kept entry goes live-and-wrong, not stale-and-unreachable.
+  # shellcheck disable=SC2086
+  SB_BAYS="$(sb_bays_resolve "$SB_BAYMAP" $disks)"
   # shellcheck disable=SC2086
   SB_TEMPS="$(sb_series_keep "$SB_TEMPS" $disks)"
   # shellcheck disable=SC2086

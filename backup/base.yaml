@@ -1,0 +1,70 @@
+version: "1"
+
+global:
+  default-command: snapshots
+  # NO `initialize` HERE, DELIBERATELY -- and it must not come back.
+  #
+  # A global `initialize: true` cannot be switched off by a profile. resticprofile
+  # 0.33.1 applies the global as a default, and a profile's `initialize: false` is
+  # Go's zero value, so it is indistinguishable from unset and the global wins.
+  # Verified empirically on 0.33.1, by counting the "initializing repository" log
+  # line: profile `true` DOES override global `false`, but profile `false` does
+  # NOT override global `true`. There is no `--no-init` flag to escape with.
+  #
+  # That asymmetry silently defeated the wsl profile's guard. /mnt/spare320 is
+  # mounted `nofail`, so when it is absent docker bind-mounts an empty directory;
+  # `restic init` then SUCCEEDS against it and the client writes a fresh
+  # zero-history repository while reporting success. On 2026-08-04 that drive was
+  # genuinely unmounted for four and a half hours.
+  #
+  # So initialization is opt-IN, declared on each profile that must be able to
+  # create its own repository. A newly added profile inherits NO init, which is
+  # the safe default: the failure mode is a loud "repository does not exist"
+  # rather than silent data loss.
+  priority: low
+
+base-job:
+  env:
+    RESTIC_PASSWORD_FILE: "pass.txt"
+  lock: "resticprofile-{{ .Profile.Name }}.lock"
+  force-inactive-lock: true
+  retry-lock: 10s
+  # NO `check-before` HERE EITHER -- it belongs under `backup:`, not at profile
+  # level, and at profile level it is silently inert.
+  #
+  # It sat here from the beginning and never ran a single check. Measured on
+  # 0.33.1: four scheduled runs of the `latitude` profile issued 4 `restic init`,
+  # 4 `restic backup` and 4 `restic forget` -- and 0 `restic check`. A direct
+  # `resticprofile -n <p> backup` issues none either. The key is not rejected and
+  # is not a typo: `resticprofile show` prints `check-before: true` back at you,
+  # which is exactly what kept it believable for so long.
+  #
+  # Moved under `backup:` in the same harness, the pipeline becomes
+  # init -> check -> backup. So the fix is placement, and it is per-profile on
+  # purpose: turning it on here would also turn on a daily full check against the
+  # wsl client's REMOTE repo over the tailnet, which is a behaviour change on a
+  # host that cannot currently be reached to test it. Declare it where you can
+  # prove it.
+  verbose: true
+  compression: off
+  backup:
+    read-concurrency: 1
+    schedule-permission: user
+    schedule-log: "resticprofile-{{ .Profile.Name }}.backup.log"
+    schedule-ignore-on-battery: true
+    schedule-lock-wait: 10m
+    skip-if-unchanged: true
+  retention:
+    before-backup: false
+    after-backup: true
+    keep-daily: 7
+    keep-weekly: 8
+    keep-monthly: 12
+    keep-yearly: 10
+    prune: true
+  check:
+    read-data-subset: 5%
+    schedule-permission: user
+    schedule-log: "{{ .Profile.Name }}.check.log"
+    schedule-ignore-on-battery: true
+    schedule-lock-wait: 10m

@@ -1425,6 +1425,83 @@ UNIT
   return 0
 }
 
+# ── SERVER: publish gortex release bumps for the whole fleet ─────────────────
+# tier_gortex_autoupdate: install the weekly timer that bumps
+# provision/gortex.version to the newest upstream release and pushes it.
+#
+# This is the PUBLISHER, not an installer — it never puts a binary on any box.
+# tier_gortex does that, from the pin, on every box that carries it. Keeping the
+# two apart is what makes an auto-update safe here: the fleet still runs exactly
+# one version, the bump is an ordinary commit, and a bad release is a `git
+# revert` rather than five hand-repaired boxes.
+#
+# SERVER-ONLY, and that is a correctness constraint rather than a preference —
+# see provision/gortex-autoupdate.sh's header. Two boxes bumping in the same
+# window race on the push and strand a commit. latitude is the writer because it
+# is always on, and because `server` omits tier_gortex: the box that publishes
+# the version is then the one box whose own gortex can never bias what it
+# publishes.
+tier_gortex_autoupdate() {
+  info "Installing gortex auto-update timer…"
+  GAU="$REPO/provision/gortex-autoupdate.sh"
+  if [ ! -f "$GAU" ]; then
+    warn "provision/gortex-autoupdate.sh not found — skipping gortex auto-update timer"
+    return 0
+  fi
+  # curl+jq are what read the releases API. They are a fleet-wide assumption
+  # already (provision/lib/fleet.sh cannot parse fleet.json without jq), so a
+  # miss here is worth a warning rather than a silent weekly no-op in the journal.
+  have curl || warn "curl not found — the gortex auto-update timer will skip every tick"
+  have jq   || warn "jq not found — the gortex auto-update timer will skip every tick"
+  if _is_darwin; then
+    _launchd_periodic kz.cyphy.gortex-autoupdate 604800 /usr/bin/env bash "$GAU" \
+      && ok "gortex-autoupdate LaunchAgent installed" \
+      || warn "could not load the gortex-autoupdate LaunchAgent"
+  elif systemctl --user show-environment >/dev/null 2>&1; then
+    _ud4="$HOME/.config/systemd/user"; mkdir -p "$_ud4"
+    {
+      printf '[Unit]\nDescription=Bump the fleet gortex pin to the newest release\n\n'
+      printf '[Service]\nType=oneshot\nTimeoutStartSec=5min\n'
+      printf 'ExecStart=/usr/bin/env bash %s\n' "$GAU"
+    } > "$_ud4/gortex-autoupdate.service"
+    # WEEKLY, not 10-minutely like its sibling timers: every tick that finds a new
+    # release writes a commit the whole fleet reprovisions from, so the cadence is
+    # the blast radius. RandomizedDelaySec is an hour for the same reason —
+    # nothing here needs to happen at a predictable minute.
+    cat > "$_ud4/gortex-autoupdate.timer" <<'UNIT'
+[Unit]
+Description=Weekly gortex pin bump
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1w
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+    if systemctl --user daemon-reload >/dev/null 2>&1 \
+       && systemctl --user enable --now gortex-autoupdate.timer >/dev/null 2>&1; then
+      ok "gortex-autoupdate.timer (systemd-user) installed"
+    else
+      warn "could not enable gortex-autoupdate.timer"
+    fi
+  elif have crontab; then
+    if crontab -l 2>/dev/null | grep -qF "$GAU"; then
+      ok "gortex-autoupdate cron already present"
+    elif { crontab -l 2>/dev/null; printf '17 4 * * 1 /usr/bin/env bash %s >/dev/null 2>&1\n' "$GAU"; } \
+           | crontab - >/dev/null 2>&1; then
+      ok "gortex-autoupdate cron installed"
+    else
+      warn "could not install gortex-autoupdate cron"
+    fi
+  else
+    warn "gortex-autoupdate installed but not scheduled (no systemd user manager or cron)"
+  fi
+  return 0
+}
+
 # ── BEST-EFFORT: inbound fleet SSH trust (ssh-server role) ────────────────────
 # Merge provision/fleet-authorized-keys into ~/.ssh/authorized_keys so this box
 # accepts inbound fleet logins (mirrors ssh-server.nix keyFiles / windows.ps1
