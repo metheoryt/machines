@@ -139,7 +139,7 @@ profile also carries the `g614jv-maintenance` prune/check for desktop-wsl's repo
 Both break silently if the path is wrong — `run-before` asserts the *repo*, not
 the password.
 
-- [ ] **2.1** Move the password to a name that says what it is, keeping the
+- [x] **2.1** Move the password to a name that says what it is, keeping the
       dotfiles-tracked file as the single byte-source. On latitude:
 
 ```bash
@@ -153,21 +153,37 @@ cmp ~/machines/backup/latitude/pass.txt ~/my/vps/backup/homeserver/pass.txt
 Rename the tracked path under `~/g513ie-prod-config/` **later or never** — it is a
 dotfiles change on latitude's branch and is not worth coupling to this move.
 
-- [ ] **2.2** Update both `password-file:` and `env.RESTIC_PASSWORD_FILE` in
+- [x] **2.2** Update both `password-file:` and `env.RESTIC_PASSWORD_FILE` in
       `backup/latitude/profiles.yaml` to the new absolute path. Both, not one —
       the file already warns that leaving a stale env var set is how someone later
       fixes the wrong thing.
 
-- [ ] **2.3** Reinstall latitude's schedules from the new directory:
+- [x] **2.3** Reinstall latitude's schedules from the new directory:
 
 ```bash
 cd ~/machines/backup/latitude
-resticprofile -n latitude              schedule --all
-resticprofile -n g614jv-maintenance    schedule --all
-systemctl list-timers --all | grep restic    # expect the same four unit names
+sudo resticprofile schedule --all            # ONE invocation; see below
+systemctl list-timers --all | grep -c resticprofile   # exactly 4
+grep -H -E 'WorkingDirectory|RESTIC_PASSWORD_FILE' /etc/systemd/system/resticprofile-*.service
 ```
 
-- [ ] **2.4** **Verify by firing the schedule, not the script.** This repo has
+Three things this step turned out to depend on:
+
+- **`schedule --all` ignores `-n` and schedules every profile in the config**, so
+  the two `-n` invocations the plan first carried were the same command run twice.
+- **`sudo` is required** — these are root-owned units in `/etc/systemd/system`,
+  installed with `HOME=/root` and `SUDO_USER=me` baked in.
+- **The unit bakes `Environment="RESTIC_PASSWORD_FILE=…"` at install time.**
+  Editing `profiles.yaml` therefore changes nothing until the schedule is
+  reinstalled — and it is why 2.2 had to move *both* keys: the env var is not a
+  fallback, it is copied verbatim into the unit.
+
+The duplicate-timer hazard does not materialise here: unit names derive from the
+profile name (`resticprofile-backup@profile-latitude`), not the directory, so
+reinstalling overwrites the same eight files. It would bite if a profile were ever
+renamed — which is why Invariant 1 freezes the names. Verify the count anyway.
+
+- [x] **2.4** **Verify by firing the schedule, not the script.** This repo has
       been burned by exactly this: `mirror-refresh.sh -go` passed by hand for weeks
       while every timer run reported `Failed`.
 
@@ -176,11 +192,16 @@ sudo systemctl start resticprofile-backup@profile-latitude.service
 systemctl show -p Result resticprofile-backup@profile-latitude.service   # Result=success
 sudo systemctl start resticprofile-forget@profile-g614jv-maintenance.service
 systemctl show -p Result resticprofile-forget@profile-g614jv-maintenance.service
-restic -r /mnt/spare320/restic/latitude snapshots | tail -3   # a new snapshot today
+sudo restic -r /mnt/spare320/restic/latitude \
+  --password-file /home/me/machines/backup/latitude/pass.txt snapshots --latest 3
 ```
 
 A `repository does not exist` here means the spare320 drive is absent — that is the
 mount guard working, not a reason to touch `initialize`.
+
+**Verified 2026-08-29:** both units `Result=success`, all four timers present under
+the same names, every `WorkingDirectory` now `/home/me/machines/backup/latitude`,
+no unit left referencing `~/my/vps`, and snapshot `2d7cc63e` written at 15:47.
 
 ## Task 3 — repoint desktop-wsl's client
 
