@@ -914,6 +914,42 @@ same names, `WorkingDirectory=/home/me/machines/backup/latitude`, snapshot
   now false — and `~/machines/backup/latitude/pass.txt` symlinks to it so the
   committed config names only the correct path. The symlink is gitignored and
   host-local: a rebuilt latitude must recreate it by hand.
+### The REST server served 401 for two days, and `Result` said success (2026-08-29)
+
+Found while reinstalling desktop-wsl's client (Task 3 of the relocation). The
+first hand-fire returned **401 Unauthorized**; a bare `restic snapshots` with the
+unchanged absolute env paths returned the same, which is what proved the config
+move innocent before anything was reverted. Last good backup **2026-08-27 10:15**,
+401 on 08-28 and 08-29 — **two days unbacked-up, silently.**
+
+- **Cause: a container bound to the *underlying* directory of a mountpoint.**
+  `restic-server` started 2026-08-27 13:11 while `/mnt/spare320` was unmounted, so
+  `${RESTIC_DATA_PATH}:/data` resolved to the empty directory beneath the
+  mountpoint; rest-server wrote a 0-byte `.htpasswd` there and kept serving it
+  after the drive returned. Third appearance of this hazard on latitude — the same
+  one `backup/latitude/profiles.yaml` warns about for `initialize`, and the same
+  shape as the 2026-08-23 USB-drop incident. **`nofail` + a bind mount means every
+  container on that drive has this failure mode.**
+- **Fix: `docker compose up -d --force-recreate`, not `docker restart`** — restart
+  reuses the existing container's mount configuration.
+- **The discriminator is `docker exec restic-server ls -la /data`**, not a
+  successful backup. Healthy shows the 68-byte `.htpasswd` and `g614jv/`; broken
+  shows a 0-byte `.htpasswd` stamped with the container's own start time. Every
+  host-side check passes in both states.
+- **`systemctl show -p Result` is only valid within one boot.** It read `success`
+  while the journal showed two consecutive failures, because the WSL distro had
+  rebooted and a never-run unit in a fresh user manager defaults to `success`. On
+  a WSL box — which reboots whenever Windows does — it is worthless as "did the
+  last scheduled run succeed". Use the journal or the profile's own
+  `schedule-log`. This narrows AGENTS.md's own recipe ("`systemctl start <unit>`
+  then `systemctl show -p Result`"): still right for a run you just fired, wrong
+  for a run you did not.
+- **`~/my/vps/homeserver/restic-server/selfcheck.sh` catches it and runs from no
+  timer.** It failed `newest snapshot age: 56h > 26h` while its other eight checks
+  passed — they inspect the host filesystem and the container's flags, never
+  whether those are the same directory. Scheduling it is the deferred monitoring
+  work (roadmap P0), not an oversight.
+
 - **`g614jv-maintenance` holds desktop-wsl's key, not latitude's**
   (`~/.config/restic/g614jv.pass.txt`, outside both repos). It prunes desktop-wsl's
   repo on latitude's own filesystem because the REST server runs `--append-only`,

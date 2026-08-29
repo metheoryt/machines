@@ -224,9 +224,9 @@ this step first named:
 Its unit carries `WorkingDirectory=/home/me/my/vps/backup/wsl`, so the tree cannot
 move out from under it without a reinstall.
 
-- [ ] **3.1** On desktop-wsl, from `~/machines/backup/desktop-wsl`:
+- [x] **3.1** On desktop-wsl, from `~/machines/backup/desktop-wsl`:
       `bash install-tasks.sh` (it is `cd "$(dirname "$0")"` + `resticprofile schedule --all`).
-- [ ] **3.2** Confirm the unit now points at the new dir and that linger is still on
+- [x] **3.2** Confirm the unit now points at the new dir and that linger is still on
       — without linger the user timer stops firing silently:
 
 ```bash
@@ -236,12 +236,49 @@ systemctl --user start resticprofile-backup@profile-wsl.service
 systemctl --user show -p Result resticprofile-backup@profile-wsl.service
 ```
 
-- [ ] **3.3** Confirm from **latitude**, not from the client — the box that failed
+- [x] **3.3** Confirm from **latitude**, not from the client — the box that failed
       cannot hide the failure. Newest snapshot mtime under the hub repo:
 
 ```bash
 ssh latitude 'sudo ls -lt /mnt/spare320/restic-rest/g614jv/snapshots | head -3'
 ```
+
+**Verified 2026-08-29:** `WorkingDirectory=/home/me/machines/backup/desktop-wsl`,
+`Linger=yes`, exactly one user timer, no user unit left referencing `~/my/vps`,
+`Result=success`, and snapshot `5f8d263c` visible from latitude at 18:39.
+
+### This step uncovered a live incident that had nothing to do with the move
+
+The first hand-fire returned **401 Unauthorized**, and so did a bare `restic
+snapshots` with the unchanged absolute env paths — which is what proved the move
+innocent before anything was changed back. The old log dated it: last good backup
+**2026-08-27 10:15**, then 401 on 08-28 and 08-29. **desktop-wsl had not been
+backed up for two days and nothing said so.**
+
+Cause: `restic-server` started at 2026-08-27 13:11 while `/mnt/spare320` was not
+mounted. `${RESTIC_DATA_PATH}:/data` therefore bound the *underlying* directory of
+the mountpoint, rest-server created an empty `.htpasswd` there, and when the drive
+came back the container stayed pinned to the shadowed directory. Every client got
+401 against a server that looked healthy. This is the third appearance of the
+empty-bind-mount hazard on latitude — the same one `profiles.yaml` warns about for
+`initialize`, and the same one behind the 2026-08-23 USB-drop incident.
+
+- **Fix:** `docker compose up -d --force-recreate` from
+  `~/my/vps/homeserver/restic-server`. Not `docker restart`, which reuses the
+  existing mount configuration.
+- **The discriminator is one line**, and it is not a successful backup:
+  `docker exec restic-server ls -la /data` must show the 68-byte `.htpasswd` and
+  the `g614jv/` directory. Broken, it showed a 0-byte `.htpasswd` stamped with the
+  container's own start time.
+- **Leave the shadowed directory alone.** It holds only that 0-byte file, and
+  unmounting a live `/mnt/spare320` to clean it would take down the repo that
+  `backup@latitude` and `forget@g614jv-maintenance` both use.
+- **`selfcheck.sh` already catches this** — it failed `newest snapshot age: 56h >
+  26h` while its other eight checks passed, because they inspect the host
+  filesystem and the container's flags, not whether the two are the same
+  directory. **It runs from no timer and no unit.** Scheduling it is monitoring,
+  which this plan puts out of scope by explicit deferral; it is recorded here so
+  the decision is his and not an oversight.
 
 ## Task 4 — write the two role executors
 
