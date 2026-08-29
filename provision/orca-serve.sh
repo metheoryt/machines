@@ -157,7 +157,13 @@ addr="\$(tailscale ip -4 2>/dev/null | head -1)"
 # when DISPLAY is unset — but under WSLg /tmp/.X11-unix is a READ-ONLY tmpfs, so
 # Xvfb cannot bind its socket there and never becomes ready. WSLg already serves
 # :0 on that same tmpfs, so hand it to serve instead of fighting for :99.
-if [ -z "\${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then export DISPLAY=:0; fi
+# On a cold distro start the unit can beat WSLg to its socket; without the wait
+# the first attempt gets no display and Restart=on-failure has to clean up after
+# it (NRestarts=1 on a measured wsl --terminate cycle).
+if [ -z "\${DISPLAY:-}" ]; then
+  for _ in \$(seq 1 30); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 1; done
+  [ -S /tmp/.X11-unix/X0 ] && export DISPLAY=:0
+fi
 # Serve prints the banner and the PAIRING URL on stdout, and Electron flushes a
 # non-tty stdout only at exit — so under systemd the journal shows nothing until
 # the process dies, and the documented "read the pairing URL from the journal"
