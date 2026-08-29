@@ -224,8 +224,17 @@ Convention: `provision/roles/<role>.sh` is **sourced** by `provision.sh` and def
       It must **not** create repositories — `initialize` stays with the profiles.
 - [ ] **4.3** `provision/tests/roles.test.sh` — extend it: both functions defined
       after sourcing, dry-run mutates nothing, a missing profile dir returns 0.
-- [ ] **4.4** `just test` green — 28+ suites, 0 failures. A red suite gives no
-      signal at all, which is the whole reason the count is tracked.
+- [ ] **4.4** Run the suite. **`just` is not installed on desktop-wsl**, so use the
+      for-loop form from AGENTS.md. The documented "28 suites, 0 failures" is stale
+      on two counts: the loop finds **37** suites, and **2 fail for environmental
+      reasons unrelated to any of this work** —
+      `provision/tests/expansion-multibyte.test.sh` (its bash-behaviour self-test;
+      its repo scan passes) and `provision/tests/fleet-ssh-config-ps.test.sh`
+      (`UnauthorizedAccess` from `powershell.exe` under WSL). The gate here is
+      therefore **no NEW failures beyond those two, and
+      `provision/tests/roles.test.sh` green** — not an unreachable zero. A red count
+      treated as a baseline is exactly how a real bug sat unread for weeks
+      (`docs/fleet-roadmap.md` P4), so re-measure the two before accepting them.
 
 ## Task 5 — make `fleet.json` describe reality
 
