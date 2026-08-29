@@ -273,12 +273,47 @@ empty-bind-mount hazard on latitude — the same one `profiles.yaml` warns about
 - **Leave the shadowed directory alone.** It holds only that 0-byte file, and
   unmounting a live `/mnt/spare320` to clean it would take down the repo that
   `backup@latitude` and `forget@g614jv-maintenance` both use.
-- **`selfcheck.sh` already catches this** — it failed `newest snapshot age: 56h >
-  26h` while its other eight checks passed, because they inspect the host
-  filesystem and the container's flags, not whether the two are the same
-  directory. **It runs from no timer and no unit.** Scheduling it is monitoring,
-  which this plan puts out of scope by explicit deferral; it is recorded here so
-  the decision is his and not an oversight.
+- **`selfcheck.sh` caught this and ran from nothing** — it failed `newest
+  snapshot age: 56h > 26h` while its other eight checks passed, because they
+  inspect the host filesystem and the container's flags, not whether the two are
+  the same directory. **Now scheduled, by his explicit decision** (see Task 3b).
+
+## Task 3b — put the hub selfcheck on a timer (added mid-plan, on request)
+
+Not in the original plan: the incident above made the case, and he asked for it
+directly. Done 2026-08-29.
+
+- [x] **3b.1** Move `vps/homeserver/restic-server/selfcheck.sh` to
+      `machines/hosts/latitude/debian/restic-hub-selfcheck.sh`. The REST *server*
+      stays in `vps` because it is a service; verifying that latitude's backup hub
+      works is machine-backup work. It also lands with latitude's other ops
+      scripts and reuses `install-timers.sh` — one mechanism for this box's system
+      timers, same copy-not-symlink review boundary. Deleted from `vps` rather
+      than copied: two copies drift, and a pointer in `compose.yml` says where it
+      went and how to recover the failure it detects.
+- [x] **3b.2** Add **check 3, the real empty-bind-mount guard.** Check 2 claimed
+      to be it while reading the HOST path, where the mount always looks fine —
+      which is exactly how eight checks stayed green through a two-day outage.
+      Check 3 compares the `.htpasswd` **inode** the container sees against the
+      host's: size only says "a file of the same length", inode says "the same
+      file". Positive control run with a bogus container name: it fails.
+- [x] **3b.3** `restic-hub-selfcheck.{service,timer}` — `OnBootSec=15min`
+      (every failure so far was a bind race at container start), `OnCalendar=09:00`
+      after the client's 06:00 run, `Persistent=true`. Wire into `install-timers.sh`:
+      `UNITS`, `TIMERS` **and** the executable pre-flight loop — missing the last
+      one enables a timer that fails every fire.
+- [x] **3b.4** Verified by the timer firing itself, not by running the script:
+      `Result=success`, all ten checks `ok`, next trigger 09:03, `systemctl
+      --failed` empty.
+
+**Notification is a failed systemd unit and nothing more**, which `just health`
+already reports. Alerting proper stays deferred (roadmap P0).
+
+**Known false positive, left in place deliberately.** Check 8 reads snapshot
+freshness, which is really a *client* liveness check: desktop-wsl is a laptop, and
+a weekend off fails it with nothing wrong on the hub. Check 3 is the one that
+fires only on real hub breakage. The 26h threshold is left exactly as found — see
+it misfire before changing it.
 
 ## Task 4 — write the two role executors
 

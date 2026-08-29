@@ -944,11 +944,21 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   `schedule-log`. This narrows AGENTS.md's own recipe ("`systemctl start <unit>`
   then `systemctl show -p Result`"): still right for a run you just fired, wrong
   for a run you did not.
-- **`~/my/vps/homeserver/restic-server/selfcheck.sh` catches it and runs from no
-  timer.** It failed `newest snapshot age: 56h > 26h` while its other eight checks
-  passed — they inspect the host filesystem and the container's flags, never
-  whether those are the same directory. Scheduling it is the deferred monitoring
-  work (roadmap P0), not an oversight.
+- **The selfcheck is now on a timer, and moved into `machines`** (2026-08-29, at
+  his request). `machines/hosts/latitude/debian/restic-hub-selfcheck.sh`, deleted
+  from `vps` with a pointer left in `compose.yml`; units in `systemd/` next to it,
+  installed by `install-timers.sh` — `OnBootSec=15min` plus 09:00 daily. **Adding
+  a pair there means editing `UNITS`, `TIMERS` and the executable pre-flight
+  loop**; miss the loop and you enable a timer that fails every fire.
+  **Notification is a failed systemd unit and nothing else** — `just health`
+  reports it, and alerting proper stays deferred.
+- **Its new check 3 is the one that discriminates.** It compares the `.htpasswd`
+  **inode** the container sees against the host's — size would only say "a file of
+  the same length". Old check 2 claimed to guard the empty-bind-mount case while
+  reading the host path, where the mount always looks fine; that is precisely how
+  eight checks stayed green for two days. Check 8 (snapshot freshness) is really a
+  *client* liveness check and fires when desktop-wsl is merely asleep for a
+  weekend, so it cannot be the sentinel.
 
 - **`g614jv-maintenance` holds desktop-wsl's key, not latitude's**
   (`~/.config/restic/g614jv.pass.txt`, outside both repos). It prunes desktop-wsl's
