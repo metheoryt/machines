@@ -1,0 +1,32 @@
+# --- caches / temp ---
+.cache/
+.config/*/cache/
+.config/*/Cache/
+.local/share/Trash/
+.local/share/recently-used.xbel
+
+# --- reproducible deps ---
+.npm/
+.vscode-remote-containers/
+.docker/
+.marvin/
+.java/
+.nv/
+
+# --- histories / state ---
+.lesshst
+.wget-hsts
+.motd_shown
+.sudo_as_admin_successful
+
+# --- python/jupyter/ipython runtime ---
+.ipython/
+.jupyter/
+**/.venv/
+
+# --- credentials ---
+# The repo password and the repository URL (with its transport credential) live
+# here. Backing them up into the repository they unlock is circular and puts a
+# plaintext credential inside every snapshot. They are escrowed in the private
+# dotfiles repo instead, on this machine's branch.
+.config/restic/

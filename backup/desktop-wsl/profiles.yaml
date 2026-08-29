@@ -1,0 +1,130 @@
+# yaml-language-server: $schema=https://creativeprojects.github.io/resticprofile/jsonschema/config-1.json
+
+version: "1"
+
+includes:
+  - ../base.yaml
+
+wsl:
+  inherit: base-job
+  compression: auto
+  one-file-system: true
+  # PROVENANCE: repointed off g513ie 2026-08-01. The old target was
+  # rest:http://server.gg.ez:8001/wsl - that host was being retired, its
+  # restic-server container had been down for days, and the drives its repos
+  # lived on were reformatted during the migration. There was nothing to migrate,
+  # so this repository started from zero on that date.
+  #
+  # IT IS NOT EMPTY ANY MORE, and must never be recreated: see `initialize: false`
+  # below, which is the guard, not a preference. There is no `repository:` key on
+  # this profile by design - the URL, what it expands to, and why it is not
+  # committed are all described in the block immediately below.
+  #
+  # The repository URL now lives OUTSIDE this repo, in
+  # /home/me/.config/restic/repo.txt, read via RESTIC_REPOSITORY_FILE. It has to:
+  # the server requires htpasswd auth, restic's REST backend accepts credentials
+  # only inside the URL, and this file is tracked. A URL here would commit a
+  # transport password to a git repo; a URL on the command line would put it in
+  # `ps`. Verified working with resticprofile 0.33.1 -- with no `repository` key
+  # set, resticprofile passes no -r and restic resolves the repo from the env var.
+  #
+  # What that file contains, so nobody has to guess:
+  #   rest:http://g614jv:<transport-password>@100.64.0.8:8001/g614jv
+  #
+  # Raw tailnet IP, not MagicDNS, to match the rest of the fleet's addressing - a
+  # name here would add a dependency on --accept-dns being set on whichever box
+  # runs the backup. (The SERVER now binds 0.0.0.0, so this address is a routing
+  # choice, no longer a security one.)
+  #
+  # The path segment `g614jv` is also the htpasswd USERNAME, which is what
+  # --private-repos requires: it maps a username to a top-level directory, so
+  # user g614jv may access /g614jv and nothing else. It is what the old
+  # `{{ .Hostname }}` template expanded to anyway -- a WSL distro inherits its
+  # WINDOWS host name, not the distro nickname or the tailnet node name. Both of
+  # desktop's distros therefore resolve to this one repo and SHARE it. That is
+  # safe (restic keys snapshots by host + paths, so sharing dedupes rather than
+  # clobbers) but it is not isolation - do not rely on it to separate two
+  # distros. $WSL_DISTRO_NAME would name them properly and is deliberately not
+  # used: it is set for interactive shells and absent from the systemd unit this
+  # is scheduled as, so it would work by hand and produce a different repo path
+  # on every scheduled run.
+  #
+  # Both files are OPERATIONAL copies and are escrowed in the private dotfiles
+  # repo on this machine's own branch (desktop-wsl), which is the authoritative
+  # off-box copy. The repo password is ALSO escrowed on latitude's branch,
+  # because latitude is where this repo's pruning is to be done from and
+  # --append-only makes it impossible from here. (That job is not written yet --
+  # see the retention block below.) If this box is rebuilt, restore both from
+  # dotfiles.
+  password-file: "/home/me/.config/restic/pass.txt"
+  env:
+    RESTIC_PASSWORD_FILE: "/home/me/.config/restic/pass.txt"
+    RESTIC_REPOSITORY_FILE: "/home/me/.config/restic/repo.txt"
+  # The repo exists and must never be silently recreated. Initialization is
+  # opt-IN: base.yaml declares no `initialize` anywhere, so a profile can only
+  # create a repository by asking for it. The profiles that own one they must be
+  # able to create ask explicitly; this profile deliberately never does, and the
+  # `false` below says so out loud rather than relying on the default.
+  #
+  # Why it matters here: this repo lives on /mnt/spare320 on latitude, mounted
+  # `nofail`. If that drive is absent at boot, docker bind-mounts an empty
+  # directory in its place and the REST server serves it quite happily. Creating
+  # a config is not a DELETE, so --append-only does not stop it either. An
+  # initialising client would start a FRESH repository against that empty
+  # directory and report success -- history restarting from zero while every
+  # run still looks healthy. That drive really was unmounted for four and a half
+  # hours on 2026-08-04.
+  #
+  # Not opting in turns that silent data loss into a loud failure: the run stops
+  # with "repository does not exist" and writes nothing. If you ever see that
+  # error, check the mount first. It is the guard working, not a reason to turn
+  # initialization on.
+  initialize: false
+  pack-size: 4
+  backup:
+    source:
+      - "/home/me"
+    exclude-file: ".resticignore"
+    exclude-caches: true
+    schedule: "06:00"
+    # NOT base.yaml's inherited `user`, which fails on this box with
+    # "user is not allowed to create a system job: please restart resticprofile
+    # as root". resticprofile's `user` permission means a ROOT-OWNED unit that
+    # merely runs as the user, so installing it needs sudo - and desktop-wsl has
+    # no passwordless sudo and no TTY when driven over ssh through wsl.exe.
+    # `user_logged_on` produces a genuine `systemctl --user` unit, which needs no
+    # privilege at all.
+    #
+    # The name is misleading and the distinction matters: it does NOT mean the
+    # backup only runs while someone is logged in. `loginctl show-user` reports
+    # Linger=yes on this distro, so the systemd --user instance persists without
+    # a session - which is exactly how the fleet-selfpull and dotfiles-sync user
+    # timers already running here fire unattended. If linger is ever turned off,
+    # this schedule stops firing silently; check it before believing a backup ran.
+    schedule-permission: user_logged_on
+  retention:
+    # OFF, and it must stay off. The server runs --append-only, which refuses
+    # every DELETE except locks (repo/repo.go:737), so `forget` and `prune` both
+    # get 403 - and with after-backup: true inherited from base.yaml that 403
+    # fails the whole backup run, not just the retention step.
+    #
+    # AS OF THIS COMMIT THIS REPO HAS NO PRUNING PATH AT ALL. That is a known
+    # gap, not an oversight to "fix" by switching the three lines above back on.
+    # Server-side deletes are forbidden by --append-only; client-side retention
+    # is off here deliberately; and the filesystem-side job meant to replace it
+    # is not written yet.
+    #
+    # Retention is meant to MOVE rather than disappear: a maintenance profile on
+    # latitude is to prune this repo directly on the filesystem, bypassing the
+    # server entirely. Do not assume that already exists --
+    # backup/latitude/profiles.yaml currently declares only the `latitude`
+    # profile, which targets a DIFFERENT repository
+    # (/mnt/spare320/restic/latitude) with its own retention (30/12/24/10).
+    # Nothing anywhere targets the g614jv repo today.
+    #
+    # The keep-* numbers this profile used to declare, for whoever writes that
+    # job: keep-daily 14, keep-weekly 8, keep-monthly 12, keep-yearly 5. Once it
+    # exists, change them there and make this comment point at it.
+    before-backup: false
+    after-backup: false
+    prune: false

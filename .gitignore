@@ -67,3 +67,11 @@ provision/secrets/
 # declares itself a fleet member locally without a committed fleet.json entry;
 # the Windows parent discovers it via `wsl -l`. Per-host, never synced.
 fleet.local.json
+
+# restic backup secrets and runtime artifacts under backup/. The password files
+# are per-host and live at absolute paths outside the repo; a copy that lands in
+# a profile dir must never be committed. Logs are runtime output of a scheduled
+# client, not config.
+**/pass.txt
+**/.env
+backup/**/*.log

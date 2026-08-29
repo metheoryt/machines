@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://creativeprojects.github.io/resticprofile/jsonschema/config-1.json
+
+version: "1"
+
+includes:
+  - ../base.yaml
+
+immich-postgres:
+  inherit: base-job
+  # Explicit, because base.yaml no longer sets `initialize` globally -- see the
+  # comment there for why a global one could never be switched off again. All
+  # three profiles here own a repository on a local drive and are expected to be
+  # able to create it, so they opt in; this preserves the behaviour they had.
+  initialize: true
+  repository: "G:\\backup-homeserver\\immich-postgres"
+  pack-size: 64
+  compression: auto
+  backup:
+    stdin: true
+    stdin-filename: "pgdump.sql"
+    stdin-command: "docker exec -i immich_postgres pg_dumpall --clean --if-exists --username=postgres"
+    run-before: "docker exec immich_postgres pg_isready"
+    schedule: "04:00"
+
+immich-media:
+  # immich media 2025 - now
+  inherit: base-job
+  initialize: true          # opt-in; see immich-postgres above
+  repository: "G:\\backup-homeserver\\immich-media"
+  pack-size: 128
+  backup:
+    source:
+      - "D:\\ImmichMedia\\library\\library"
+    exclude:
+      - "**/.DS_Store"
+      - "**/thumbs.db"
+      - "**/*.tmp"
+    schedule: "04:15"
+
+immich-media-2024:
+  # immich media 1970 - 2024
+  inherit: base-job
+  initialize: true          # opt-in; see immich-postgres above
+  repository: "H:\\backup-homeserver\\immich-media-2024"
+  pack-size: 128
+  backup:
+    source:
+      - "E:\\admin"
+    schedule: "05:30"

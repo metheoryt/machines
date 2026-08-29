@@ -1,0 +1,284 @@
+# yaml-language-server: $schema=https://creativeprojects.github.io/resticprofile/jsonschema/config-1.json
+#
+# latitude's restic backup — the small irreplaceable set.
+#
+# THIS DELIBERATELY DOES NOT COVER THE PHOTO LIBRARIES. /mnt/immich (242 G) and
+# /mnt/immich-2024/admin (663 G) are protected by whole-filesystem rsync mirrors
+# instead — machines/hosts/latitude/debian/{mirror-refresh,archive-mirror}.sh.
+# There is no drive left in the fleet with 815 G free for a restic repo, so
+# pretending otherwise would produce a config that fails every night. What lives
+# here is everything that is small AND not reconstructible:
+#
+#   /var/backups/immich-db   immich's own nightly pg_dumpall — albums, faces,
+#                            people, stacks. No pile of JPEGs rebuilds this.
+#   /mnt/immich/ServarrConfig  jellyfin + *arr configs; not re-derivable.
+#   /mnt/immich/xs-keepers   config harvested off the xs drive during the
+#                            migration; exists nowhere else.
+#   ~/my/vps                 the stack definitions. The repo is on a remote, but
+#                            its seven .env files are gitignored and are not.
+#
+# WHY THIS EARNS ITS KEEP ON TOP OF THE RSYNC MIRRORS: the mirrors give a second
+# copy and nothing else. They cannot answer "restore yesterday's DB, today's is
+# corrupt" — a corrupt source rsyncs straight over the mirror. restic adds
+# versioned history, integrity you can verify (`check --read-data-subset`), and a
+# format that can be shipped off-site as-is.
+#
+# NOT the three-profile design from ../homeserver/profiles.yaml. That one assumed
+# two dedicated repo drives, `G:\` and `H:\`. Those drives were reformatted into
+# /mnt/servarr and friends during the migration, taking the repos with them —
+# there is no history to continue, so this starts from zero.
+#
+# REPO PLACEMENT: /mnt/spare320 (sdg, usb2/2-1) is a different physical drive
+# from every source here — the dumps are on nvme1n1, the rest on nvme0n1 — and it
+# is on a different USB bus from the archive-mirror target, so a scheduled backup
+# does not contend with a mirror run. It is NOT one of the two flaky dock bays.
+#
+# PASSWORD: the single tracked byte-source. ~/my/vps/backup/homeserver/pass.txt
+# is a symlink at ~/g513ie-prod-config/vps/backup/homeserver/pass.txt, which is
+# the dotfiles-tracked file. Absolute path here so resticprofile does not resolve
+# it relative to this directory and make someone create a second copy.
+
+version: "1"
+
+includes:
+  - ../base.yaml
+
+latitude:
+  inherit: base-job
+  # Explicit, because base.yaml no longer sets `initialize` globally -- a global
+  # one could never be switched off by a profile again, which is what defeated
+  # the wsl guard. See base.yaml. Set true here to keep this scheduled job's
+  # behaviour exactly as it was.
+  #
+  # WORTH KNOWING: this repository is on /mnt/spare320 too, the same `nofail`
+  # drive as the repo the REST server serves, so it carries the same hazard --
+  # if that drive is absent at 04:30 this profile will create a fresh
+  # zero-history repo on the root filesystem and report success. It is left true
+  # only because the repo has to be creatable and flipping it is a behaviour
+  # change outside the scope of the change that moved this key. What closes the
+  # hazard instead is the `run-before` assertion below -- the drive/repo has to
+  # be visible before anything runs, so `initialize: true` can no longer fire
+  # against an empty mountpoint.
+  initialize: true
+
+  # MOUNT ASSERTION -- the same guard the g614jv-maintenance profile below
+  # carries, pointed at THIS profile's own repository. Note the path: this is
+  # /mnt/spare320/restic/latitude, a different repository from the
+  # /mnt/spare320/restic-rest/g614jv one the REST server serves, with different
+  # retention (30/12/24/10 here, 14/8/12/5 there). They share only the drive.
+  #
+  # This profile is the one place left in the fleet where a missing drive can
+  # still silently produce a fresh empty repository that reports success: it
+  # legitimately needs `initialize: true` (unlike the wsl client, which was
+  # fixed by making initialize opt-in), so no flag can close it. Only an
+  # assertion can. Testing the repo's own `config` object covers both failure
+  # modes at once -- drive absent, or drive present but repo gone.
+  run-before:
+    - test -f /mnt/spare320/restic/latitude/config
+
+  repository: "/mnt/spare320/restic/latitude"
+  password-file: "/home/me/my/vps/backup/homeserver/pass.txt"
+  # base-job sets RESTIC_PASSWORD_FILE to a relative "pass.txt"; the flag above
+  # would win, but leaving a wrong env var set is how someone later "fixes" the
+  # wrong thing. Point them at the same file.
+  env:
+    RESTIC_PASSWORD_FILE: "/home/me/my/vps/backup/homeserver/pass.txt"
+  # On, unlike the base default: these are sqlite, XML and JSON. The .sql.gz
+  # dumps are already compressed and simply will not shrink further, which costs
+  # a little CPU and no correctness.
+  compression: auto
+  pack-size: 16
+
+  backup:
+    # HERE, not at profile level. base.yaml used to declare `check-before: true`
+    # as a sibling of `backup:`, where resticprofile 0.33.1 parses it, echoes it
+    # back from `show`, and never runs it -- four scheduled runs of this profile
+    # issued zero `restic check`. Under `backup:` the pipeline is
+    # init -> check -> backup. See base.yaml for the measurement.
+    #
+    # Its job is to refuse to append onto a repository that is already damaged.
+    #
+    # NOTE WHAT IT INHERITS -- this is not a metadata-only check. resticprofile
+    # builds it from the `check:` section below, so it picks up
+    # `read-data-subset: 5%` and samples real pack data every night. Measured on
+    # the first run: 4 seconds against a 2.6 G repo (01:55:19 -> 01:55:23),
+    # versus 3 seconds for the backup itself. Cheap enough to keep, but if that
+    # subset is ever raised for the weekly check, this daily one grows with it.
+    check-before: true
+    source:
+      - "/var/backups/immich-db"
+      - "/mnt/immich/ServarrConfig"
+      - "/mnt/immich/xs-keepers"
+      - "/home/me/my/vps"
+    exclude:
+      - "**/.git/"
+      - "**/node_modules/"
+      - "**/.DS_Store"
+      - "**/*.tmp"
+    exclude-caches: true
+    # System scope, not the base default of user: /var/backups/immich-db is
+    # written root:root and ServarrConfig is container-owned. A user unit reads
+    # some of this today by luck of the 644 bits and would break the first time
+    # a container tightened a mode.
+    schedule: "04:30"
+    schedule-permission: system
+    # 03:30 mirror-refresh, 04:30 this. Separated so the backup reads a
+    # filesystem the mirror is no longer walking.
+    #
+    # OVERRIDES base.yaml's `true`. On a laptop that is right; on THIS host it
+    # converts a power failure into a silently missing backup. latitude has
+    # sleep.target/suspend.target/hibernate.target masked and every lid action
+    # set to ignore -- it is a server that happens to have a battery, so running
+    # on battery is never normal operation, it means the power went out. The
+    # skip is logged (`WARN running on battery, leaving now`) but the unit still
+    # exits 0, so `systemctl show -p Result` reports success for a night that
+    # produced nothing. It fired for real at 2026-08-04 18:35.
+    #
+    # Safe to flip only because `run-before` above is now proven to abort the
+    # whole pipeline: during an outage the USB dock drops with the mains, the
+    # mount assertion fails, and the run reports a LOUD failure instead of a
+    # quiet success. Verified on 0.33.1 that a profile CAN override this key to
+    # false through `inherit` -- unlike `initialize`, which cannot be overridden
+    # from `global:` (see base.yaml).
+    schedule-ignore-on-battery: false
+
+  retention:
+    # Longer dailies than the base 7. The dumps are ~220 MB each and dedupe well,
+    # and "the DB went bad more than a week ago" is exactly the case a photo
+    # library loses quietly.
+    keep-daily: 30
+    keep-weekly: 12
+    keep-monthly: 24
+    keep-yearly: 10
+    prune: true
+
+  check:
+    schedule: "Sun 06:00"
+    schedule-permission: system
+    read-data-subset: 5%
+    # Same override as the backup above, for a WEAKER reason -- worth stating so
+    # nobody reads the two as one decision. A missed backup is a permanent hole
+    # in the history; a missed check just runs next Sunday. What makes it right
+    # anyway is that the cost argument is empty: the 2026-08-02 run took three
+    # seconds wall-clock (06:00:00 -> 06:00:03) for a 5% read-data sample, so
+    # "spare the battery" is protecting nothing. Consistency is worth more than
+    # a three-second saving nobody will ever notice.
+    schedule-ignore-on-battery: false
+
+# The prune --append-only made latitude's job.
+#
+# The g614jv repo is written by desktop-wsl over REST, and the server runs
+# --append-only, so the client cannot forget or prune: every DELETE but a lock
+# gets 403 (repo/repo.go:737). Retention therefore runs HERE, against the
+# filesystem, bypassing the server. This is the maintenance step the compose
+# file used to reject --append-only over ("retention would have to become a
+# server-side chore on latitude" with no home) -- it has a home now.
+#
+# It needs the CLIENT's encryption password, which is why that password is
+# escrowed twice: on desktop-wsl's dotfiles branch for its own restore, and on
+# this host's branch for this job. /home/me/.config/restic/g614jv.pass.txt is
+# tracked on the `latitude` branch, mode 600; this unit runs as root and can
+# read it.
+#
+# NOTE the trust boundary this makes explicit: --append-only protects against a
+# compromised or confused CLIENT, not against this host. latitude holds the data
+# and the key. The offsite copy on hub (phase 3 of the design spec) is what
+# limits that blast radius.
+#
+# Phase 4 of the design spec generates this from fleet.json's backup block and
+# moves it into `machines`, which owns the backup system. It lives here now
+# because this file is what already installs latitude's root-scope restic units.
+g614jv-maintenance:
+  inherit: base-job
+  # Filesystem path, NOT rest:. That is the whole point.
+  repository: "/mnt/spare320/restic-rest/g614jv"
+  password-file: "/home/me/.config/restic/g614jv.pass.txt"
+  env:
+    RESTIC_PASSWORD_FILE: "/home/me/.config/restic/g614jv.pass.txt"
+
+  # MOUNT ASSERTION. /mnt/spare320 is mounted `nofail`, so when the drive is
+  # absent the mountpoint is simply an empty directory on the root filesystem
+  # and every path below still "exists" as far as the shell is concerned. On
+  # 2026-08-04 that was not hypothetical: a blackout dropped the dock and this
+  # drive was gone for four and a half hours while the container happily served
+  # the empty directory underneath it.
+  #
+  # Testing the repo's own `config` object covers both failure modes in one
+  # check -- if the drive is missing the file is absent, and if the drive is
+  # present but the repo is not, it is absent too. A prune that cannot see its
+  # repository must abort, not proceed against whatever is at that path.
+  # This profile does NOT opt into `initialize`, so without this assertion a
+  # missing drive would surface as a confusing restic error rather than a
+  # clear one; with it, the job fails on a line that names the cause.
+  run-before:
+    - test -f /mnt/spare320/restic-rest/g614jv/config
+
+  # A `forget` SECTION, not a scheduled `retention` one: resticprofile 0.33.1
+  # deprecates a schedule on `retention` and tells you to move it here. This
+  # registers as `schedule forget@g614jv-maintenance` and installs
+  # resticprofile-forget@profile-g614jv-maintenance.{timer,service}.
+  forget:
+    # Verbatim from what backup/wsl/profiles.yaml used to declare, so moving the
+    # job did not silently change the policy. If these change, change the
+    # comment in the client profile too.
+    keep-daily: 14
+    keep-weekly: 8
+    keep-monthly: 12
+    keep-yearly: 5
+    prune: true
+    # 07:30: the client backs up at 06:00 and its slowest observed run was 14
+    # minutes, so this starts well clear of it rather than contending for the
+    # repo lock.
+    schedule: "07:30"
+    # System scope, matching the `latitude` profile above: the repo directory is
+    # root-owned (drwx------) because the container writes it as root.
+    schedule-permission: system
+    schedule-lock-wait: 10m
+
+  retention:
+    # base-job carries keep-daily 7 / keep-weekly 8 / keep-monthly 12 /
+    # keep-yearly 10 with after-backup: true. This profile never runs a backup,
+    # so that is inert -- but if anyone ever invokes `backup` on it, the
+    # inherited policy would forget with the WRONG numbers. Turn it off
+    # explicitly rather than relying on nobody doing that.
+    before-backup: false
+    after-backup: false
+    prune: false
+
+  # THE g614jv REPO'S INTEGRITY CHECK -- and it belongs HERE, on the host that
+  # holds the repo, not on the client that writes it.
+  #
+  # Until 2026-08-05 this repository had never been integrity-checked even once,
+  # since it was created on 2026-08-01. The obvious fix was `check-before: true`
+  # on the wsl client, and it is affordable: measured 22s over the tailnet for a
+  # 5% sample, against a backup that takes 6s-14min. Affordable and still wrong.
+  #
+  # A client-side check only runs when the client runs. The failure this whole
+  # system is most exposed to is a client that quietly stopped -- desktop-wsl was
+  # already found frozen ~35 hours under a green unit once -- and a pre-backup
+  # check goes dark at exactly that moment. It verifies the repo only while
+  # something is already verifying it by writing to it. Here the check runs on
+  # latitude's own schedule whether or not desktop-wsl ever comes back, which is
+  # the same principle as reading freshness from `snapshots/` mtimes: the box
+  # that failed cannot hide the failure.
+  #
+  # It also costs less (15s local vs 22s over the tailnet, same 5% sample, same
+  # 97 packs), needs no network, and reuses the password already escrowed here
+  # for the prune. Nothing extra is trusted that was not trusted already.
+  #
+  # SUNDAY 08:30, AND THE HOUR IS LOAD-BEARING. `restic check` takes an EXCLUSIVE
+  # lock, so this is a third writer on a repo that already has two: the client's
+  # backup at 06:00 (up to 14 min) and the prune at 07:30. Ordering it AFTER the
+  # prune rather than between the two is deliberate -- a check holding an
+  # exclusive lock at 07:25 would make the prune wait out its 10m and then fail.
+  # latitude's own weekly check is Sun 06:00 on the same physical drive, so this
+  # does not contend with that either.
+  #
+  # NOTE FOR ANYONE ADDING `check-before` TO THIS PROFILE LATER: it would inherit
+  # `read-data-subset` from this section, exactly as it does on the `latitude`
+  # profile above. Adding a check section is not a free-standing change.
+  check:
+    schedule: "Sun 08:30"
+    schedule-permission: system
+    schedule-lock-wait: 15m
+    read-data-subset: 5%
