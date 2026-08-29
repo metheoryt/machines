@@ -180,6 +180,14 @@ global + per-host). One bullet per fact under a topical heading.
 
 ## Fleet network
 
+- **SUPERSEDED 2026-08-27 — the box is `g15` and is back in `fleet.json`.** Read
+  the bullet below as history, not as the present. The rename and re-enrollment
+  are recorded under *`g15` (ex-`server`) back in the fleet* further down this
+  file; `AGENTS.md` carries the current facts. Two live corrections to what
+  follows: **reach it as `methe@g15.gg.ez`** — `server.gg.ez` no longer resolves
+  — and the member block is restored, so the bare `ssh g15` alias works from any
+  box that has re-provisioned since. What the decommission *did* is not undone:
+  `hosts/server/` stays deleted, Forgejo stays wiped, `C:` stays unreviewed.
 - **`server` (g513ie) left `fleet.json` on 2026-08-01 — but the hardware is still
   live.** The decommission is done: manifest entry removed, `methe@server` dropped
   from `provision/fleet-authorized-keys`, `hosts/server/` deleted, and the seven

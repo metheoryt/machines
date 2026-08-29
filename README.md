@@ -19,15 +19,16 @@ provisioner under `provision/`.
 - **hub** — Debian VPS at `cyphy.kz`; Headscale control server + AmneziaWG VPN hub.
 - **desktop** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
   **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
-- ~~**server**~~ — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
-  Windows 11, OS hostname `g513ie`. **Left `fleet.json` 2026-08-01**; its services
-  moved to latitude. Still powered on, reachable as
-  `methe@server.gg.ez` (name the user — the bare alias dies at air's next provision
-  run), . Forgejo was wiped from it 2026-08-01 (never
-  used, zero repos) and its Docker state holds nothing unique; `C:` is the only
-  drive left and is unreviewed — see `docs/fleet-roadmap.md` P2 before wiping it.
-  It used to run the cyphy.kz platform, defined in the sibling **`vps`** repo —
-  that repo owns the *services*; `machines` owns the *machines* + their backups.
+- **g15** (`g513ie`) — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
+  Windows 11. The **personal-projects host**. Named `server` until 2026-08-27,
+  when it was renamed and put back into `fleet.json`; reach it as
+  `methe@g15.gg.ez`, naming the user. Its Linux side is the self-declared WSL
+  host `g15-wsl`, not a reinstall. The 2026-08-01 decommission is history but
+  not undone: `hosts/server/` stays deleted and Forgejo stays wiped (zero repos,
+  never used). `C:` is still the only drive and still unreviewed — see
+  `docs/fleet-roadmap.md` P2 before wiping it. It used to run the cyphy.kz
+  platform, defined in the sibling **`vps`** repo — that repo owns the
+  *services*; `machines` owns the *machines* + their backups.
 
 Top-level layout: `hosts/<host>/<platform>/` (per-machine ops scripts),
 `provision/` (the cross-platform provisioner + tier library), `agents/` (agent

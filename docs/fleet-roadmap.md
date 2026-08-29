@@ -237,9 +237,10 @@ Nix ever returns. Leave them.
   `provision/fleet-authorized-keys`.** The dropped key is server's OUTBOUND trust
   into latitude and hub, not anything's route in, and the file's own warning
   applies: the revocation lands when latitude and hub next provision, not now.
-  **Access path: `ssh methe@server.gg.ez`** — bare `server.gg.ez` works only until
-  `tier_fleet_ssh` next rewrites air's config and drops the member block, after
-  which the FQDN hits the `Host *.gg.ez` catch-all's `User me` and is refused.
+  **Access path (SUPERSEDED 2026-08-27): `ssh methe@g15.gg.ez`.** The box was
+  renamed to `g15` and put back into `fleet.json`, so the member block is
+  restored and the bare `ssh g15` alias works again; `server.gg.ez` no longer
+  resolves. The username is still `methe`, not `me`.
 - [x] **`hosts/server/` deleted** — a `winget-packages.json` for a box leaving
   service, and a README whose only unique facts are recorded here. Git history
   holds both.

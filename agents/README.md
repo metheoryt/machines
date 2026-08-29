@@ -403,14 +403,22 @@ behavior breaks. Enable Developer Mode and re-run `bootstrap.sh`.
   it), appends only what is missing, preserves order, and runs on **every**
   bootstrap, because `copy_managed` re-seeds `settings.json` whenever the
   committed baseline changes and would otherwise drop the hooks.
-- **Note that this is a live behaviour change.** The default gortex posture is
+- **Note that this is a live behaviour change.** Gortex's own default is
   `--hook-mode deny`: the `PreToolUse` hook blocks `Read` / `Grep` / `Glob`
-  against *indexed* source and redirects you to the graph tools. That is the
-  documented intent (see the global `CLAUDE.md` rule block), but it only started
-  actually happening once the hooks reached a file Claude Code reads. To soften
-  it, re-wire with `GORTEX_REWIRE=1` after changing `--hook-mode` (`enrich`
-  never denies), or drop the `PreToolUse` entry from the profile's
-  `settings.json`.
+  against *indexed* source outright. That is the documented intent (see the
+  global `CLAUDE.md` rule block), but it only started actually happening once
+  the hooks reached a file Claude Code reads. **This fleet does not run that
+  default** — `bootstrap.sh` pins `GORTEX_HOOK_MODE=nudge`, which lets the call
+  through and appends guidance instead. Override per run with
+  `GORTEX_HOOK_MODE=deny just gortex-setup`, or drop the `PreToolUse` entry
+  from the profile's `settings.json` to silence it entirely.
+- **Changing the posture is a rewire, and the merge must converge for it to
+  take.** `gortex hook` and `gortex hook --mode=nudge` are different strings, so
+  an append-only merge that dedups by equality keeps BOTH; Claude Code then
+  applies the most restrictive verdict and the bare entry's default `deny` wins,
+  silently. `gortex_merge_hooks` replaces a gortex entry in place rather than
+  appending beside it, which is what makes `GORTEX_REWIRE=1` actually change
+  behaviour.
 - **No daemon-start step** — `gortex mcp` (from `.mcp.json`) brings the daemon
   up per session automatically.
 
