@@ -280,6 +280,33 @@ JSON
   check "a posture change does not disturb the Orca hook beside it" \
     '[ "$(jq "[.hooks.PreToolUse[].hooks[].command | select(. == \"orca hook\")] | length" "$p/settings.json")" = 1 ]'
 
+  # (f2) THE WINDOWS SHAPE. The command is the binary PATH plus `hook`, and on
+  # Windows that path ends in `.exe` — `…/gortex.exe hook`, not `…/gortex hook`.
+  # A convergence keyed on the literal substring "gortex hook" therefore matches
+  # nothing there, silently degrades to append-only, and leaves both entries with
+  # the bare one's deny winning. Measured live on g15 2026-08-30, after (f) had
+  # been green for two weeks: 5 bare `gortex.exe hook` and 5 `--mode=nudge`, on
+  # the very run that was supposed to converge them. (f) passed throughout
+  # because every command in it was POSIX-shaped.
+  w="$tmp/gx-win"; mkdir -p "$w"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"C:/gx/gortex.exe hook --mode=nudge"}]}]}}' > "$w/settings.local.json"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"C:/gx/gortex.exe hook"}]}]}}' > "$w/settings.json"
+  gortex_merge_hooks "$w" >/dev/null
+  check "a .exe-suffixed gortex hook converges too (windows)" \
+    '[ "$(jq "[.hooks.PreToolUse[].hooks[].command | select(test(\"gortex\"))] | length" "$w/settings.json")" = 1 ]'
+  check "the surviving windows hook carries the new posture" \
+    '[ "$(jq -r "[.hooks.PreToolUse[].hooks[].command | select(test(\"gortex\"))][0]" "$w/settings.json")" = "C:/gx/gortex.exe hook --mode=nudge" ]'
+
+  # …and the match must stay narrow. A command that merely mentions gortex is
+  # NOT a gortex hook, and replacing it would silently delete someone else's
+  # wiring — the opposite failure, and a worse one.
+  n="$tmp/gx-narrow"; mkdir -p "$n"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"/gx/gortex hook --mode=nudge"}]}]}}' > "$n/settings.local.json"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"my-wrapper --tool gortex --log hooks.log"}]}]}}' > "$n/settings.json"
+  gortex_merge_hooks "$n" >/dev/null
+  check "a command that merely mentions gortex is not replaced" \
+    '[ "$(jq "[.hooks.PreToolUse[].hooks[].command | select(test(\"my-wrapper\"))] | length" "$n/settings.json")" = 1 ]'
+
   # (g2) The posture must reach the installer, not just be converged afterwards.
   # gortex install writes the hooks (with their --mode flag) into
   # settings.local.json; the merge can only converge on what that call requested.

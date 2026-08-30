@@ -417,7 +417,17 @@ gortex_merge_hooks() {
   tmp="$(mktemp "$dst.XXXXXX")" || return 0
   if ! jq -s '
         # A gortex hook entry, identified by its command rather than its position.
-        def isgx: [(.hooks // [])[] | .command // ""] | any(test("gortex hook"));
+        # The command is the binary PATH followed by `hook`, so the binary name
+        # is what anchors it — and on Windows that name is `gortex.exe`, which is
+        # why the `.exe` is optional rather than absent. Matching the bare
+        # substring "gortex hook" was the first version and it converged nothing
+        # on Windows: it silently fell back to append-only and left both entries,
+        # with the deny of the bare one winning. Measured on g15 2026-08-30.
+        # The trailing bound keeps the match narrow: a command that merely
+        # MENTIONS gortex is not a gortex hook, and replacing one would delete
+        # somebody else wiring, which is the worse failure of the two.
+        def isgx: [(.hooks // [])[] | .command // ""]
+                  | any(test("gortex(\\.exe)? hook( |$)"));
         .[0] as $dst | .[1] as $src
         | ($dst.hooks // {}) as $d | ($src.hooks // {}) as $s
         | $dst
