@@ -1446,6 +1446,15 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
 
 ## Pending follow-ups
 
+- **`fleet-pull.sh`'s `self_alias()` is blind to self-declared WSL hosts
+  (2026-08-30).** It maps this box's tailnet IP to a `fleet.json` member, and a
+  WSL host is deliberately not in `fleet.json` — so on `desktop-wsl`/`g15-wsl`
+  the header reads `(self: unknown)`. Harmless today only because `fd_wsl_hosts`
+  still dispatches over ssh and so never enumerates the calling box: fix
+  `self_alias` (read `fleet.local.json`'s nickname) BEFORE making
+  `fd_wsl_hosts` interop-aware, or the box will try to pull itself. The two are
+  kept decoupled on purpose — see the fleet-dispatch section of AGENTS.md.
+
 - **Profile-aware `touches_linux` (deferred by decision 2026-07-25).** The regex is
   profile-blind, so a routine `provision/gortex.version` bump re-runs hub's whole tier list on
   a box that never runs gortex. Cheap now that the list is lean (8 tiers, all
