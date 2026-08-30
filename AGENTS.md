@@ -94,8 +94,13 @@ explicitly and records a failure rather than advancing `converged-rev`.
 
 ## Common Commands
 
-All commands run from repo root. `just --list` is the full menu (16 recipes,
-down from 33 — the other 28 were `nixos-rebuild`/`nix-store` wrappers).
+All commands run from repo root. `just --list` is the full menu — ask it rather
+than trusting a number written here. It said "16 recipes" until 2026-08-30, by
+which point there were 21; the count moves whenever anyone adds a recipe, which
+is the same trap this file already documents for the suite count below. What is
+worth recording is the shape, not the size: the menu shrank hard when the NixOS
+tree went, because 28 of the old recipes were `nixos-rebuild` / `nix-store`
+wrappers.
 
 ```bash
 # THE validation gate. NOT every *.test.sh in the repo — see below. It prints
