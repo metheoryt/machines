@@ -288,6 +288,10 @@ interop instead. Which member that is is **declared**, in `fleet.local.json`'s
 - **Not inferred from a hostname.** `detect.hostname` is the *WSL* name on
   `desktop` (`g614jv`) and the *native* name on `g15` (`g513ie`), so no single
   comparison is right for both — a match on one box is a coincidence.
+- **Not gated on `$WSL_DISTRO_NAME`.** sshd does not set it, so a `/ship`
+  started over ssh *into* the distro read it empty and fell back to the
+  network. The gate is `/proc/sys/fs/binfmt_misc/WSLInterop` — the binfmt
+  handler that makes a `.exe` executable at all, i.e. the actual precondition.
 - **Not a fallback on a failed ssh.** From `desktop-wsl`, `ssh g15` also fails
   whenever `g15` is asleep; falling back there would run the script against
   *desktop's* Windows clone and print it as a green `g15` row. A right-looking

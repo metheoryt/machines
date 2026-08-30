@@ -27,6 +27,12 @@
 # same two install roots as FLEET_GITBASH below. Overridable as one command word
 # (like $SSH) so tests can intercept without a Windows box.
 : "${FLEET_LOCAL_BASH:=_fd_local_bash}"
+# The binfmt_misc handler that makes a .exe executable from Linux at all — i.e.
+# the exact precondition for the interop branch, and the only reliable "am I a
+# WSL distro" test here. NOT $WSL_DISTRO_NAME: WSL sets it for interactive and
+# interop-launched shells but sshd does not, so a /ship run started over ssh
+# into the distro saw it empty and silently fell back to the network.
+: "${FLEET_WSL_INTEROP:=/proc/sys/fs/binfmt_misc/WSLInterop}"
 
 # _fd_wsl_split <parent:distro> — echoes "<parent> <distro>".
 # The distro name may not contain ':'; wsl.exe forbids it.
@@ -65,7 +71,7 @@ _fd_local_bash() {
 # tests use to pin auto-detection off while running on a real WSL box.
 fd_local_parent() {
   if [ -n "${FLEET_LOCAL_PARENT+x}" ]; then printf '%s' "$FLEET_LOCAL_PARENT"; return 0; fi
-  [ -n "${WSL_DISTRO_NAME:-}" ] || return 0
+  [ -e "$FLEET_WSL_INTEROP" ] || return 0
   command -v jq >/dev/null 2>&1 || return 0
   local f="${FLEET_LOCAL_JSON:-$HOME/machines/fleet.local.json}"
   [ -f "$f" ] || return 0

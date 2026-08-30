@@ -267,15 +267,20 @@ grep -q 'LOCALBASH' "$LOG" && die "non-parent windows must not use local Git Bas
 
 # fd_local_parent reads self.parent, and treats its absence as "no parent".
 unset FLEET_LOCAL_PARENT
-FLEET_LOCAL_JSON="$(mktemp)"; WSL_DISTRO_NAME="test-distro"
+FLEET_LOCAL_JSON="$(mktemp)"
+# The WSL gate is the binfmt_misc interop handler, not $WSL_DISTRO_NAME — sshd
+# does not set the latter, so a /ship run started over ssh into the distro read
+# it empty and fell back to the network (found live on g15-wsl, 2026-08-30).
+FLEET_WSL_INTEROP="$(mktemp)"
 printf '{"self":{"nickname":"desktop-wsl","fleet":true,"parent":"desktop"}}' > "$FLEET_LOCAL_JSON"
 [ "$(fd_local_parent)" = desktop ] && pass "fd_local_parent reads self.parent" \
   || die "fd_local_parent -> '$(fd_local_parent)'"
 printf '{"self":{"nickname":"desktop-wsl","fleet":true}}' > "$FLEET_LOCAL_JSON"
 [ -z "$(fd_local_parent)" ] && pass "fd_local_parent: no parent key → empty" \
   || die "fd_local_parent (no key) -> '$(fd_local_parent)'"
-unset WSL_DISTRO_NAME
-[ -z "$(fd_local_parent)" ] && pass "fd_local_parent: not WSL → empty" \
+printf '{"self":{"nickname":"desktop-wsl","fleet":true,"parent":"desktop"}}' > "$FLEET_LOCAL_JSON"
+rm -f "$FLEET_WSL_INTEROP"
+[ -z "$(fd_local_parent)" ] && pass "fd_local_parent: no interop handler → empty" \
   || die "fd_local_parent (non-WSL) -> '$(fd_local_parent)'"
 rm -f "$FLEET_LOCAL_JSON"
 FLEET_LOCAL_PARENT=""   # restore the off switch for any later cases
