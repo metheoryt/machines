@@ -422,6 +422,18 @@ reproduced on air or desktop yet; the bash version is the first thing to compare
   against. `SB_TEMPS` has a milder version of the same: between round-robin visits
   a reused node shows the previous drive's temperature.
 
+- [ ] **`provision/fleet-selfpull.ps1` has no dirty-streak escalation and no
+  test coverage at all.** The bash side got both on 2026-08-03, after one
+  untracked zero-byte `.zed/tasks.json` held desktop-wsl 28 commits behind for
+  ~35 hours — 185 consecutive `SKIP dirty` lines under a green timer, one of the
+  unpulled commits a key revocation. The PowerShell counterpart still reports a
+  persistently dirty tree as an ordinary skip and exits 0, so `desktop` — the one
+  Windows-native member left — can still freeze exactly that way, silently. The
+  gap is named in `provision/fleet-selfpull.sh`'s header as review item 20;
+  recorded here because a script comment is not where the backlog is read. Port
+  `_streak_bump` / `_streak_clear` and `FLEET_SELFPULL_DIRTY_LIMIT`, and give the
+  `.ps1` its first suite.
+
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
   desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh
   config pins `id_fleet`. Removing it is a real revocation, not a cleanup.

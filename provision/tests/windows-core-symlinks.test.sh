@@ -71,4 +71,21 @@ body="$(uncommented "$PS1FILE")"
 printf '%s' "$body" | grep -A6 'checkout-index' | grep -qE 'LASTEXITCODE|Test-Path'
 check $? "windows.ps1 verifies the re-materialisation instead of trusting it"
 
+# ...and the failure branch must STOP, not retry through git. A fallback that
+# re-runs a checkout is worse than none: it fires exactly when git could not
+# write the symlink, so under the same core.symlinks state it either fails again
+# or writes the 9-byte plain file back -- silently restoring the original bug
+# while printing a line that reads like a recovery. The whole point of this file
+# is that the plain file is INVISIBLE once it exists. So the branch throws, the
+# way windows.ps1 already throws when Git Bash is missing.
+branch="$(printf '%s' "$body" | grep -A8 'checkout-index')"
+printf '%s' "$branch" | grep -q 'throw'
+check $? "the failed-repair branch throws"
+printf '%s' "$branch" | grep -qE 'git checkout( |$)'
+if [ $? -eq 0 ]; then
+    fail "the failed-repair branch retries through git checkout, which can restore the plain file"
+else
+    pass "the failed-repair branch does not retry through git"
+fi
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi

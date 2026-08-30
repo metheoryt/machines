@@ -159,11 +159,14 @@ try {
             Remove-Item -Force $path
             git checkout-index -f -- $rel
             if (($LASTEXITCODE -ne 0) -or (-not (Test-Path $path))) {
-                Warn "could not re-materialise $rel (git exit $LASTEXITCODE) - restoring the plain file so the path is not left missing."
-                git checkout -f -- $rel
-                if (-not (Test-Path $path)) {
-                    throw "$rel is now MISSING from $RepoDir and git could not restore it. Restore it by hand before continuing."
-                }
+                # Stop here, deliberately. Do NOT retry with `git checkout` - it
+                # runs the same checkout logic that just failed, under the same
+                # core.symlinks state, so it either fails identically or writes
+                # the 9-byte plain file back and silently restores the exact bug
+                # this step exists to remove, behind a message that reads like a
+                # recovery. A loud stop on a box the human is standing at is the
+                # better failure.
+                throw "$rel could not be re-materialised as a symlink (git exit $LASTEXITCODE) and is now MISSING from $RepoDir. Fix core.symlinks and run: git checkout-index -f -- $rel"
             } else {
                 Warn "re-materialised $rel as a symlink (was a plain file)."
             }
