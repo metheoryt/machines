@@ -55,5 +55,32 @@ else
 fi
 rm -rf "$tmp2"
 
+# ── .self.parent (2026-08-30) ────────────────────────────────────────────────
+# Names the Windows member this distro runs on, so fleet-dispatch reaches that
+# one member through WSL interop rather than over a tailnet node it cannot
+# hairpin to. Optional: absent means "no parent", the pre-2026-08-30 behavior.
+tmp3="$(mktemp -d)"; mkdir -p "$tmp3/machines"
+g="$tmp3/machines/fleet.local.json"
+
+bash "$SCRIPT" --nickname desktop-wsl --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self | has("parent")' "$g")" = false ] && pass "no --parent → key absent" \
+  || die "parent key should be absent: $(cat "$g")"
+
+bash "$SCRIPT" --nickname desktop-wsl --parent desktop --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self.parent' "$g")" = desktop ] && pass "--parent written" \
+  || die "parent: expected 'desktop', got '$(jq -r '.self.parent' "$g")'"
+
+# A later run without the flag must not silently drop it — provision-wsl.sh
+# omits --parent whenever the caller does, and losing it re-breaks dispatch.
+bash "$SCRIPT" --nickname desktop-wsl --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self.parent' "$g")" = desktop ] && pass "--parent survives a re-run without the flag" \
+  || die "parent lost on re-write: $(cat "$g")"
+
+# But an explicit new value replaces it.
+bash "$SCRIPT" --nickname desktop-wsl --parent g15 --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self.parent' "$g")" = g15 ] && pass "--parent overwrites the old value" \
+  || die "parent not overwritten: $(cat "$g")"
+rm -rf "$tmp3"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # provision/provision-wsl.sh — half-provision THIS WSL distro as a self-declaring,
 # ephemeral fleet host (NOT a fleet.json member). Run from inside the distro:
-#   bash ~/machines/provision/provision-wsl.sh <nickname> [--no-tailscale]
+#   bash ~/machines/provision/provision-wsl.sh <nickname> [--no-tailscale] \
+#        [--parent <windows-fleet-alias>]
 #
 # Chain (spec 2026-07-21, extended by spec 2026-08-01):
 #   1. tailscale-wsl.sh --hostname <nickname>   enroll on the tailnet
@@ -15,6 +16,11 @@
 # so only ONE distro per Windows host can run tailscaled and own tailscale0.
 # Every distro after the first is provisioned with --no-tailscale and reached
 # through its Windows parent instead — see fleet-dispatch.sh.
+#
+# --parent <alias> names the Windows fleet member this distro runs on. It makes
+# /ship reach THAT member through WSL interop instead of its tailnet node, which
+# a distro on the same machine cannot hairpin to. Omitted, whatever the existing
+# fleet.local.json declares is kept — so a re-provision never drops it.
 #
 # The nickname is the fleet.local.json nickname and the dispatch key. For the
 # ONE distro that owns the tailnet node it is also the tailnet node name; for
@@ -35,10 +41,11 @@ provision_wsl_steps() {
 }
 
 provision_wsl_main() {
-  local nick="" no_tailscale=0
+  local nick="" no_tailscale=0 parent=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-tailscale) no_tailscale=1; shift ;;
+      --parent) parent="${2:-}"; [ -n "$parent" ] || die "--parent needs a fleet alias"; shift 2 ;;
       -*) die "unknown option: $1" ;;
       *)  [ -n "$nick" ] && die "unexpected argument: $1"; nick="$1"; shift ;;
     esac
@@ -57,10 +64,12 @@ provision_wsl_main() {
       fleet-local.sh)
         if [ "$no_tailscale" = 1 ]; then
           bash "$REPO/provision/$step" --nickname "$nick" \
-               --platform linux --dispatch parent --repo "$REPO"
+               --platform linux --dispatch parent --repo "$REPO" \
+               ${parent:+--parent "$parent"}
         else
           bash "$REPO/provision/$step" --nickname "$nick" \
-               --platform linux --repo "$REPO"
+               --platform linux --repo "$REPO" \
+               ${parent:+--parent "$parent"}
         fi ;;
       *)                bash "$REPO/provision/$step" ;;
     esac || die "$step failed"

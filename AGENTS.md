@@ -260,7 +260,7 @@ through our own DERP — expected and accepted.
 
 Self-declared WSL hosts are first-class fleet hosts that never appear in
 `fleet.json`: each carries a gitignored `fleet.local.json`
-(`{nickname, fleet:true, platform, dispatch}`), written by
+(`{nickname, fleet:true, platform, dispatch, parent}`), written by
 `provision/fleet-local.sh` as step 4 of `just provision-wsl <nickname>` (chain:
 `tailscale-wsl.sh → ssh-wsl.sh → linux.sh → fleet-local.sh → wsl-fixes.sh`).
 Its Windows parent discovers it live via `wsl -l -q` + reading each distro's
@@ -276,6 +276,27 @@ through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
 `fleet.json` — which since 2026-08-27 means `desktop` **and** `g15` again (`g15`
 was out of the manifest between 2026-08-01 and 2026-08-27, when `desktop` was the
 only one).
+
+**A WSL distro cannot ssh to its own Windows host** (proven 2026-08-30: from
+`desktop-wsl`, `desktop.gg.ez:22` times out, while the same address answers
+from `latitude`). So for exactly one Windows member — the one the calling box
+runs on — `fd_probe`/`fd_run` skip the network and invoke Git Bash through WSL
+interop instead. Which member that is is **declared**, in `fleet.local.json`'s
+`self.parent` (`fleet-local.sh --parent <alias>`, threaded through
+`provision-wsl.sh`). Two things it deliberately is NOT:
+
+- **Not inferred from a hostname.** `detect.hostname` is the *WSL* name on
+  `desktop` (`g614jv`) and the *native* name on `g15` (`g513ie`), so no single
+  comparison is right for both — a match on one box is a coincidence.
+- **Not a fallback on a failed ssh.** From `desktop-wsl`, `ssh g15` also fails
+  whenever `g15` is asleep; falling back there would run the script against
+  *desktop's* Windows clone and print it as a green `g15` row. A right-looking
+  row on the wrong machine is worse than `SKIP unreachable`.
+
+`fd_wsl_hosts` is deliberately left on ssh: it only enumerates a parent's
+distros, and making it interop-aware would unmask a second bug — `fleet-pull`'s
+`self_alias()` reads `fleet.json` by tailnet IP, so a self-declared WSL host is
+`self: unknown` and would try to pull itself.
 
 **Gotcha:** a self-declared WSL host has no `fleet.json` entry, so the generated
 `~/.ssh/config` has no `Host` block for its bare name — only the catch-all

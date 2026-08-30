@@ -11,6 +11,13 @@ die()  { echo "FAIL $1"; fail=1; }
 
 source "$SCRIPT"
 
+# Pin local-parent detection OFF for every case below. This suite runs on real
+# WSL boxes, where fd_local_parent would otherwise read fleet.local.json, decide
+# "desktop is my parent", take the interop branch and write nothing to $LOG —
+# failing the ssh-argv assertions for reasons that have nothing to do with them.
+# Empty-but-set is the documented off switch; unset would re-enable detection.
+FLEET_LOCAL_PARENT=""
+
 # Mock ssh: records the flattened remote command (last args) to $LOG, models a
 # PowerShell/Windows box (bare `true` fails; a bash/`&`-wrapped command works),
 # and for fd_run echoes back "<remote-cmd>||<stdin>" so we can assert both.
@@ -222,6 +229,56 @@ echo "$rows" | grep -q $'^legacy-distro\tlegacy-distro.gg.ez\tlinux$' \
   || die "legacy row wrong: $rows"
 
 SSH="mock_ssh"   # restore for any later cases
+
+# ── local-parent dispatch (2026-08-30) ───────────────────────────────────────
+# A WSL distro cannot ssh to its OWN Windows host's tailnet node, so a dispatch
+# to that one member goes through WSL interop instead. Which member it is comes
+# from fleet.local.json's self.parent, never from a hostname or a failed probe.
+
+mock_local_bash() {
+  printf '%s' "LOCALBASH $*" >> "$LOG"
+  local in; in="$(cat 2>/dev/null)"
+  printf 'LOCALBASH %s||%s\n' "$*" "$in"
+}
+FLEET_LOCAL_BASH="mock_local_bash"
+FLEET_LOCAL_PARENT="desktop"
+
+: > "$LOG"; fd_probe desktop windows >/dev/null && pass "probe local parent ok" \
+  || die "probe local parent failed"
+grep -q 'LOCALBASH -c true' "$LOG" && pass "probe local parent uses local Git Bash" \
+  || die "probe local parent argv: $(cat "$LOG")"
+grep -q 'bash.exe" -c true' "$LOG" && die "probe local parent must not go over ssh" \
+  || pass "probe local parent avoids ssh"
+
+out="$(printf 'SCRIPT-BODY' | fd_run desktop windows target-arg)"
+[ "$out" = 'LOCALBASH -s -- target-arg||SCRIPT-BODY' ] \
+  && pass "fd_run local parent argv+stdin" || die "fd_run local parent -> '$out'"
+
+# The property that makes declaring the parent worth it: the OTHER Windows
+# member still goes over ssh. Inferring the parent from a failed probe would
+# run the script against the LOCAL Windows clone and report it as g15.
+: > "$LOG"; fd_probe g15 windows && pass "probe non-parent windows ok" \
+  || die "probe non-parent windows failed"
+grep -q 'Git\\bin\\bash.exe" -c true' "$LOG" \
+  && pass "a non-parent Windows member still dispatches over ssh" \
+  || die "non-parent windows argv: $(cat "$LOG")"
+grep -q 'LOCALBASH' "$LOG" && die "non-parent windows must not use local Git Bash" \
+  || pass "non-parent windows avoids local Git Bash"
+
+# fd_local_parent reads self.parent, and treats its absence as "no parent".
+unset FLEET_LOCAL_PARENT
+FLEET_LOCAL_JSON="$(mktemp)"; WSL_DISTRO_NAME="test-distro"
+printf '{"self":{"nickname":"desktop-wsl","fleet":true,"parent":"desktop"}}' > "$FLEET_LOCAL_JSON"
+[ "$(fd_local_parent)" = desktop ] && pass "fd_local_parent reads self.parent" \
+  || die "fd_local_parent -> '$(fd_local_parent)'"
+printf '{"self":{"nickname":"desktop-wsl","fleet":true}}' > "$FLEET_LOCAL_JSON"
+[ -z "$(fd_local_parent)" ] && pass "fd_local_parent: no parent key → empty" \
+  || die "fd_local_parent (no key) -> '$(fd_local_parent)'"
+unset WSL_DISTRO_NAME
+[ -z "$(fd_local_parent)" ] && pass "fd_local_parent: not WSL → empty" \
+  || die "fd_local_parent (non-WSL) -> '$(fd_local_parent)'"
+rm -f "$FLEET_LOCAL_JSON"
+FLEET_LOCAL_PARENT=""   # restore the off switch for any later cases
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit "$fail"
