@@ -5,6 +5,22 @@
 **Status: COMPLETE** (2026-08-05) — Phase 1 of
 `docs/superpowers/specs/2026-08-04-fleet-backup-consolidation-design.md`.
 
+> **Where the implementation lives — read before auditing this phase.** The work
+> this plan describes was done in the sibling **`vps`** repo, not in `machines`.
+> The plan, the spec and the commits around them are the only Phase 1 artifacts
+> here; the compose edit, the htpasswd setup and the profile changes were made in
+> `~/my/vps` and reviewed there, at the time, against that repo's history. Any
+> review scoped to `machines` — including the whole-branch review of
+> `repo-review-cleanup` on 2026-08-30 — never saw them and could not have. "The
+> branch reviewed clean" therefore does not mean "Phase 1 was reviewed here."
+>
+> This note exists because the ground moved underneath it: the backup tree was
+> later **relocated into `machines`**
+> (`docs/superpowers/plans/2026-08-29-backup-relocation-vps-to-machines.md`), so
+> `machines/backup/` exists now and a future reader will reasonably assume Phase 1
+> happened here. It did not. Use the `vps` repo's history for the 2026-08-04/05
+> window.
+
 All four exit criteria met, each proven rather than asserted:
 
 1. **Server authenticated, append-only, private-repos, wildcard bind.** Proof
