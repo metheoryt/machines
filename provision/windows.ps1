@@ -153,9 +153,20 @@ try {
         if (-not (Test-Path $path)) { continue }
         $isLink = ((Get-Item $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)
         if (-not $isLink) {
+            # Delete-then-restore, because checkout-index will not overwrite an
+            # existing path. That window is why the result is checked: a repair
+            # for a SILENT breakage must not fail by deleting the file outright.
             Remove-Item -Force $path
             git checkout-index -f -- $rel
-            Warn "re-materialised $rel as a symlink (was a plain file)."
+            if (($LASTEXITCODE -ne 0) -or (-not (Test-Path $path))) {
+                Warn "could not re-materialise $rel (git exit $LASTEXITCODE) - restoring the plain file so the path is not left missing."
+                git checkout -f -- $rel
+                if (-not (Test-Path $path)) {
+                    throw "$rel is now MISSING from $RepoDir and git could not restore it. Restore it by hand before continuing."
+                }
+            } else {
+                Warn "re-materialised $rel as a symlink (was a plain file)."
+            }
         }
     }
 } finally { Pop-Location }

@@ -59,4 +59,16 @@ uncommented() { grep -vE '^[[:space:]]*#' "$1"; }
 uncommented "$PS1FILE" | grep -qE "config[^#]*core\.symlinks[^#]*true"
 check $? "windows.ps1 sets core.symlinks=true (uncommented)"
 
+# ── 4. The repair must not be able to leave the path DELETED ─────────────────
+# The repair deletes the plain file and asks git to write the symlink back. That
+# order is forced -- git checkout-index will not overwrite an existing path --
+# but it means a failure between the two steps leaves no CLAUDE.md at all, and
+# the repair for a silent breakage must not have a louder breakage of its own as
+# its failure mode. Every other git call in this file checks $LASTEXITCODE
+# (bootstrap.sh, icacls, robocopy); this one is the destructive one, so it is
+# the one that must.
+body="$(uncommented "$PS1FILE")"
+printf '%s' "$body" | grep -A6 'checkout-index' | grep -qE 'LASTEXITCODE|Test-Path'
+check $? "windows.ps1 verifies the re-materialisation instead of trusting it"
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi

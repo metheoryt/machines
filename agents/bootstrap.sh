@@ -6,7 +6,7 @@
 # modules/home/claude.nix — either mechanism produces identical symlinks.
 #
 # It also brings up gortex (code-intelligence MCP server): installs the binary on
-# Windows if missing (NixOS gets it declaratively via pkgs/gortex.nix) and runs
+# Windows if missing (elsewhere tier_gortex installs the pinned release) and runs
 # the machine-local `gortex install --no-claude-md` wiring. See the "Gortex"
 # section below.
 #
@@ -465,9 +465,10 @@ gortex_merge_hooks() {
 # ── gortex: code-intelligence engine / MCP server ────────────────────────────
 # Two concerns, split by platform (see docs/superpowers/specs/2026-07-20-gortex-
 # bootstrap-wiring-design.md):
-#   binary — NixOS gets it declaratively (pkgs/gortex.nix + development.nix);
-#            Windows installs it here if missing. Other off-nix platforms are
-#            left to the user (no automated installer wired for them yet).
+#   binary — Windows installs it here if missing; every other platform gets it
+#            from tier_gortex, which installs the release pinned in
+#            provision/gortex.version. (This line used to point at pkgs/gortex.nix
+#            and development.nix — both deleted with the NixOS tree 2026-08-01.)
 #   wiring — `gortex install --no-claude-md` regenerates the machine-local
 #            skills/agents/hooks + user MCP config for the profile being
 #            provisioned. --no-claude-md is LOAD-BEARING: it keeps gortex's rule

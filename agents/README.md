@@ -379,10 +379,11 @@ behavior breaks. Enable Developer Mode and re-run `bootstrap.sh`.
 `bootstrap.sh` also brings up [gortex](https://github.com/zzet/gortex):
 
 - **Binary.** On Windows it installs gortex if missing (upstream PowerShell
-  installer; floats to latest — re-run it to upgrade). On NixOS the binary is
-  declarative (`pkgs/gortex.nix`, installed via `modules/programs/development.nix`)
-  and the daemon runs as a `systemd --user` service (`modules/home/me.nix`), so
-  bootstrap installs nothing there.
+  installer; floats to latest — re-run it to upgrade). Everywhere else the
+  binary comes from `tier_gortex`, which installs the release pinned in
+  `provision/gortex.version`, so bootstrap installs nothing there. (This used to
+  read "on NixOS the binary is declarative, `pkgs/gortex.nix`" — that tree was
+  deleted 2026-08-01 and none of those files exist.)
 - **Machine-local wiring.** It runs `gortex install --no-claude-md`, which
   regenerates the profile's gortex skills/agents/hooks + user MCP config.
   `--no-claude-md` is load-bearing: it keeps gortex's rule block OUT of the
