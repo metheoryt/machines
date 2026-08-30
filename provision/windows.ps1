@@ -195,6 +195,28 @@ if ($pyReal) {
     Warn "python missing and winget unavailable - install Python 3 from https://python.org, then re-run (kb-refresh distill needs it)."
 }
 
+# jq - a PROVISIONING dependency on Windows, not a convenience. agents/
+# bootstrap.sh's gortex_merge_hooks is what copies gortex's hooks out of
+# settings.local.json (which Claude Code does not read at user scope) into
+# settings.json (which it does), and that function is written in jq: with no jq
+# it warns once and returns, so gortex's hooks are written and never run - at
+# any posture. Measured on desktop 2026-08-30, where the line
+# "! jq not found - gortex hooks stay inert" had been the whole story since the
+# box was provisioned. The POSIX tiers install jq already (tier_apt_min,
+# tier_brew_min); Windows was the only platform where the wiring silently did
+# not work. Guarded by provision/tests/windows-jq.test.sh.
+if (Have jq) {
+    Info "jq:   $(jq --version 2>&1)"
+} elseif (Have winget) {
+    Warn "jq not found - installing via winget (gortex hook wiring needs it)..."
+    winget install --id jqlang.jq -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    Update-PathFromRegistry
+    if (Have jq) { Info "jq:   $(jq --version 2>&1)" }
+    else { Warn "jq still not on PATH after install - gortex hooks will stay inert until it is." }
+} else {
+    Warn "jq missing and winget unavailable - install jq, then re-run: gortex hooks stay inert without it."
+}
+
 # ---- 3. Claude Code ----------------------------------------------------------
 Step "3. Claude Code CLI"
 $claudeExe = Join-Path $env:USERPROFILE '.local\bin\claude.exe'
