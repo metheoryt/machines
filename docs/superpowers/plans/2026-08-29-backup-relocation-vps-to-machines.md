@@ -401,48 +401,88 @@ Task 1 contradicted it:**
       inherited. **The "37 suites" written in this plan earlier was wrong** — which
       is exactly why AGENTS.md says not to write the count down.
 
-## Task 5 — make `fleet.json` describe reality  ⛔ BLOCKED — needs a decision
+## Task 5 (rewritten 2026-09-01) — every box backs itself up, Windows and WSL alike
 
-**5.1 as written would install a green lie, and Task 4 is what proved it.**
+**The original Task 5 asked the wrong question.** It tried to make one
+`fleet.json` entry stand for a backup running on a different machine. The answer
+is not to dispatch across the boundary — it is that **Windows and each WSL distro
+on it are separate boxes with separate things to lose, so each gets its own
+client.** Requested explicitly, 2026-09-01.
 
-`desktop` is `platform: windows`. Its backup client does not run on Windows — it
-runs inside the WSL distro `desktop-wsl`, which is a *self-declared* host with no
-`fleet.json` entry, and `provision/linux.sh` (the tier driver that provisions such
-a host) **dispatches no roles at all**. So adding `backup-client` to `desktop`
-gives:
+### The one idea
 
-```
-role_backup_client apply windows desktop  →  "no posix executor for platform 'windows'" → exit 0
-```
+**The profile dir is keyed on WHO THE BOX IS, not on which `fleet.json` entry
+owns the hardware.** `backup/<identity>/`, where identity is:
 
-…for ever, on the one client with a live verified snapshot. That is precisely the
-*provisioned nothing, reported success* failure `PLANNED_ROLES` exists to kill,
-wearing a different hat — and worse than the current state, where `desktop`
-simply does not claim the role.
+- a `fleet.json` machine name — `latitude`, `desktop`, `g15`
+- a `fleet.local.json` nickname — `desktop-wsl`, `g15-wsl`
 
-`hub`'s skip is the honest version of the same shape: it genuinely has no client,
-and `role_backup_client` says so by name on every run.
+One flat namespace; the names are already unique. Each box then provisions its
+own backup from the chain that already provisions it, so **nothing has to reach
+across a machine boundary** — no `fd_wsl_hosts`, no `.ps1` driving `wsl.exe`, and
+none of the `self_alias()` breakage option (b) would have unmasked.
 
-Two ways out, and it is a real choice, not a detail:
+### THE TRAP, and it must be closed before anything else
 
-- **(a) Leave `desktop` out of the manifest.** The WSL client stays a
-  `just provision-wsl` / tier concern, provisioned by the chain that already owns
-  self-declared hosts. Cheapest, and honest. Cost: `fleet.json` still does not
-  describe who is backed up, which is what Task 5 set out to fix.
-- **(b) Teach the windows arm to dispatch into the distro.** The primitive exists
-  — `agents/plugin/skills/lib/fleet-dispatch.sh` already reaches a parent's distros
-  (`fd_wsl_hosts`) and runs commands in them. Cost: a `.ps1` side, and
-  `fd_wsl_hosts` is still on ssh, which AGENTS.md records would unmask
-  `self_alias()`'s `self: unknown` bug for self-declared hosts.
+**`fleet_detect` returns the WRONG machine on a WSL box, differently wrong on
+each one.** On desktop-wsl, `hostname` is `g614jv` — which is `desktop`'s
+`detect.hostname` — so detection returns **`desktop`**, and the WSL client would
+schedule *Windows'* profile. On g15-wsl the OS hostname is not `g513ie`, so
+detection returns **nothing**. Same code, two different wrong answers.
 
-- [ ] **5.1** DECIDE (a) or (b). Do not write a `.ps1` that cannot work.
-- [x] **5.2** Leave `hub`'s `backup-client` declared and unconfigured. Task 4.1
-      makes that print `no profile dir for hub (skipped)` and return 0 — pinned in
-      `roles.test.sh`. Giving hub a real profile is the offsite copy, its own piece
-      of work needing capacity that does not exist yet (roadmap P0, deferred).
-- [ ] **5.3** `fleet.json` is a `_touches_driver` trigger in `scripts/converge.sh`,
-      so this edit reprovisions every box on the next tick. Land it with the
-      executors, never before them.
+So the resolver is: **`fleet.local.json`'s nickname wins outright — if it exists,
+`fleet_detect` is never consulted.** This is AGENTS.md's documented
+`{{ .Hostname }}`-expands-to-the-Windows-hostname trap wearing a different hat.
+
+### Steps
+
+- [x] **5.1** `provision/backup-client.sh` — the one implementation. Takes an
+      optional identity; resolves it as above when not given. Runs
+      `backup/<id>/install-tasks.sh`; missing dir is a named skip, exit 0.
+      `role_backup_client` becomes a wrapper passing an explicit id — which is
+      what keeps it testable off-host and keeps `roles.test.sh`'s tripwire honest.
+- [x] **5.2** Add it as **step 6 of the WSL chain** in `provision_wsl_steps`. It
+      takes no args on the self-resolving path, so it falls through the dispatch
+      `case`'s `*)` arm. **Pinned in three places** in
+      `provision/tests/provision-wsl.test.sh` (both step-list assertions and the
+      existence loop) — all three must move together.
+- [x] **5.3** `provision/roles/backup-client.ps1` → `Invoke-RoleBackupClient`,
+      **plus its `$RoleExecutors` map entry in `provision.ps1`** — without the
+      entry the role prints "not yet implemented (skipped)" and exits 0.
+      Per-dir contract is `install-tasks.ps1`, for the same reason latitude and
+      desktop-wsl ship different `.sh` files: Windows scheduling writes Task
+      Scheduler entries and wants elevation, and that decision belongs next to
+      the config, not in the executor.
+- [x] **5.4** **Ship NO new profile dirs.** The ask was the capability. Deciding
+      what is irreplaceable on a box nobody has inventoried is real work —
+      `backup/latitude/profiles.yaml`'s header is a long argument for how much.
+      `desktop` and `g15` gain `backup-client` in `fleet.json` when they gain a
+      profile dir, not before.
+- [ ] **5.5** The Windows apply arm is **UNVERIFIED** until it runs on `desktop`
+      or `g15`. The retired `install-tasks.bat` ends in `pause`, which says it was
+      run by hand in a console, never by a provisioner. Do not report it as done.
+
+### Verified
+
+- **The trap is live and closed.** On desktop-wsl, `hostname` is `g614jv` and
+  `fleet_detect` returns **`desktop`** — measured, not argued. The resolver
+  returns `desktop-wsl`. `provision/tests/backup-client.test.sh` reproduces it
+  synthetically (a manifest whose `detect.hostname` is whatever box runs the
+  suite), so it fails on any machine if the precedence ever inverts.
+- **End to end on this box:** `bash provision/backup-client.sh` with no argument
+  resolved `desktop-wsl`, ran its `install-tasks.sh`, and left **one** user timer
+  under its unchanged name (`resticprofile-backup@profile-wsl`) with
+  `WorkingDirectory=/home/me/machines/backup/desktop-wsl`. Invariant 1 intact.
+- **Suite:** 47 suites, 45 pass, the same two environmental failures and no
+  others.
+
+### Found on the way, NOT fixed here
+
+`provision.ps1` has **no `PLANNED_ROLES` equivalent**. Its fallback prints
+"not yet implemented (skipped)" and leaves `$rc` at 0 — the identical hole
+`49497bd` closed on the posix side. Adding the map entry in 5.3 fixes this
+change's case; the missing guard is a pre-existing defect and its own piece of
+work. → `docs/fleet-roadmap.md`.
 
 ## Task 6 — remove `backup/` from `vps`
 

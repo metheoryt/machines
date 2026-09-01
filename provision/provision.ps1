@@ -19,6 +19,13 @@ $RoleExecutors = @{
     'agents'      = { param($Mode, $Platform, $Machine) Invoke-RoleAgents     -Mode $Mode -Platform $Platform -Machine $Machine }
     'dotfiles'    = { param($Mode, $Platform, $Machine) Invoke-RoleDotfiles   -Mode $Mode -Platform $Platform -Machine $Machine }
     'repos'       = { param($Mode, $Platform, $Machine) Invoke-RoleRepos      -Mode $Mode -Platform $Platform -Machine $Machine }
+    # THE MAP ENTRY IS NOT OPTIONAL. A role missing from here falls through to
+    # the `else` arm below, which prints "not yet implemented (skipped)" and
+    # leaves $rc at 0 -- provisioned nothing, reported success. That is the hole
+    # 49497bd closed on the posix side with PLANNED_ROLES; this file still has
+    # no equivalent guard (roadmap), so the entry is the only thing standing
+    # between a declared role and a silent green skip.
+    'backup-client' = { param($Mode, $Platform, $Machine) Invoke-RoleBackupClient -Mode $Mode -Platform $Platform -Machine $Machine }
 }
 
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }

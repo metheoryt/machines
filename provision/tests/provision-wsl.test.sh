@@ -15,13 +15,13 @@ source "$REPO/provision/provision-wsl.sh"
 
 # Default chain: tailnet enroll first, fixes last.
 full="$(provision_wsl_steps 0 | tr '\n' ' ')"
-eq "$full" "tailscale-wsl.sh ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh " \
+eq "$full" "tailscale-wsl.sh ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh backup-client.sh " \
   "default chain order"
 
 # --no-tailscale drops ONLY the enroll step. WSL2 distros share one network
 # namespace, so a second tailscaled cannot create a second tailscale0.
 none="$(provision_wsl_steps 1 | tr '\n' ' ')"
-eq "$none" "ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh " \
+eq "$none" "ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh backup-client.sh " \
   "--no-tailscale drops only the enroll step"
 
 case "$none" in
@@ -48,7 +48,7 @@ REPO_REAL="$REPO"
 STEP_LOG="$(mktemp)"
 FAKES="$(mktemp -d)"
 mkdir -p "$FAKES/provision"
-for s in tailscale-wsl.sh ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh; do
+for s in tailscale-wsl.sh ssh-wsl.sh linux.sh fleet-local.sh wsl-fixes.sh backup-client.sh; do
   cat > "$FAKES/provision/$s" <<EOF
 #!/usr/bin/env bash
 printf '%s\t%s\n' "$s" "\$*" >> "$STEP_LOG"

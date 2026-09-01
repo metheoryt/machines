@@ -326,18 +326,27 @@ Nix ever returns. Leave them.
   drifting. The failure mode is silent rather than loud: latitude has **no
   GitHub account block at all**, so a `cyphy671` repo cloned there would fall
   back to default identity resolution and quietly offer the wrong key.
-- [ ] **The `ssh-server` role has no executor**, and neither do `base`,
-  `backup-hub` or `backup-client` — `provision/roles/` holds only `agents`,
-  `dotfiles`, `repos`. (Corrected 2026-08-05: they were never "stubs that print
-  a message"; there is no file for them at all. They fall through
-  `provision.sh`'s fallback arm, which now names them in `PLANNED_ROLES` and
-  fails `--apply` for any role NOT on that list — review item 6. Implementing
-  one means deleting its name from that list.) The capability
+- [ ] **The `ssh-server` role has no executor**, and neither does `base` —
+  `provision/roles/` holds `agents`, `dotfiles`, `repos` and, since 2026-09-01,
+  `backup-client` (`.sh` + `.ps1`) and `backup-hub`. (Corrected 2026-08-05: they
+  were never "stubs that print a message"; there is no file for them at all.
+  They fall through `provision.sh`'s fallback arm, which now names them in
+  `PLANNED_ROLES` and fails `--apply` for any role NOT on that list — review
+  item 6. Implementing one means deleting its name from that list, which is what
+  the two backup roles did.) The capability
   exists three separate hand-rolled ways — the now-dead NixOS module,
   `windows.ps1` step 6, and `tier_ssh_trust` for POSIX tier boxes — which is why
   AGENTS.md reads as though the role is done. It is not, and with the NixOS
   module gone latitude's sshd has no generator either. Windows gotchas for
   whoever implements it are in project memory.
+- [ ] **`provision.ps1` has NO `PLANNED_ROLES` equivalent** — the same hole
+  `49497bd` closed on the posix side, still open on Windows. A role missing from
+  its `$RoleExecutors` map falls through to a branch that prints "not yet
+  implemented (skipped)" and leaves `$rc` at **0**: provisioned nothing, reported
+  success. Found 2026-09-01 while adding `backup-client.ps1`; the map entry fixes
+  that one role and nothing else. Windows members are `desktop` and `g15`, so
+  today the exposure is `base` and `ssh-server` on both. The posix fix is a list
+  plus a padded-substring match — port it, do not re-invent it.
 
 ---
 

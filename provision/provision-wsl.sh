@@ -10,6 +10,13 @@
 #   3. linux.sh                                  software + timers + inbound trust
 #   4. fleet-local.sh --nickname <nickname>      write the self-declaration
 #   5. wsl-fixes.sh                              wslopen + binfmt watchdog
+#   6. backup-client.sh                          this distro's own restic schedule
+#
+# Step 6 is AFTER fleet-local.sh and that ordering is load-bearing: it resolves
+# its identity from the fleet.local.json step 4 writes. A WSL distro cannot be
+# identified any other way -- on desktop-wsl `hostname` is g614jv, which IS the
+# Windows parent's detect.hostname, so detection would hand this distro the
+# PARENT's backup profile. It is a no-op skip until backup/<nickname>/ exists.
 #
 # --no-tailscale skips step 1. WSL2 distros share ONE network namespace (proven
 # 2026-08-01: identical /proc/self/ns/net inodes, cross-visible listener tables),
@@ -38,6 +45,7 @@ provision_wsl_steps() {
   printf 'linux.sh\n'
   printf 'fleet-local.sh\n'
   printf 'wsl-fixes.sh\n'
+  printf 'backup-client.sh\n'
 }
 
 provision_wsl_main() {
