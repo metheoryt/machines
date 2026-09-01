@@ -516,15 +516,31 @@ Only after Tasks 2 and 3 have both been verified green on their hosts.
 
 ## Task 7 — fix the two documentation claims that sent this work to the wrong repo
 
-- [ ] **7.1** `machines/AGENTS.md` says in one paragraph that `machines` owns
-      "provisioning **and data backup**" and that `vps` owns "the restic profiles".
-      Both cannot be true. Keep the first, drop the second, and say what `vps` does
-      keep: the REST **server** as a service.
-- [ ] **7.2** `machines/AGENTS.md` and `docs/fleet-roadmap.md:329` both claim the
-      `base`, `ssh-server` and `backup-client` executors are "unimplemented stubs
-      that print not yet implemented (skipped)". **None of those files exist.** The
-      printed-plan behaviour comes from `provision.sh`'s absent-function path. Say
-      that instead, and mark `backup-{hub,client}` done once Task 4 lands.
+- [x] **7.1** Done. `machines/AGENTS.md` now says `machines` owns the profiles
+      and schedules and `vps` keeps the REST **server** container — the daemon is a
+      service, what a box chooses to back up is a machine fact. The contradiction
+      itself is written up in place, because a file asserting two incompatible
+      things is worse than one that is merely wrong: the reader picks the half that
+      suits the task, which is exactly how this work started in the wrong repo.
+      Dropped **Forgejo** from that sentence's service list too — wiped 2026-08-01.
+- [x] **7.2** Done, and it was in **three** places, not the two this box named.
+      `machines/README.md:96` carried the false claim verbatim ("`ssh-server`,
+      `base` and `backup-client` are stubs that print a plan") and was not in the
+      plan; `docs/fleet-roadmap.md` P3 had already been corrected on 2026-08-05 and
+      updated again when the backup roles landed, so line 329 needed nothing.
+      All now say the same thing: no stub file exists, the printed plan comes from
+      `provision.sh`'s absent-function arm, and only `base` + `ssh-server` remain.
+- [x] **7.3** (added) `backup/` had no row in AGENTS.md's top-level-directory
+      table or in README's layout line — the tree moved in under Task 1 and no doc
+      admitted it existed. Both now carry it, with the one non-obvious rule: each
+      profile dir ships its OWN `install-tasks.sh` / `.ps1` because scope is not
+      derivable by the caller (latitude is `schedule-permission: system` and needs
+      sudo; a WSL client is user-scope and must NOT be root, or its units land in
+      the system manager and the timer that backs the box up is never installed).
+- [x] **7.4** (added) Recorded in AGENTS.md that `provision.ps1` has no
+      `PLANNED_ROLES` equivalent, so a Windows role missing from `$RoleExecutors`
+      reports success having done nothing. Roadmap P3 carries the same item. NOT
+      fixed here — it is a guard, not a doc fix.
 
 ---
 

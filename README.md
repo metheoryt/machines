@@ -33,7 +33,8 @@ provisioner under `provision/`.
 Top-level layout: `hosts/<host>/<platform>/` (per-machine ops scripts),
 `provision/` (the cross-platform provisioner + tier library), `agents/` (agent
 config, plugin, bootstrap), `scripts/` (convergence engine + version bumper),
-`docs/` (`fleet-roadmap.md` is the live backlog), `install-media/` (shared Win11
+`backup/` (restic profiles + schedules, one dir per identity), `docs/`
+(`fleet-roadmap.md` is the live backlog), `install-media/` (shared Win11
 answer file + Ventoy config).
 
 ## Onboarding — start here
@@ -92,9 +93,11 @@ deleted, where behaviour lives.
   provenance is deliberate, not stale.
 - `linux.sh` / `macos.sh` — tier drivers. Both run the same tier bodies; only the
   driver path differs.
-- `roles/*.{sh,ps1}` — role executors. Only `agents`, `dotfiles` and `repos` are
-  implemented; `ssh-server`, `base` and `backup-client` are stubs that print a
-  plan (roadmap P3).
+- `roles/*.{sh,ps1}` — role executors: `agents`, `dotfiles`, `repos` and, since
+  2026-09-01, `backup-client` (`.sh` + `.ps1`) and `backup-hub`. `base` and
+  `ssh-server` are **not stubs** — no file for them exists at all; the printed
+  plan comes from `provision.sh`'s absent-function arm, which fails `--apply`
+  for any such role not named in its `PLANNED_ROLES` (roadmap P3).
 - `gortex.version` — the pinned gortex release, installed by `tier_gortex` into
   `~/.local/bin` on every box. **Bumped automatically**, weekly, by
   `gortex-autoupdate.sh` on latitude alone (`tier_gortex_autoupdate`): it commits

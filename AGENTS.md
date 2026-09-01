@@ -67,9 +67,18 @@ The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
 
 **`machines` / `vps` boundary:** `machines` owns the *machines* — provisioning
-and data backup across Debian, Windows and macOS. The sibling **`vps`** repo owns
-the *services* (Immich, Forgejo, the cyphy.kz platform, the restic profiles).
-Machine here, services there.
+and data backup across Debian, Windows and macOS, **including the restic
+profiles and their schedules** (`backup/<identity>/`, moved out of `vps` on
+2026-09-01). The sibling **`vps`** repo owns the *services* (Immich, the
+cyphy.kz platform, and the restic REST **server** container latitude's hub runs).
+Machine here, services there — the daemon that stores the backups is a service,
+what each box chooses to back up is a machine fact.
+
+This paragraph used to claim both halves at once — `machines` owned "data
+backup", `vps` owned "the restic profiles" — and that contradiction is what sent
+a whole round of backup work to the wrong repo. It also listed Forgejo, wiped
+2026-08-01. If you catch this file asserting two incompatible things, the
+contradiction is the bug; do not pick the half that suits the task.
 
 ### The NixOS tree is gone
 
@@ -198,6 +207,7 @@ count as a baseline is how the first one stayed unread — see
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `update-gortex.sh` (bumps the pin). |
 | `hosts/` | Per-machine, per-platform ops scripts: `hosts/<name>/<platform>/`. |
 | `docs/` | `fleet-roadmap.md` is the live backlog; `superpowers/plans/` holds plans and specs. |
+| `backup/` | The fleet's restic profiles, one dir per **identity** — `backup/<identity>/` where identity is a `fleet.json` machine (`latitude`) or a `fleet.local.json` nickname (`desktop-wsl`), one flat namespace. Each dir ships `profiles.yaml` plus its own `install-tasks.sh` / `.ps1`, because scope is not derivable by the caller: latitude's profiles are `schedule-permission: system` and need sudo, a WSL client is user-scope and must NOT be root. Moved here from `vps` 2026-09-01. |
 | `install-media/` | Shared Win11 install media. |
 
 ### The provisioner is the whole story now
@@ -233,19 +243,28 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   `provision/gortex-autoupdate.test.sh` (14 cases, all about what it can commit
   or push) and the single-writer assertions in `provision/tests/tiers.test.sh`.
 
-**Four roles have no executor at all**: `base`, `ssh-server`, `backup-hub` and
-`backup-client`. `provision/roles/` holds only `agents`, `dotfiles` and `repos` —
-there is no stub file for the other four, they fall through `provision.sh`'s
-fallback arm. The capability exists in hand-rolled forms elsewhere
-(`windows.ps1` step 6, `tier_ssh_trust`), which is why this can read as done. It
-is not — roadmap P3.
+**Two roles have no executor at all**: `base` and `ssh-server`.
+`provision/roles/` holds `agents`, `dotfiles`, `repos` and — since 2026-09-01 —
+`backup-client` (`.sh` **and** `.ps1`) and `backup-hub`. For the remaining two
+there is **no stub file of any kind**: nothing of theirs prints "not yet
+implemented", that message comes from `provision.sh`'s absent-function arm. The
+capability exists in hand-rolled forms elsewhere (`windows.ps1` step 6,
+`tier_ssh_trust`), which is why this can read as done. It is not — roadmap P3.
 
 Since 2026-08-05 that gap is **declared, not silent**: `provision.sh` carries a
-`PLANNED_ROLES` list naming those four, and a role that is neither implemented
-nor named there makes `--apply` exit 1. Before that, `just provision --machine
+`PLANNED_ROLES` list naming them, and a role that is neither implemented nor
+named there makes `--apply` exit 1. Before that, `just provision --machine
 latitude --apply` reported success while doing nothing for four of its seven
 roles. **Implementing a role means DELETING its name from `PLANNED_ROLES`** —
-leave it in and the new executor is never demanded of a box that lacks it.
+leave it in and the new executor is never demanded of a box that lacks it. Done
+twice so far, both on 2026-09-01, by the two backup roles.
+
+**The Windows front door has no such guard.** `provision.ps1` resolves roles
+through a `$RoleExecutors` map with no `PLANNED_ROLES` equivalent, so a role
+missing from that map prints "not yet implemented (skipped)" and leaves `$rc` at
+**0** — provisioned nothing, reported success, the exact hole the posix list
+closed. Adding an executor for a Windows role means adding its map entry too.
+Roadmap P3.
 
 ### Fleet networking / tailnet architecture
 
