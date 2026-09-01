@@ -704,6 +704,50 @@ global + per-host). One bullet per fact under a topical heading.
 > Read it before touching any drive on latitude. What stays here is the durable
 > rules that outlive the migration.**
 
+### The backup system lives in `machines`, not `vps` (2026-09-01)
+
+- **`machines/backup/<identity>/`** — one directory per box that backs itself up,
+  keyed on **who the box is**, not on which `fleet.json` entry owns the hardware:
+  a manifest machine (`latitude`) or a `fleet.local.json` nickname
+  (`desktop-wsl`), one flat namespace. `vps` keeps only the REST **server**
+  container. `git rm -r backup` in `vps` = `f70b9cb`.
+- **The identity resolver must let the nickname win OUTRIGHT, never "prefer, else
+  fall back".** Measured on desktop-wsl: `hostname` is `g614jv`, which IS
+  `desktop`'s `detect.hostname`, so `fleet_detect` returns **`desktop`** — the
+  distro would schedule its Windows parent's profile against its own filesystem.
+  On g15-wsl the same code returns empty. Two different wrong answers from one
+  fallback, which is why a malformed `fleet.local.json` is an ERROR here.
+- **Each profile dir ships its own `install-tasks.sh`/`.ps1` because scope is not
+  derivable by the caller.** latitude is `schedule-permission: system` and needs
+  sudo; a WSL client is user-scope and must NOT be root, or its units land in the
+  system manager and the timer that backs the box up is never installed.
+- **`resticprofile schedule --all` ignores `-n`** and unit names come from the
+  PROFILE, not the directory — one `backup/latitude/profiles.yaml` holds two
+  profiles and installs four units. Two schedulers would race on the same files.
+- **Reading a restic repo on latitude as `me` reports MISSING, not "unreadable".**
+  The repo dirs are `drwx------ root:root`. `restic snapshots` silently skips the
+  files it cannot open and prints a SHORTER list; the hub selfcheck printed 2 FAIL
+  on a healthy hub for the same reason. Use `sudo`, and treat "could not check" as
+  a distinct exit code from "check failed".
+
+### A written instruction did not stop the loss it was written about (2026-09-01)
+
+- The relocation plan said, in bold, to decide deliberately about
+  `~/my/vps/backup/wsl/pass.txt` — the last copy of a secret, tracked nowhere.
+  **Two days later the personal-projects move to `g15` deleted it** and nothing
+  noticed: present in restic snapshot `f7f978d7` (2026-08-27 10:13), absent from
+  `5f8d263c` (2026-08-29 18:38).
+- **The recovery path was luck.** `.resticignore` excludes `.config/restic/` and
+  not `my/`, so a secret that was deliberately kept out of the backup in one
+  location was incidentally captured in another. Do not read that as coverage.
+- Now escrowed at `~/.config/restic/pass-legacy-wsl-2026-04.txt` on the dotfiles
+  `desktop-wsl` branch (`be81e44`), with a `README.md` in that directory naming
+  which file is live and which is dead — **an unlabelled 12-byte password file is
+  how it nearly went in the first place.**
+- The rule this sharpens: when a plan identifies a last-copy secret, **escrow it
+  in that same session**. A future-tense instruction is not a safeguard; it is a
+  bet that the next person to touch the directory reads the plan first.
+
 - ~~Fleet restic hub-and-spoke: every client backs up through resticprofile to/on
   the homeserver (REST server on port 8001, or local drives).~~ — **superseded
   2026-07-31**: the strategy is now mirror-the-bulk and **no restic repo is
