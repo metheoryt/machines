@@ -485,34 +485,61 @@ So the resolver is: **`fleet.local.json`'s nickname wins outright — if it exis
 change's case; the missing guard is a pre-existing defect and its own piece of
 work. → `docs/fleet-roadmap.md`.
 
-## Task 6 — remove `backup/` from `vps`
+## Task 6 — remove `backup/` from `vps` ✅ 2026-09-01 (`vps` f70b9cb)
 
-Only after Tasks 2 and 3 have both been verified green on their hosts.
+- [x] **6.1** `git rm -r backup` — nine tracked files. Gated on a full comparison
+      first: every tracked file has a counterpart in `machines`, and the two that
+      differ (`latitude/profiles.yaml`, `wsl/install-tasks.sh`) differ only in
+      header prose and the password path. **Invariant 1 re-proved by set equality**
+      — the profile-name list and the `repository:` list are byte-identical on both
+      sides, which is the check that actually matters, not a whole-file diff.
+- [x] **6.2** Both docs repointed. They now say what `vps` keeps — the REST
+      **server** container — and why the split falls there: the daemon that stores
+      backups is a service, what a machine backs up is a machine fact.
+- [x] **6.3** Done, but **not with the grep this box specified.** That grep was
+      scoped `-- '*.md'` over `base.yaml|latitude|wsl|homeserver`, which misses
+      `backup/restic-install.{sh,bat}` — the install command both READMEs name —
+      and every non-markdown hit. Ran bare `git grep -n 'backup/'` instead: it
+      found a live reference in `homeserver/servarr/README.md` that the specified
+      grep would have left behind, and a comment in `restic-server/compose.yml`.
+      Both fixed. What remains are historical records (a 2026-07 plan) and this
+      move's own account of what was deleted.
+- [x] **6.4** `homeserver/restic-server/` is functionally untouched — the only
+      change is one comment qualifying `backup/latitude/profiles.yaml` as
+      `machines/backup/...`. A deliberate one-byte deviation from "unchanged".
+- [x] **6.5** Pulled on latitude, and verified by **firing the unit**, not by
+      reading config: `resticprofile-backup@profile-latitude.service` →
+      `Result=success`, `ExecMainStatus=0`, new snapshot `8b5e476e` at 17:41:58.
+      The source path `/home/me/my/vps` survives with its 16 `.env` files; only
+      `backup/` left it. Untracked leftovers survive as predicted, including the
+      `backup/homeserver/pass.txt` symlink into `~/g513ie-prod-config/` — `git rm`
+      does not touch untracked paths. That symlink is now unreferenced;
+      `machines/backup/latitude/pass.txt` points at the same tracked file directly.
+- [x] **6.6** `~/my/vps` deleted on desktop-wsl. `~/my` is now empty.
 
-- [ ] **6.1** `cd ~/my/vps && git rm -r backup`
-- [ ] **6.2** Replace the `## Backups` section in `vps/CLAUDE.md` and `README.md`
-      with a pointer to `machines/backup/`, keeping the note that this repo still
-      runs the restic REST **server** (`homeserver/restic-server/`) as a service.
-- [ ] **6.3** `git grep -nE 'backup/(base\.yaml|latitude|wsl|homeserver)' -- '*.md'`
-      → empty.
-- [ ] **6.4** `git status --short homeserver/restic-server/` → unchanged.
-- [ ] **6.5** The copy on **latitude** is a backup *source*
-      (`/home/me/my/vps` is in the `latitude` profile's `source:` list, for the
-      seven gitignored `.env` files). Pull the deletion there and confirm the next
-      04:30 run still succeeds — the source path still exists, only `backup/` left it.
-- [ ] **6.6** **Escrow `~/my/vps/backup/wsl/pass.txt` first, then** delete `~/my/vps`
-      on **desktop-wsl** — the last personal-project directory still there;
-      everything else moved to g15 on 2026-08-29.
+      **The escrow this box demanded had already failed, and nobody knew.**
+      `~/my/vps/backup/wsl/pass.txt` was gone when Task 6 reached it — present in
+      the restic snapshot of 2026-08-27 10:13, absent from the one of 2026-08-29
+      18:38. It was swept along by the personal-projects move to `g15` two days
+      after this plan wrote down that it must be decided deliberately. That is the
+      exact failure the instruction existed to prevent, and writing the
+      instruction did not prevent it.
 
-      That file is **not** a redundant copy of the live password, which is what a
-      quick look suggests. Measured 2026-08-29: 12 bytes, mtime 2026-04-27, versus
-      the live `/home/me/.config/restic/pass.txt` at 64 bytes, mtime 2026-08-04 —
-      they differ at byte 1. It predates the 2026-08-01 repoint, so it is the key
-      to the pre-migration `rest://server.gg.ez:8001/wsl` repo whose drives were
-      reformatted. Almost certainly it unlocks nothing. **`git log` in `vps` shows
-      it was never tracked and it is in no dotfiles branch, so this is its last
-      copy** — decide deliberately (escrow on the desktop-wsl branch, or confirm
-      it is dead), never as a side effect of `rm -rf`.
+      **Recovered and escrowed 2026-09-01.** `restic restore f7f978d7` — the repo
+      held it only because `.resticignore` excludes `.config/restic/` and not
+      `my/`, i.e. by luck, not by design. Confirmed to be what this box described:
+      12 bytes, mtime 2026-04-27, differing from the live password at byte 1, so a
+      second secret rather than a stale duplicate. Now tracked in dotfiles on the
+      `desktop-wsl` branch as `~/.config/restic/pass-legacy-wsl-2026-04.txt`
+      (commit `be81e44`), beside a new `README.md` in that directory saying which
+      file is live, which is dead, and what retiring the dead one would take —
+      because an unlabelled 12-byte password file is how this one nearly went in
+      the first place.
+
+      Not deleted despite almost certainly opening nothing: the repo it unlocked
+      was `rest://server.gg.ez:8001/wsl`, whose drives were reformatted into
+      `immich-mirror` / `spare320` / `immich-2024`. "Almost certainly" is not the
+      standard for destroying the last copy of a secret.
 
 ## Task 7 — fix the two documentation claims that sent this work to the wrong repo
 
@@ -546,16 +573,31 @@ Only after Tasks 2 and 3 have both been verified green on their hosts.
 
 ## Final verification
 
-- [ ] `machines/backup/` is `diff`-identical to the pre-move `vps/backup/`, dir
-      names excepted; profile names and repository URLs byte-for-byte unchanged.
-- [ ] No `pass.txt` and no `.env` is tracked in `machines`; `git check-ignore` proves it.
-- [ ] Latitude: four restic timers present under the same unit names, and both
-      hand-fired units report `Result=success`.
-- [ ] desktop-wsl: `WorkingDirectory` points into `machines/`, `Linger=yes`, a new
-      snapshot visible **from latitude**.
-- [ ] `just provision --machine latitude --dry-run` runs both new roles and mutates
-      nothing; `just test` green.
-- [ ] `vps` has no `backup/`, its docs point at `machines`, `restic-server` untouched.
+- [x] `machines/backup/` matches the pre-move `vps/backup/` — dir names excepted,
+      plus two deliberately rewritten headers and the password path. Profile names
+      and repository URLs proved identical **as sets**, which is the invariant.
+- [x] No `pass.txt` and no `.env` is tracked in `machines`; `git check-ignore` proves it.
+- [x] Latitude: four timers under their original unit names, all four with
+      `Result=success`; the backup unit hand-fired again after the `vps` deletion
+      produced snapshot `8b5e476e`, and the daily chain is unbroken through
+      2026-09-01 04:30.
+- [x] desktop-wsl: one user timer, `WorkingDirectory` into `machines/`,
+      `Linger=yes`, snapshot `6137acc2` at 2026-09-01 06:00.
+- [x] `just provision --machine latitude --dry-run` runs both new roles and mutates
+      nothing (tripwire-asserted, not read off the output); `just test` green.
+- [x] `vps` has no `backup/`, its docs point at `machines`, `restic-server`
+      functionally untouched (one comment).
+
+**Open, and deliberately so:**
+
+- **5.5 — the Windows apply arm is UNVERIFIED.** `backup-client.ps1` has never
+  run: no `backup/desktop/` or `backup/g15/` exists to run it against. Do not
+  report it as working.
+- **No profile dirs for `desktop` or `g15`.** The ask was the *capability*.
+  Choosing what is irreplaceable on a box whose 416 GB nobody has reviewed is
+  separate work, and those two stay out of `fleet.json`'s backup roles until they
+  have a directory.
+- **`provision.ps1` has no `PLANNED_ROLES` equivalent** — roadmap P3.
 
 ## Rollback
 
