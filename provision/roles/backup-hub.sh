@@ -40,7 +40,7 @@ role_backup_hub() {
                 # on whatever box you happen to be on -- desktop-wsl has no
                 # /mnt/spare320 and no container, so asserting here would make
                 # roles.test.sh red everywhere but latitude.
-                echo "  backup-hub: would run $selfcheck"
+                echo "  backup-hub: would run (as root) $selfcheck"
                 echo "  backup-hub: asserts the drive by UUID, the repo config, that the"
                 echo "              container and host see ONE .htpasswd (the bind-race guard),"
                 echo "              the listening port, and snapshot freshness."
@@ -51,7 +51,16 @@ role_backup_hub() {
             # Apply = verify. A nonzero here is the point: it turns a hub that
             # has quietly stopped serving into a failed role rather than a green
             # line, which is the whole reason the selfcheck exists.
-            bash "$selfcheck"
+            #
+            # SUDO IS NOT OPTIONAL. The repo dir is drwx------ root:root, so a
+            # non-root run of the selfcheck reports two of its ten checks as
+            # MISSING / none-found on a healthy hub -- measured 2026-09-01, and
+            # the reason the script now refuses to run as anyone else (exit 2).
+            if [ "$(id -u)" -eq 0 ]; then
+                bash "$selfcheck"
+            else
+                sudo bash "$selfcheck"
+            fi
             ;;
         *)
             # DELIBERATE, unlike backup-client's fallthrough. This role is not

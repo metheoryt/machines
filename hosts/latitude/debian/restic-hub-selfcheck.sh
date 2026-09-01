@@ -28,6 +28,28 @@
 set -uo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
+# ROOT IS REQUIRED, AND THE FAILURE MODE IF IT IS NOT IS WHY THIS GUARD EXISTS.
+# /mnt/spare320/restic-rest/g614jv is drwx------ root:root (the container writes
+# it as root). Run as any other user, `[ -e "$DATA/$REPO/config" ]` fails with
+# EACCES and check 2 prints "MISSING"; the snapshot scan in check 8 finds nothing
+# and prints "none found". Two FAILs, on a hub that is perfectly healthy, and
+# nothing in the output says "I could not read this" rather than "this is gone".
+# Measured 2026-09-01: as `me`, 2 FAIL / 8 ok; as root, 10 ok, same second.
+#
+# That is the same defect class as the check-2 comment this script already
+# carries a correction for -- a check that reports the wrong thing confidently is
+# worse than no check. Exit 2, distinct from the 1 a real failure returns, so
+# "could not check" and "check failed" are never the same signal.
+#
+# The systemd unit runs User=root, so this changes nothing on the timer path. It
+# fires for a human, or a role executor, invoking it by hand.
+if [ "$(id -u)" -ne 0 ]; then
+  echo "restic-hub-selfcheck: must run as root — the repo dir is drwx------ root:root," >&2
+  echo "  and without it checks 2 and 8 report MISSING instead of unreadable." >&2
+  echo "  try: sudo $0" >&2
+  exit 2
+fi
+
 DRIVE_UUID="3a78fd88-deb0-4c1a-a576-14abd0631d57"
 DATA="/mnt/spare320/restic-rest"
 REPO="g614jv"

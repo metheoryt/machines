@@ -141,6 +141,27 @@ out="$(PATH="$tw/bin:$PATH" TRIPWIRE="$TRIPWIRE" role_backup_hub dry-run debian 
 [ -e "$TRIPWIRE" ] && die "role_backup_hub: dry-run EXECUTED $(cat "$TRIPWIRE")" \
   || pass "role_backup_hub: dry-run runs nothing"
 
+# THE SELFCHECK MUST REFUSE TO RUN AS NON-ROOT, exit 2. Its repo dir is
+# drwx------ root:root, so as any other user checks 2 and 8 report MISSING /
+# none-found on a healthy hub -- two confident FAILs that mean "I could not read
+# this". Exit 2 keeps "could not check" distinct from the 1 a real failure gives.
+# Skipped when the suite itself runs as root, since then the guard does not fire
+# and the whole selfcheck would execute against a live hub.
+sc="$HERE/../../hosts/latitude/debian/restic-hub-selfcheck.sh"
+if [ "$(id -u)" -eq 0 ]; then
+  pass "restic-hub-selfcheck root guard (skipped — suite is running as root)"
+elif [ ! -f "$sc" ]; then
+  die "restic-hub-selfcheck.sh missing — role_backup_hub would skip on latitude"
+else
+  out="$(bash "$sc" 2>&1)"; rc=$?
+  [ "$rc" -eq 2 ] && pass "restic-hub-selfcheck: non-root exits 2, not 1" \
+    || die "restic-hub-selfcheck: non-root exited $rc — a permission failure must not read as a check failure"
+  case "$out" in
+    *"must run as root"*) pass "restic-hub-selfcheck: names the reason" ;;
+    *) die "restic-hub-selfcheck: non-root message changed — $out" ;;
+  esac
+fi
+
 # Each profile dir must carry the install script the executor calls. The
 # executor keys its SKIP on the directory but its ACTION on the script, so a dir
 # with no script is a loud failure by design — this asserts the shipped dirs are

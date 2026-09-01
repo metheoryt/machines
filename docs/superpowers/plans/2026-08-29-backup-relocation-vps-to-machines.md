@@ -372,6 +372,18 @@ Task 1 contradicted it:**
       `provision/tests/fleet-profile.test.sh`, whose old assertions ("declared, not
       silently skipped") were inverted to "reaches a real executor, not the
       declaration". `ssh-server` now carries the declared-stub branch.
+- [x] **4.6** **A defect found by verifying on latitude, not by testing here.**
+      `role_backup_hub apply debian latitude`, run as `me`, reported 2 FAIL / 8 ok
+      — "repo config present: MISSING" and "newest snapshot: none found". The hub
+      was fine: `/mnt/spare320/restic-rest/g614jv` is `drwx------ root:root`, so
+      those two checks were hitting EACCES and printing it as absence. As root, 10
+      ok in the same second. Two fixes: `restic-hub-selfcheck.sh` now refuses to
+      run as non-root with **exit 2** (distinct from the 1 a real failure gives, so
+      "could not check" is never "check failed"), and `role_backup_hub` runs it
+      under `sudo` when it is not already root. Pinned in `roles.test.sh`, skipped
+      when the suite itself runs as root. Same defect class as the check-2 comment
+      the script already carries a correction for.
+
 - [x] **4.5** Suite re-measured this session, on desktop-wsl, with the same `find`
       `just _test-suites` uses. **46 suites, 44 pass, the same 2 environmental
       failures and no others** — `expansion-multibyte.test.sh` (its bash-behaviour
