@@ -315,46 +315,111 @@ a weekend off fails it with nothing wrong on the hub. Check 3 is the one that
 fires only on real hub breakage. The 26h threshold is left exactly as found — see
 it misfire before changing it.
 
-## Task 4 — write the two role executors
+## Task 4 — write the two role executors  ✅ done 2026-09-01
 
 Convention: `provision/roles/<role>.sh` is **sourced** by `provision.sh` and defines
 `role_<role with - as _>`, taking `(mode, platform, machine)` and honouring
 `dry-run`. Copy the shape from `roles/repos.sh`.
 
-- [ ] **4.1** `provision/roles/backup-client.sh` → `role_backup_client`.
-      Installs restic + resticprofile if absent, then runs
-      `backup/<machine>/install-tasks.sh` when that directory exists; prints
-      `no profile dir for <machine> (skipped)` and returns 0 when it does not, so a
-      declared-but-unconfigured client is a visible skip rather than a failure.
-      Platform `windows` dispatches the `.bat` from the `.ps1` side.
-- [ ] **4.2** `provision/roles/backup-hub.sh` → `role_backup_hub`.
-      Asserts the REST server is up and reachable on the tailnet address, asserts
-      `/mnt/spare320` is a real mountpoint, and installs latitude's own schedules.
-      It must **not** create repositories — `initialize` stays with the profiles.
-- [ ] **4.3** `provision/tests/roles.test.sh` — extend it: both functions defined
-      after sourcing, dry-run mutates nothing, a missing profile dir returns 0.
-- [ ] **4.4** Run the suite. **`just` is not installed on desktop-wsl**, so use the
-      for-loop form from AGENTS.md. The documented "28 suites, 0 failures" is stale
-      on two counts: the loop finds **37** suites, and **2 fail for environmental
-      reasons unrelated to any of this work** —
-      `provision/tests/expansion-multibyte.test.sh` (its bash-behaviour self-test;
-      its repo scan passes) and `provision/tests/fleet-ssh-config-ps.test.sh`
-      (`UnauthorizedAccess` from `powershell.exe` under WSL). The gate here is
-      therefore **no NEW failures beyond those two, and
-      `provision/tests/roles.test.sh` green** — not an unreachable zero. A red count
-      treated as a baseline is exactly how a real bug sat unread for weeks
-      (`docs/fleet-roadmap.md` P4), so re-measure the two before accepting them.
+**Two deviations from this plan as written — both because the tree that landed in
+Task 1 contradicted it:**
 
-## Task 5 — make `fleet.json` describe reality
+1. **`backup-hub` schedules nothing.** 4.2 said it "installs latitude's own
+   schedules". It cannot: one `backup/latitude/profiles.yaml` holds *both* the
+   `latitude` and `g614jv-maintenance` profiles, and `schedule --all` installs
+   both from one place. Giving hub a second scheduler makes two roles race to
+   write the same four unit files. So `backup-client` owns all scheduling and
+   `backup-hub` is purely **verification** — it runs
+   `hosts/latitude/debian/restic-hub-selfcheck.sh`, the one implementation of
+   "is the hub healthy", rather than growing a second that drifts from it.
+   It also installs no server: the REST container is a `vps` service (machines
+   here, services there), and it never creates a repository.
+2. **`backup/latitude/install-tasks.sh` had to be written.** 4.1 keyed the skip on
+   the *directory* but the action on a *script*, and latitude shipped the dir with
+   no script. The script is where the scope decision belongs: latitude's profiles
+   are `schedule-permission: system` and need `sudo`; desktop-wsl's client is
+   user-scope and must **not** be root, or the units land in the system manager
+   and the timer that actually backs the box up is never installed. That is not
+   derivable from the role executor, so each profile dir declares it.
 
-- [ ] **5.1** Add `backup-client` to **desktop** — it has been running a client for
-      weeks without declaring the role. (The client lives in the WSL distro;
-      `desktop` is the manifest entry that owns it, since `desktop-wsl` is
-      self-declared and never appears in `fleet.json`.)
-- [ ] **5.2** Leave `hub`'s `backup-client` declared and unconfigured. Task 4.1
-      makes that print a skip. Giving hub a real profile is the offsite copy, which
-      is its own piece of work and needs capacity that does not exist yet
-      (roadmap P0, deferred).
+- [x] **4.1** `provision/roles/backup-client.sh` → `role_backup_client`.
+      Installs restic + resticprofile if absent (apt path only — on darwin/nixos it
+      stops rather than guessing), then runs `backup/<machine>/install-tasks.sh`.
+      Missing dir → `no profile dir for <machine> (skipped)`, returns 0. Dir present
+      but no script → returns 1: that is a misconfiguration, not an absence.
+      Platform `windows` reaches the fallthrough — see Task 5, which is blocked.
+- [x] **4.2** `provision/roles/backup-hub.sh` → `role_backup_hub`. Debian arm runs
+      the selfcheck on apply; every other platform hits the skip arm **on purpose**
+      (a USB drive by UUID, a container and a port on one box do not generalise).
+      Dry-run asserts nothing, so the suite is green off-latitude.
+- [x] **4.3** `provision/tests/roles.test.sh` extended. Three things it now does
+      that it did not:
+      - **Sources `roles/*.sh` by glob, not a hardcoded three-file list.** The old
+        list was a false-green generator: a forgotten role leaves its function
+        undefined, `role_backup_client …` emits "command not found" into `2>&1`,
+        that does not match the skip pattern, and `not_skipped` **passes**. A
+        `defined` helper now turns a missing function into a failure.
+      - **Tripwire for the dry run.** `resticprofile schedule` writes systemd units
+        and has no dry-run of its own, so the preview can only print the command.
+        Shims for `resticprofile`/`sudo`/`systemctl` record being executed; the
+        test asserts the marker is absent. Reading the output proves the message,
+        only the tripwire proves the silence.
+      - **Pins both skip arms as decisions** — `windows` for the client (a known
+        hole, so Task 5 must edit this line deliberately), `darwin` for the hub.
+- [x] **4.4** `provision/provision.sh`: `backup-hub` and `backup-client` **deleted
+      from `PLANNED_ROLES`** — implementing a role means deleting its name, and
+      leaving it in means the executor is never demanded. That half is pinned in
+      `provision/tests/fleet-profile.test.sh`, whose old assertions ("declared, not
+      silently skipped") were inverted to "reaches a real executor, not the
+      declaration". `ssh-server` now carries the declared-stub branch.
+- [x] **4.5** Suite re-measured this session, on desktop-wsl, with the same `find`
+      `just _test-suites` uses. **46 suites, 44 pass, the same 2 environmental
+      failures and no others** — `expansion-multibyte.test.sh` (its bash-behaviour
+      self-test; the repo scan passes) and `fleet-ssh-config-ps.test.sh`
+      (`UnauthorizedAccess` from `powershell.exe` under WSL). Both re-run
+      individually first, so the baseline is from this session rather than
+      inherited. **The "37 suites" written in this plan earlier was wrong** — which
+      is exactly why AGENTS.md says not to write the count down.
+
+## Task 5 — make `fleet.json` describe reality  ⛔ BLOCKED — needs a decision
+
+**5.1 as written would install a green lie, and Task 4 is what proved it.**
+
+`desktop` is `platform: windows`. Its backup client does not run on Windows — it
+runs inside the WSL distro `desktop-wsl`, which is a *self-declared* host with no
+`fleet.json` entry, and `provision/linux.sh` (the tier driver that provisions such
+a host) **dispatches no roles at all**. So adding `backup-client` to `desktop`
+gives:
+
+```
+role_backup_client apply windows desktop  →  "no posix executor for platform 'windows'" → exit 0
+```
+
+…for ever, on the one client with a live verified snapshot. That is precisely the
+*provisioned nothing, reported success* failure `PLANNED_ROLES` exists to kill,
+wearing a different hat — and worse than the current state, where `desktop`
+simply does not claim the role.
+
+`hub`'s skip is the honest version of the same shape: it genuinely has no client,
+and `role_backup_client` says so by name on every run.
+
+Two ways out, and it is a real choice, not a detail:
+
+- **(a) Leave `desktop` out of the manifest.** The WSL client stays a
+  `just provision-wsl` / tier concern, provisioned by the chain that already owns
+  self-declared hosts. Cheapest, and honest. Cost: `fleet.json` still does not
+  describe who is backed up, which is what Task 5 set out to fix.
+- **(b) Teach the windows arm to dispatch into the distro.** The primitive exists
+  — `agents/plugin/skills/lib/fleet-dispatch.sh` already reaches a parent's distros
+  (`fd_wsl_hosts`) and runs commands in them. Cost: a `.ps1` side, and
+  `fd_wsl_hosts` is still on ssh, which AGENTS.md records would unmask
+  `self_alias()`'s `self: unknown` bug for self-declared hosts.
+
+- [ ] **5.1** DECIDE (a) or (b). Do not write a `.ps1` that cannot work.
+- [x] **5.2** Leave `hub`'s `backup-client` declared and unconfigured. Task 4.1
+      makes that print `no profile dir for hub (skipped)` and return 0 — pinned in
+      `roles.test.sh`. Giving hub a real profile is the offsite copy, its own piece
+      of work needing capacity that does not exist yet (roadmap P0, deferred).
 - [ ] **5.3** `fleet.json` is a `_touches_driver` trigger in `scripts/converge.sh`,
       so this edit reprovisions every box on the next tick. Land it with the
       executors, never before them.

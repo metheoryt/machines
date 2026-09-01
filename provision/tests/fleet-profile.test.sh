@@ -129,19 +129,35 @@ printf '%s\n' "$out" | grep -q 'no executor yet (declared)' \
 
 # The declaration must cover today's stubs on EVERY machine, or the commit that
 # adds the guard turns the whole fleet's --apply red. air carries base and
-# ssh-server; latitude is the only member carrying the two backup roles, so it
-# has to be exercised separately — asserting all four against air would pass
-# vacuously for the two air does not have.
+# ssh-server; latitude carries those two plus every implemented role, so it
+# exercises both sides of the branch in one run.
 out="$(prov_apply latitude)"; rc=$?
-eq "$rc" "0" "provision.sh exits 0 on latitude, whose seven roles include both backup stubs"
+eq "$rc" "0" "provision.sh exits 0 on latitude, whose seven roles mix stubs and executors"
+
+# THE DELETION IS THE ASSERTION. backup-hub and backup-client left PLANNED_ROLES
+# on 2026-09-01 when provision/roles/backup-{hub,client}.sh landed. Pin that they
+# now reach a real executor: leaving a name in the declaration after writing its
+# executor is invisible — the role would keep printing "no executor yet" and the
+# box would keep not being provisioned, which is the failure this whole guard
+# exists to stop, one layer up.
 for r in backup-hub backup-client; do
   printf '%s\n' "$out" | grep -q "$r — apply: no executor yet (declared)" \
-    && pass "'$r' is declared, not silently skipped" \
-    || die "'$r' is declared, not silently skipped"
+    && die "'$r' still reports as a declared stub — delete it from PLANNED_ROLES" \
+    || pass "'$r' reaches a real executor, not the declaration"
+  printf '%s\n' "$out" | grep -q "▸ $r — preview:" \
+    && pass "'$r' previews through its executor" \
+    || die "'$r' previews through its executor"
 done
-# And the guard still bites there: a future executor lands by DELETING a name
-# from the declaration, and that deletion is what this asserts stays reviewable.
-out="$(MACHINES_PLANNED_ROLES="base ssh-server" prov_apply latitude)"; rc=$?
-eq "$rc" "1" "dropping the backup roles from the declaration fails latitude's --apply"
+
+# base and ssh-server are still genuinely unimplemented (roadmap P3), so the
+# declared-stub branch is still exercised — asserted on latitude rather than
+# assumed, since this is now the only machine covering both branches.
+printf '%s\n' "$out" | grep -q "ssh-server — apply: no executor yet (declared)" \
+  && pass "'ssh-server' is declared, not silently skipped" \
+  || die "'ssh-server' is declared, not silently skipped"
+
+# And the guard still bites: a role with no executor and no declaration fails.
+out="$(MACHINES_PLANNED_ROLES="" prov_apply latitude)"; rc=$?
+eq "$rc" "1" "an undeclared, executor-less role still fails latitude's --apply"
 
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

@@ -64,9 +64,12 @@ while IFS= read -r role; do roles+=("$role"); done < <(fleet_roles "$MACHINE")
 #
 # A future executor lands by DELETING its name from here. That deletion is the
 # reviewable event; adding one back is a deliberate declaration, not a shrug.
+# Done once so far: `backup-hub` and `backup-client` left this list on 2026-09-01
+# when provision/roles/backup-{hub,client}.sh landed. `base` and `ssh-server`
+# are still genuinely unimplemented (roadmap P3).
 # Overridable so the guard itself is testable (provision/tests/fleet-profile.test.sh)
 # and so a human can demand a strict run: MACHINES_PLANNED_ROLES= just provision …
-PLANNED_ROLES="${MACHINES_PLANNED_ROLES-base ssh-server backup-hub backup-client}"
+PLANNED_ROLES="${MACHINES_PLANNED_ROLES-base ssh-server}"
 
 rc=0
 for role in "${roles[@]}"; do
