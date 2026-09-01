@@ -453,11 +453,12 @@ So the resolver is: **`fleet.local.json`'s nickname wins outright — if it exis
       desktop-wsl ship different `.sh` files: Windows scheduling writes Task
       Scheduler entries and wants elevation, and that decision belongs next to
       the config, not in the executor.
-- [x] **5.4** **Ship NO new profile dirs.** The ask was the capability. Deciding
+- [x] **5.4** **NO new profile dirs shipped — the deliberate non-action.** The ask was the capability. Deciding
       what is irreplaceable on a box nobody has inventoried is real work —
       `backup/latitude/profiles.yaml`'s header is a long argument for how much.
-      `desktop` and `g15` gain `backup-client` in `fleet.json` when they gain a
-      profile dir, not before.
+      `desktop` and `g15` are **still absent** from `fleet.json`'s backup roles,
+      by decision — they gain the role when they gain a profile dir, not before.
+      Checked off as "decided and left alone", not as "shipped".
 - [ ] **5.5** The Windows apply arm is **UNVERIFIED** until it runs on `desktop`
       or `g15`. The retired `install-tasks.bat` ends in `pause`, which says it was
       run by hand in a console, never by a provisioner. Do not report it as done.

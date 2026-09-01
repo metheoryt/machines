@@ -27,10 +27,13 @@ role_backup_client() {
             backup_client_install "$mode" "$machine"
             ;;
         *)
-            # windows has its OWN executor now — provision/roles/backup-client.ps1,
-            # reached through provision.ps1. This arm is for a platform with
-            # neither, and it must stay: a platform silently missing from both
-            # sides is the "provisioned nothing, reported success" failure.
+            # WINDOWS STILL LANDS HERE, and it is still a hole from THIS side.
+            # The Windows executor is provision/roles/backup-client.ps1, reached
+            # only through provision.ps1 — so `provision.sh --machine desktop`
+            # run from Linux prints this skip and exits 0, provisioning nothing.
+            # That path is not how a Windows member is provisioned, but nothing
+            # stops someone taking it. Pinned in roles.test.sh so closing it has
+            # to be a deliberate edit rather than a drift.
             echo "  backup-client: no posix executor for platform '$platform' (skipped)."
             return 0
             ;;

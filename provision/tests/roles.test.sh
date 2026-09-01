@@ -97,10 +97,11 @@ case "$out" in
   *) die "role_backup_client: missing-dir message changed — $out" ;;
 esac
 
-# windows hits the fallthrough TODAY and the comment there says it is a known
-# hole, not a decision: `desktop`'s client actually runs inside the WSL distro,
-# which provision.sh dispatches no roles to. Pinned so that when Task 5 resolves
-# it, this line has to be edited deliberately rather than silently drifting.
+# windows hits the POSIX fallthrough, and still does after Task 5. The Windows
+# executor exists (provision/roles/backup-client.ps1) but is reached only through
+# provision.ps1 — so `provision.sh --machine desktop` from Linux prints a skip and
+# exits 0. Not the path a Windows member is provisioned by, and not stopped from
+# being taken either. Pinned so closing it is a deliberate edit.
 skipped "role_backup_client(windows)" "$(role_backup_client dry-run windows desktop 2>&1)"
 
 # backup-hub's fallthrough IS a decision: a USB drive by UUID, a container and a
