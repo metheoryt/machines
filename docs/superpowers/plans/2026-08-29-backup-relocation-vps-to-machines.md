@@ -372,6 +372,14 @@ Task 1 contradicted it:**
       `provision/tests/fleet-profile.test.sh`, whose old assertions ("declared, not
       silently skipped") were inverted to "reaches a real executor, not the
       declaration". `ssh-server` now carries the declared-stub branch.
+- [x] **4.7** Both apply arms verified live on latitude, not just dry-run.
+      `role_backup_hub apply` → 10/10 ok, rc=0 (as `me`, through the new sudo
+      wrapper). `role_backup_client apply` → rc=0, and **Invariant 1 re-checked
+      after it**: exactly 4 timers, unit names unchanged
+      (`resticprofile-{backup,check}@profile-latitude`,
+      `resticprofile-{forget,check}@profile-g614jv-maintenance`), every
+      `WorkingDirectory=/home/me/machines/backup/latitude`.
+
 - [x] **4.6** **A defect found by verifying on latitude, not by testing here.**
       `role_backup_hub apply debian latitude`, run as `me`, reported 2 FAIL / 8 ok
       — "repo config present: MISSING" and "newest snapshot: none found". The hub

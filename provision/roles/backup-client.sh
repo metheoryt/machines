@@ -68,8 +68,16 @@ role_backup_client() {
                     esac
                 fi
                 # Nudge, not a gate: a non-lingering user manager kills a
-                # user-scope timer at logout, but latitude's units are
-                # system-scope and need no linger at all.
+                # user-scope timer at logout.
+                #
+                # IT FIRES FOR NOBODY TODAY, and that is not an argument for
+                # deleting it -- it is the Task 5 hole restated. The only
+                # machines reaching this arm are latitude (system-scope, needs no
+                # linger) and hub (no profile dir, returns above). The one box
+                # where linger decides whether the backup runs at all is
+                # desktop-wsl, which provision.sh dispatches no roles to. Do not
+                # read this line as evidence that the WSL client is provisioned
+                # through here; it is what has to already be right when it is.
                 if command -v loginctl >/dev/null 2>&1 \
                    && [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" = "no" ]; then
                     echo "  backup-client: note — linger is off; a user-scope timer"
