@@ -51,12 +51,24 @@ for d in 'Host ' '  User ' '  IdentityFile ' '  StrictHostKeyChecking accept-new
 done
 
 # ── The module's own self-test, when a PowerShell exists ──────────────────────
+# `pwsh.exe` before `powershell.exe`: on a WSL box only the .exe forms are on
+# PATH, so the old list (`pwsh powershell powershell.exe`) always landed on
+# Windows PowerShell 5.1 and never tried PS7 — which is installed here and is
+# what the Windows members would actually run.
 PS=""
-for c in pwsh powershell powershell.exe; do command -v "$c" >/dev/null 2>&1 && { PS="$c"; break; }; done
+for c in pwsh pwsh.exe powershell powershell.exe; do command -v "$c" >/dev/null 2>&1 && { PS="$c"; break; }; done
 if [ -z "$PS" ]; then
   printf '  SKIP module -SelfTest (no pwsh/powershell on PATH — runs on the Windows members)\n'
 else
-  OUT="$("$PS" -NoProfile -File "$MODULE" -SelfTest 2>&1)"; rc=$?
+  # -ExecutionPolicy Bypass IS THE POINT. Without it this suite was red on every
+  # box that has a PowerShell but has never had its policy loosened: the default
+  # policy refuses an unsigned .ps1 from disk and the run dies with a
+  # SecurityError/UnauthorizedAccess before the module is ever loaded. That read
+  # as "PowerShell is broken here" and the failure was carried for a month as one
+  # of two "known environmental failures" — a red nobody could act on, which is
+  # exactly what P4 exists to stop. Process scope only; it changes nothing on the
+  # machine.
+  OUT="$("$PS" -NoProfile -ExecutionPolicy Bypass -File "$MODULE" -SelfTest 2>&1)"; rc=$?
   printf '%s\n' "$OUT" | sed 's/^/    /'
   [ "$rc" = 0 ]; check $? "module -SelfTest exits 0 ($PS)"
   printf '%s' "$OUT" | grep -q 'ALL PASS'; check $? "module -SelfTest reports ALL PASS"

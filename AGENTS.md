@@ -185,16 +185,30 @@ Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in
 this same file. `just test` prints the count it actually ran; that is the number.
 
-**The suite is GREEN as of 2026-08-03, 0 failures.** Keep it that way:
+**The suite is GREEN as of 2026-09-02, 48 suites, 0 failures.** Keep it that way:
 it is the only validation the repo has since the Nix gate went, and a red suite
-gives no signal at all. The three long-standing failures were fixed that day, and
-what they turned out to be is worth knowing: `provision-wsl.test.sh` had been
-reporting a **real bug in shipped code** for weeks (an unbraced `"$var…"` that is
-fatal under `set -u` in a UTF-8 locale — it also broke `just provision --apply`),
-while the two `orca-profile-*` suites were **macOS-portability bugs in the tests**
-(BSD `wc -l` pads its count; `/var` resolves to `/private/var`). Treating a red
-count as a baseline is how the first one stayed unread — see
-`docs/fleet-roadmap.md` P4.
+gives no signal at all.
+
+**"Known environmental failure" is not a category — it is an unread bug report.**
+Two suites carried that label for a month (`expansion-multibyte.test.sh` and
+`fleet-ssh-config-ps.test.sh`) and were repeated as a baseline in session after
+session. Neither was environmental. The PowerShell one needed
+`-ExecutionPolicy Bypass`: without it the default policy refused the unsigned
+`.ps1` before the module loaded, and the `SecurityError` read as "PowerShell is
+broken on this box". The other was reporting a **real unbraced expansion** in
+`provision/backup-client.sh`, shipped the day before — while its own premise check
+was correctly reporting that the bash behaviour the rule was built on **does not
+exist**. Both are fixed; the second is written up in `docs/fleet-roadmap.md` P4.
+
+**One of this file's own claims went with it.** This paragraph used to state, as
+settled fact, that an unbraced `"$var…"` is *"fatal under `set -u` in a UTF-8
+locale"*. Measured 2026-09-02 on bash 5.3.9 / 5.2.37 / 5.2.15 under `C`, `C.utf8`
+and `en_US.utf8`, as `bash -c` and as a script file: it is not, anywhere. bash's
+identifier scan is ASCII-only in every build, so no locale could ever have made it
+so. The brace rule is kept anyway — it costs two characters and the original
+failure's real cause is still unknown — but it is style plus defence-in-depth, not
+a reproduced bash bug. **If you are about to repeat a mechanism from this file in a
+commit message, that is the moment to measure it.**
 
 ## Architecture
 

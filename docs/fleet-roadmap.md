@@ -364,6 +364,11 @@ apart mattered:
   prompt, so `just provision --apply` aborted after taking consent and before
   running any role.** Fixed + guarded by
   `provision/tests/expansion-multibyte.test.sh`.
+  **The mechanism in this item is WRONG — see the 2026-09-02 entry below.** The
+  bash behaviour it describes does not reproduce on any fleet bash in any locale,
+  and the historical "red" tree is green today. Left standing rather than rewritten
+  because the item is a record of what was believed at the time; read the two
+  together, and trust the measured one.
 - [x] **The two `orca-profile-*` suites were genuinely test-only — and both failed
   for macOS-vs-Linux reasons, which is why they were red on `air` specifically.**
   The code was correct in all four cases; the dedup behaviour they check works.
@@ -388,14 +393,54 @@ apart mattered:
 change broke two suites, a green baseline made that obvious instead of something to
 be diffed against a remembered failure count.
 
-**Re-opened on latitude, 2026-08-19 — one suite, and it is the STALE-TEST kind.**
-`provision/tests/expansion-multibyte.test.sh` fails on latitude's pristine checkout:
-`unbraced expansion no longer fails under C.utf8 — bash changed; re-check this rule`.
-Note which way round this is: the 2026-08-01 pair above was a red test reporting a
-real bug in shipped code. This is the inverse — the test asserts a property of bash
-that its version no longer has, and the guarded code is fine. It still has to be
-resolved rather than remembered as a baseline, which is the whole point of P4. Not
-reproduced on air or desktop yet; the bash version is the first thing to compare.
+- [x] **Re-opened on latitude 2026-08-19, closed 2026-09-02 — and the answer was
+  not "bash changed". It is that the mechanism was never real.** The failing
+  assertion was `expansion-multibyte.test.sh`'s premise check:
+  `unbraced expansion no longer fails under C.utf8 — bash changed; re-check this
+  rule`. That item said "the bash version is the first thing to compare", so it
+  was compared, and then some:
+
+  | probe | result |
+  |---|---|
+  | `bash -c` and a real script file, `set -u`, `"$var…"` | exits 0, prints correctly |
+  | bash 5.3.9 (desktop-wsl), 5.2.37 (latitude), 5.2.15 (hub) | same on all three |
+  | `LC_ALL=C`, `C.utf8`, `en_US.utf8` | same in all three |
+  | unbrace ONLY that line at HEAD, run `provision-wsl.test.sh` | **green** |
+  | the whole `65aac22^` tree — the "red" state the brace fix greened | **green today** |
+
+  So the explanation in the item above (and in `65aac22`'s message, and in
+  `AGENTS.md`) — *"bash 5.x in a UTF-8 locale resolves `$var…` as a variable named
+  `var…`"* — does not happen, on any bash in this fleet, in any locale. It is
+  consistent with bash's identifier scan being ASCII-only in every build, which is
+  why no locale could ever have changed it. **What the original red actually was is
+  unidentified.** It is not this, and it is not "a bash that has since been fixed"
+  either, because the historical tree passes now.
+
+  Disposition, deliberately conservative: **the rule stays and the scan still fails
+  the gate.** Bracing is correct regardless of why, it costs two characters, and an
+  unexplained historical red argues for keeping a guard rather than dropping one.
+  What changed is that the premise block now REPORTS (`NOTE`) instead of asserting —
+  a `die` there made the gate red over bash declining to do something no bash does.
+  The reasoning is written into the test file so the next reader does not re-derive
+  it or, worse, restore a mechanism nobody measured.
+
+- [x] **`fleet-ssh-config-ps.test.sh` was never an "environmental failure" —
+  it was a missing flag.** Carried for a month as the second of two reds assumed to
+  be the box's fault. The actual cause: it invoked `powershell.exe -NoProfile -File`
+  with no `-ExecutionPolicy Bypass`, so the default policy refused the unsigned
+  `.ps1` with a `SecurityError`/`UnauthorizedAccess` before the module ever loaded.
+  One flag, and the module's 30-assertion self-test passes. Its candidate loop was
+  also wrong on WSL — `pwsh powershell powershell.exe` always landed on Windows
+  PowerShell **5.1**, because only the `.exe` spellings are on PATH there; `pwsh.exe`
+  is now tried first and the self-test runs under PS **7.6.5**, which is what the
+  Windows members actually have.
+
+  **The lesson is the phrase, not the flag.** "Two known environmental failures" was
+  repeated across many sessions as if it were a property of the machine. Neither was.
+  A red whose cause has never been read is not a baseline — it is an unread bug
+  report, and this is the second time P4 has had to say so.
+
+**48 suites, 48 pass, 0 failures (2026-09-02).** No known-failing suite remains.
 
 ## P5 — Documentation drift.
 

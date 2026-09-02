@@ -94,7 +94,7 @@ backup_client_install() {
 
     if [ -n "$missing" ]; then
         if [ -r /etc/debian_version ]; then
-            echo "  backup-client: installing$missing…"
+            echo "  backup-client: installing${missing}…"
             bash "$REPO/backup/restic-install.sh" || return 1
         else
             # restic-install.sh is apt + a curl'd installer into /usr/local/bin.

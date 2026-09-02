@@ -474,8 +474,12 @@ So the resolver is: **`fleet.local.json`'s nickname wins outright — if it exis
   resolved `desktop-wsl`, ran its `install-tasks.sh`, and left **one** user timer
   under its unchanged name (`resticprofile-backup@profile-wsl`) with
   `WorkingDirectory=/home/me/machines/backup/desktop-wsl`. Invariant 1 intact.
-- **Suite:** 47 suites, 45 pass, the same two environmental failures and no
-  others.
+- **Suite:** 47 suites, 45 pass, no new failures. The two reds were recorded here
+  as "the same two environmental failures" — **that was wrong, and one of them was
+  reporting this plan's own code.** `expansion-multibyte.test.sh` was flagging
+  `provision/backup-client.sh:97`, an unbraced `"$var…"` added by Task 5, and the
+  phrase "environmental" is what stopped it being read. Both suites are green as of
+  2026-09-02; see `docs/fleet-roadmap.md` P4.
 
 ### Found on the way, NOT fixed here
 

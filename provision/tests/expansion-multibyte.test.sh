@@ -103,15 +103,37 @@ PY
 [ "$clean" = "0" ] && pass "the braced form \${var} is not flagged" \
   || die "the braced form is flagged — the rule forbids its own fix"
 
-# The runtime behaviour itself, asserted rather than described: the whole reason this
-# file exists is that the unbraced form is fatal under `set -u` in a UTF-8 locale.
-# Skipped where the locale is unavailable, since that is what decides the outcome.
+# THE STATED MECHANISM DOES NOT REPRODUCE, AND THIS BLOCK NO LONGER PRETENDS IT
+# DOES. 65aac22 (2026-08-01) introduced this rule with the explanation that under
+# bash 5.x in a UTF-8 locale the ellipsis bytes are "absorbed INTO the identifier",
+# so `"$var…"` expands a variable named `var…` and `set -u` aborts. Measured
+# 2026-09-02 and it is false:
+#
+#   • as `bash -c` AND as a real script file, unbraced exits 0 and prints correctly
+#   • on bash 5.3.9 (desktop-wsl), 5.2.37 (latitude), 5.2.15 (hub)
+#   • under LC_ALL=C, C.utf8 and en_US.utf8
+#   • unbracing ONLY that one line at HEAD leaves provision-wsl.test.sh green, and
+#     the whole 65aac22^ tree — the "red" state the fix was credited with greening —
+#     is green today too
+#
+# That is consistent with bash's identifier scan being ASCII-only in every build,
+# which is why no locale could change it. What the original red actually was is
+# unidentified; it is NOT this. Do not write a replacement mechanism here without
+# measuring one.
+#
+# THE RULE STAYS ANYWAY, and the scan above still fails the gate — bracing is
+# correct regardless of why, it costs two characters, and the cause of the
+# original red being unknown is an argument for keeping a guard, not for dropping
+# one. What changed is that this block REPORTS the behaviour instead of asserting
+# it: a `die` here made the gate red over bash declining to do something no bash
+# does, which is the "red nobody can act on" failure P4 exists to kill.
 if locale -a 2>/dev/null | grep -qiE '^(en_US\.utf-?8|C\.utf-?8)$'; then
   loc="$(locale -a 2>/dev/null | grep -iE '^(en_US\.utf-?8|C\.utf-?8)$' | head -1)"
   if LC_ALL="$loc" bash -c 'set -u; v=x; : "$v'$'\xe2\x80\xa6''"' 2>/dev/null; then
-    die "unbraced expansion no longer fails under $loc — bash changed; re-check this rule"
+    printf '  NOTE unbraced form does NOT abort under %s — as measured 2026-09-02.\n' "$loc"
+    printf '       The rule is style + defence-in-depth, not a reproduced bash bug.\n'
   else
-    pass "unbraced form still fails under $loc (the rule is still load-bearing)"
+    pass "unbraced form fails under $loc — the documented mechanism reproduces here"
   fi
   LC_ALL="$loc" bash -c 'set -u; v=x; : "${v}'$'\xe2\x80\xa6''"' 2>/dev/null \
     && pass "braced form succeeds under $loc" \
