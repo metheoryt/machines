@@ -22,4 +22,4 @@
 #
 # The reader takes the first bare semver on a non-comment line, so this header is
 # safe. Do NOT add a `v`.
-0.63.8
+0.63.10
