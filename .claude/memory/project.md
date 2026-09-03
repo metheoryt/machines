@@ -2266,3 +2266,40 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
   (`orca repo` has list/add/show/set-base-ref/search-refs only) — so it is a
   per-repo UI toggle, or a destructive `worktree rm` + `create`, which would
   drop each worktree's gitignored state.
+
+## Servarr: a yearless release name stalls Radarr import forever (2026-09-03)
+
+- **Symptom:** Jellyseerr shows 100% and never advances; the movie never reaches
+  Jellyfin. Radarr's queue says `trackedDownloadState: importPending`,
+  statusMessage **"Unable to parse file"**; `GET /api/v3/manualimport` on the
+  folder rejects with **"Unknown Movie"**. qBittorrent is fine — `stalledUP`,
+  `progress: 1`, file complete in `/data/torrents/radarr/<release>/`.
+- **Cause:** RuTracker (via Prowlarr) hands over release names with **no year**,
+  and Radarr's parser returns *nothing at all* for those — not a wrong match, a
+  null parse. Proven with `GET /api/v3/parse`: adding `.2026.` to the same name
+  parses and resolves; without it `movieTitle` is `null`. The
+  `_New-Team_il68k` group suffix is NOT the problem —
+  `Backrooms.2026.720p...New-Team_il68k` imported fine.
+- **The grab history does not rescue it.** Radarr knows the movieId in the queue
+  record and still won't import, so this needs a human every time. Three items
+  had been sitting like this since 2026-08-05.
+- **Fix (per item), all API, no UI:**
+  `POST /api/v3/command` with `{"name":"ManualImport","importMode":"auto",
+  "files":[{path, movieId, quality, languages, downloadId}]}`. Take `quality` and
+  `languages` **verbatim** from the `manualimport` GET response; take `movieId`
+  and **`downloadId` from the queue record**. Omitting `downloadId` imports the
+  file but leaves the queue item in place — Jellyseerr keeps showing it in flight,
+  i.e. fixes Jellyfin and leaves Seer wrong.
+- `importMode: auto` hardlinks (link count 2, no extra space) because
+  `/data/torrents` and `/data/movies` are the same mount; the torrent keeps seeding.
+- **Radarr has zero notification connections** (`GET /api/v3/notification` → 0),
+  so nothing tells Jellyfin about an import. It still works: Jellyfin's
+  `LibraryMonitor` watches `/data/movies` in real time and picked the folder up
+  ~60s after the import, trickplay included. Don't "fix" this by adding a
+  Jellyfin connection unless real-time monitoring gets turned off.
+- Radarr API key: `sudo grep -oP '(?<=<ApiKey>)[^<]+' /mnt/immich/ServarrConfig/radarr/config.xml`.
+  qBittorrent's WebUI **rejects `localhost`** (`Forbidden`) — `AuthSubnetWhitelist`
+  is `100.64.0.0/24`, so curl it as `--interface 100.64.0.8 http://100.64.0.8:8084`.
+- Ignore `DownloadedMovieImportService: path does not exist or is not accessible`
+  bursts right after a container restart — they stopped 23 min in on 2026-09-03
+  and were not the blocker.
