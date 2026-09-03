@@ -20,6 +20,17 @@
 #     guards being deleted or hollowed out by an edit made on a Mac;
 #   • the real front door, run end to end, wherever a PowerShell exists.
 #
+# WHAT THIS COSTS, stated because it is a new property of `just test`: the
+# exit-code half runs the REAL front door, so `agents`/`dotfiles`/`repos` execute
+# their dry-run PREVIEWS against the live Windows profile (/c/Users/methe/.claude)
+# on every gate run. Every prompt is answered `n`, so nothing is applied and the
+# -Apply arm touches no more than the dry-run arm does. But roles.test.sh proves
+# "a dry run writes nothing" for the posix executors with a shim tripwire, and
+# there is no equivalent here -- this rests on the executors' own dry-run
+# contract, not on a measurement. Worth closing if a PowerShell shim ever becomes
+# cheap; not worth dropping the coverage over, since a source-grep-only suite is
+# what let both guards stay missing for a month.
+#
 # -ExecutionPolicy Bypass is mandatory on every invocation. Without it the
 # default policy refuses an unsigned .ps1 with a SecurityError before the script
 # is parsed, and every assertion below fails for a reason that has nothing to do
