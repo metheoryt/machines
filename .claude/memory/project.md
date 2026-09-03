@@ -2303,3 +2303,76 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
 - Ignore `DownloadedMovieImportService: path does not exist or is not accessible`
   bursts right after a container restart — they stopped 23 min in on 2026-09-03
   and were not the blocker.
+
+## "Environmental failure" was never a category — both reds were bugs (2026-09-02)
+
+- Two suites were carried for a month as *"the two known environmental
+  failures"*, repeated session after session as if it were a property of the
+  box. **Neither was environmental, and one was reporting code written the day
+  before.** The phrase is the finding: a red whose cause has never been read is
+  an unread bug report, not a baseline. This is the second time roadmap P4 has
+  had to say so.
+- `fleet-ssh-config-ps.test.sh` needed **`-ExecutionPolicy Bypass`**. Without it
+  the default policy refuses an unsigned `.ps1` and the run dies with a
+  `SecurityError`/`UnauthorizedAccess` *before the module is parsed* — which
+  reads as "PowerShell is broken on this box". **Every PowerShell invocation
+  from a test or script in this repo needs that flag**, process-scope, changes
+  nothing on the machine.
+- Its candidate loop was also wrong on WSL: `for c in pwsh powershell
+  powershell.exe` always landed on Windows PowerShell **5.1**, because only the
+  `.exe` spellings are on PATH there. Put `pwsh.exe` first and you get PS 7,
+  which is what the Windows members run. `pwsh.exe` under
+  `WindowsApps` is a real binary here (7.6.5), not a Store stub.
+
+### The multibyte brace rule guards nothing — the mechanism does not exist
+
+- `65aac22` (2026-08-01), `AGENTS.md` and roadmap P4 all asserted that under bash
+  5.x in a UTF-8 locale the bytes of `…` are *absorbed into the identifier*, so
+  `"$var…"` expands a variable named `var…` and `set -u` aborts. **Measured
+  2026-09-02: false, everywhere.** bash 5.3.9 / 5.2.37 / 5.2.15, under `C`,
+  `C.utf8` and `en_US.utf8`, as `bash -c` and as a real script file: exits 0,
+  prints correctly. Consistent with bash's identifier scan being ASCII-only in
+  every build, so **no locale could ever have changed it.**
+- Unbracing only that one line at HEAD leaves `provision-wsl.test.sh` green, and
+  the whole `65aac22^` tree — the "red" state the brace fix was credited with
+  greening — **passes today**. So it is not "a bash since fixed" either.
+  **What the original red actually was is unidentified.**
+- **The rule stays** and the scan still fails the gate: bracing costs two
+  characters, and an unexplained historical red argues for keeping a guard. What
+  changed is that the premise block NOTEs instead of `die`-ing. Do not write a
+  replacement mechanism there without measuring one.
+- The generalised lesson, and the reason this is worth the space: **a mechanism
+  can survive in a commit message, a roadmap item and AGENTS.md simultaneously
+  without anyone having run it.** The confidence of the prose was the only
+  evidence. If you are about to repeat a mechanism from a doc in a commit
+  message, that is the moment to measure it.
+
+## PowerShell provisioning traps (2026-09-02, closing roadmap P3)
+
+- **`Write-Error` cannot implement a guard.** `provision.ps1` sets
+  `$ErrorActionPreference = 'Stop'`, so `Write-Error "…"; exit 2` **throws** and
+  the process dies with exit **1** before reaching the `exit`. It had been doing
+  that on the `no machine selected` arm. Use `[Console]::Error.WriteLine`, then
+  `exit`. `provision-ps-guards.test.sh` asserts no `Write-Error` comes back.
+- **`$env:X = ''` REMOVES the variable on Windows.** There is no "set but empty",
+  so the posix testing lever `MACHINES_PLANNED_ROLES=""` — *declare nothing*,
+  which is how `fleet-profile.test.sh` forces the failing arm — has no
+  equivalent in the environment. That is why the Windows guard is a
+  **parameter**, `-PlannedRoles @()`. Mirroring the env trick would have shipped
+  a guard whose failure mode nothing could exercise.
+- **Do not port the padded-substring match.** posix needs `case " $PLANNED " in
+  *" $role "*)` so `ssh` cannot match `ssh-server`. PowerShell's `-contains` is a
+  whole-element match on the array; the hazard does not arise, and the padding
+  would be cargo.
+- **`foreach` over `$null` iterates zero times** — which is the whole unknown-
+  machine bug: `Get-FleetRoles` on a non-member returns `$null`, so
+  `-Machine typo` printed no roles and exited **0**. Guard before the loop
+  (`Test-FleetMachine`), never inside it.
+- **Defining a function in a `.psm1` and exporting it are separate acts.**
+  `Export-ModuleMember`'s backtick-continued list is easy to miss, and an
+  unexported guard simply never runs. The suite asserts the name reaches that
+  line.
+- **`provision.ps1` runs end to end from WSL** via `pwsh.exe`, against the real
+  Windows side (`/c/Users/methe/.claude`), which makes the exit-code assertions
+  real coverage rather than a source grep. ~8s for a full dry run, ~1s for the
+  unknown-machine arm.
