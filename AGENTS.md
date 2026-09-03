@@ -273,12 +273,30 @@ roles. **Implementing a role means DELETING its name from `PLANNED_ROLES`** —
 leave it in and the new executor is never demanded of a box that lacks it. Done
 twice so far, both on 2026-09-01, by the two backup roles.
 
-**The Windows front door has no such guard.** `provision.ps1` resolves roles
-through a `$RoleExecutors` map with no `PLANNED_ROLES` equivalent, so a role
-missing from that map prints "not yet implemented (skipped)" and leaves `$rc` at
-**0** — provisioned nothing, reported success, the exact hole the posix list
-closed. Adding an executor for a Windows role means adding its map entry too.
-Roadmap P3.
+**The Windows front door has the same guard since 2026-09-02** — it went a month
+without one. `provision.ps1` resolves roles through a `$RoleExecutors` map, and a
+role missing from it used to print "not yet implemented (skipped)" and leave
+`$rc` at **0**: provisioned nothing, reported success. It now carries
+`-PlannedRoles`, defaulting to `base ssh-server`, and an undeclared role with no
+map entry fails `-Apply`. **A parameter, not an environment variable, and that is
+not a style choice** — on Windows `$env:X = ''` *removes* the variable, so
+"declared as empty", the lever the posix suite pulls with
+`MACHINES_PLANNED_ROLES=""`, cannot be expressed in the environment at all.
+Adding an executor for a Windows role still means adding its map entry; the
+difference is that forgetting is now loud.
+
+It also gained the **unknown-machine** gate the posix side has had since
+2026-08-01. Without it `Get-FleetRoles` returned `$null`, `foreach` over `$null`
+iterated zero times, and `-Machine typo` exited **0** having printed no roles at
+all. `Test-FleetMachine` in `Fleet.psm1` closes it, exit 2, message for message
+with `provision.sh`. Both arms are pinned by
+`provision/tests/provision-ps-guards.test.sh`, which asserts the exit codes
+rather than the messages and was mutation-tested against each guard's removal.
+
+One trap that bit while writing it: **`Write-Error` cannot implement a guard
+here.** `$ErrorActionPreference` is `Stop`, so it throws and the process exits 1
+before ever reaching `exit 2` — the pre-existing `no machine selected` arm had
+been doing exactly that. Use plain stderr, then `exit`.
 
 ### Fleet networking / tailnet architecture
 

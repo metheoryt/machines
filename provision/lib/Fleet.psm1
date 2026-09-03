@@ -22,6 +22,19 @@ function Get-FleetDetected {
     return $null
 }
 
+# Is this a member of the manifest? The Windows counterpart of fleet_has_machine.
+# Without it, `-Machine typo` resolves platform $null, Get-FleetRoles returns
+# $null, `foreach` over $null iterates ZERO times, and the run exits 0 -- printed
+# no roles, provisioned nothing, reported success. Exactly the hole the posix
+# front door closed on 2026-08-01, still open here until 2026-09-02.
+# `-contains` on the property-name array is an exact, whole-element match, so no
+# prefix of a real machine name can slip through.
+function Test-FleetMachine {
+    param([string] $Machine)
+    if (-not $Machine) { return $false }
+    return [bool]((Get-FleetManifest).machines.PSObject.Properties.Name -contains $Machine)
+}
+
 function Get-FleetPlatform {
     param([Parameter(Mandatory)] [string] $Machine)
     (Get-FleetManifest).machines.$Machine.platform
@@ -33,4 +46,4 @@ function Get-FleetRoles {
 }
 
 Export-ModuleMember -Function Get-FleetManifest, Get-FleetMachines, `
-    Get-FleetDetected, Get-FleetPlatform, Get-FleetRoles
+    Get-FleetDetected, Test-FleetMachine, Get-FleetPlatform, Get-FleetRoles

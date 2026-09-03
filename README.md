@@ -97,7 +97,9 @@ deleted, where behaviour lives.
   2026-09-01, `backup-client` (`.sh` + `.ps1`) and `backup-hub`. `base` and
   `ssh-server` are **not stubs** — no file for them exists at all; the printed
   plan comes from `provision.sh`'s absent-function arm, which fails `--apply`
-  for any such role not named in its `PLANNED_ROLES` (roadmap P3).
+  for any such role not named in its `PLANNED_ROLES`. Since 2026-09-02
+  `provision.ps1` enforces the same rule via `-PlannedRoles`, and refuses an
+  unknown `-Machine` with exit 2 — both gaps are closed (roadmap P3).
 - `gortex.version` — the pinned gortex release, installed by `tier_gortex` into
   `~/.local/bin` on every box. **Bumped automatically**, weekly, by
   `gortex-autoupdate.sh` on latitude alone (`tier_gortex_autoupdate`): it commits

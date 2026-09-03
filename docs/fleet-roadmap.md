@@ -339,14 +339,37 @@ Nix ever returns. Leave them.
   AGENTS.md reads as though the role is done. It is not, and with the NixOS
   module gone latitude's sshd has no generator either. Windows gotchas for
   whoever implements it are in project memory.
-- [ ] **`provision.ps1` has NO `PLANNED_ROLES` equivalent** — the same hole
-  `49497bd` closed on the posix side, still open on Windows. A role missing from
-  its `$RoleExecutors` map falls through to a branch that prints "not yet
-  implemented (skipped)" and leaves `$rc` at **0**: provisioned nothing, reported
-  success. Found 2026-09-01 while adding `backup-client.ps1`; the map entry fixes
-  that one role and nothing else. Windows members are `desktop` and `g15`, so
-  today the exposure is `base` and `ssh-server` on both. The posix fix is a list
-  plus a padded-substring match — port it, do not re-invent it.
+- [x] **`provision.ps1` had NO `PLANNED_ROLES` equivalent — closed 2026-09-02**,
+  a day after it was found while adding `backup-client.ps1`. A role missing from
+  its `$RoleExecutors` map fell through to a branch that printed "not yet
+  implemented (skipped)" and left `$rc` at **0**: provisioned nothing, reported
+  success, on both Windows members, for `base` and `ssh-server`.
+  Now `-PlannedRoles`, defaulting to `base ssh-server`; an undeclared role with
+  no map entry fails `-Apply`.
+  **Two things did not port straight across, and both are the interesting part:**
+  - The posix lever is `MACHINES_PLANNED_ROLES=""` — set but empty, meaning
+    "declare nothing", which is how `fleet-profile.test.sh` forces the failing
+    arm. On Windows `$env:X = ''` **removes** the variable, so that state does
+    not exist and the negative arm would have been untestable. Hence a parameter:
+    `-PlannedRoles @()`.
+  - The posix side needs a padded-substring match (`*" $role "*`) so `ssh` cannot
+    match the declaration of `ssh-server`. PowerShell's `-contains` is a
+    whole-element match on the array, so the hazard does not arise. Do not port
+    the padding; it would be cargo.
+- [x] **The unknown-MACHINE gate, found while closing the one above and closed
+  with it.** `provision.ps1` had no `fleet_has_machine` counterpart either, and
+  its failure was worse than the role one: `Get-FleetPlatform` on a non-member
+  returns `$null`, `Get-FleetRoles` returns `$null`, `foreach` over `$null`
+  iterates **zero times**, so `-Machine typo` printed no roles and exited 0. The
+  posix side has had that gate since 2026-08-01. `Test-FleetMachine` closes it,
+  exit 2, message for message.
+  Also fixed on the way: the pre-existing `Write-Error "no machine selected";
+  exit 2` **could not return 2**. Under `$ErrorActionPreference = 'Stop'`,
+  `Write-Error` throws and the process dies with exit 1 first. Any PowerShell
+  guard in this repo must use plain stderr and then `exit`.
+  Both arms pinned by `provision/tests/provision-ps-guards.test.sh` — exit codes,
+  not messages — and mutation-tested by removing each guard in a worktree and
+  confirming the suite goes red (`expected '2' got '0'`, `expected '1' got '0'`).
 
 ---
 

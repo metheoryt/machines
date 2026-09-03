@@ -4,7 +4,23 @@
 [CmdletBinding()]
 param(
     [switch] $Apply,
-    [string] $Machine
+    [string] $Machine,
+    # Roles with no entry in $RoleExecutors, declared unimplemented ON PURPOSE.
+    # The Windows half of provision.sh's PLANNED_ROLES, and it exists for the same
+    # reason: a role NOT named here and with no executor makes -Apply exit 1,
+    # instead of printing "not yet implemented (skipped)" and reporting success.
+    #
+    # A PARAMETER, not an environment variable, and that is not a style choice.
+    # The posix suite forces the failing arm with MACHINES_PLANNED_ROLES="" --
+    # declare nothing, so every executor-less role must fail. On Windows,
+    # assigning '' to $env:X REMOVES the variable, so "set but empty" cannot be
+    # expressed in the environment at all and the negative arm would be
+    # untestable. -PlannedRoles @() says it exactly.
+    #
+    # A future executor lands by DELETING its name from this default AND adding
+    # its $RoleExecutors entry. Leave the name in and the new executor is never
+    # demanded of a box that lacks it.
+    [string[]] $PlannedRoles = @('base', 'ssh-server')
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'lib/Fleet.psm1') -Force
@@ -20,11 +36,12 @@ $RoleExecutors = @{
     'dotfiles'    = { param($Mode, $Platform, $Machine) Invoke-RoleDotfiles   -Mode $Mode -Platform $Platform -Machine $Machine }
     'repos'       = { param($Mode, $Platform, $Machine) Invoke-RoleRepos      -Mode $Mode -Platform $Platform -Machine $Machine }
     # THE MAP ENTRY IS NOT OPTIONAL. A role missing from here falls through to
-    # the `else` arm below, which prints "not yet implemented (skipped)" and
-    # leaves $rc at 0 -- provisioned nothing, reported success. That is the hole
-    # 49497bd closed on the posix side with PLANNED_ROLES; this file still has
-    # no equivalent guard (roadmap), so the entry is the only thing standing
-    # between a declared role and a silent green skip.
+    # the `else` arm below. Until 2026-09-02 that arm printed "not yet
+    # implemented (skipped)" and left $rc at 0 -- provisioned nothing, reported
+    # success -- the hole 49497bd had already closed on the posix side. It is
+    # closed here now by -PlannedRoles above: an undeclared role with no map
+    # entry fails -Apply. So a missing entry is loud rather than silent; it is
+    # still a missing entry.
     'backup-client' = { param($Mode, $Platform, $Machine) Invoke-RoleBackupClient -Mode $Mode -Platform $Platform -Machine $Machine }
 }
 
@@ -42,7 +59,23 @@ if (-not $Machine) {
         $Machine = $all[[int]$sel]
     }
 }
-if (-not $Machine) { Write-Error "no machine selected"; exit 2 }
+# Write-Error is unusable for a guard here: $ErrorActionPreference is 'Stop', so
+# it THROWS and the process dies with exit 1 before ever reaching `exit 2` --
+# which is what the line below used to do, quietly turning a deliberate exit code
+# into a generic failure. Plain stderr, then exit.
+function Write-Err([string] $Message) { [Console]::Error.WriteLine($Message) }
+
+if (-not $Machine) { Write-Err "no machine selected"; exit 2 }
+
+# A name that is not in the manifest must fail HERE and loudly. Without this,
+# Get-FleetRoles returns $null, `foreach` over $null iterates zero times, and the
+# run exits 0 having printed no roles at all. Mirrors provision.sh's
+# fleet_has_machine gate, exit code included.
+if (-not (Test-FleetMachine -Machine $Machine)) {
+    Write-Err "unknown machine: $Machine"
+    Write-Err "known machines: $((Get-FleetMachines) -join ' ')"
+    exit 2
+}
 
 $platform = Get-FleetPlatform -Machine $Machine
 Write-Host "> Machine: $Machine   platform: $platform   mode: $mode"
@@ -72,10 +105,22 @@ foreach ($role in (Get-FleetRoles -Machine $Machine)) {
             & $exec 'dry-run' $platform $Machine
         }
     } else {
-        if ($mode -eq 'apply') {
-            Write-Host "  x $role - apply: not yet implemented (skipped)"
+        # Declared-planned or not? -contains is a whole-element match, so a role
+        # named 'ssh' cannot match the declaration of 'ssh-server' -- the hazard
+        # the posix side has to spell out as a padded substring test.
+        if ($PlannedRoles -contains $role) {
+            if ($mode -eq 'apply') {
+                Write-Host "  - $role - apply: no executor yet (declared); skipped"
+            } else {
+                Write-Host "  * $role - plan: no executor yet (declared)"
+            }
         } else {
-            Write-Host "  * $role - plan: would converge via the $platform executor for '$role'"
+            # $rc = 1 under -Apply ONLY. A dry run writes nothing, so it reports
+            # loudly and still exits 0; the nonzero status is reserved for "an
+            # apply did not do what it said". The message is identical in both
+            # modes, so the preview is the warning you get BEFORE the failing run.
+            Write-Err "  x $role - no executor, and not declared in -PlannedRoles"
+            if ($mode -eq 'apply') { $rc = 1 }
         }
     }
 }
