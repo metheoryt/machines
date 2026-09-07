@@ -30,7 +30,7 @@ These apply to every task below, without being repeated in it.
 
 ### Amendments (2026-09-07, recorded after Task 2)
 
-Six changes to what Task 1 delivered. All are in `stage.sh` and its suite
+Seven changes to what Task 1 delivered. All are in `stage.sh` and its suite
 already; the code blocks in Task 1 below are regenerated from the files, so the
 plan and the disk agree. Items 4-6 were found while Task 4 was running.
 
@@ -87,6 +87,17 @@ plan and the disk agree. Items 4-6 were found while Task 4 was running.
    at all. Finding a broken verify mechanism on the first payload costs a
    re-check; finding it after three transfers costs an hour and a half. Task 7's
    pgdata step then re-reads the recorded verdict instead of re-deriving it.
+7. **`pgrep -f "stage.sh stage music"` always matches — including itself.**
+   `pgrep -f` compares full command lines, and the remote shell running it is
+   `bash -c '... pgrep -f "stage.sh stage music" ...'`, which contains the
+   pattern. So the probe reports RUNNING forever. Measured: Music finished at
+   14:44:42 and a poller built on that probe still said RUNNING at 15:04 — a
+   completed transfer looked live for twenty minutes. Use a pattern that cannot
+   match the probe: `pgrep -af "stage[.]sh stage home"`. The launch steps below
+   were already safe by accident, because `ps ... | grep -F ... | grep -v grep`
+   drops its own grep; nothing dropped the pgrep. **The log is the source of
+   truth for "finished" — `=== done rc=0`. A process probe is a convenience and
+   this one was wrong.**
 
 ---
 
@@ -1303,7 +1314,7 @@ printf '%s\n' \
   'cd /home/me/machines/hosts/g15/staging' \
   'setsid --fork ./stage.sh stage pgdata' \
   'sleep 3' \
-  'ps -eo pid,etime,args | grep -F "stage.sh stage pgdata" | grep -v grep' \
+  'pgrep -af "stage[.]sh stage pgdata" || echo "NOT RUNNING"' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
@@ -1373,13 +1384,13 @@ printf '%s\n' \
   'cd /home/me/machines/hosts/g15/staging' \
   'setsid --fork ./stage.sh stage music' \
   'sleep 3' \
-  'ps -eo pid,etime,args | grep -F "stage.sh stage music" | grep -v grep' \
+  'pgrep -af "stage[.]sh stage music" || echo "NOT RUNNING"' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
 Expected: one `ps` line.
 
-- [ ] **Step 3: Watch it and confirm**
+- [x] **Step 3: Watch it and confirm**
 
 ```bash
 ssh g15-wsl.gg.ez 'tail -f /var/log/g15-staging/music.log'
@@ -1397,7 +1408,7 @@ Expected: `rsync clean`, `=== done rc=0`, in **~37 minutes**. Two independent re
 - Consumes: Task 1's `stage.sh`, Task 5's finished transfer.
 - Produces: the staged tree, and `/var/log/g15-staging/home.log`. **This copy is not final** — Task 8 re-runs it as a delta with the box quiesced.
 
-- [ ] **Step 1: Dry run**
+- [x] **Step 1: Dry run**
 
 ```bash
 printf '%s\n' \
@@ -1408,14 +1419,14 @@ printf '%s\n' \
 
 Expected: roughly **226 000 files and ~18 GB**, and no `skipping non-regular file` lines — `--exclude=*.sock` covers the two orca sockets. If such a line does appear, a new socket was created under a name that does not end in `.sock`; add it to the exclude list rather than accepting exit 23.
 
-- [ ] **Step 2: Launch it detached**
+- [x] **Step 2: Launch it detached**
 
 ```bash
 printf '%s\n' \
   'cd /home/me/machines/hosts/g15/staging' \
   'setsid --fork ./stage.sh stage home' \
   'sleep 3' \
-  'ps -eo pid,etime,args | grep -F "stage.sh stage home" | grep -v grep' \
+  'pgrep -af "stage[.]sh stage home" || echo "NOT RUNNING"' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
