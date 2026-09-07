@@ -102,10 +102,22 @@ case "$c" in
   dpkg)   [ "\$1" = "--print-architecture" ] && { echo amd64; exit 0; } ;;
   getent) exit "\${SHIM_GETENT_RC:-0}" ;;
   id)     case "\$1" in -nG) echo "\$2 sudo" ;; -un) echo shimuser ;; esac; exit 0 ;;
-  curl)   for a in "\$@"; do case "\$a" in
-            */dists/*/Release) exit "\${SHIM_PROBE_RC:-0}" ;;
-            */gpg)             echo FAKE-KEY; exit 0 ;;
-          esac; done; exit 0 ;;
+  curl)   out=""; prev=""; kind=""
+          for a in "\$@"; do
+            [ "\$prev" = "-o" ] && out="\$a"
+            case "\$a" in
+              */dists/*/Release) kind=probe ;;
+              */gpg)             kind=key ;;
+            esac
+            prev="\$a"
+          done
+          case "\$kind" in
+            probe) exit "\${SHIM_PROBE_RC:-0}" ;;
+            key)   [ "\${SHIM_KEY_RC:-0}" = 0 ] || exit "\${SHIM_KEY_RC}"
+                   if [ -n "\$out" ]; then printf 'FAKE-KEY\n' > "\$out"; else printf 'FAKE-KEY\n'; fi
+                   exit 0 ;;
+          esac
+          exit 0 ;;
   systemctl) [ "\$1" = "is-enabled" ] && exit 1 ;;
 esac
 exit 0
@@ -124,7 +136,7 @@ reset() {
   DOCKER_TIER_LIST="$SHIM/etc/docker.list"
   DOCKER_TIER_DOCKERD="$SHIM/etc/dockerd-absent"
   PRIV=1; SUDO=""
-  unset SHIM_PROBE_RC SHIM_GETENT_RC
+  unset SHIM_PROBE_RC SHIM_GETENT_RC SHIM_KEY_RC
   SUDO_USER=testuser
 }
 calls() { cut -d' ' -f1 "$LOG" | sort -u | tr '\n' ' '; }
@@ -211,6 +223,23 @@ DOCKER_TIER_DOCKERD="$SHIM/etc/dockerd-here"
 out="$(SHIM_GETENT_RC=2 tier_docker 2>&1)"; rc=$?
 eq "$rc" "0" "no docker group: returns 0"
 hasnt "$(cat "$LOG")" "usermod" "no docker group: no usermod"
+
+# Case H — the suite exists but the KEY fetch fails (404, or a mid-fetch drop).
+# The mirror of Case C, and the reason the tier fetches to a temp file instead
+# of `curl … | $SUDO tee "$keyring"`: the driver runs without pipefail, so a
+# pipeline's status is tee's, and a failed fetch would report success and go on
+# to write docker.list against an unusable key — leaving the box with a docker
+# source that breaks every later apt-get update, which is exactly what Case C
+# exists to prevent.
+reset
+out="$(SHIM_KEY_RC=22 tier_docker 2>&1)"; rc=$?
+eq "$rc" "0" "key fetch fails: returns 0"
+has "$out" "cannot fetch the docker apt key" "key fetch fails: says so"
+[ -e "$DOCKER_TIER_LIST" ] && bad "key fetch fails: must write NO apt source" \
+  || pass "key fetch fails: writes no apt source"
+[ -s "$DOCKER_TIER_KEYRING" ] && bad "key fetch fails: must leave no keyring" \
+  || pass "key fetch fails: leaves no keyring"
+hasnt "$(calls)" "apt-get" "key fetch fails: never runs apt"
 
 rm -rf "$SHIM"
 [ "$fail" -eq 0 ] && echo "ALL PASS" || echo "FAILURES"; exit "$fail"

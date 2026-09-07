@@ -277,7 +277,7 @@ _docker_is_wsl() {
 
 tier_docker() {
   local keyring="$DOCKER_TIER_KEYRING" list="$DOCKER_TIER_LIST"
-  local arch id codename want url pkgs user
+  local arch id codename want url pkgs user tmpkey
 
   have apt-get || { warn "no apt-get — skipping the docker engine"; return 0; }
 
@@ -285,7 +285,10 @@ tier_docker() {
   # owns the CLI there (docker-ce-cli + the plugins, behind a dpkg-divert). A
   # dockerd installed here would fight both.
   if _docker_is_wsl; then
-    warn "WSL distro — the engine stays Docker Desktop's (provision/wsl-fixes.sh owns the CLI)"
+    # info, not warn: two fleet boxes are permanently WSL, and this is their
+    # expected state — the register here is tier_rapl_read's ("no RAPL counter
+    # on this hardware"), not tier_apt_min's wanted-to-but-could-not.
+    info "WSL distro — the engine stays Docker Desktop's (provision/wsl-fixes.sh owns the CLI)"
     return 0
   fi
   if [ "$PRIV" -eq 0 ]; then
@@ -318,13 +321,22 @@ tier_docker() {
       return 0
     fi
 
+    # Fetched to a temp file and INSTALLED, never `curl … | $SUDO tee "$keyring"`.
+    # The driver sets `set -u` and not pipefail, so a pipeline's status is tee's:
+    # a 404 or a mid-fetch drop would report success, and the tier would go on to
+    # write docker.list against an unusable key — leaving the box in the state
+    # the suite probe exists to prevent, arriving through the other door. Worse,
+    # the `[ ! -s ]` guard never retries a TRUNCATED key, only an empty one.
     if [ ! -s "$keyring" ]; then
-      $SUDO install -m 0755 -d "$(dirname "$keyring")"
-      if curl -fsL --max-time 20 "https://download.docker.com/linux/$id/gpg" | $SUDO tee "$keyring" >/dev/null; then
-        $SUDO chmod a+r "$keyring"
+      tmpkey="$(mktemp)" || { warn "cannot create a temp file — skipping the docker engine"; return 0; }
+      if curl -fsL --max-time 20 -o "$tmpkey" "https://download.docker.com/linux/$id/gpg" \
+        && [ -s "$tmpkey" ]; then
+        $SUDO install -m 0755 -d "$(dirname "$keyring")"
+        $SUDO install -m 0644 "$tmpkey" "$keyring"
+        rm -f "$tmpkey"
         ok "installed $keyring"
       else
-        $SUDO rm -f "$keyring"
+        rm -f "$tmpkey"
         warn "cannot fetch the docker apt key — skipping the docker engine"
         return 0
       fi
