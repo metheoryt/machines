@@ -30,7 +30,7 @@ These apply to every task below, without being repeated in it.
 
 ### Amendments (2026-09-07, recorded after Task 2)
 
-Seven changes to what Task 1 delivered. All are in `stage.sh` and its suite
+Eight changes to what Task 1 delivered. All are in `stage.sh` and its suite
 already; the code blocks in Task 1 below are regenerated from the files, so the
 plan and the disk agree. Items 4-6 were found while Task 4 was running.
 
@@ -98,6 +98,23 @@ plan and the disk agree. Items 4-6 were found while Task 4 was running.
    drops its own grep; nothing dropped the pgrep. **The log is the source of
    truth for "finished" — `=== done rc=0`. A process probe is a convenience and
    this one was wrong.**
+8. **Task 7's stop condition named directories where it meant derived state, and
+   as written it would have stopped Task 8 on a correct copy.** The rule read
+   "a differing line anywhere else — under `my/`, `.ssh/`, `.gnupg/` — is a real
+   problem and stops the plan". `/home/me`'s first pass produced 20 differing
+   lines and one of them was `./my/telegrind/.git/FETCH_HEAD`. It is not a
+   failed copy: three of this box's own user timers fired INSIDE the transfer
+   window (rsync 15:05→15:10:23; `git-autofetch` 15:09:30, `fleet-selfpull`
+   15:09:46, `dotfiles-sync` every ~10 min), and Orca's trace log was growing
+   throughout. All 20 lines are git bookkeeping or a log — derived state written
+   *after* rsync read it, in `machines/.git/` (14), `machines/docs/` (2, from
+   selfpull landing this plan's own commits), `.config/orca/logs/` (2) and that
+   `FETCH_HEAD` (2). Nothing whose content failed to transfer. The discriminator
+   is **derived-vs-content, not the directory**: `my/<repo>/.git/` is derived,
+   anything under `my/<repo>/` that is not `.git/` is content. Same class as
+   amendment 4 — a check that reports the wrong thing at the moment it matters
+   most. The writers are now named in Task 8 Step 1, where "quiesced" had been
+   left undefined.
 
 ---
 
@@ -1432,7 +1449,7 @@ printf '%s\n' \
 
 Expected: one `ps` line.
 
-- [ ] **Step 3: Watch it and confirm**
+- [x] **Step 3: Watch it and confirm**
 
 ```bash
 ssh g15-wsl.gg.ez 'tail -f /var/log/g15-staging/home.log'
@@ -1442,7 +1459,7 @@ Expected: `rsync clean`, `=== done rc=0`. 18 GB is 4 minutes of bytes, but 226 0
 
 `rc=24` (source files vanished mid-run) is treated as done by the script, and on a live home directory it is the *likely* outcome — a shell history file or an editor swap file disappearing between the file list and the transfer. That is precisely why Task 8 exists and why this pass is not the one the manifest is taken from.
 
-- [ ] **Step 4: Check the total against the budget**
+- [x] **Step 4: Check the total against the budget**
 
 ```bash
 printf '%s\n' \
@@ -1467,7 +1484,7 @@ Expected: source sizes near 186G / 18G / 89G, and destination sizes within a per
 - Consumes: Tasks 4, 5 and 6.
 - Produces: `<payload>.src.manifest` and `<payload>.dst.manifest` on g15-wsl for each payload, and a `MANIFEST MATCH` line for each.
 
-- [ ] **Step 1: Verify `pgdata`**
+- [x] **Step 1: Verify `pgdata`**
 
 ```bash
 printf '%s\n' \
@@ -1480,7 +1497,7 @@ Expected: `entries: src=N dst=N` with the two equal, then `MANIFEST MATCH — N 
 
 Task 4 Step 6 already ran this. Re-running is free and idempotent — postgres is stopped, so nothing on either side has moved — but if it was recorded there, reading `/var/log/g15-staging/pgdata.log` is enough.
 
-- [ ] **Step 2: Verify `music`**
+- [x] **Step 2: Verify `music`**
 
 ```bash
 printf '%s\n' \
@@ -1491,7 +1508,7 @@ printf '%s\n' \
 
 Expected: `MANIFEST MATCH`. Note what this check deliberately does not compare: mode, ownership and mtime. On drvfs all three are invented by the filesystem, so comparing them would report thousands of differences that mean nothing. Path, size and symlink target are the content.
 
-- [ ] **Step 3: Verify `home` — and expect a small mismatch here**
+- [x] **Step 3: Verify `home` — and expect a small mismatch here**
 
 ```bash
 printf '%s\n' \
@@ -1502,15 +1519,30 @@ printf '%s\n' \
 
 Expected: **either** `MANIFEST MATCH`, **or** exit 4 with a handful of differing lines under `.cache/`, `.local/state/`, `.bash_history`, `.zsh_history`, `.config/orca/` or a `.claude/projects/` transcript.
 
-A mismatch here is not a failure of the copy — `/home/me` is a live tree and the manifest is taken minutes after the transfer. Read the diff and confirm every differing line is a file that changed after the copy, then continue: Task 8 is what settles it. **A differing line anywhere else — under `my/`, `.ssh/`, `.gnupg/` — is a real problem and stops the plan.**
+A mismatch here is not a failure of the copy — `/home/me` is a live tree and the manifest is taken minutes after the transfer. Read the diff and confirm every differing line is a file that changed after the copy, then continue: Task 8 is what settles it.
 
-- [ ] **Step 4: Record the three verdicts where the next phase can find them**
+**Classify every line, and classify it by derived-vs-content, not by directory.** This condition used to read "a differing line anywhere else — under `my/`, `.ssh/`, `.gnupg/` — is a real problem and stops the plan", and on the real run it fired on `./my/telegrind/.git/FETCH_HEAD` — a file `git-autofetch` rewrote four minutes after rsync read it. That is not a failed copy, and a rule that stops the plan on it would have stopped Task 8 at the point of no return on a correct copy.
+
+- **Derived state, continue:** anything under a `.git/` directory (logs, objects, refs, `FETCH_HEAD`), any log file, `.cache/`, `.local/state/`, shell history, `.config/orca/`. A daemon or a timer wrote it after the read. Confirm the timestamps support that story — Step 5 below names this box's writers.
+- **Content, stop:** a source file under `my/<repo>/` outside its `.git/`, anything under `.ssh/` or `.gnupg/`, a config file you did not just edit. That is a copy that did not happen, and no amount of re-running the same pass fixes it.
+
+Classify by counting, not by reading the first 40 lines — `verify` truncates its diff:
 
 ```bash
-ssh g15-wsl.gg.ez 'grep -h MANIFEST /var/log/g15-staging/*.log | tail -20'
+ssh g15-wsl.gg.ez 'cd /var/log/g15-staging && diff home.src.manifest home.dst.manifest | grep -cE "^[<>]"; diff home.src.manifest home.dst.manifest | grep -E "^[<>]" | sed -E "s|^(.) \./([^\t]*)\t.*|\2|" | cut -d/ -f1-2 | sort | uniq -c | sort -rn'
 ```
 
-Expected: one `MANIFEST MATCH` line for `pgdata` and one for `music`, each naming its entry count. Those two are now final and must not be re-copied: `pgdata` because postgres is stopped and stays stopped, `music` because nothing on the box writes to it.
+Measured on the real first pass: **20 lines, all derived** — `machines/.git` (14), `machines/docs` (2), `.config/orca/logs` (2), `my/telegrind/.git/FETCH_HEAD` (2).
+
+- [x] **Step 4: Record the verdicts where the next phase can find them — the LAST one per payload**
+
+Each payload's log accumulates every verdict `verify` ever wrote into it, so `home` will hold a MISMATCH from this task and a MATCH from Task 8. Grepping them all leaves a reader with three matches and one mismatch and no way to tell which is current. Read the last line per payload:
+
+```bash
+ssh g15-wsl.gg.ez 'for p in pgdata music home; do printf "%-7s %s\n" "$p" "$(grep MANIFEST /var/log/g15-staging/$p.log | tail -1)"; done'
+```
+
+Expected at this point: `MANIFEST MATCH` for `pgdata` and for `music`, each naming its entry count, and a `MANIFEST MISMATCH` for `home` — which Task 8 replaces. Those two are now final and must not be re-copied: `pgdata` because postgres is stopped and stays stopped, `music` because nothing on the box writes to it.
 
 ---
 
@@ -1524,9 +1556,23 @@ Expected: one `MANIFEST MATCH` line for `pgdata` and one for `music`, each namin
 
 **Run this immediately before Phase 2, not right after Task 7.** Days may pass between them; that is fine and expected. What must not happen is booting the installer on the strength of Task 7's `home` verdict, which was taken while the box was in use.
 
-- [ ] **Step 1: Quiesce the box**
+- [ ] **Step 1: Quiesce the box — stop the timers FIRST, they are the writers that were missed**
 
-Close every editor, terminal, Orca window and agent session that writes under `/home/me` on g15-wsl. Then confirm nothing is still writing:
+"Quiesced" meant "close your editors" until 2026-09-07, and that was not enough. `/home/me`'s first pass came out 20 lines short of a match and **not one of those lines was a human's edit** — three of this box's own user timers fired inside the five-minute transfer window, and Orca's trace log grew throughout. They will fire inside Task 8's window exactly the same way, and here a mismatch is a stop at the point of no return.
+
+```bash
+ssh g15-wsl.gg.ez 'systemctl --user stop dotfiles-sync.timer git-autofetch.timer fleet-selfpull.timer && \
+  systemctl --user is-active dotfiles-sync.service git-autofetch.service fleet-selfpull.service; \
+  systemctl --user list-timers --all --no-pager | head -8'
+```
+
+Expected: three `inactive` lines from `is-active` (it exits non-zero when nothing is active — that is the good case, not a failure), and no `dotfiles-sync` / `git-autofetch` / `fleet-selfpull` row with a `NEXT` in the timer list. **Stopping a timer does not kill a service already mid-run**, which is why `is-active` is checked on the `.service` units and not just the timers.
+
+**Orca is the fourth writer and it is not a timer** — `.config/orca/logs/main.trace.ndjson` grows whenever the runtime is up. Close Orca on the box. Do not "solve" it by adding the log to `--exclude`: excluded means protected from `--delete`, so the file would then be frozen at the destination in whatever state the first pass caught, and the manifest would match while holding a stale file. Closing it is honest; excluding it is a match that means less than it says.
+
+These stops are not undone. The distro is deleted in Phase 2.
+
+Then close every editor, terminal, Orca window and agent session that writes under `/home/me` on g15-wsl, and confirm nothing is still writing:
 
 ```bash
 ssh g15-wsl.gg.ez 'who; echo "---"; ps -eo user,pid,args | grep -E "^me " | grep -vE "sshd|ps -eo|grep" | head -20'
