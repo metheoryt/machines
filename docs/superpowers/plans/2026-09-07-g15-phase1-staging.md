@@ -272,8 +272,22 @@ pid="$(mktemp)"; trap 'rm -f "$pid"' EXIT
 STAGE_PGPID="$pid" "$SH" stage pgdata >/dev/null 2>&1; [ "$?" = 3 ]
 check $? "stage pgdata refuses with exit 3 while postmaster.pid exists"
 
-STAGE_PGPID="$pid" "$SH" stage pgdata 2>&1 | grep -q "postmaster.pid"
-check $? "the refusal names postmaster.pid"
+# Greps for the OVERRIDE path, not the literal string "postmaster.pid": the
+# message names the file it actually checked, and STAGE_PGPID has replaced the
+# default here. Asserting the literal would only test that the default is
+# hard-coded into the prose.
+STAGE_PGPID="$pid" "$SH" stage pgdata 2>&1 | grep -qF "$pid"
+check $? "the refusal names the pid file it checked"
+
+# die() takes the exit code as its SECOND argument; printing "$*" instead of
+# "$1" appends it to the message. Measured while writing this plan: the root
+# refusal ended in a stray " 1".
+STAGE_PGPID="$pid" "$SH" stage pgdata 2>&1 | tail -1 | grep -qE '(^| )3$'
+if [ $? -eq 0 ]; then
+    fail "the refusal message leaks its exit code (die prints \$* instead of \$1)"
+else
+    pass "the refusal message does not leak its exit code"
+fi
 
 STAGE_PGPID="$pid" "$SH" stage home >/dev/null 2>&1; [ "$?" = 3 ]
 if [ $? -eq 0 ]; then
@@ -387,10 +401,27 @@ SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 SSH_OPTS="$SSH_OPTS -o ServerAliveInterval=30 -o ServerAliveCountMax=6"
 
 usage() {
-    sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//' >&2
+    # A heredoc, not `sed -n '5,16p' "$0"`: a line-range into this file's own
+    # header drifts silently the first time a comment is added above, and no
+    # test catches it — the suite can only assert the exit code.
+    cat >&2 <<'USAGE'
+stage.sh — move g15's payload onto latitude. Runs ON g15-wsl, AS ROOT.
+
+  ./stage.sh cmd          <payload> [dry]   print the rsync command, run nothing
+  ./stage.sh manifest-cmd <payload> src|dst print the manifest pipeline, run nothing
+  ./stage.sh plan         <payload>         rsync -n: what would move
+  ./stage.sh stage        <payload>         the copy (logs to $LOGDIR; detach it)
+  ./stage.sh verify       <payload>         manifest both sides and diff
+  ./stage.sh status                         sizes on both sides + log tails
+
+  payload: pgdata | home | music
+  exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest mismatch
+USAGE
     exit 2
 }
-die()  { printf '%s: %s\n' "${0##*/}" "$*" >&2; exit "${2:-1}"; }
+# "$1", NOT "$*": the second argument is the exit code, and $* would print it
+# as part of the message — measured, the root refusal ended in a stray " 1".
+die()  { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit "${2:-1}"; }
 say()  { printf '[%s] %s\n' "$(date +%F_%H:%M:%S)" "$*"; }
 
 require_root() {
@@ -813,7 +844,7 @@ ssh g15-wsl.gg.ez 'cd ~/machines && git pull --ff-only && \
   ls -l hosts/g15/staging/stage.sh && git log --oneline -1'
 ```
 
-Expected: the file is present and executable, and HEAD is Task 2's commit.
+Expected: the file is present and executable, and HEAD is at or past **Task 1's** commit — that is the one that adds `stage.sh`. Task 2's identity-snapshot commit is later and irrelevant here; the plan document itself (`c331260`) does not contain the tool.
 
 - [ ] **Step 2: Dry run**
 
@@ -1096,6 +1127,10 @@ The staging copy stays on latitude until the rebuilt box has run for a week, the
 Two things this plan adds that the spec does not state. The keepalive gate (Task 2 Step 2) — the spec assumes the distro stays up, and it is currently held only by stray `wsl.exe` orphans while the task that should hold it died on 2026-09-05. And the final quiesced `/home/me` delta (Task 8) — the spec says the manifest check is the point of no return without saying that a manifest of a *live* home directory cannot be that check.
 
 One spec item is deliberately out of scope: `Downloads` (2.2 GB, "owner reviews before the wipe"). That is a human review with no staging step, and inventing a copy for it would contradict the spec's own disposition. It belongs in Phase 2's pre-wipe checklist.
+
+**Both code blocks were extracted from this document and run before it was committed**, on desktop-wsl, non-root, with no g15 and no latitude involved. `bash -n` passes on both; the suite reports **ALL PASS** (59 assertions) against the script exactly as written above. Three defects were found that way and are fixed in the text: the manifest sorted by size-as-a-string instead of by path; `die()` printed `"$*"`, appending its exit-code argument to the message (the root refusal ended in a stray ` 1`); and `usage()` was a `sed` line-range into the script's own header, which drifts the first time a comment is added above it. The two assertions that pin the last two were mutation-tested by reintroducing each bug. The manifest pipeline was separately run against a tree carrying a regular file, a symlink, a broken symlink, a fifo, a socket and a `.rsync-partial/` directory, and handles all six as this plan claims.
+
+**The repo gate was not re-run for this change and does not need to be** — the change adds a markdown file and no executable. `stage.sh` and its suite land in Task 1, and Task 1 Step 5 runs the gate there.
 
 **Placeholder scan.** No `TBD`, no "add error handling", no "similar to Task N". Every code step carries the code. The one manual step (Task 2 Step 1) is manual on purpose and says exactly what to look at, with the concrete four-line fallback if the answer is no.
 
