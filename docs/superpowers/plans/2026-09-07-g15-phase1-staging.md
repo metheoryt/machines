@@ -81,7 +81,7 @@ All measured 2026-09-07. If a number here disagrees with the box, trust the box 
   Payloads: `pgdata`, `home`, `music`. Env overrides: `STAGE_LAT`, `STAGE_DIR`, `STAGE_KEY`, `STAGE_LOGDIR`, `STAGE_PGPID`.
   Exit codes: `0` ok, `1` not root, `2` usage, `3` postgres still running, `4` manifest mismatch.
 
-- [ ] **Step 1: Write the failing test suite**
+- [x] **Step 1: Write the failing test suite**
 
 Create `hosts/g15/staging/stage.test.sh`:
 
@@ -313,7 +313,7 @@ check $? "STAGE_DIR overrides the staging root"
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi
 ```
 
-- [ ] **Step 2: Run the suite to verify it fails**
+- [x] **Step 2: Run the suite to verify it fails**
 
 ```bash
 bash hosts/g15/staging/stage.test.sh
@@ -321,7 +321,7 @@ bash hosts/g15/staging/stage.test.sh
 
 Expected: `FAIL: hosts/g15/staging/stage.sh missing`, exit 1.
 
-- [ ] **Step 3: Write `stage.sh`**
+- [x] **Step 3: Write `stage.sh`**
 
 Create `hosts/g15/staging/stage.sh`, then `chmod +x` it:
 
@@ -625,7 +625,7 @@ hosts/latitude/debian/mirror-refresh.sh's header. Stop it first:
 esac
 ```
 
-- [ ] **Step 4: Run the suite to verify it passes**
+- [x] **Step 4: Run the suite to verify it passes**
 
 ```bash
 chmod +x hosts/g15/staging/stage.sh
@@ -634,7 +634,7 @@ bash hosts/g15/staging/stage.test.sh
 
 Expected: every line `PASS`, last line `ALL PASS`, exit 0.
 
-- [ ] **Step 5: Run the whole gate**
+- [x] **Step 5: Run the whole gate**
 
 ```bash
 for t in $(just _test-suites); do bash "$t" < /dev/null || echo "FAILED: $t"; done
@@ -642,7 +642,7 @@ for t in $(just _test-suites); do bash "$t" < /dev/null || echo "FAILED: $t"; do
 
 Expected: no `FAILED:` lines. (`just` is not installed on every box — on one without it, use `find . -name '*.test.sh' -not -path './.git/*' | sed 's|^\./||' | LC_ALL=C sort` in place of `just _test-suites`, which is exactly what that recipe is.) The suite count goes from 49 to 50.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```bash
 git add hosts/g15/staging/stage.sh hosts/g15/staging/stage.test.sh
