@@ -312,8 +312,30 @@ the machine manifest. The old AmneziaWG mesh was retired from the repo
 2026-07-17 (AmneziaWG survives only as the VPS's obfuscated VPN for RU
 relatives).
 
-Two separate LANs. Same-LAN pairs get direct P2P (~3ms); cross-LAN pairs relay
-through our own DERP — expected and accepted.
+**One LAN, not two.** Every member except `hub` sits behind the same router —
+some on wifi, some on cable — and gets direct P2P. Measured with `tailscale
+ping` on 2026-09-07 from `desktop-wsl`: latitude direct via 192.168.8.155 in
+2 ms, g15 direct via 192.168.8.170 in 3 ms, hub direct via its public IP in
+6 ms. Throughput follows: 99 MB/s desktop-wsl -> latitude over the tailnet.
+
+This paragraph used to say "two separate LANs… cross-LAN pairs relay through our
+own DERP — expected and accepted", and that sentence did real damage: it is why
+a migration design initially wrote latitude off as a 7-hour target when it is
+the fastest one in the fleet. **"Expected and accepted" is how a stale
+measurement survives** — if you catch a relayed pair, measure it before
+accepting it.
+
+**The one genuine exception is `g15-wsl`, and it is a WSL property rather than a
+network one**: `tailscale ping` says `direct connection not established`, DERP,
+3.3 MB/s. It runs in NAT networking mode, so tailscale cannot punch through to
+another NATed peer. `desktop-wsl` has no such problem because its `.wslconfig`
+sets `networkingMode=mirrored` and it therefore holds a real LAN address. Do not
+"fix" g15-wsl by copying that setting: mirrored also exposes the Windows
+Tailscale adapter inside the distro, and g15 has both a Windows node
+(`100.64.0.3`) and a distro node (`100.64.0.9`) to fight over routes — the
+warning is written out in desktop's own `.wslconfig`. Two routes that work
+today: reach the distro through its Windows host's sshd over the LAN (44 MB/s),
+or have the distro push outbound to a LAN peer, which NAT permits.
 
 Self-declared WSL hosts are first-class fleet hosts that never appear in
 `fleet.json`: each carries a gitignored `fleet.local.json`

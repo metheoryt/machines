@@ -47,61 +47,89 @@ usual reason to keep Windows on a ROG laptop does not apply here. Emby and
 Jellyfin are installed but **not running** (only Cloudflare WARP, sshd and
 Tailscale are), `Videos` is empty, and Jellyfin holds 0.1 GB of config.
 
-## Transport — measured, not assumed
+## Transport — measured, and the fleet topology was wrong
+
+**The fleet is one LAN, not two.** Every member except `hub` is behind the same
+router (some wifi, some cable) and gets a direct P2P path. `tailscale ping` from
+`desktop-wsl`, 2026-09-07: latitude direct in 2 ms, g15 direct in 3 ms, hub
+direct in 6 ms. `AGENTS.md` said "two separate LANs, cross-LAN pairs relay
+through our own DERP — expected and accepted"; that is corrected in the same
+change as this spec. The first draft of this document wrote latitude off as a
+7-hour target on the strength of that sentence. It is the fastest target there
+is.
 
 | Path | Rate | Note |
 |---|---|---|
-| g15 Windows sshd → `wsl.exe` → desktop-wsl, over the LAN | **44 MB/s** | measured, 3 GB |
-| g15-wsl ↔ desktop-wsl over the tailnet | **3.3 MB/s** | measured, 1 GB — DERP relay via hub (Kazakhstan) |
-| direct Ethernet cable, APIPA | ~117 MB/s | measured 2026-08-28 |
+| **g15-wsl → latitude, over the LAN** | **78 MB/s** | measured, 3 GB. One wifi hop; latitude is on cable. **The route this plan uses.** |
+| desktop-wsl → latitude, over the tailnet | 99 MB/s | measured. Direct P2P, 2 ms. |
+| latitude ← g15 Windows sshd → `wsl.exe`, over the LAN | 44 MB/s | measured. Two wifi hops — the double radio hop is the cost. |
+| g15-wsl ↔ desktop-wsl, over the tailnet | 3.3 MB/s | measured. DERP relay via hub (Kazakhstan). |
+| direct Ethernet cable, APIPA | ~117 MB/s | measured 2026-08-28. Not needed now. |
 
-Both laptops now associate at a 1201 Mbps WiFi 6 link rate, **and that does not
-help the tailnet path**: re-measured on 2026-09-07 with the WiFi 6 link up, the
-relayed pair still delivers 3.3 MB/s, and `tailscale status` reports `curaddr=`
-empty for it — 13× slower than the LAN route on the same radio. Two NATed WSL distros get no
-direct path. The LAN route through g15's Windows sshd is the fast one because it
-leaves tailscale out of it entirely.
+**`g15-wsl` is the fleet's only relayed peer, and that is a WSL property rather
+than a network one.** `tailscale ping` reports `direct connection not
+established`: the distro runs in NAT networking mode, so tailscale cannot punch
+through to another NATed peer. But **NAT permits outbound**, which is why the
+distro pushing to latitude's LAN address works and is fast — the relay is only
+in the way when something tries to reach *in*.
+
+**Do not switch g15 to `networkingMode=mirrored` to "fix" this.** It would
+probably work — that is exactly why `desktop-wsl` has a real LAN address — but
+mirrored also exposes the Windows Tailscale adapter inside the distro, and g15
+has both a Windows node (`100.64.0.3`) and a distro node (`100.64.0.9`) to fight
+over routes; desktop's own `.wslconfig` carries that warning in writing. Changing
+the network mode of the box you are about to read 204 GB out of, to save perhaps
+half an hour on a route that already works at 78 MB/s, is the wrong trade.
+
+Both laptops now hold a 1201 Mbps WiFi 6 link, **and that is not what made the
+difference**: re-measured with that link up, the relayed pair still delivers
+3.3 MB/s. Leaving the relay is what helps; a faster radio is not.
 
 Two transport facts that cost time when forgotten:
 
 - **`ssh` to a bare IP does not pick up the fleet identity.** The generated
   config keys on `Host *.gg.ez`, so `ssh methe@192.168.8.170` falls through to
-  the default identity and fails instantly with zero bytes transferred — which
-  reads as "no bandwidth". Pass `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`.
-- **Only port 22 is open inbound.** `nc` to any other port on either box is
-  refused by Windows Firewall, so the transfer rides ssh whether you wanted it
-  to or not.
+  the default identity and fails in 0.2 s with zero bytes transferred — which
+  reads as "no bandwidth". Pass `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`. This
+  produced three false measurements before it was spotted.
+- **Only port 22 is open inbound** on either Windows box, so a transfer rides
+  ssh whether or not that was the plan.
 
-Staging target is **desktop's `C:`** — 1.2 TB free of 1.9 TB, same LAN. Not
-latitude: it is on the other LAN, so its path relays too (88 GB would be ~7
-hours).
+Staging target is **latitude**, `/mnt/immich-mirror` (610 GB free). It is the
+always-on box, which matters for a park that spans a reinstall — a laptop that
+sleeps is a poor custodian of the only copy.
 
 ## Payload
 
-**Out of the distro (204 GB)** — everything here is inside the vhdx and dies
-with the Windows partition:
+~292 GB out, ~292 GB back. Everything below lives inside the vhdx or on the
+Windows partition and dies with the disk.
+
+**Out of the distro (204 GB):**
 
 - `/data/qaz-law/pgdata` — 186 GB. Physical postgres copy, `data_checksums on`.
 - `/home/me` — 18 GB.
 
-**Out of Windows (~88.4 GB):**
+**Out of Windows (88.3 GB):**
 
-- `Music` — 88.3 GB.
-- Three Docker Desktop named volumes — **~59 MB total**: `telegrind_pgdata`
-  (57.31 MB), `embedthat_redis_data` (1.335 MB),
-  `tugtainer_tugtainer_data` (45.12 kB).
+- `Music` — 88.3 GB. OneDrive does **not** cover it: `My Music` in the registry
+  points at the local `C:\Users\methe\Music`, not into OneDrive. It comes back
+  to g15 afterwards (owner's call, 2026-09-07), so it round-trips through
+  latitude — that is why the return leg is also ~292 GB.
 
-### Docker: the 158 GB store is disposable, and that is measured
+**Explicitly dropped** (all four decided by the owner, 2026-09-07):
 
-All 19 containers are `Exited`, five weeks old — the servarr/immich/restic stack
-from when this box was `server`, whose role has since moved to latitude. Every
-stateful one bind-mounted `D:\` or `F:\`, and **both drives are absent from the
-box now**: `D:\ImmichMedia\postgres`, `D:/Media/config/*`, `F:/restic-repos` all
-point at nothing. So the containers are shells with no data behind them.
-
-What carries size in that store is images and build cache — 7.6 GB and 7.1 GB
-layers, `immich_model-cache` at 6.5 GB — all regenerable. The only real state is
-the three named volumes above, and they fit in a single tar.
+- `WindowsGSM`, 32.1 GB — unused.
+- `Downloads`, 2.2 GB.
+- **Docker Desktop's store in full, 158.2 GB — including its data.** Everything
+  it held has already moved to latitude. That decision is corroborated: all 19
+  containers are five weeks `Exited`, and every stateful one bind-mounted `D:\`
+  or `F:\` — **both drives are absent from the box now**, so
+  `D:\ImmichMedia\postgres`, `D:/Media/config/*` and `F:/restic-repos` point at
+  nothing. The three named volumes that did hold bytes
+  (`telegrind_pgdata` 57 MB, `embedthat_redis_data` 1.3 MB,
+  `tugtainer_tugtainer_data` 45 kB) go with it.
+- `OneDrive`, 3.7 GB — no action needed, already in the cloud.
+- `C:\Users\methe\my` (repos), <1 GB — no action, git-tracked and cloned fresh.
 
 ## Plan
 
@@ -110,7 +138,6 @@ passes.
 
 ### 0. Decide and record
 
-- Owner reviews `Downloads` (2.2 GB) and says keep-or-drop.
 - Confirm the OneDrive client has actually finished syncing — the 3.7 GB is only
   safe if it is uploaded, not merely enrolled. Check the client's own status,
   not the folder's existence.
@@ -120,8 +147,11 @@ passes.
 
 ### 1. Stage everything off the box
 
-Target `desktop:C:\g15-staging\`. Transport: ssh from desktop-wsl pulling
-through g15's Windows sshd, `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`.
+Target `latitude:/mnt/immich-mirror/g15-staging/`. Transport: **g15-wsl pushes
+outbound to latitude's LAN address**, `ssh -i ~/.ssh/id_fleet -o
+IdentitiesOnly=yes me@192.168.8.155` — verified to authenticate, 78 MB/s
+measured. Windows-side items (`Music`) go the same way, read through
+`/mnt/c` from inside the distro.
 
 1. Stop postgres cleanly on g15-wsl before copying `pgdata`. A running postgres
    directory copies torn — `hosts/latitude/debian/mirror-refresh.sh`'s header
@@ -129,23 +159,24 @@ through g15's Windows sshd, `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`.
 2. Copy in **chunks with a marker per chunk**, reusing the shape of
    `scratchpad/xfer2.sh` (18 × 10 GB batches, resumable). An interruption then
    costs one chunk, not the run.
-3. `Music`, the three docker volumes (`docker run --rm -v <vol>:/v …` to tar
-   each), and `Downloads` if kept.
+3. `Music`, read from `/mnt/c/Users/methe/Music`. Nothing else — the docker
+   volumes and `Downloads` are dropped, not staged.
 
 **Check — by manifest, never by `du`.** Path plus size for every file, sorted
 `LC_ALL=C`, compared on both sides. `du` totals match even when one file is
 truncated, which is exactly what a killed `tar` leaves behind.
 
-Budget: ~293 GB at 44 MB/s ≈ 1 h 55 m. With the Ethernet cable ≈ 45 m.
+Budget: ~292 GB at 78 MB/s ≈ **1 h 5 m**. The Ethernet cable (117 MB/s) would
+save ~20 minutes and is not worth unplugging anything for.
 
 ### 2. Install Debian 13 trixie
 
 Mirror latitude's shape where the reasons still apply, and only there:
 
-- **Unencrypted ext4 root.** latitude's rationale is "must boot unattended" and
-  is recorded as settled. g15 is a personal laptop that leaves the flat — this
-  is the one place to diverge and take LUKS. Decide explicitly rather than by
-  copying.
+- **Unencrypted ext4 root — decided, not copied.** latitude's own rationale is
+  "must boot unattended", which does not transfer. The reason here is g15's own:
+  it is a home box that does not get carried around (owner, 2026-09-07). Had it
+  travelled, this is where LUKS would have gone in.
 - GUI: install a desktop environment. The whole point of the reinstall is that
   this is a workstation, not a services host.
 - Hostname `g513ie` (the OS-hostname layer keeps the SKU, per the two-layer
@@ -174,7 +205,13 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
   explicit `192.168.8.0/24` carve-out. That harvest is the only written spec for
   the role.
 - Charge limit via `tier_battery_limit`.
-- Restore `/home/me`, then `pgdata`, then `Music`.
+- Restore `/home/me`, then `pgdata`, then `Music` — pulled from latitude, which
+  is now a direct 2 ms peer.
+- **Noticed while planning, not fixed here:** latitude has no `~/.ssh/id_fleet`
+  and no `Host *.gg.ez` block, so the always-on box cannot *originate* fleet ssh
+  — it can only be connected to. Nothing in this plan needs it (g15-wsl pushes),
+  but it is a real asymmetry and belongs in the roadmap rather than in this
+  spec's scope.
 
 ### 5. Flip the manifest — one change, not several
 
@@ -208,13 +245,17 @@ runtime, which is why `provision/orca-serve.sh` stays in the repo for
 Until phase 2 begins, rollback is free: nothing on g15 has changed and the
 staging copy is redundant. Once the disk is wiped, rollback means reinstalling
 Windows — so **phase 1's manifest check is the point of no return** and must
-pass before the installer boots. Keep the staging copy until the new box has run
-for a week, then delete it deliberately.
+pass before the installer boots. Keep the staging copy on latitude until the new
+box has run for a week, then delete it deliberately.
 
 ## Open questions
 
-- LUKS on the root or not (phase 2).
-- Whether `Downloads` is kept (phase 0).
-- Whether latitude should hold a second copy of `pgdata` while the box is being
-  rebuilt. 186 GB at relay speed is ~14 hours, so this is only worth it if the
-  single staging copy on desktop feels too thin.
+**None blocking.** All four that this design opened were answered on 2026-09-07:
+no LUKS, `Downloads` dropped, Docker Desktop dropped with its data, `Music`
+returns to g15.
+
+One thing deliberately left un-decided because it costs nothing to defer: whether
+a second copy of `pgdata` should exist while the box is rebuilt. The single
+staging copy sits on latitude, which is the always-on box on a direct 2 ms path
+and already the fleet's backup hub — thin enough is a judgement call, and the
+answer can wait until phase 1 has actually run.

@@ -2074,7 +2074,16 @@ were not, and all four will recur for the next project moved there.
 Transport, for the next time something big has to move: the two boxes' WSL
 distros reach each other over tailscale **through the DERP relay on hub
 (cyphy.kz, Kazakhstan)** — 3-4 MB/s, and not a misconfiguration, just no direct
-path between two NATed distros. **Re-measured 2026-09-07: still 3.3 MB/s, and
+path between two NATed distros. **But that is the ONLY relayed pair in the
+fleet, and "two separate LANs" was never true** (see AGENTS.md, corrected
+2026-09-07): every member but hub is behind one router, and `tailscale ping`
+gives latitude 2 ms direct, g15 3 ms direct. The winning route out of g15-wsl is
+therefore the distro **pushing outbound** to latitude's LAN address —
+`me@192.168.8.155` with `id_fleet`, **78 MB/s measured** — because NAT blocks
+reaching *in*, not going out. Ranked, all measured 2026-09-07 on 3 GB:
+g15-wsl→latitude LAN **78 MB/s** > desktop-wsl→latitude tailnet 99 MB/s (direct
+P2P) > latitude←g15-Windows-sshd→wsl.exe 44 MB/s (two wifi hops) > relay
+3.3 MB/s. **Re-measured 2026-09-07: the relay is still 3.3 MB/s, and
 the wifi is no longer the excuse** — both laptops now associate at a 1201 Mbps
 WiFi 6 rate (so the old "g15 is stuck on 2.4 GHz channel 12, 286 Mbps, and
 MT7921 exposes no band-preference property" no longer holds), and the relayed
