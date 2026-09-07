@@ -327,8 +327,16 @@ box has run for a week, then delete it deliberately.
 no LUKS, `Downloads` dropped, Docker Desktop dropped with its data, `Music`
 returns to g15.
 
-One thing deliberately left un-decided because it costs nothing to defer: whether
-a second copy of `pgdata` should exist while the box is rebuilt. The single
-staging copy sits on latitude, which is the always-on box on a direct 2 ms path
-and already the fleet's backup hub — thin enough is a judgement call, and the
-answer can wait until phase 1 has actually run.
+The last one — whether a second copy of `pgdata` should exist while the box is
+rebuilt — was left to wait until phase 1 had actually run. It ran on 2026-09-07
+and the answer is **no second copy** (owner). So `pgdata` exists in exactly one
+place: `latitude:/mnt/immich-mirror/g15-staging/pgdata` on `/dev/sdd2`, a USB
+drive on the dock this repo calls the flaky one. The internal NVMe behind
+`/mnt/immich` had 655 GB free and a `cp -a` would have cost nothing; it was
+offered and declined. Not an open item — but if that drive misbehaves during the
+rebuild, there is nothing to fall back on, so say so at once rather than
+retrying.
+
+**Phase 1 is complete.** All three payloads verified by manifest on 2026-09-07:
+`pgdata` 1297 entries / 186G and `home-me` 341543 entries / 18G on latitude,
+`Music` 18377 entries / 88.3G on desktop. Phase 2 may boot the installer.

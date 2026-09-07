@@ -2486,3 +2486,84 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
   17. latitude has no PowerShell, which is why its count looked sane. Second
   false-confidence failure for this number after the 2026-08-13 one, and the same
   lesson: `just test`'s printed total is a floor, not the repo.
+
+### qBittorrent: автоудаление включено 2026-09-07 — и у застрявшего импорта теперь таймер
+
+- Настройки (проверены через `/api/v2/app/preferences`): `max_ratio = 7`
+  (ставился 3, поднят до 7 в тот же день),
+  `max_seeding_time = 44640` мин (31 день), **`max_ratio_act = 3` = Remove
+  torrent AND files**. Было `max_ratio = 10` / act `Pause`, то есть де-факто
+  вечное сидирование и ноль автоочистки.
+- **Библиотеке это не угрожает, замерено:** после автоснятия 25 торрентов вместе
+  с файлами `df` не изменился (662 GB занято / 259 свободно до и после), Radarr
+  21/21 файлов на диске, Sonarr 143/143, пропавших 0. Хардлинк: удаление снимает
+  ИМЯ, данные уходят с последним именем, у библиотеки имя своё.
+- **Что стало опаснее — зазор «докачано, но не импортировано».** Раньше
+  застрявший `importPending` (имена без года, см. выше) сидел безопасно месяцами,
+  потому что торрент жил вечно. Теперь его снесёт ratio 3 или 31 день, после чего
+  *arr увидит «path does not exist», пометит failed и **пойдёт качать заново**.
+  Вывод: застрявшую очередь надо разбирать за дни, а не «когда-нибудь»;
+  `queue?includeUnknownMovieItems=true` — единственный способ её увидеть целиком.
+- `Remove Completed Downloads: True` в обоих *arr включено, но практически не
+  срабатывает (они не отслеживают почти ни один торрент). Реально удаляет только
+  правило qBittorrent — на него и рассчитывать.
+- `torrents/sources` — это **export dir** qBittorrent (`export_dir =
+  /data/torrents/sources`), куда он кладёт копию каждого добавленного `.torrent`.
+  Не watch dir (`scan_dirs = {}`), так что удаление старых копий ничего не
+  переподхватит. Свои копии qBittorrent держит в `/config/qBittorrent/BT_backup`.
+- **С 2026-09-07 правило ровное: удалять в Sonarr/Radarr, и только для живого
+  торрента ещё в qBittorrent.** Три папки со «вторым линком без торрента»
+  (`Azumanga Daioh` 20.9 GB, `The Amazing Digital Circus` 2.8 GB,
+  `I.Fought.The.Law.2025` 2.1 GB) удалены — они освобождали 0 байт, но ломали
+  правило: qBittorrent про них не знал, значит его автоудаление их не тронуло бы
+  никогда. После удаления библиотека цела (38 крупных файлов — те же иноды,
+  `nlink` 2→1), Sonarr 143/143, `df` не изменился, как и ожидалось.
+  Под `torrents/` осталось ровно содержимое живых торрентов.
+- **Проверка перед удалением, если торрента нет:** глянуть, нет ли одноимённой
+  папки в `torrents/radarr` / `torrents/sonarr`. Если появилась — это снова тот
+  же класс, и её надо снести руками; иначе она останется навсегда.
+
+## g15 phase 1 done — where the only copies live (2026-09-07)
+
+- **Windows on g15 is staged for the wipe. Target is Ubuntu 26.04.1 LTS**, not
+  Debian 13 — changed by the owner on 2026-09-07 (he reads Debian as headless).
+  The technical argument that backs it: asus-linux names a **6.19+ kernel floor**
+  as the reason it does not support Debian-based distros, trixie ships 6.12, and
+  Ubuntu 26.04 ships 7.0 out of the box. Spec:
+  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md` (renamed —
+  the filename no longer names a distro).
+- **All three payloads are verified by manifest and these are the ONLY copies:**
+  - `latitude:/mnt/immich-mirror/g15-staging/pgdata` — 186G, 1297 entries.
+    qaz-law's postgres, physical copy, taken with the DB cleanly shut down.
+  - `latitude:/mnt/immich-mirror/g15-staging/home-me` — 18G, 341543 entries.
+  - `desktop:C:\Users\methe\g15-staging\Music` — 88.3G, 18377 entries.
+- **One copy of pgdata, by decision, not oversight.** Offered a free `cp -a` to
+  the internal NVMe behind `/mnt/immich` (655 GB free) and declined. It sits on
+  `/dev/sdd2`, the flaky dock. **Do not re-raise it as an open item** — but if
+  that dock starts resetting during the rebuild, say so immediately, because
+  there is nothing to fall back on.
+- **postgres is DOWN and stays down until phase 4.** `docker update
+  --restart=no qaz-law-db-1` was applied deliberately and is NOT undone: the
+  container dies with the disk. Do not "helpfully" restart it — a running PGDATA
+  invalidates the staged copy.
+- **Four writers on g15-wsl are stopped and stay stopped:** `orca-serve.service`
+  (the Orca headless runtime — this darkened the `g15-wsl` environment on `air`
+  and `desktop`, expected), plus the `dotfiles-sync`, `git-autofetch` and
+  `fleet-selfpull` timers. They are why the first `/home/me` pass missed by 20
+  lines; all three fired inside the transfer window.
+- **`fleet-selfpull.service` is `failed` on g15-wsl and that is pre-existing:**
+  four repos under `~/my` (`buton`, `embedthat`, `skep`, `vps`) have been dirty
+  for 65+ consecutive ticks, so it refuses to pull them and exits 1. Their
+  working trees ARE in the staged copy — rsync copies dirty files like any
+  other — so nothing is lost, but they will come back dirty.
+- **Install media verified:** `ubuntu-26.04.1-desktop-amd64.iso` on the Ventoy
+  drive's `Boot` partition, SHA256
+  `601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f`. **Secure
+  Boot on g15 is OFF**, so Ventoy needs no MokManager enrolment. The same
+  physical drive carries latitude's `xs700` archive-mirror partition;
+  `archive-mirror.timer` next fires 2026-10-01 05:01, so return it before then.
+- **Two gaps phase 4 will hit, both recorded in the spec's §4:** the provisioner
+  installs **neither docker nor a desktop toolchain**, and `linux.sh`'s closing
+  text explains that by pointing at "only a NixOS host" — none has existed since
+  2026-08-01. `dockerd` is what qaz-law needs to come back up. Undecided: by
+  hand as a phase-4 step, or a `tier_docker`.

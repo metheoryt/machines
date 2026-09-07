@@ -1556,7 +1556,7 @@ Expected at this point: `MANIFEST MATCH` for `pgdata` and for `music`, each nami
 
 **Run this immediately before Phase 2, not right after Task 7.** Days may pass between them; that is fine and expected. What must not happen is booting the installer on the strength of Task 7's `home` verdict, which was taken while the box was in use.
 
-- [ ] **Step 1: Quiesce the box — stop the timers FIRST, they are the writers that were missed**
+- [x] **Step 1: Quiesce the box — stop the timers FIRST, they are the writers that were missed**
 
 "Quiesced" meant "close your editors" until 2026-09-07, and that was not enough. `/home/me`'s first pass came out 20 lines short of a match and **not one of those lines was a human's edit** — three of this box's own user timers fired inside the five-minute transfer window, and Orca's trace log grew throughout. They will fire inside Task 8's window exactly the same way, and here a mismatch is a stop at the point of no return.
 
@@ -1587,7 +1587,7 @@ ssh g15-wsl.gg.ez 'who; echo "---"; ps -eo user,pid,args | grep -E "^me " | grep
 
 Expected: only the ssh session running this check. A leftover `orca`, `node`, `claude` or shell is what makes this pass unreliable — end it before continuing. The one process that must **stay** is the keepalive's `sleep infinity`, which runs as root and does not appear in this list.
 
-- [ ] **Step 2: Run the delta**
+- [x] **Step 2: Run the delta**
 
 Small enough to run in the foreground and watch:
 
@@ -1613,7 +1613,7 @@ plain second `stage` never removes it, so the gate would fail on a copy that is
 otherwise correct. `restage` is `stage` plus `--delete`, and it refuses (exit 5)
 a destination that does not already hold a first pass.
 
-- [ ] **Step 3: Verify, and this time demand an exact match**
+- [x] **Step 3: Verify, and this time demand an exact match**
 
 ```bash
 printf '%s\n' \
@@ -1624,7 +1624,7 @@ printf '%s\n' \
 
 Expected: `MANIFEST MATCH`, exit 0, **no tolerated differences.** Unlike Task 7 Step 3, a diff here is a stop: either something is still writing (back to Step 1) or the copy is genuinely incomplete (re-run Step 2).
 
-- [ ] **Step 4: Re-confirm `pgdata` has not moved since Task 7**
+- [x] **Step 4: Re-confirm `pgdata` has not moved since Task 7**
 
 Cheap, and it catches the one thing that silently invalidates the largest payload — postgres having been started again in the meantime:
 
@@ -1637,19 +1637,30 @@ printf '%s\n' \
 
 Expected: `No such file or directory`, and `state=exited restart=no`. If postgres was started, its manifest is stale: stop it again per Task 3 and re-run `stage.sh stage pgdata` and `verify pgdata` before the installer boots.
 
-- [ ] **Step 5: Declare phase 1 done, and say what that permits**
+- [x] **Step 5: Declare phase 1 done, and say what that permits**
+
+Two hosts, because the destination is split — and the verdict is the LAST line per payload, not any of them (see Task 7 Step 4):
 
 ```bash
-ssh g15-wsl.gg.ez 'grep -h MANIFEST /var/log/g15-staging/*.log | tail -6; \
-  echo "---"; ls -l /var/log/g15-staging/*.manifest'
-ssh latitude.gg.ez 'df -h /mnt/immich-mirror; sudo du -sh /mnt/immich-mirror/g15-staging/*'
+ssh g15-wsl.gg.ez 'for p in pgdata music home; do printf "%-7s %s\n" "$p" "$(grep MANIFEST /var/log/g15-staging/$p.log | tail -1)"; done; ls -l /var/log/g15-staging/*.manifest'
+ssh latitude 'df -h /mnt/immich-mirror | tail -1; sudo du -sh /mnt/immich-mirror/g15-staging/*'
 ```
 
-Expected: a `MANIFEST MATCH` for each of `pgdata`, `music` and `home`; three payload directories on latitude totalling ~293 GB; `Avail` around 315 GB.
+Expected: a `MANIFEST MATCH` for each of `pgdata`, `music` and `home`; on latitude `pgdata` ~186G and `home-me` ~18G with `Avail` around 405G; Music's 88.3 GB on desktop's `C:`. **This step said "three payload directories on latitude totalling ~293 GB, `Avail` around 315 GB" until it was run** — the same pre-split arithmetic amendment 5 caught in Task 6 Step 4, in a second place. Two payloads on latitude, one on desktop.
+
+Recorded on the run of 2026-09-07:
+
+```
+pgdata  MANIFEST MATCH —   1297 entries   186G  latitude:/mnt/immich-mirror/g15-staging/pgdata
+music   MANIFEST MATCH —  18377 entries  88.3G  desktop:C:\Users\methe\g15-staging\Music
+home    MANIFEST MATCH — 341543 entries    18G  latitude:/mnt/immich-mirror/g15-staging/home-me
+```
 
 **With those three lines present, Phase 2 may boot the installer. Without all three, it may not.** Nothing on g15 has been destroyed up to this point, so this is the last moment at which rollback is free.
 
 The staging copy stays on latitude until the rebuilt box has run for a week, then is deleted deliberately — not left to be reclaimed by accident.
+
+**One copy, and that is a decision rather than an oversight** (owner, 2026-09-07). The spec left "should a second copy of `pgdata` exist while the box is rebuilt" open until phase 1 had actually run; it has, and the answer is no. So `pgdata` now exists in exactly one place: `latitude:/mnt/immich-mirror/g15-staging/pgdata`, which is `/dev/sdd2` — a USB drive on the dock `AGENTS.md` calls the flaky one (24 `usb reset` events in one day under load; zero in the 24 hours before this run). The internal NVMe behind `/mnt/immich` had 655 GB free and would have made a `cp -a` copy for free. It was offered and declined. **Nobody should re-raise it as though it were an open item; the thing to do if the drive misbehaves is say so immediately, because there is no second copy to fall back on.**
 
 ---
 
