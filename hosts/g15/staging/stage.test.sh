@@ -222,4 +222,123 @@ check $? "STAGE_LAT overrides the destination host"
 STAGE_DIR="/srv/elsewhere" "$SH" cmd pgdata 2>/dev/null | grep -q "/srv/elsewhere/pgdata"
 check $? "STAGE_DIR overrides the staging root"
 
+
+# ── 9. require_root must ACCEPT root, not only refuse non-root ────────────────
+# Section 7's two root assertions both check the REFUSAL, and a require_root
+# that is broken in the *other* direction produces exactly the same refusal —
+# so it passed a green suite while `plan`, `stage`, `verify` and `status` were
+# all dead. That is what happened: the comparison in require_root read
+#   [ "1000 4 24 27 30 46 100 1000 1001id -u)" = 0 ]
+# a write-time command-substitution leak baked into the plan document's own code
+# block, so extracting it verbatim reproduced it faithfully. `cmd` and
+# `manifest-cmd` never call require_root, which is why every hand-check passed.
+#
+# The shim gives uid 0 without root and a no-op rsync, so the accept path is
+# reachable in the gate on any box.
+shim="$(mktemp -d)"
+cat > "$shim/id" <<'SHIM'
+#!/bin/sh
+case "$1" in -u) echo 0 ;; *) exec /usr/bin/id "$@" ;; esac
+SHIM
+cat > "$shim/rsync" <<'SHIM'
+#!/bin/sh
+echo "SHIM-RSYNC $*"
+SHIM
+cat > "$shim/ssh" <<'SHIM'
+#!/bin/sh
+exit "${SHIM_SSH_RC:-0}"
+SHIM
+chmod +x "$shim/id" "$shim/rsync" "$shim/ssh"
+LOGD="$(mktemp -d)"
+trap 'rm -rf "$shim" "$LOGD" "$pid"' EXIT
+
+root_out="$(PATH="$shim:$PATH" "$SH" plan pgdata 2>&1)"
+printf '%s' "$root_out" | grep -q "SHIM-RSYNC"
+check $? "require_root ACCEPTS uid 0 — plan reaches rsync"
+printf '%s' "$root_out" | grep -q "must run as root"
+if [ $? -eq 0 ]; then
+    fail "require_root refuses uid 0 — its comparison is broken, every running mode is dead"
+else
+    pass "require_root does not refuse uid 0"
+fi
+
+# ── 10. The delete pass: opt-in by its own mode word ──────────────────────────
+# Task 8 re-runs `home` days after Task 6 and then demands an EXACT manifest
+# match. Without --delete, a file deleted under /home/me in between lingers at
+# the destination and that gate fails on a copy which is otherwise correct —
+# at the point of no return. So a delete pass exists; it is NOT the default,
+# because on a mistyped STAGE_DIR --delete is not a no-op.
+for p in pgdata home music; do
+    printf '%s' "$("$SH" cmd "$p" 2>/dev/null)" | grep -q -- "--delete"
+    if [ $? -eq 0 ]; then
+        fail "$p: the DEFAULT composition carries --delete"
+    else
+        pass "$p: the default composition carries no --delete"
+    fi
+done
+
+del="$("$SH" cmd home delete 2>/dev/null)"
+printf '%s' "$del" | grep -q -- "--delete"
+check $? "cmd <payload> delete composes --delete"
+printf '%s' "$del" | grep -qE -- "(^| )'?-n'?( |$)"
+if [ $? -eq 0 ]; then
+    fail "cmd <payload> delete is also a dry run — the delete pass would move nothing"
+else
+    pass "cmd <payload> delete is not a dry run"
+fi
+printf '%s' "$del" | grep -q -- "--delete-excluded"
+if [ $? -eq 0 ]; then
+    fail "delete pass carries --delete-excluded, which would remove the parked .rsync-partial files and the protected sockets"
+else
+    pass "delete pass does not carry --delete-excluded"
+fi
+printf '%s' "$del" | grep -q -- "--exclude=.rsync-partial/"
+check $? "delete pass still excludes .rsync-partial/ (excluded means protected from deletion)"
+
+dd="$("$SH" cmd home delete-dry 2>/dev/null)"
+printf '%s' "$dd" | grep -q -- "--delete" && \
+    printf '%s' "$dd" | grep -qE -- "(^| )'?-n'?( |$)"
+check $? "cmd <payload> delete-dry composes --delete AND -n (see what would be removed first)"
+
+"$SH" restage >/dev/null 2>&1; [ "$?" = 2 ]
+check $? "restage with no payload exits 2"
+"$SH" restage nosuchpayload >/dev/null 2>&1; [ "$?" = 2 ]
+check $? "restage with an unknown payload exits 2"
+
+pid="$(mktemp)"
+STAGE_PGPID="$pid" "$SH" restage pgdata >/dev/null 2>&1; [ "$?" = 3 ]
+check $? "restage pgdata refuses with exit 3 while postmaster.pid exists"
+rm -f "$pid"
+
+STAGE_PGPID="$pid" "$SH" restage home >/dev/null 2>&1; [ "$?" = 1 ]
+check $? "a non-root restage exits 1 (the root refusal, same as stage)"
+
+# The destination guard: a delete pass is only ever a SECOND pass, so it refuses
+# an absent or empty destination rather than mirroring a fresh tree with
+# --delete armed. Exit 5. The shimmed ssh stands in for the remote check.
+out5="$(PATH="$shim:$PATH" SHIM_SSH_RC=1 STAGE_LOGDIR="$LOGD" \
+        STAGE_PGPID="$pid" "$SH" restage home 2>&1)"; rc5=$?
+[ "$rc5" = 5 ]
+check $? "restage refuses with exit 5 when the destination is absent or empty (got $rc5)"
+printf '%s' "$out5" | grep -qi "second pass"
+check $? "the exit-5 refusal says why: a delete pass is only ever a second pass"
+
+# ...and with a destination that does exist, the delete pass actually arms
+# --delete. stage/restage redirect their output into the log, so read it there.
+rm -f "$LOGD"/home.log
+PATH="$shim:$PATH" SHIM_SSH_RC=0 STAGE_LOGDIR="$LOGD" STAGE_PGPID="$pid" \
+    "$SH" restage home >/dev/null 2>&1
+grep -q -- "--delete" "$LOGD/home.log" 2>/dev/null
+check $? "restage runs rsync WITH --delete"
+
+rm -f "$LOGD"/home.log
+PATH="$shim:$PATH" SHIM_SSH_RC=0 STAGE_LOGDIR="$LOGD" STAGE_PGPID="$pid" \
+    "$SH" stage home >/dev/null 2>&1
+grep -q -- "--delete" "$LOGD/home.log" 2>/dev/null
+if [ $? -eq 0 ]; then
+    fail "plain stage runs rsync WITH --delete — the first pass must not delete"
+else
+    pass "plain stage runs rsync without --delete"
+fi
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi

@@ -24,6 +24,32 @@ These apply to every task below, without being repeated in it.
 - **Postgres stays stopped once Task 3 stops it.** Any restart rewrites `pgdata` and invalidates the manifest taken in Task 7. The container's restart policy is set to `no` deliberately and is **not** restored — the container dies with the disk.
 - **Nothing in this plan wipes, formats, deletes or reinstalls anything.** Phase 1 is additive on both boxes. Rollback until Phase 2 is "delete the staging copy".
 
+### Amendments (2026-09-07, recorded after Task 2)
+
+Two changes to what Task 1 delivered. Both are in `stage.sh` and its suite
+already; the code blocks in Task 1 below are regenerated from the files, so the
+plan and the disk agree.
+
+1. **`require_root` never accepted root.** Its comparison read
+   `[ "1000 4 24 27 30 46 100 1000 1001id -u)" = 0 ]` — a write-time
+   command-substitution leak that was baked into *this document's own code
+   block*, so extracting it verbatim reproduced it faithfully. Every mode that
+   runs anything (`plan`, `stage`, `verify`, `status`) refused with exit 1 even
+   as uid 0. `cmd` and `manifest-cmd` never call it, which is why every
+   hand-check and all 59 suite assertions passed: the suite's two root
+   assertions both checked the *refusal*, and a require_root broken in the other
+   direction produces exactly the same refusal. The suite now shims `id -u` to 0
+   and a no-op `rsync` and asserts the ACCEPT path.
+2. **A delete pass exists: `./stage.sh restage <payload>`.** Task 8 re-runs
+   `home` days after Task 6 and then demands an exact manifest match. Without
+   `--delete` a file deleted under `/home/me` in between lingers at the
+   destination and that gate fails on a correct copy — at the point of no
+   return. `--delete` is opt-in by its own mode word rather than a default,
+   because on a first pass it is a no-op and on a mistyped `STAGE_DIR` it is
+   not; `restage` additionally refuses (exit 5) a destination that does not
+   already hold a first pass. `./stage.sh plan <payload> delete` previews the
+   removals. Exit 5 joins the documented codes.
+
 ---
 
 ## Measured facts this plan is built on
@@ -310,6 +336,125 @@ check $? "STAGE_LAT overrides the destination host"
 STAGE_DIR="/srv/elsewhere" "$SH" cmd pgdata 2>/dev/null | grep -q "/srv/elsewhere/pgdata"
 check $? "STAGE_DIR overrides the staging root"
 
+
+# ── 9. require_root must ACCEPT root, not only refuse non-root ────────────────
+# Section 7's two root assertions both check the REFUSAL, and a require_root
+# that is broken in the *other* direction produces exactly the same refusal —
+# so it passed a green suite while `plan`, `stage`, `verify` and `status` were
+# all dead. That is what happened: the comparison in require_root read
+#   [ "1000 4 24 27 30 46 100 1000 1001id -u)" = 0 ]
+# a write-time command-substitution leak baked into the plan document's own code
+# block, so extracting it verbatim reproduced it faithfully. `cmd` and
+# `manifest-cmd` never call require_root, which is why every hand-check passed.
+#
+# The shim gives uid 0 without root and a no-op rsync, so the accept path is
+# reachable in the gate on any box.
+shim="$(mktemp -d)"
+cat > "$shim/id" <<'SHIM'
+#!/bin/sh
+case "$1" in -u) echo 0 ;; *) exec /usr/bin/id "$@" ;; esac
+SHIM
+cat > "$shim/rsync" <<'SHIM'
+#!/bin/sh
+echo "SHIM-RSYNC $*"
+SHIM
+cat > "$shim/ssh" <<'SHIM'
+#!/bin/sh
+exit "${SHIM_SSH_RC:-0}"
+SHIM
+chmod +x "$shim/id" "$shim/rsync" "$shim/ssh"
+LOGD="$(mktemp -d)"
+trap 'rm -rf "$shim" "$LOGD" "$pid"' EXIT
+
+root_out="$(PATH="$shim:$PATH" "$SH" plan pgdata 2>&1)"
+printf '%s' "$root_out" | grep -q "SHIM-RSYNC"
+check $? "require_root ACCEPTS uid 0 — plan reaches rsync"
+printf '%s' "$root_out" | grep -q "must run as root"
+if [ $? -eq 0 ]; then
+    fail "require_root refuses uid 0 — its comparison is broken, every running mode is dead"
+else
+    pass "require_root does not refuse uid 0"
+fi
+
+# ── 10. The delete pass: opt-in by its own mode word ──────────────────────────
+# Task 8 re-runs `home` days after Task 6 and then demands an EXACT manifest
+# match. Without --delete, a file deleted under /home/me in between lingers at
+# the destination and that gate fails on a copy which is otherwise correct —
+# at the point of no return. So a delete pass exists; it is NOT the default,
+# because on a mistyped STAGE_DIR --delete is not a no-op.
+for p in pgdata home music; do
+    printf '%s' "$("$SH" cmd "$p" 2>/dev/null)" | grep -q -- "--delete"
+    if [ $? -eq 0 ]; then
+        fail "$p: the DEFAULT composition carries --delete"
+    else
+        pass "$p: the default composition carries no --delete"
+    fi
+done
+
+del="$("$SH" cmd home delete 2>/dev/null)"
+printf '%s' "$del" | grep -q -- "--delete"
+check $? "cmd <payload> delete composes --delete"
+printf '%s' "$del" | grep -qE -- "(^| )'?-n'?( |$)"
+if [ $? -eq 0 ]; then
+    fail "cmd <payload> delete is also a dry run — the delete pass would move nothing"
+else
+    pass "cmd <payload> delete is not a dry run"
+fi
+printf '%s' "$del" | grep -q -- "--delete-excluded"
+if [ $? -eq 0 ]; then
+    fail "delete pass carries --delete-excluded, which would remove the parked .rsync-partial files and the protected sockets"
+else
+    pass "delete pass does not carry --delete-excluded"
+fi
+printf '%s' "$del" | grep -q -- "--exclude=.rsync-partial/"
+check $? "delete pass still excludes .rsync-partial/ (excluded means protected from deletion)"
+
+dd="$("$SH" cmd home delete-dry 2>/dev/null)"
+printf '%s' "$dd" | grep -q -- "--delete" && \
+    printf '%s' "$dd" | grep -qE -- "(^| )'?-n'?( |$)"
+check $? "cmd <payload> delete-dry composes --delete AND -n (see what would be removed first)"
+
+"$SH" restage >/dev/null 2>&1; [ "$?" = 2 ]
+check $? "restage with no payload exits 2"
+"$SH" restage nosuchpayload >/dev/null 2>&1; [ "$?" = 2 ]
+check $? "restage with an unknown payload exits 2"
+
+pid="$(mktemp)"
+STAGE_PGPID="$pid" "$SH" restage pgdata >/dev/null 2>&1; [ "$?" = 3 ]
+check $? "restage pgdata refuses with exit 3 while postmaster.pid exists"
+rm -f "$pid"
+
+STAGE_PGPID="$pid" "$SH" restage home >/dev/null 2>&1; [ "$?" = 1 ]
+check $? "a non-root restage exits 1 (the root refusal, same as stage)"
+
+# The destination guard: a delete pass is only ever a SECOND pass, so it refuses
+# an absent or empty destination rather than mirroring a fresh tree with
+# --delete armed. Exit 5. The shimmed ssh stands in for the remote check.
+out5="$(PATH="$shim:$PATH" SHIM_SSH_RC=1 STAGE_LOGDIR="$LOGD" \
+        STAGE_PGPID="$pid" "$SH" restage home 2>&1)"; rc5=$?
+[ "$rc5" = 5 ]
+check $? "restage refuses with exit 5 when the destination is absent or empty (got $rc5)"
+printf '%s' "$out5" | grep -qi "second pass"
+check $? "the exit-5 refusal says why: a delete pass is only ever a second pass"
+
+# ...and with a destination that does exist, the delete pass actually arms
+# --delete. stage/restage redirect their output into the log, so read it there.
+rm -f "$LOGD"/home.log
+PATH="$shim:$PATH" SHIM_SSH_RC=0 STAGE_LOGDIR="$LOGD" STAGE_PGPID="$pid" \
+    "$SH" restage home >/dev/null 2>&1
+grep -q -- "--delete" "$LOGD/home.log" 2>/dev/null
+check $? "restage runs rsync WITH --delete"
+
+rm -f "$LOGD"/home.log
+PATH="$shim:$PATH" SHIM_SSH_RC=0 STAGE_LOGDIR="$LOGD" STAGE_PGPID="$pid" \
+    "$SH" stage home >/dev/null 2>&1
+grep -q -- "--delete" "$LOGD/home.log" 2>/dev/null
+if [ $? -eq 0 ]; then
+    fail "plain stage runs rsync WITH --delete — the first pass must not delete"
+else
+    pass "plain stage runs rsync without --delete"
+fi
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi
 ```
 
@@ -333,15 +478,25 @@ Create `hosts/g15/staging/stage.sh`, then `chmod +x` it:
 #
 # RUNS ON g15-wsl, AS ROOT. Not on latitude, not on Windows.
 #
-#   ./stage.sh cmd          <payload> [dry]   print the rsync command, run nothing
+#   ./stage.sh cmd          <payload> [kind]  print the rsync command, run nothing
 #   ./stage.sh manifest-cmd <payload> src|dst print the manifest pipeline, run nothing
-#   ./stage.sh plan         <payload>         rsync -n: what would move
+#   ./stage.sh plan         <payload> [delete] rsync -n: what would move (or remove)
 #   ./stage.sh stage        <payload>         the copy (logs to $LOGDIR; detach it)
+#   ./stage.sh restage      <payload>         a SECOND pass, with --delete
 #   ./stage.sh verify       <payload>         manifest both sides and diff
 #   ./stage.sh status                         sizes on both sides + log tails
 #
 #   payload: pgdata | home | music
-#   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest mismatch
+#   kind:    go | dry | delete | delete-dry
+#   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
+#            mismatch · 5 restage into a missing or empty destination
+#
+# WHY `restage` IS A SEPARATE WORD. Task 8 re-runs `home` days after Task 6 and
+# then demands an EXACT manifest match — the spec's point of no return. Without
+# --delete, a file deleted under /home/me in between lingers at the destination
+# and that gate fails on a copy which is otherwise correct. But --delete must
+# not be the default: on a first pass it is a no-op, and on a mistyped
+# STAGE_DIR it removes whatever is at that path instead.
 #
 # WHY ROOT, ALWAYS, EVEN TO LOOK. pgdata's directories are mode 700 owned by
 # uid 999, so `find` cannot descend as `me` — the manifest, not just the copy,
@@ -407,15 +562,18 @@ usage() {
     cat >&2 <<'USAGE'
 stage.sh — move g15's payload onto latitude. Runs ON g15-wsl, AS ROOT.
 
-  ./stage.sh cmd          <payload> [dry]   print the rsync command, run nothing
+  ./stage.sh cmd          <payload> [kind]  print the rsync command, run nothing
   ./stage.sh manifest-cmd <payload> src|dst print the manifest pipeline, run nothing
-  ./stage.sh plan         <payload>         rsync -n: what would move
+  ./stage.sh plan         <payload> [delete] rsync -n: what would move (or remove)
   ./stage.sh stage        <payload>         the copy (logs to $LOGDIR; detach it)
+  ./stage.sh restage      <payload>         a SECOND pass, with --delete
   ./stage.sh verify       <payload>         manifest both sides and diff
   ./stage.sh status                         sizes on both sides + log tails
 
   payload: pgdata | home | music
-  exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest mismatch
+  kind:    go | dry | delete | delete-dry
+  exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
+           mismatch · 5 restage into a missing or empty destination
 USAGE
     exit 2
 }
@@ -425,7 +583,7 @@ die()  { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit "${2:-1}"; }
 say()  { printf '[%s] %s\n' "$(date +%F_%H:%M:%S)" "$*"; }
 
 require_root() {
-    [ "1000 4 24 27 30 46 100 1000 1001id -u)" = 0 ] && return 0
+    [ "$(id -u)" = 0 ] && return 0
     # $MODE/$P rather than "$@": the caller passes nothing, and the point of the
     # message is to hand back a runnable line.
     die "must run as root (pgdata's dirs are mode 700 owned by uid 999, so even
@@ -475,7 +633,7 @@ payload_flags() {
 }
 
 CMD=()
-build_cmd() {   # $1 payload  $2 dry|go
+build_cmd() {   # $1 payload  $2 go|dry|delete|delete-dry
     local src dst
     src="$(payload_src "$1")" || return 1
     dst="$(payload_dst "$1")" || return 1
@@ -483,7 +641,14 @@ build_cmd() {   # $1 payload  $2 dry|go
     mapfile -t f < <(payload_flags "$1")
     f+=(--partial --partial-dir=.rsync-partial '--exclude=.rsync-partial/'
         --human-readable --info=stats2)
-    [ "$2" = dry ] && f+=(-n)
+    # --delete is opt-in by its own word and never a default. On the FIRST
+    # pass into a fresh directory it is a no-op; on a mistyped STAGE_DIR it is
+    # not. See the restage arm for the guard that goes with it.
+    case "$2" in
+        dry)        f+=(-n) ;;
+        delete)     f+=(--delete) ;;
+        delete-dry) f+=(--delete -n) ;;
+    esac
     CMD=(rsync "${f[@]}" -e "ssh $SSH_OPTS" --rsync-path='sudo rsync'
          "$src/" "$LAT:$dst/")
     return 0
@@ -531,6 +696,7 @@ MODE="${1:-}"; P="${2:-}"; ARG="${3:-}"
 case "$MODE" in
     cmd)
         [ -n "$P" ] || usage
+        case "${ARG:-go}" in go|dry|delete|delete-dry) ;; *) usage ;; esac
         build_cmd "$P" "${ARG:-go}" || die "unknown payload: $P" 2
         printf '%q ' "${CMD[@]}"; printf '\n'
         ;;
@@ -543,13 +709,17 @@ case "$MODE" in
 
     plan)
         [ -n "$P" ] || usage
-        build_cmd "$P" dry || die "unknown payload: $P" 2
+        # `plan` means dry, so `plan <payload> delete` is the DRY delete pass:
+        # it lists what --delete would remove, which is the whole point of
+        # previewing it.
+        case "${ARG:-}" in ''|dry) K=dry ;; delete) K=delete-dry ;; *) usage ;; esac
+        build_cmd "$P" "$K" || die "unknown payload: $P" 2
         require_root
         say "dry run: $P"
         "${CMD[@]}"
         ;;
 
-    stage)
+    stage|restage)
         [ -n "$P" ] || usage
         payload_src "$P" >/dev/null || die "unknown payload: $P" 2
         # The guard comes BEFORE the root check so it is reachable in the gate,
@@ -562,13 +732,30 @@ hosts/latitude/debian/mirror-refresh.sh's header. Stop it first:
   docker update --restart=no qaz-law-db-1 && docker stop qaz-law-db-1" 3
         fi
         require_root
-        build_cmd "$P" go || die "unknown payload: $P" 2
+        K=go
+        if [ "$MODE" = restage ]; then
+            K=delete
+            # A delete pass is only ever a SECOND pass. Refuse a destination
+            # that does not already hold a first one: with --delete armed
+            # against the wrong path, rsync removes what is there. The check
+            # goes AFTER require_root so a non-root run in `just test` stops at
+            # the root refusal instead of reaching for the network.
+            dstq="$(payload_dst "$P")"
+            q="$(printf 'test -d %q && [ -n "$(ls -A %q)" ]' "$dstq" "$dstq")"
+            # A here-string, not a pipe: with pipefail on, a pipe would let the
+            # writer's EPIPE outvote ssh's own exit code.
+            ssh $SSH_OPTS "$LAT" 'sudo bash -s' <<<"$q" \
+                || die "restage refuses: $LAT:$dstq is missing or empty.
+A delete pass is only ever a SECOND pass over a destination that already holds
+one. Run 'stage $P' first, or fix STAGE_DIR." 5
+        fi
+        build_cmd "$P" "$K" || die "unknown payload: $P" 2
         mkdir -p "$LOGDIR" && chmod 755 "$LOGDIR"
         # 755 so the log is tailable over the DIRECT ssh into the distro as
         # `me`, instead of every progress check having to go back through
         # Windows for root.
         exec >>"$LOGDIR/$P.log" 2>&1
-        say "=== stage $P"
+        say "=== $MODE $P"
         say "src=$(payload_src "$P")  dst=$LAT:$(payload_dst "$P")"
         ssh $SSH_OPTS "$LAT" "sudo mkdir -p $(payload_dst "$P") && sudo chown me:me $(payload_dst "$P")" </dev/null \
             || die "could not create the destination directory"
@@ -576,7 +763,7 @@ hosts/latitude/debian/mirror-refresh.sh's header. Stop it first:
         case "$rc" in
             0)  say "rsync clean" ;;
             24) say "rsync exit 24 (source files vanished mid-run) — benign here, treating as done"; rc=0 ;;
-            *)  say "rsync exit $rc — re-run 'stage $P', it resumes from .rsync-partial" ;;
+            *)  say "rsync exit $rc — re-run '$MODE $P', it resumes from .rsync-partial" ;;
         esac
         say "=== done rc=$rc"
         exit $rc
@@ -1073,12 +1260,24 @@ Small enough to run in the foreground and watch:
 ```bash
 printf '%s\n' \
   'cd /home/me/machines/hosts/g15/staging' \
-  './stage.sh stage home' \
+  './stage.sh plan home delete' \
+  './stage.sh restage home' \
   'tail -20 /var/log/g15-staging/home.log' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
-Expected: a few hundred MB at most, `rsync clean`, `=== done rc=0`. A large delta means something is still running — go back to Step 1.
+Expected: the `plan … delete` line first lists what would be REMOVED at the
+destination — read it before the real pass; a long list of live-looking files
+means something is wrong with the path, not with the copy. Then a few hundred MB
+at most, `rsync clean`, `=== done rc=0`. A large delta means something is still
+running — go back to Step 1.
+
+**`restage`, not `stage`, and that is the whole reason this step can pass.**
+Task 6 copied `/home/me` days ago; anything deleted under it since then still
+sits at the destination, and Step 3 below demands an exact manifest match. A
+plain second `stage` never removes it, so the gate would fail on a copy that is
+otherwise correct. `restage` is `stage` plus `--delete`, and it refuses (exit 5)
+a destination that does not already hold a first pass.
 
 - [ ] **Step 3: Verify, and this time demand an exact match**
 
@@ -1128,7 +1327,7 @@ Two things this plan adds that the spec does not state. The keepalive gate (Task
 
 One spec item is deliberately out of scope: `Downloads` (2.2 GB, "owner reviews before the wipe"). That is a human review with no staging step, and inventing a copy for it would contradict the spec's own disposition. It belongs in Phase 2's pre-wipe checklist.
 
-**Both code blocks were extracted from this document and run before it was committed**, on desktop-wsl, non-root, with no g15 and no latitude involved. `bash -n` passes on both; the suite reports **ALL PASS** (59 assertions) against the script exactly as written above. Three defects were found that way and are fixed in the text: the manifest sorted by size-as-a-string instead of by path; `die()` printed `"$*"`, appending its exit-code argument to the message (the root refusal ended in a stray ` 1`); and `usage()` was a `sed` line-range into the script's own header, which drifts the first time a comment is added above it. The two assertions that pin the last two were mutation-tested by reintroducing each bug. The manifest pipeline was separately run against a tree carrying a regular file, a symlink, a broken symlink, a fifo, a socket and a `.rsync-partial/` directory, and handles all six as this plan claims.
+**Both code blocks were extracted from this document and run before it was committed**, on desktop-wsl, non-root, with no g15 and no latitude involved. `bash -n` passes on both; the suite reports **ALL PASS** (77 assertions) against the script exactly as written above, and the blocks are regenerated from the files, so the two cannot drift. Three defects were found that way and are fixed in the text: the manifest sorted by size-as-a-string instead of by path; `die()` printed `"$*"`, appending its exit-code argument to the message (the root refusal ended in a stray ` 1`); and `usage()` was a `sed` line-range into the script's own header, which drifts the first time a comment is added above it. **A fourth defect survived all of that and is the one worth learning from:** `require_root` compared a leaked literal to `0` and therefore refused even uid 0, killing `plan`, `stage`, `verify` and `status` — and the suite could not see it, because both of its root assertions checked the refusal, which a require_root broken in the other direction still produces. Extracting and running a script only proves the paths you actually take; `cmd` and `manifest-cmd` were the only modes reachable without root, and they never call it. The suite now shims `id -u` to 0 and asserts the accept path. Every assertion added for these four defects, and for the `restage` delete pass, was mutation-tested by reintroducing the bug it guards. The manifest pipeline was separately run against a tree carrying a regular file, a symlink, a broken symlink, a fifo, a socket and a `.rsync-partial/` directory, and handles all six as this plan claims.
 
 **The repo gate was not re-run for this change and does not need to be** — the change adds a markdown file and no executable. `stage.sh` and its suite land in Task 1, and Task 1 Step 5 runs the gate there.
 
