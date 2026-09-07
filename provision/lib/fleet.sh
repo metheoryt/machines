@@ -69,6 +69,22 @@ fleet_profile() {
     jq -r --arg m "$1" '.machines[$m].profile // "workstation"' "$(fleet_manifest_path)"
 }
 
+# fleet_repo_groups <machine>: which provision/repos.sh groups this box clones,
+# one per line. An absent field emits NOTHING, and role_repos then passes no
+# arguments so repos.sh keeps its own default — one code path, the manifest is a
+# pure override.
+#
+# This is a per-MACHINE field rather than a fleet-wide default because the two
+# cannot express the same thing: `pure` (work repos) belongs on air and desktop
+# and NOT on g15, which exists to be the personal-projects host. The rejected
+# alternatives were a machine-local opt-out file (untracked state that no
+# provision run reproduces — the same objection that keeps Ubuntu Pro out of
+# this repo) and the profile, which cannot distinguish them at all: g15, air and
+# desktop are all `workstation`.
+fleet_repo_groups() {
+    jq -r --arg m "$1" '.machines[$m].repo_groups // [] | .[]' "$(fleet_manifest_path)"
+}
+
 # fleet_profile_for_host [hostname]: resolve THIS box's profile straight from
 # detect.hostname; empty when no machine matches (e.g. a self-declared WSL host,
 # which carries fleet.local.json and no fleet.json entry — the caller defaults it).
