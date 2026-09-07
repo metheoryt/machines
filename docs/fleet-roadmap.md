@@ -6,8 +6,10 @@ the "where to head next" companion. For any item worth real work, run
 `superpowers:brainstorming` → `writing-plans` and drop the plan under
 `docs/superpowers/plans/`.
 
-_Last updated: 2026-08-27 — `server` returned to the fleet (P2 reversed) and was
-renamed `g15` the same day.
+_Last updated: 2026-09-07 — g15's Windows install was replaced by Ubuntu 26.04
+and `g15-wsl` ceased to exist; "Where we are now" was carrying four claims the
+rest of the repo had already corrected. Previously 2026-08-27 — `server`
+returned to the fleet (P2 reversed) and was renamed `g15` the same day.
 Previously 2026-08-01, rewritten after the latitude-server migration. The
 previous revision (2026-07-14) had gone materially wrong: retired node names,
 latitude at the wrong tailnet IP, and done items still open. If you find
@@ -22,19 +24,28 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| `g15` | `100.64.0.3` | Windows 11 (`g513ie`) | **back in `fleet.json` 2026-08-27**, renamed from `server` the same day — the personal-projects host. Windows kept on purpose; its Linux side is the WSL host `g15-wsl` below. `C:` is still ~416 GB used and unreviewed, but nothing is waiting on that review any more. Reach it as `methe@g15.gg.ez` |
+| `g15` | `100.64.0.10` | **Ubuntu 26.04 resolute** (`g513ie`) | the personal-projects host. **Windows was wiped 2026-09-07** and with it the `g15-wsl` distro — one host replaces two. Reach it as `me@g15.gg.ez` (no `ssh` block in the manifest; `ssh.user` defaults to `me`). Its old tailnet node `100.64.0.3` is retired. **In restic nowhere** — see the item at the end of P6 |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
 
-`desktop-wsl` (`100.64.0.6`) and `g15-wsl` (`100.64.0.9`) are self-declared
-WSL hosts: no `fleet.json` entry, a gitignored `fleet.local.json` instead. Both
-are `dispatch:direct` — each owns its own tailnet node, distinct from the
-Windows parent's.
+`desktop-wsl` (`100.64.0.6`) is the one remaining self-declared WSL host: no
+`fleet.json` entry, a gitignored `fleet.local.json` instead. It is
+**`dispatch:parent`** since 2026-08-31 — reached as `wsl.exe -d desktop-wsl`
+through `desktop`, because in `networkingMode=mirrored` its sshd lost port 22 to
+the Windows OpenSSH server and answers on 2222 instead. Its own tailnet node is
+still registered and no longer load-bearing. `g15-wsl` (`100.64.0.9`) is gone
+with the Windows install it lived on.
 
-Two separate LANs. Same-LAN pairs get direct P2P (~3ms); cross-LAN pairs relay
-through our own DERP — expected and accepted, which is why **UPnP/router
-port-mapping is not on this backlog**.
+**One LAN, not two.** Every member except `hub` sits behind the same router and
+gets direct P2P — measured 2026-09-07 from `desktop-wsl`: latitude 2 ms, g15
+3 ms, hub 6 ms via its public IP, 99 MB/s to latitude. This section said "two
+separate LANs … cross-LAN pairs relay through our own DERP — expected and
+accepted" until 2026-09-07, and that sentence is why a migration design first
+wrote latitude off as a 7-hour staging target when it is the fastest box in the
+fleet. **UPnP/router port-mapping is still not on this backlog** — now because
+nothing relays, rather than because relaying was accepted. The one genuine DERP
+pair was `g15-wsl`, which no longer exists.
 
 **There is no Nix host left in the fleet, and the NixOS tree is deleted**
 (2026-08-01, tag `nixos-final`). `modules/`, `flake.nix` and `pkgs/` no longer
@@ -343,7 +354,9 @@ Nix ever returns. Leave them.
   **Access path (SUPERSEDED 2026-08-27): `ssh methe@g15.gg.ez`.** The box was
   renamed to `g15` and put back into `fleet.json`, so the member block is
   restored and the bare `ssh g15` alias works again; `server.gg.ez` no longer
-  resolves. The username is still `methe`, not `me`.
+  resolves. **SUPERSEDED AGAIN 2026-09-07:** the username is `me`, not `methe` —
+  the Windows install and its user are gone, and g15's manifest entry carries no
+  `ssh` block at all.
 - [x] **`hosts/server/` deleted** — a `winget-packages.json` for a box leaving
   service, and a README whose only unique facts are recorded here. Git history
   holds both.

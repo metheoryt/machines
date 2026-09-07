@@ -2004,7 +2004,11 @@ the code does not say and a re-read of the diff would not tell you.
 - **`ssh-wsl.sh` needs `jq` but runs BEFORE the `linux.sh` tier that installs
   it.** On a fresh distro it dies at step 2. `apt-get install -y jq git curl` as
   root first; do not reorder the chain.
-- **`FLEET_WIN_USER=methe` is mandatory on `server`.** `ssh-wsl.sh` auto-detects
+- **`FLEET_WIN_USER=methe` was mandatory on `server`/`g15` — MOOT since
+  2026-09-07**, when that box's Windows install and its `g15-wsl` distro were
+  wiped. Kept because the mechanism still applies to any future WSL host with
+  more than one Windows user profile, and `desktop` has only `methe`, so nothing
+  in the fleet needs the override today. `ssh-wsl.sh` auto-detects
   the Windows key store by globbing `/mnt/c/Users` and requires **exactly one**
   non-system dir; g513ie has `methe` AND `WsiAccount`, so the detect yields
   empty, key persistence is skipped, and the only symptom is one warning. The

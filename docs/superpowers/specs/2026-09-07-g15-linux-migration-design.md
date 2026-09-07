@@ -287,8 +287,16 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
   explicit `192.168.8.0/24` carve-out. That harvest is the only written spec for
   the role.
 - Charge limit via `tier_battery_limit`.
-- Restore `/home/me`, then `pgdata`, then `Music` — pulled from latitude, which
-  is now a direct 2 ms peer.
+- Restore `/home/me`, then `pgdata`, then `Music` — **pulled** from latitude,
+  which is now a direct 2 ms peer. The direction is forced by the asymmetry in
+  the next bullet: latitude cannot originate fleet ssh, so it cannot push. And
+  the pull is not symmetric with phase 1's push — `stage.sh` wrote into
+  `/mnt/immich-mirror/g15-staging` as root, so every restore leg needs
+  `--rsync-path="sudo rsync"` on the g15 side. Without it rsync exits 23 on the
+  first unreadable directory, part-way through, and looks like a permissions
+  problem on the destination rather than the source (amended 2026-09-07, after
+  it happened). `Music` came back from `desktop` instead, where it had been
+  staged — that leg is an ordinary unprivileged pull.
 - **Noticed while planning, not fixed here:** latitude has no `~/.ssh/id_fleet`
   and no `Host *.gg.ez` block, so the always-on box cannot *originate* fleet ssh
   — it can only be connected to. Nothing in this plan needs it (g15-wsl pushes),
