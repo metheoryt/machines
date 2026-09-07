@@ -463,8 +463,11 @@ from the code.
 - **Roles are declared in `fleet.json`** and executed by `provision/roles/<role>.{sh,ps1}`.
   A role with no executor degrades to a printed plan rather than failing.
 - **Mount every external drive by UUID, never by `/dev/sdX`.** Every letter
-  reshuffles across a reboot on latitude (five bus-powered USB drives plus a card
-  reader race to enumerate) and one enclosure reports a fake serial.
+  reshuffles across a reboot on latitude (five external USB devices plus a card
+  reader race to enumerate) and one enclosure reports a fake serial. Only one of
+  the five is bus-powered — the XS2000 stick; the four spinners sit in two
+  self-powered Ugreen CM198 docks (measured 2026-09-07, correcting a
+  "bus-powered" claim this file and `project.md` both carried).
 - **Verify a scheduled job by firing its schedule, not by running the script.**
   `mirror-refresh.sh -go` passed by hand for weeks while every timer run reported
   `Failed` — its last command was falsy under `-go`. `systemctl start <unit>` then

@@ -204,18 +204,25 @@ is what made the right work obvious._
   Both docks run the `usb-storage` (BOT) driver, not `uas`, while the XS2000 on
   another bus does negotiate `uas`; assume BOT for anything plugged into them.
 
-  **Bay allocation — the 8 TB replaces `spare320`, not an archive drive.** The
-  current map is dock `4-1` = {`sdb` servarr, `sdc` spare320}, dock `4-2` =
-  {`sdd` immich-mirror, `sde` immich-2024}. Note what that means today: **the
-  archive source and its mirror-to-be are on the same bridge**, which the August
-  plan asserted they would not be. Put the 8 TB in `sdc`'s bay and move
-  `spare320` (ST320LT020, 36 202 power-on hours) to a standalone SATA-USB
-  enclosure, and the end state separates every source from its copy:
-  `4-1` = {8 TB servarr, freed 931 G HGST as archive mirror}, `4-2` = {library
-  mirror, archive source}, standalone = spare320. Keep spare320 mounted at
-  `/mnt/spare320` by UUID `3a78fd88-deb0-4c1a-a576-14abd0631d57` — restic repo
-  `14f4eab544` lives on it and resticprofile addresses it by path. The standalone
-  enclosure needs the same SMART pass-through check as the docks.
+  **Bay allocation — the 8 TB takes `spare320`'s bay, and `spare320` leaves the
+  docks.** All four bays are full: dock B (`670200210032`, `usb 4-1`, the flaky
+  one) = {`sdc` spare320 bay 1, `sdb` servarr bay 2}; dock A (`6702002103E1`,
+  `usb 4-2`) = {`sdd` library mirror bay 1, `sde` immich-2024 archive primary
+  bay 2}. Both dock A bays hold drives that have to stay, so the only bay that
+  can be freed is `spare320`'s. Move it (ST320LT020, 36 202 power-on hours) to a
+  standalone SATA-USB enclosure, keeping it mounted at `/mnt/spare320` by UUID
+  `3a78fd88-deb0-4c1a-a576-14abd0631d57` — restic repo `14f4eab544` lives on it
+  and resticprofile addresses it by path — and check SMART pass-through on that
+  enclosure the same way as on the docks.
+
+  End state: dock B = {8 TB servarr, freed 931 G HGST as archive mirror},
+  dock A = {library mirror, archive primary}, standalone = spare320. That does
+  satisfy the August plan's "the freed drive lands on a different dock from the
+  archive source", and it matches the standing rule in `project.md` — archive
+  primary on dock A, its copy on flakier dock B, long writes into dock B with
+  `--partial`. The cost to accept knowingly: the seeding library and the archive
+  copy then share the flakiest dock. Both are replaceable-or-a-copy, which is why
+  that is the acceptable side to load.
 
   **8 TB, not 16.** ~6.4 TB headroom after the move — ~14 months even at the
   2026-08-05 burst rate, years at the quiet rate; 16 TB is real money against

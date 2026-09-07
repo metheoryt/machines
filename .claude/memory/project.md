@@ -808,10 +808,26 @@ global + per-host). One bullet per fact under a topical heading.
   `sudo journalctl -k --since today | grep -aE "usb [0-9.-]+: (reset|USB disconnect)"`.
   Layout consequence: archive *primary* on dock A, *copy* on flakier dock B, and
   give any long write into dock B `--partial --append-verify` so a drop resumes.
+- **Neither dock is bus-powered, and both hang off ONE root hub** (measured
+  2026-09-07). Both are Ugreen **CM198** two-bay units on JMicron **JMS561U**
+  bridges (`152d:1561`), each with its own 12 V brick, occupying ports 1 and 2 of
+  the same xhci root hub (`usb4`, 5 Gbps). Serial ↔ port, the pair that is stable:
+  **dock A = `6702002103E1` = `usb 4-2`**, **dock B = `670200210032` = `usb 4-1`**
+  (the flaky one). Consequence for diagnosis: two docks dropping *together* is
+  explained by the shared host controller, NOT by shared bus power — a "buy a
+  self-powered drive" fix does not address it, and the 2026-08-16 double drop
+  stays undiagnosed. Consequence for scheduling: two long jobs on "different
+  docks" still contend for one 5 Gbps uplink.
+- **SMART passes through the CM198s** — `smartctl -i -d sat /dev/sdX` returns
+  model, rotation rate and `SMART support is: Enabled` on all four drives. So a
+  new drive can be surface-tested and SMART-audited in a dock, with no need to
+  find a native SATA port (there is no free one anywhere in the fleet — every box
+  is a laptop). Both docks bind `usb-storage` (BOT), not `uas`; the XS2000 on
+  another bus does negotiate `uas`, so driver choice is per-bridge, not per-box.
 - **`nofail` in fstab applies at boot only.** After any dock power-cycle or bus
   drop, every affected mount needs an explicit `sudo mount <target>`.
 - **Every `/dev/sdX` letter reshuffles across a reboot — treat any letter written
-  down anywhere as point-in-time only.** Five bus-powered USB spinners plus a card
+  down anywhere as point-in-time only.** Five external USB devices plus a card
   reader race to enumerate, and **USB port paths are not stable either**. Identify
   a drive by **UUID** (mounts), **bridge serial** in `/dev/disk/by-id/usb-*`
   (`6702002103E1` = dock A, `670200210032` = dock B; suffix `-0:0` is bay 1,
@@ -1281,9 +1297,10 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   than joining it — every text column comes out of the chart width — and a `gone`
   row shows its partition node there, since a vanished device has no drive to name.
 - **`psys` is not wall power.** The board's `power` row is the RAPL platform rail
-  — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The five
-  bus-powered USB spinners sit outside it, so real draw is well above what the row
-  says. The row prints the domain name (`psys`, or `package-0` where psys is
+  — CPU, GPU, memory, board logic — reading ~16-19W on latitude. The USB storage
+  sits outside it, so real draw is well above what the row says — and more so than
+  "bus-powered" implied: the four spinners draw from the docks' own 12 V bricks,
+  i.e. from the wall and not from the laptop at all. The row prints the domain name (`psys`, or `package-0` where psys is
   absent and the figure is ~3x smaller) precisely so it cannot be misread.
 - **Never capture `btop` to a file — it never stops writing.** Measuring btop's
   minimum row count during statusboard-gui work left `bash -c 'btop
@@ -1783,8 +1800,9 @@ Work branch: `worktree-fleet-migration-mac-primary`.
 
 Nothing here is derivable from the repo — latitude is Debian and its disks are
 hand-mounted. **Always identify a drive by UUID or bridge serial; `/dev/sdX`
-reshuffles on every boot** (five bus-powered USB drives plus a card reader race
-to enumerate, and `sde`/`sdf` show as 0 B card-reader slots).
+reshuffles on every boot** (five external USB devices plus a card reader race
+to enumerate, and two letters show as 0 B card-reader slots — which letters is
+itself unstable, so do not memorise `sde`/`sdf`).
 
 | mount | dev | UUID | fs / label | holds |
 |---|---|---|---|---|
