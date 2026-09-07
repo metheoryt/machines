@@ -203,6 +203,24 @@ make, and the argument is the one that matters here:
 The cost, stated plainly: the fleet gains a second apt distro, so latitude is
 Debian and g15 is Ubuntu. That is a real divergence and it buys the kernel.
 
+**The media is ready and verified (2026-09-07).**
+`ubuntu-26.04.1-desktop-amd64.iso`, 6 482 409 472 bytes, sits on the Ventoy
+drive's `Boot` partition (253.8 GB exFAT, 203 GB still free). Its SHA256 is
+`601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f`, matching
+`https://releases.ubuntu.com/26.04/SHA256SUMS` — fetched as the raw file, not
+read back through a summarizer, because a single transcribed hex string is
+exactly the kind of check that passes while proving nothing.
+
+**Secure Boot is OFF on g15** (`Confirm-SecureBootUEFI` → `False`, probed
+2026-09-07), so Ventoy boots directly and there is no shim to enrol through
+MokManager. Worth knowing before standing at the machine: with Secure Boot on,
+Ventoy's first boot is a security violation and the fix is a BIOS-level detour.
+
+The same drive carries latitude's `xs700` archive-mirror partition on
+`sda3`/`H:`. Nothing on Windows writes to it, and `archive-mirror.timer` on
+latitude next fires **2026-10-01 05:01** — return the drive before then and no
+run is missed.
+
 Mirror latitude's shape where the reasons still apply, and only there:
 
 - **Unencrypted ext4 root — decided, not copied.** latitude's own rationale is
