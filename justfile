@@ -76,7 +76,10 @@ test:
       [ -f "$t" ] || continue
       ran=$((ran + 1))
       printf '\n\033[1m== %s\033[0m\n' "$t"
-      bash "$t" || { fail=$((fail + 1)); printf '\033[31mFAILED: %s\033[0m\n' "$t"; }
+      # < /dev/null is load-bearing: without it a suite that reads stdin consumes
+      # the rest of THIS loop's input and the gate silently skips every remaining
+      # file. Measured 2026-09-07: 49 suites on disk, 32 actually run, green.
+      bash "$t" < /dev/null || { fail=$((fail + 1)); printf '\033[31mFAILED: %s\033[0m\n' "$t"; }
     done < <(just --justfile {{justfile()}} _test-suites)
     printf '\n────────────────────────────\n'
     if [ "$fail" = 0 ]; then
