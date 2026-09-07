@@ -30,9 +30,9 @@ These apply to every task below, without being repeated in it.
 
 ### Amendments (2026-09-07, recorded after Task 2)
 
-Two changes to what Task 1 delivered. Both are in `stage.sh` and its suite
+Six changes to what Task 1 delivered. All are in `stage.sh` and its suite
 already; the code blocks in Task 1 below are regenerated from the files, so the
-plan and the disk agree.
+plan and the disk agree. Items 4-6 were found while Task 4 was running.
 
 1. **`require_root` never accepted root.** Its comparison read
    `[ "1000 4 24 27 30 46 100 1000 1001id -u)" = 0 ]` — a write-time
@@ -62,6 +62,31 @@ plan and the disk agree.
    ~37 minutes. The reasons are in the Global Constraints above and, measured,
    in `stage.sh`'s header; the one that decides it is that NTFS cannot hold
    pgdata's ownership or `/home/me`'s modes at all.
+4. **`verify`'s verdict never reached the payload log.** `stage` redirects its
+   own output there with `exec >>`; `verify` deliberately does not, because it
+   runs in the foreground and is read live. But Task 7 Step 4 records the
+   outcome with `grep -h MANIFEST /var/log/g15-staging/*.log`, which would have
+   grepped three logs and found nothing — and reported that as having recorded
+   the verdicts. A `verdict()` helper now renders the line once and writes it to
+   both, so the screen and the log cannot carry different timestamps. Suite
+   §12 runs `verify` for real against shimmed manifests and asserts the log
+   copy, the shared timestamp and both exit codes.
+5. **`tail -f` on the log shows nothing for 40 minutes.** There is no
+   `--progress`; `--info=stats2` prints its block only when rsync finishes. The
+   log carries the two header lines and then goes silent until the end, which
+   reads exactly like a dead transfer. The progress signal is the destination:
+   `ssh latitude 'sudo du -sh /mnt/immich-mirror/g15-staging/pgdata'`. **The
+   `sudo` is not optional** — rsync recreates pgdata's tree with its numeric
+   ownership, so `18/docker` lands as mode 700 owned by uid 999 and `me` reads
+   `0` for the whole payload. That is ownership being preserved correctly, which
+   is what Phase 4's physical restore needs; it is a passed check, not a
+   nuisance.
+6. **`pgdata` is verified immediately after Task 4, not deferred to Task 7.**
+   The dst-side manifest is the one thing the suite cannot exercise against a
+   real root-owned 0700 tree, and `verify` is the only step that proves anything
+   at all. Finding a broken verify mechanism on the first payload costs a
+   re-check; finding it after three transfers costs an hour and a half. Task 7's
+   pgdata step then re-reads the recorded verdict instead of re-deriving it.
 
 ---
 
@@ -517,6 +542,63 @@ else
     pass "STAGE_DESK does not affect pgdata"
 fi
 
+
+# --- 12. the verdict reaches the payload log, not just the operator's screen ---
+# Task 7's last step records the outcome with `grep -h MANIFEST
+# /var/log/g15-staging/*.log`. `stage` redirects its own output into that log
+# with `exec >>`; `verify` deliberately does not, because it runs in the
+# foreground and is meant to be read live. So the verdict lines are the one
+# thing that has to reach both, and until 2026-09-07 they reached only stdout —
+# the record step would have grepped three logs and found nothing.
+#
+# This section runs verify FOR REAL. The manifests come from shims: `bash`
+# stands in for the local `manifest_cmd | bash`, `ssh` for the remote one, each
+# printing a fixed file. That is why stage.sh is invoked as `/bin/bash "$SH"` —
+# its shebang is `/usr/bin/env bash`, which would resolve to the shim.
+shim2="$(mktemp -d)"; LOGD2="$(mktemp -d)"
+cp "$shim/id" "$shim2/id"
+cat > "$shim2/bash" <<'SHIM'
+#!/bin/sh
+cat > /dev/null
+cat "$SHIM_SRC_MANIFEST"
+SHIM
+cat > "$shim2/ssh" <<'SHIM'
+#!/bin/sh
+cat > /dev/null
+cat "$SHIM_DST_MANIFEST"
+SHIM
+chmod +x "$shim2/bash" "$shim2/ssh"
+printf './PG_VERSION\tf\t3\n./base\td\t-\n' > "$LOGD2/m.src"
+printf './PG_VERSION\tf\t3\n./base\td\t-\n' > "$LOGD2/m.same"
+printf './PG_VERSION\tf\t4\n./base\td\t-\n' > "$LOGD2/m.diff"
+trap 'rm -rf "$shim" "$LOGD" "$pid" "$shim2" "$LOGD2"' EXIT
+
+v_out="$(PATH="$shim2:$PATH" STAGE_LOGDIR="$LOGD2" \
+    SHIM_SRC_MANIFEST="$LOGD2/m.src" SHIM_DST_MANIFEST="$LOGD2/m.same" \
+    /bin/bash "$SH" verify pgdata 2>&1)"; v_rc=$?
+[ "$v_rc" = 0 ]
+check $? "verify: a matching pair exits 0 (got $v_rc)"
+printf '%s' "$v_out" | grep -q "MANIFEST MATCH — 2 entries"
+check $? "verify: prints the match verdict to stdout"
+grep -q "MANIFEST MATCH — 2 entries" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the match verdict also lands in the payload log (Task 7 greps it)"
+grep -q "entries: src=2 dst=2" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the entry counts land in the payload log too"
+# One render, two copies: a second `date` call would let the log and the screen
+# disagree by a second, and then nobody can line the two up.
+ts_screen="$(printf '%s' "$v_out" | grep -o '^\[[^]]*\] MANIFEST MATCH' | head -1)"
+grep -qF "$ts_screen" "$LOGD2/pgdata.log"
+check $? "verify: screen and log carry the SAME timestamp for the verdict"
+
+rm -f "$LOGD2/pgdata.log"
+PATH="$shim2:$PATH" STAGE_LOGDIR="$LOGD2" \
+    SHIM_SRC_MANIFEST="$LOGD2/m.src" SHIM_DST_MANIFEST="$LOGD2/m.diff" \
+    /bin/bash "$SH" verify pgdata > /dev/null 2>&1
+[ $? = 4 ]
+check $? "verify: a differing pair exits 4"
+grep -q "MANIFEST MISMATCH" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the MISMATCH verdict lands in the payload log as well"
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi
 ```
 
@@ -653,6 +735,16 @@ USAGE
 # as part of the message — measured, the root refusal ended in a stray " 1".
 die()  { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit "${2:-1}"; }
 say()  { printf '[%s] %s\n' "$(date +%F_%H:%M:%S)" "$*"; }
+
+# `verify` has no `exec >>` of its own the way `stage` does — it runs in the
+# foreground and its output is meant to be read live. But Task 7's record step
+# greps the payload logs for the verdict, so the verdict lines have to reach
+# BOTH. Rendered once, so the two copies cannot carry different timestamps.
+verdict() {
+    local m; m="$(say "$*")"
+    printf '%s\n' "$m"
+    printf '%s\n' "$m" >>"$LOGDIR/$P.log"
+}
 
 require_root() {
     [ "$(id -u)" = 0 ] && return 0
@@ -923,11 +1015,11 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         manifest_cmd "$P" dst | ssh $(ssh_opts_for "$P") "$(payload_host "$P")" \
             "$(remote_sh "$P")" > "$d" || die "destination manifest failed"
         sn=$(wc -l < "$s"); dn=$(wc -l < "$d")
-        say "entries: src=$sn dst=$dn"
+        verdict "entries: src=$sn dst=$dn"
         if cmp -s "$s" "$d"; then
-            say "MANIFEST MATCH — $sn entries, path+size+symlink-target identical"
+            verdict "MANIFEST MATCH — $sn entries, path+size+symlink-target identical"
         else
-            say "MANIFEST MISMATCH — first 40 differing lines:"
+            verdict "MANIFEST MISMATCH — first 40 differing lines:"
             diff -u "$s" "$d" | head -40
             say "full manifests: $s and $d"
             exit 4
@@ -1128,7 +1220,7 @@ git push
 - Consumes: Task 2's live distro.
 - Produces: `postmaster.pid` absent from `/data/qaz-law/pgdata/18/docker`, which is what unblocks `stage.sh stage pgdata`.
 
-- [ ] **Step 1: Take the restart policy off the container first**
+- [x] **Step 1: Take the restart policy off the container first**
 
 `qaz-law-db-1` has `restart: always`. Stopping it by hand is not enough — a docker daemon restart, or a WSL bounce, brings postgres back up and starts writing into the tree that is being copied. Set the policy before the stop, so there is no window:
 
@@ -1141,7 +1233,7 @@ Expected: `restart=no`.
 
 This is **not undone.** The container dies with the disk in Phase 2; the new box gets a fresh one in Phase 4. Restoring `always` here would only reopen the hole.
 
-- [ ] **Step 2: Stop the container**
+- [x] **Step 2: Stop the container**
 
 ```bash
 ssh g15-wsl.gg.ez 'docker stop -t 120 qaz-law-db-1 && \
@@ -1150,7 +1242,7 @@ ssh g15-wsl.gg.ez 'docker stop -t 120 qaz-law-db-1 && \
 
 Expected: `state=exited exit=0`. The `-t 120` matters: `docker stop`'s default 10-second grace, on a 186 GB database with 8 GB of shared buffers, can expire mid-checkpoint and escalate to `SIGKILL`, which is an unclean shutdown — recoverable by postgres, but it leaves a WAL replay that a *physical copy* then has to carry, and there is no reason to accept that when waiting is free.
 
-- [ ] **Step 3: Prove the shutdown was clean — two independent checks**
+- [x] **Step 3: Prove the shutdown was clean — two independent checks**
 
 ```bash
 ssh g15-wsl.gg.ez 'docker logs --tail 20 qaz-law-db-1 2>&1 | tail -8'
@@ -1180,7 +1272,7 @@ Expected: `No such file or directory` for `postmaster.pid`. **A present `postmas
 - Consumes: Task 1's `stage.sh` (present on g15-wsl at `/home/me/machines/hosts/g15/staging/`), Task 2's staging root, Task 3's stopped postgres.
 - Produces: the staged tree, and `/var/log/g15-staging/pgdata.log`.
 
-- [ ] **Step 1: Get the tool onto the box**
+- [x] **Step 1: Get the tool onto the box**
 
 `~/machines` on g15-wsl is a normal checkout (at `de1fad2`, clean, as of 2026-09-07):
 
@@ -1191,7 +1283,7 @@ ssh g15-wsl.gg.ez 'cd ~/machines && git pull --ff-only && \
 
 Expected: the file is present and executable, and HEAD is at or past **Task 1's** commit — that is the one that adds `stage.sh`. Task 2's identity-snapshot commit is later and irrelevant here; the plan document itself (`c331260`) does not contain the tool.
 
-- [ ] **Step 2: Dry run**
+- [x] **Step 2: Dry run**
 
 ```bash
 printf '%s\n' \
@@ -1202,7 +1294,7 @@ printf '%s\n' \
 
 Expected: rsync's stats block reporting about **1268 regular files and ~186 GB** to transfer, and no `Permission denied`. If it reports 0 files, the destination already holds the tree — check `stage.sh status` before assuming the source is empty.
 
-- [ ] **Step 3: Launch it detached**
+- [x] **Step 3: Launch it detached**
 
 `setsid --fork` so it survives the ssh session; the script redirects its own output to the log, so no shell redirection has to survive PowerShell:
 
@@ -1217,15 +1309,18 @@ printf '%s\n' \
 
 Expected: one `ps` line showing the running script. No output there means it exited immediately — read the log in the next step for why.
 
-- [ ] **Step 4: Watch it, over the direct ssh**
+- [ ] **Step 4: Watch it — at the DESTINATION, not in the log**
 
-The log is world-readable by design, so progress checks do not have to go back through Windows for root:
+`tail -f` on the log is the obvious move and it shows nothing for 40 minutes. There is no `--progress`; `--info=stats2` prints its block only when rsync finishes, so the log holds two header lines and then goes silent until the end. That reads exactly like a dead transfer. Confirm the header once, then watch the destination grow:
 
 ```bash
-ssh g15-wsl.gg.ez 'tail -f /var/log/g15-staging/pgdata.log'
+ssh g15-wsl.gg.ez 'head -3 /var/log/g15-staging/pgdata.log'
+ssh latitude 'sudo du -sh /mnt/immich-mirror/g15-staging/pgdata; date +%T'
 ```
 
-Expected: the `=== stage pgdata` header, then rsync's `--info=stats2` output. Budget **~40 minutes** (186 GB at 78 MB/s). Ctrl-C on the `tail` does not touch the transfer.
+**The `sudo` is not optional.** rsync recreates the tree with its numeric ownership, so `18/docker` arrives as mode 700 owned by uid 999 and an unprivileged `du` reports `0` for the entire payload — which looks like a transfer that never started. Sample twice a minute apart to get the rate. Measured on the real run: 38 GiB at 9 minutes, ~72 MB/s, done in **~45 minutes**.
+
+Also note `ssh me@192.168.8.155` fails from desktop-wsl with `Host key verification failed` — `known_hosts` carries the tailnet name. Use the `latitude` alias for these checks; the transfer itself uses the IP with the fleet identity and is unaffected.
 
 If it dies mid-run, re-run Step 3 verbatim — rsync picks the partial file up from `.rsync-partial/` and continues. That is what `--partial-dir` is for.
 
@@ -1236,6 +1331,19 @@ ssh g15-wsl.gg.ez 'tail -6 /var/log/g15-staging/pgdata.log'
 ```
 
 Expected: `rsync clean` then `=== done rc=0`. Any other `rc` is reported with the resume instruction; re-run Step 3. **Do not proceed to Task 5 on a non-zero rc** — the link is shared and a half-finished payload competing with the next one only makes both slower.
+
+- [ ] **Step 6: Verify `pgdata` NOW, before launching Music**
+
+```bash
+printf '%s\n' \
+  'cd /home/me/machines/hosts/g15/staging' \
+  './stage.sh verify pgdata' \
+  | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
+```
+
+Expected: `entries: src=1298 dst=1298`, then `MANIFEST MATCH`.
+
+Task 7 verifies all three, and this step does not replace it — it front-loads the one payload whose destination-side manifest exercises something no test could: a root-owned, mode-700 tree read back through `sudo bash -s`. The suite pins how the command is composed, never that it can read that tree. If the verify mechanism is broken, this is the cheap place to find out; after three transfers it costs the whole ninety minutes again. `pgdata` is also the only payload that cannot change under us — postgres is stopped and stays stopped — so a match here is final.
 
 ---
 
@@ -1332,7 +1440,9 @@ printf '%s\n' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
-Expected: source sizes near 186G / 18G / 89G, destination sizes within a percent or two of each, and `Avail` on `/mnt/immich-mirror` down by about 293 GB to roughly 315 GB.
+Expected: source sizes near 186G / 18G / 89G, and destination sizes within a percent or two of each.
+
+**The free-space expectation is per host now, and this line said otherwise until the split.** latitude receives `pgdata` + `/home/me` only, about **205 GB**: `Avail` on `/mnt/immich-mirror` goes from 610 GB to roughly **405 GB**. Music's 89 GB lands on desktop's `C:`, which had 1.2 TB free. The old "down by about 293 GB to roughly 315 GB" was the all-on-latitude number — chasing the missing 90 GB, or waving it through, are both worse than the number being right.
 
 **These `du` numbers are orientation, not verification.** A `du` total matches even when one file is truncated, which is exactly what a killed transfer leaves behind. Task 7 is the verification.
 
@@ -1356,6 +1466,8 @@ printf '%s\n' \
 ```
 
 Expected: `entries: src=N dst=N` with the two equal, then `MANIFEST MATCH — N entries, path+size+symlink-target identical`. Exit 4 with a diff means a real discrepancy: re-run `stage.sh stage pgdata` (it resumes), then verify again.
+
+Task 4 Step 6 already ran this. Re-running is free and idempotent — postgres is stopped, so nothing on either side has moved — but if it was recorded there, reading `/var/log/g15-staging/pgdata.log` is enough.
 
 - [ ] **Step 2: Verify `music`**
 

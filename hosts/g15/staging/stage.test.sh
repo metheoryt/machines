@@ -390,4 +390,61 @@ else
     pass "STAGE_DESK does not affect pgdata"
 fi
 
+
+# --- 12. the verdict reaches the payload log, not just the operator's screen ---
+# Task 7's last step records the outcome with `grep -h MANIFEST
+# /var/log/g15-staging/*.log`. `stage` redirects its own output into that log
+# with `exec >>`; `verify` deliberately does not, because it runs in the
+# foreground and is meant to be read live. So the verdict lines are the one
+# thing that has to reach both, and until 2026-09-07 they reached only stdout —
+# the record step would have grepped three logs and found nothing.
+#
+# This section runs verify FOR REAL. The manifests come from shims: `bash`
+# stands in for the local `manifest_cmd | bash`, `ssh` for the remote one, each
+# printing a fixed file. That is why stage.sh is invoked as `/bin/bash "$SH"` —
+# its shebang is `/usr/bin/env bash`, which would resolve to the shim.
+shim2="$(mktemp -d)"; LOGD2="$(mktemp -d)"
+cp "$shim/id" "$shim2/id"
+cat > "$shim2/bash" <<'SHIM'
+#!/bin/sh
+cat > /dev/null
+cat "$SHIM_SRC_MANIFEST"
+SHIM
+cat > "$shim2/ssh" <<'SHIM'
+#!/bin/sh
+cat > /dev/null
+cat "$SHIM_DST_MANIFEST"
+SHIM
+chmod +x "$shim2/bash" "$shim2/ssh"
+printf './PG_VERSION\tf\t3\n./base\td\t-\n' > "$LOGD2/m.src"
+printf './PG_VERSION\tf\t3\n./base\td\t-\n' > "$LOGD2/m.same"
+printf './PG_VERSION\tf\t4\n./base\td\t-\n' > "$LOGD2/m.diff"
+trap 'rm -rf "$shim" "$LOGD" "$pid" "$shim2" "$LOGD2"' EXIT
+
+v_out="$(PATH="$shim2:$PATH" STAGE_LOGDIR="$LOGD2" \
+    SHIM_SRC_MANIFEST="$LOGD2/m.src" SHIM_DST_MANIFEST="$LOGD2/m.same" \
+    /bin/bash "$SH" verify pgdata 2>&1)"; v_rc=$?
+[ "$v_rc" = 0 ]
+check $? "verify: a matching pair exits 0 (got $v_rc)"
+printf '%s' "$v_out" | grep -q "MANIFEST MATCH — 2 entries"
+check $? "verify: prints the match verdict to stdout"
+grep -q "MANIFEST MATCH — 2 entries" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the match verdict also lands in the payload log (Task 7 greps it)"
+grep -q "entries: src=2 dst=2" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the entry counts land in the payload log too"
+# One render, two copies: a second `date` call would let the log and the screen
+# disagree by a second, and then nobody can line the two up.
+ts_screen="$(printf '%s' "$v_out" | grep -o '^\[[^]]*\] MANIFEST MATCH' | head -1)"
+grep -qF "$ts_screen" "$LOGD2/pgdata.log"
+check $? "verify: screen and log carry the SAME timestamp for the verdict"
+
+rm -f "$LOGD2/pgdata.log"
+PATH="$shim2:$PATH" STAGE_LOGDIR="$LOGD2" \
+    SHIM_SRC_MANIFEST="$LOGD2/m.src" SHIM_DST_MANIFEST="$LOGD2/m.diff" \
+    /bin/bash "$SH" verify pgdata > /dev/null 2>&1
+[ $? = 4 ]
+check $? "verify: a differing pair exits 4"
+grep -q "MANIFEST MISMATCH" "$LOGD2/pgdata.log" 2>/dev/null
+check $? "verify: the MISMATCH verdict lands in the payload log as well"
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi

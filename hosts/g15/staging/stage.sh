@@ -119,6 +119,16 @@ USAGE
 die()  { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit "${2:-1}"; }
 say()  { printf '[%s] %s\n' "$(date +%F_%H:%M:%S)" "$*"; }
 
+# `verify` has no `exec >>` of its own the way `stage` does — it runs in the
+# foreground and its output is meant to be read live. But Task 7's record step
+# greps the payload logs for the verdict, so the verdict lines have to reach
+# BOTH. Rendered once, so the two copies cannot carry different timestamps.
+verdict() {
+    local m; m="$(say "$*")"
+    printf '%s\n' "$m"
+    printf '%s\n' "$m" >>"$LOGDIR/$P.log"
+}
+
 require_root() {
     [ "$(id -u)" = 0 ] && return 0
     # $MODE/$P rather than "$@": the caller passes nothing, and the point of the
@@ -388,11 +398,11 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         manifest_cmd "$P" dst | ssh $(ssh_opts_for "$P") "$(payload_host "$P")" \
             "$(remote_sh "$P")" > "$d" || die "destination manifest failed"
         sn=$(wc -l < "$s"); dn=$(wc -l < "$d")
-        say "entries: src=$sn dst=$dn"
+        verdict "entries: src=$sn dst=$dn"
         if cmp -s "$s" "$d"; then
-            say "MANIFEST MATCH — $sn entries, path+size+symlink-target identical"
+            verdict "MANIFEST MATCH — $sn entries, path+size+symlink-target identical"
         else
-            say "MANIFEST MISMATCH — first 40 differing lines:"
+            verdict "MANIFEST MISMATCH — first 40 differing lines:"
             diff -u "$s" "$d" | head -40
             say "full manifests: $s and $d"
             exit 4
