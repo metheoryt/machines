@@ -2717,11 +2717,28 @@ Freed 105 GB and pruned the dead fleet trust. What is worth keeping:
   on desktop-wsl and it was current — my own `awk` had taken `ssh-keyscan`'s
   banner line as the key. The bare `g15` entries on air and desktop-wsl are live
   aliases, kept. Only `server.gg.ez` and `g15-wsl.gg.ez` were dead and pruned.
-- **`methe@g15` is pruned on 5 of 6 members.** `desktop` needs an elevated shell:
-  `C:\ProgramData\ssh\administrators_authorized_keys` denies a non-elevated read,
-  a WSL distro cannot ssh to its own Windows host, and a Windows OpenSSH session
-  is not elevated either. Its next `provision.ps1` regenerates the file wholesale
-  and closes it. Risk is nil — no machine holds that private half.
+- **`methe@g15` is pruned on all 6 members — desktop included, automatically.**
+  This bullet said "5 of 6, pending an elevated shell, closed by its next
+  `provision.ps1`", and both halves were wrong. The script is
+  **`provision/windows.ps1`** (step 6d), not `provision.ps1` — that one is the
+  role front door and never touches sshd. And it is not pending: on desktop the
+  trust file's mtime is 16:54:04 and `converge` recorded `ok` on the revoking
+  commit at 16:54:19, so it closed within minutes of the push.
+  `C:\ProgramData\ssh\administrators_authorized_keys` still denies a
+  non-elevated read, which is what made it look manual — but reading it was
+  never the mechanism.
+
+  **Why it works unattended: the post-merge hook fires `schtasks /run /tn
+  machines-converge`, and that task is registered as SYSTEM.** So converge on a
+  Windows box runs with a full token, `windows.ps1` step 6's
+  `if (-not $isAdmin6) { throw }` passes, and 6d rewrites the file wholesale from
+  `provision/fleet-authorized-keys` and re-locks the ACL by well-known SID. The
+  hook's own comment says this is the point of the task. **A SYSTEM task is
+  invisible to a limited token** — `Get-ScheduledTask` from the distro lists
+  `fleet-selfpull` and not `machines-converge` — so absence there is not evidence
+  it is unregistered. Consequence worth generalising: a key revocation reaches
+  the Windows members through convergence like everywhere else, and the elevated
+  path to check is `machines-converge`'s last result, never a read of the file.
 - **`wsl-keepalive` and the `nc` ProxyCommand do not exist in this repo.** They
   were host-local on the wiped box, so phase 6's "retire the Windows-shaped
   workarounds" is already done for two of its three items. `ssh.user: methe` in
