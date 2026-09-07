@@ -2376,3 +2376,92 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
   Windows side (`/c/Users/methe/.claude`), which makes the exit-code assertions
   real coverage rather than a source grep. ~8s for a full dry run, ~1s for the
   unknown-machine arm.
+
+## Servarr: удаление в *arr не освобождает место — держит qBittorrent (2026-09-07)
+
+- **Импорт делает хардлинк** (`copyUsingHardlinks: true`, `/data/torrents` и
+  `/data/movies|tv` — один mount `/mnt/servarr`). Значит у файла ДВА линка:
+  библиотека и торрент. Удаление сериала/сезона/фильма в Sonarr/Radarr снимает
+  только библиотечный — **на диске не освобождается ничего**, и qBittorrent
+  продолжает раздавать «удалённое».
+- **`Remove Completed Downloads: True` этого не спасает.** Он работает по
+  очереди *arr, а *arr забывает торрент после импорта: замерено 2026-09-06 —
+  очередь Radarr 3 записи, Sonarr 0, при 46 живых торрентах. Плюс
+  `max_ratio = 10` (29 из 46 не дошли до 1). Итог: автоочистки нет ни при каком
+  ratio для уже скачанного; настройка ratio влияет только на новые закачки.
+- **Порядок:** удалить в Sonarr/Radarr (галка *Delete Series Folder* /
+  *Delete Files*), потом снять торрент в qBittorrent с *Delete files*.
+  `recycleBin` пуст в обоих — отката нет.
+- **Как найти, что реально освободится** — по link count, не по `du`:
+  файл с `n=1` под `torrents/` ничей → освободится; `n>1` → второй линк в
+  библиотеке, удаление даст 0 байт. Для незавершённых торрентов считать
+  `st_blocks*512`, а не `st_size`: qBittorrent преаллоцирует, и apparent size
+  врёт (38 GB «свободных» у скачанного на 1 GB The Dark Knight).
+- **Обход по списку qBittorrent НЕ находит всё.** Так пропустилась пачка
+  `torrents/sonarr/Devil May Cry (Season 1)` — 12.6 GB без торрента вообще.
+  Правильный обход: пройти дерево `torrents/`, собрать иноды живых торрентов и
+  вычесть. Сделано 2026-09-07; после этого в дереве осталось ~35 MB мусора.
+- **Не всякая папка без торрента — мусор.** `Azumanga Daioh` (20.9 GB),
+  `The Amazing Digital Circus`, `I Fought the Law` лежат под `torrents/` без
+  торрента, но с `n>1` — те же иноды, что в библиотеке. Удаление освободит ноль.
+- Результат прохода: 15 GB свободных → **259 GB** (99% → 72%), 217 GB за два
+  шага. `Everybody Hates Chris` один занимал 106 GB в торрентах.
+- **Jellyseerr показывает русские названия** (`user_settings.locale = ru` у
+  единственного юзера, глобальный `main.locale = en` проигрывает ему): Silo =
+  «Укрытие», Family Guy = «Гриффины» — расходятся все 16 сериалов с tmdbId.
+  Искать по названию из Sonarr бесполезно.
+- Кнопка удаления в Jellyseerr/SeerTV = `DELETE /api/v1/media/:id/file` →
+  `removeMovie`/`removeSeries` с **`deleteFiles: true`**, `addImportExclusion:
+  false`. Сносит фильм/сериал ЦЕЛИКОМ, посезонно не умеет; сезон — только Sonarr
+  (*Delete Selected Episode Files*). Соседний `DELETE /media/:id` чистит лишь
+  базу Jellyseerr и файлов не трогает.
+
+## Orca IDE on g15-wsl never upgraded — the cache key was the word "latest" (2026-09-07)
+
+- **`apt`'s `orca` package is the GNOME screen reader** (`50.2-0ubuntu0.1`, a
+  python3 script at `/usr/bin/orca`), not Orca IDE. `apt upgrade` + `wsl
+  --shutdown` moves the Orca *runtime* version by exactly nothing. Orca IDE on
+  Linux is only ever the AppImage under `~/.local/opt/orca`, installed by
+  `provision/orca-serve.sh`. Note `which orca` under non-interactive ssh finds
+  `/usr/bin/orca` FIRST — `~/.local/bin` is not on that PATH — so even the
+  version probe reaches the screen reader unless you export the PATH yourself.
+- **`provision/orca-serve.sh` was a no-op upgrader on both of its gates**, and it
+  ran green while doing nothing (g15-wsl sat on 1.4.192 from 2026-08-29 while
+  upstream was on 1.4.197):
+  - the AppImage was cached as `orca-${ORCA_VERSION:-latest}.AppImage`, so with
+    the default the filename never changed and `[ -f "$AI" ]` hit forever;
+  - the extract gate keyed on `squashfs-root/AppRun` merely *existing*, so even
+    the documented escape hatch `ORCA_VERSION=x.y.z` downloaded the new AppImage
+    and then skipped unpacking it. Fixing only the cache key buys nothing.
+- **The one truthful record of what is EXTRACTED is
+  `squashfs-root/orca-ide.desktop`'s `X-AppImage-Version`.** `orca --version`
+  does not exist on this build — it prints the help text, which is what makes
+  "still reports outdated" easy to misattribute. Compare tags with the leading
+  `v` stripped from BOTH sides: upstream says `v1.4.197`, that file says
+  `1.4.192`, and a raw compare is either never equal (200+ MB every run) or
+  never unequal (never upgrades).
+- The fix resolves `latest` through the GitHub API up front, names the cache file
+  by the resolved tag, downloads to `.part` first (a truncated AppImage at the
+  final name would be a permanent cache hit — the same bug again), stops
+  `orca-serve` before swapping the tree it is exec'ing from, and **moves** the
+  old `squashfs-root` to `squashfs-root.prev-<ver>` instead of `rm`-ing it, so an
+  upstream layout change hitting the `cli/index.js not found` die still leaves a
+  runtime to restore. Verified 1.4.192 → 1.4.197, then a second run as a clean
+  no-op (no download, no extract, service not bounced).
+- **The repo gate silently skips suites, and the count it prints is not the
+  repo's count.** `just test` runs `while read t; … bash "$t" … done <
+  <(just _test-suites)`, which hands each suite the loop's own stdin. Measured
+  2026-09-07 on desktop-wsl: 49 `*.test.sh` files on disk, the loop **reached 32
+  and reported them all green**; with `< /dev/null` added to the `bash "$t"`
+  call it reaches **49, still 0 failures**.
+- **The consumer is `provision/tests/fleet-ssh-config-ps.test.sh`, and it is
+  isolated, not inferred.** The skip is a clean truncation, not scattered: that
+  suite sorts 32nd and everything from 33 (`fleet-ssh-tier.test.sh`) on is
+  missing contiguously. Proven directly — hand the suite a 4-line fd and the fd
+  is at EOF when it returns. Cause: it execs `powershell.exe`/`pwsh.exe`, which
+  reads its stdin to EOF, and the loop's stdin IS the suite list. So the gate
+  truncates on every box where PowerShell is on PATH — i.e. every WSL box, which
+  is where it is usually run — and prints "all 32 suites passed" while skipping
+  17. latitude has no PowerShell, which is why its count looked sane. Second
+  false-confidence failure for this number after the 2026-08-13 one, and the same
+  lesson: `just test`'s printed total is a floor, not the repo.
