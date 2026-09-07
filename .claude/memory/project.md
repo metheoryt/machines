@@ -824,6 +824,18 @@ global + per-host). One bullet per fact under a topical heading.
   find a native SATA port (there is no free one anywhere in the fleet — every box
   is a laptop). Both docks bind `usb-storage` (BOT), not `uas`; the XS2000 on
   another bus does negotiate `uas`, so driver choice is per-bridge, not per-box.
+- **Spare enclosure on hand, and it is NOT a SATA one** — a USB 3.2 Gen 2
+  (10 Gbps) Type-C **M.2 NVMe** enclosure, board marked `TP TNP-9210B-V1.22`
+  (Realtek RTL9210B family). Recorded so the next storage plan does not ask "do
+  we have an enclosure?" and get the wrong answer: it takes **M.2 only**, so
+  neither a 3.5″ drive nor a 2.5″ spinner like `spare320` fits, and any
+  dual-protocol support it has would be M.2 SATA. What it is good for is speed —
+  10 Gbps against the docks' shared 5 Gbps — i.e. staging or moving an NVMe, not
+  a permanent member of the layout. **If it ever goes into an acceptance test,
+  NVMe SMART through it is `smartctl -d sntrealtek`, not `-d sat`**; `-d sat`
+  returns nothing and reads exactly like a bridge that blocks SMART. Not yet
+  plugged into any fleet box, so none of this is measured — unlike the CM198
+  facts above.
 - **`nofail` in fstab applies at boot only.** After any dock power-cycle or bus
   drop, every affected mount needs an explicit `sudo mount <target>`.
 - **Every `/dev/sdX` letter reshuffles across a reboot — treat any letter written
