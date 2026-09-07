@@ -1,4 +1,4 @@
-# g15: Windows 11 → Ubuntu 26.04 LTS
+# g15: Windows 11 → Ubuntu 26.04.1 LTS
 
 **Status:** design, approved in direction 2026-09-07. Not started.
 **Box:** `g15` / ASUS ROG G16 G513IE — Ryzen 7 4800H, 31 GB, RTX 3050 Ti,
@@ -169,7 +169,7 @@ truncated, which is exactly what a killed `tar` leaves behind.
 Budget: ~292 GB at 78 MB/s ≈ **1 h 5 m**. The Ethernet cable (117 MB/s) would
 save ~20 minutes and is not worth unplugging anything for.
 
-### 2. Install Ubuntu 26.04 LTS
+### 2. Install Ubuntu 26.04.1 LTS
 
 **The distro was Debian 13 trixie until 2026-09-07, and the owner changed it.**
 His reason: he reads Debian as a headless server OS, and g15 is a workstation
@@ -196,7 +196,9 @@ make, and the argument is the one that matters here:
 - **It is the release qaz-law is already developed on.** `g15-wsl` runs Ubuntu
   26.04.1 LTS today, so the native install is the same userland the project's
   compose stack has been running against — one fewer variable when the database
-  comes back up in phase 4.
+  comes back up in phase 4. **The point release is the pin** (owner, 2026-09-07):
+  26.04.1 is both what the distro runs and what the current install media is, so
+  naming it costs nothing and removes a question at ISO-download time.
 
 The cost, stated plainly: the fleet gains a second apt distro, so latitude is
 Debian and g15 is Ubuntu. That is a real divergence and it buys the kernel.

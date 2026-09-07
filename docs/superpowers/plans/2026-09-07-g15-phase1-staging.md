@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move g15's entire 293 GB payload off the box onto latitude and prove by manifest that nothing was lost, so the installer can be booted without a second copy anywhere. (The target distro moved from Debian 13 to Ubuntu 26.04 LTS on 2026-09-07 — see the spec’s §2. Phase 1 moves bytes and is indifferent to it.)
+**Goal:** Move g15's entire 293 GB payload off the box onto latitude and prove by manifest that nothing was lost, so the installer can be booted without a second copy anywhere. (The target distro moved from Debian 13 to Ubuntu 26.04.1 LTS on 2026-09-07 — see the spec’s §2. Phase 1 moves bytes and is indifferent to it.)
 
 **Architecture:** One tool, `hosts/g15/staging/stage.sh`, run as root **on g15-wsl**, which pushes each of three payloads outbound over the LAN to `latitude:/mnt/immich-mirror/g15-staging/` with rsync. The distro is NATed, so the tailnet path to latitude is DERP-relayed at 3.3 MB/s while the outbound LAN path is 78 MB/s — NAT blocks reaching *in*, not going out, and that asymmetry is the whole transport design. Verification is a path+size manifest taken on both sides and diffed, never a `du` comparison.
 
@@ -1309,7 +1309,7 @@ printf '%s\n' \
 
 Expected: one `ps` line showing the running script. No output there means it exited immediately — read the log in the next step for why.
 
-- [ ] **Step 4: Watch it — at the DESTINATION, not in the log**
+- [x] **Step 4: Watch it — at the DESTINATION, not in the log**
 
 `tail -f` on the log is the obvious move and it shows nothing for 40 minutes. There is no `--progress`; `--info=stats2` prints its block only when rsync finishes, so the log holds two header lines and then goes silent until the end. That reads exactly like a dead transfer. Confirm the header once, then watch the destination grow:
 
@@ -1324,7 +1324,7 @@ Also note `ssh me@192.168.8.155` fails from desktop-wsl with `Host key verificat
 
 If it dies mid-run, re-run Step 3 verbatim — rsync picks the partial file up from `.rsync-partial/` and continues. That is what `--partial-dir` is for.
 
-- [ ] **Step 5: Confirm it finished cleanly**
+- [x] **Step 5: Confirm it finished cleanly**
 
 ```bash
 ssh g15-wsl.gg.ez 'tail -6 /var/log/g15-staging/pgdata.log'
@@ -1332,7 +1332,7 @@ ssh g15-wsl.gg.ez 'tail -6 /var/log/g15-staging/pgdata.log'
 
 Expected: `rsync clean` then `=== done rc=0`. Any other `rc` is reported with the resume instruction; re-run Step 3. **Do not proceed to Task 5 on a non-zero rc** — the link is shared and a half-finished payload competing with the next one only makes both slower.
 
-- [ ] **Step 6: Verify `pgdata` NOW, before launching Music**
+- [x] **Step 6: Verify `pgdata` NOW, before launching Music**
 
 ```bash
 printf '%s\n' \
@@ -1355,7 +1355,7 @@ Task 7 verifies all three, and this step does not replace it — it front-loads 
 - Consumes: Task 1's `stage.sh`, Task 4's finished transfer. **Still run one at a time, though the shared link is no longer the reason** — Music crosses a different link to a different host now. What is shared is g15's radio: 78 + 40 MB/s is 944 Mbps against a 1201 Mbps nominal association, so running both would bid against itself for a marginal gain and give up clean failure attribution.
 - Produces: the staged tree, and `/var/log/g15-staging/music.log`.
 
-- [ ] **Step 1: Dry run**
+- [x] **Step 1: Dry run**
 
 ```bash
 printf '%s\n' \
@@ -1366,7 +1366,7 @@ printf '%s\n' \
 
 Expected: about **14 878 files and 94.81 G bytes** (the same 88.3 GiB the spec names — rsync reports decimal). Read from `/mnt/c/Users/methe/Music` inside g15's distro and written to `/mnt/c/Users/methe/g15-staging/Music` inside desktop-wsl, so drvfs is on both ends; there is no separate Windows-side transfer, and `desktop.ini` in that tree is expected and harmless. **Confirm the destination line reads `me@192.168.8.145`, not latitude.**
 
-- [ ] **Step 2: Launch it detached**
+- [x] **Step 2: Launch it detached**
 
 ```bash
 printf '%s\n' \
