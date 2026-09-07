@@ -2074,11 +2074,23 @@ were not, and all four will recur for the next project moved there.
 Transport, for the next time something big has to move: the two boxes' WSL
 distros reach each other over tailscale **through the DERP relay on hub
 (cyphy.kz, Kazakhstan)** — 3-4 MB/s, and not a misconfiguration, just no direct
-path between two NATed distros. g15 also associates on 2.4 GHz (channel 12,
-286 Mbps link) and its MediaTek MT7921 exposes no band-preference property, so
-it cannot be pushed to 5 GHz from software. A direct Ethernet cable between the
-two laptops, left on APIPA (169.254.x, no DHCP needed), gave 117 MB/s and turned
-an 8-hour transfer into 40 minutes.
+path between two NATed distros. **Re-measured 2026-09-07: still 3.3 MB/s, and
+the wifi is no longer the excuse** — both laptops now associate at a 1201 Mbps
+WiFi 6 rate (so the old "g15 is stuck on 2.4 GHz channel 12, 286 Mbps, and
+MT7921 exposes no band-preference property" no longer holds), and the relayed
+pair is unchanged. A faster radio cannot fix a relayed route; only leaving the
+relay can.
+**What does leave it: the LAN route through g15's Windows sshd into `wsl.exe`,
+measured at 44 MB/s** (13x the relay, same radio, no tailscale in the path).
+Two traps that cost three false zero-byte "measurements" before that number
+existed: `ssh` to a **bare IP** does not pick up the fleet identity, because the
+generated config keys on `Host *.gg.ez` — pass `-i ~/.ssh/id_fleet -o
+IdentitiesOnly=yes`, or it fails in 0.2 s having transferred nothing, which
+looks exactly like no bandwidth. And **only port 22 is open inbound** on either
+Windows box, so `nc` to any port you pick is refused and the transfer must ride
+ssh. A direct Ethernet cable between the two laptops, left on APIPA
+(169.254.x, no DHCP needed), gave 117 MB/s and turned an 8-hour transfer into
+40 minutes.
 
 ### qaz-code PGDATA landed on g15 (2026-08-29, verified)
 

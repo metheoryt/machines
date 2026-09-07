@@ -50,14 +50,20 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   decommission (`docs/fleet-roadmap.md` P2) is history; what it did is not undone
   — `hosts/server/` stays deleted and Forgejo stays wiped (inspection found zero
   repositories; it was never used).
-- **The Linux side of `g15` is a WSL distro, not a reinstall.** Windows 11 was
-  deliberately kept: C: holds ~416 GB nobody has reviewed, so a native Debian
-  install would have to start with that review, and the box already had an empty
-  `Ubuntu-26.04` WSL2 distro and 607 GB free. It is provisioned as the
-  self-declared fleet host **`g15-wsl`** (`dispatch:direct`, its own tailnet
-  node — Windows `g15` keeps node 3), so it never appears in `fleet.json`. If
-  the Windows layer turns out to be friction, the target is Debian 13 trixie like
-  latitude; that decision is now deferrable rather than blocking.
+- **The Linux side of `g15` is a WSL distro, not a reinstall** — for now. It is
+  provisioned as the self-declared fleet host **`g15-wsl`** (`dispatch:direct`,
+  its own tailnet node — Windows `g15` keeps node 3), so it never appears in
+  `fleet.json`.
+  **The reason Windows was kept did not survive measurement.** This entry read
+  "C: holds ~416 GB nobody has reviewed, so a native Debian install would have to
+  start with that review" — measured 2026-09-07, `C:\Users\methe` is 510 GB of
+  which **366 GB is two virtual disks** (207.9 GB the g15-wsl distro itself,
+  158.2 GB Docker Desktop's store), and `C:\Documents and Settings` /
+  `Local Settings` are junctions that were being counted twice. The real review
+  is two items, both since decided. The migration to **Debian 13 trixie** is
+  therefore designed and approved in direction, not deferred:
+  `docs/superpowers/specs/2026-09-07-g15-debian-migration-design.md`. Read that
+  before quoting the old rationale back at anyone.
 - **Reach `g15` as `methe@g15.gg.ez`, naming the user** — its Windows user is
   `methe`, and with the member block restored the bare `ssh g15` alias works from
   any box that has re-provisioned since. Reach the Linux side directly at
