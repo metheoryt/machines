@@ -746,6 +746,14 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
 
 ---
 
+- **g15 is in restic nowhere.** Its roles are `base, ssh-server, agents,
+  dotfiles, repos` — no `backup-client` — so the 184 GB qaz-code database
+  restored on 2026-09-07 is a single copy on one NVMe. The staging leg on
+  latitude (`/mnt/immich-mirror/g15-staging/pgdata`, 186 GB) is being held only
+  because of this, which is the wrong shape: a hand-made copy nothing refreshes
+  is not a backup. Add `backup-client` to g15 with a profile for
+  `/data/qaz-code`, verify a restore, then drop the staging.
+
 ## Done
 
 **2026-08-01 — latitude-server migration.** latitude reinstalled as Debian 13

@@ -2694,3 +2694,42 @@ section is the only surviving record of the phase-1 counts.
 private half is in `home-me/.ssh/`), which was one of the two arguments for
 rotating the key. What survives rotation-wise is hygiene only: `methe@g15` and
 `me@g15-wsl` are stale entries in `provision/fleet-authorized-keys`.
+
+### The staging cleanup, and the one line in it that would have cut g15 off (2026-09-07)
+
+Freed 105 GB and pruned the dead fleet trust. What is worth keeping:
+
+- **`me@g15-wsl` in `provision/fleet-authorized-keys` was NOT a stale line.**
+  Two lines named the wiped box and only one was dead. `me@g15-wsl`'s public
+  half is byte-identical to the `id_fleet` now live on g15 — the private key was
+  restored to the new Ubuntu install from the staging copy — so deleting it as
+  "the other g15-wsl leftover" would have revoked g15 from the entire fleet. It
+  is renamed to `me@g15`; `methe@g15` (the wiped Windows install's own key,
+  private half gone with the disk) is the one that was removed. **The check that
+  tells the two apart is matching each line's key body against the live
+  `id_fleet.pub`, not reading the comments** — sshd ignores the comment and so
+  does the key. Do this before pruning any line here.
+- **`known_hosts` was never the problem.** I reported g15's host key as `STALE`
+  on desktop-wsl and it was current — my own `awk` had taken `ssh-keyscan`'s
+  banner line as the key. The bare `g15` entries on air and desktop-wsl are live
+  aliases, kept. Only `server.gg.ez` and `g15-wsl.gg.ez` were dead and pruned.
+- **`methe@g15` is pruned on 5 of 6 members.** `desktop` needs an elevated shell:
+  `C:\ProgramData\ssh\administrators_authorized_keys` denies a non-elevated read,
+  a WSL distro cannot ssh to its own Windows host, and a Windows OpenSSH session
+  is not elevated either. Its next `provision.ps1` regenerates the file wholesale
+  and closes it. Risk is nil — no machine holds that private half.
+- **`wsl-keepalive` and the `nc` ProxyCommand do not exist in this repo.** They
+  were host-local on the wiped box, so phase 6's "retire the Windows-shaped
+  workarounds" is already done for two of its three items. `ssh.user: methe` in
+  `fleet.json` is **desktop's**, live and correct — g15 carries no `ssh` block.
+- Headscale nodes 3 (`g15-retired`) and 9 (`g15-wsl`) deleted. Seven remain, all
+  live; node 5 `ipheoryt12` is his phone, offline is normal.
+
+**`pgdata`'s 186 GB staging copy is KEPT, deliberately.** I called the staging
+"redundant" and that was wrong: the sources are wiped, so deleting a leg takes it
+from two copies to one, and **g15's roles are `base, ssh-server, agents,
+dotfiles, repos` — no `backup-client`, so nothing about g15 is in restic at all.**
+Dropping this leg would leave 184 GB of qaz-code database (`act_version` 104 GB +
+`act_version_chunk` 80 GB) as a single copy on one NVMe. The fix is to give g15
+the `backup-client` role and let restic take it, then drop the staging — not to
+keep the staging forever. His call; roadmap P6.
