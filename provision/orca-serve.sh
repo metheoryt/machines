@@ -69,31 +69,85 @@ _apt_try libpango-1.0-0
 _apt_try xvfb   # fallback virtual display for headless Electron
 
 # ── Download + extract the AppImage (headless, no FUSE) ───────────────────────
+# The cache is keyed by the RESOLVED tag, never by the string "latest". Until
+# 2026-09-07 the file was named orca-${ORCA_VERSION:-latest}.AppImage, so with
+# the default VER the name never changed, `[ -f "$AI" ]` was a permanent cache
+# hit, and NO re-run of this script ever upgraded Orca — g15-wsl sat on 1.4.192
+# while upstream was at 1.4.197. The extract gate was worse: it keyed on
+# squashfs-root/AppRun merely existing, so even an explicit ORCA_VERSION=x.y.z
+# downloaded the new AppImage and then skipped unpacking it.
 ORCA_DIR="$HOME/.local/opt/orca"; mkdir -p "$ORCA_DIR"
-VER="${ORCA_VERSION:-latest}"
-if [ "$VER" = latest ]; then
-  URL="https://github.com/stablyai/orca/releases/latest/download/orca-linux.AppImage"
-else
-  URL="https://github.com/stablyai/orca/releases/download/v${VER}/orca-linux.AppImage"
-fi
-AI="$ORCA_DIR/orca-${VER}.AppImage"
-if [ -f "$AI" ]; then
-  ok "AppImage present: $AI"
-else
-  info "Downloading Orca AppImage ($VER)…"
-  curl -fsSL "$URL" -o "$AI" || die "AppImage download failed: $URL"
-fi
-chmod +x "$AI"
+APPDIR="$ORCA_DIR/squashfs-root"
 
-# Skip re-extract if already unpacked — the live orca-serve.service execs through a
-# symlink INTO squashfs-root, so a blind rm -rf would clobber the running server on
-# a re-run. rm -rf ~/.local/opt/orca/squashfs-root to force a re-extract/upgrade.
-if [ -x "$ORCA_DIR/squashfs-root/AppRun" ]; then
-  ok "Orca already extracted (rm -rf $ORCA_DIR/squashfs-root to re-extract/upgrade)"
+# The only truthful record of what is EXTRACTED is the AppImage's own desktop
+# entry. Compare tags with the leading v stripped from both sides: upstream says
+# v1.4.197 and this file says 1.4.192, so a raw comparison is either never equal
+# (re-downloads 200+ MB every run) or never unequal (never upgrades).
+_installed_ver() {
+  sed -n 's/^X-AppImage-Version=v\{0,1\}//p' "$APPDIR/orca-ide.desktop" 2>/dev/null | head -1
+}
+
+REQ="${ORCA_VERSION:-latest}"
+if [ "$REQ" = latest ]; then
+  VER="$(curl -fsSL https://api.github.com/repos/stablyai/orca/releases/latest 2>/dev/null \
+         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)"
+  if [ -z "$VER" ]; then
+    # Rate-limited or offline. Stay on what is installed rather than guessing —
+    # never re-download blind, and never leave the box without a runtime.
+    VER="$(_installed_ver)"
+    [ -n "$VER" ] || die "could not resolve the latest Orca release and none is installed."
+    warn "GitHub release lookup failed — staying on the installed $VER"
+  fi
 else
+  VER="${REQ#v}"
+fi
+URL="https://github.com/stablyai/orca/releases/download/v${VER}/orca-linux.AppImage"
+AI="$ORCA_DIR/orca-${VER}.AppImage"
+INSTALLED="$(_installed_ver)"
+ok "Orca target $VER (installed: ${INSTALLED:-none})"
+
+if [ "$INSTALLED" = "$VER" ] && [ -x "$APPDIR/AppRun" ]; then
+  ok "Orca $VER already extracted — nothing to download or unpack"
+else
+  if [ -f "$AI" ]; then
+    ok "AppImage present: $AI"
+  else
+    info "Downloading Orca AppImage ($VER)…"
+    # Download to .part first: a truncated AppImage left at the final name would
+    # be a cache hit forever, which is the bug this whole block exists to fix.
+    curl -fsSL "$URL" -o "$AI.part" || { rm -f "$AI.part"; die "AppImage download failed: $URL"; }
+    mv "$AI.part" "$AI"
+  fi
+  chmod +x "$AI"
+
+  # The live orca-serve.service execs a binary INSIDE squashfs-root, so the tree
+  # cannot be swapped under it — stop it first. Which manager owns the unit is
+  # decided further down (WSL's user@UID often has no bus), so probe both.
+  SERVE_CTL=""
+  if systemctl --user is-active --quiet orca-serve.service 2>/dev/null; then
+    SERVE_CTL="systemctl --user"
+  elif systemctl is-active --quiet orca-serve.service 2>/dev/null; then
+    SERVE_CTL="$SUDO systemctl"
+  fi
+  if [ -n "$SERVE_CTL" ]; then
+    info "Stopping orca-serve for the upgrade…"
+    $SERVE_CTL stop orca-serve.service || true
+  fi
+
   info "Extracting CLI (--appimage-extract)…"
-  rm -rf "$ORCA_DIR/squashfs-root"
-  ( cd "$ORCA_DIR" && "$AI" --appimage-extract >/dev/null 2>&1 ) || die "--appimage-extract failed."
+  # MOVE the old tree aside, never rm: if the new release moved cli/index.js the
+  # `die` below fires and this is the only way back to a working runtime.
+  OLD=""
+  if [ -e "$APPDIR" ]; then
+    OLD="$APPDIR.prev-${INSTALLED:-unknown}"
+    rm -rf "$OLD"; mv "$APPDIR" "$OLD"
+  fi
+  if ( cd "$ORCA_DIR" && "$AI" --appimage-extract >/dev/null 2>&1 ); then
+    [ -n "$OLD" ] && ok "previous tree kept at $OLD (rm -rf it once $VER is proven)"
+  else
+    if [ -n "$OLD" ]; then rm -rf "$APPDIR"; mv "$OLD" "$APPDIR"; warn "restored the previous Orca tree"; fi
+    die "--appimage-extract failed."
+  fi
 fi
 
 # ── Expose the orca CLI on PATH ───────────────────────────────────────────────
@@ -103,7 +157,6 @@ fi
 # bundled Electron binary in Node mode (ELECTRON_RUN_AS_NODE=1) — the launcher
 # model VS Code and Orca's own darwin/win wrappers use. In Node mode it needs no
 # X display, so `serve` runs truly headless (no xvfb). We write that wrapper.
-APPDIR="$ORCA_DIR/squashfs-root"
 CLIJS="$(find "$APPDIR/resources" -type f -path '*/cli/index.js' 2>/dev/null | head -1)"
 [ -n "$CLIJS" ] || die "Orca CLI entrypoint (…/cli/index.js) not found under $APPDIR/resources — Orca's layout may have changed."
 ELECTRON="$APPDIR/orca-ide"
