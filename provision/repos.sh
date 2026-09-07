@@ -94,7 +94,15 @@ select_repos() {
 
 main() {
   local selected=("$@")
-  [ ${#selected[@]} -eq 0 ] && selected=(my pure cyphy671)
+  # `cyphy671` left OUT of the default set 2026-09-07 (owner's call — the account
+  # is not in use for now). Its REPO_GROUPS row above is deliberately kept, so
+  # re-enabling is one token here or one explicit `repos.sh my pure cyphy671`.
+  # Worth knowing before restoring it: README.md still says the account exists to
+  # keep "a large corpus like qaz-law" off the main account, and that is not what
+  # the boxes hold — every repo under ~/my, qaz-code included, is `metheoryt`.
+  # Dropping it from the default also removes a per-converge warning: with gh
+  # authed for metheoryt only, discovery for cyphy671 fails on every run.
+  [ ${#selected[@]} -eq 0 ] && selected=(my pure)
   local key row g dir owner alias account repo _absent
   for key in "${selected[@]}"; do
     row=""; for g in "${REPO_GROUPS[@]}"; do [ "${g%%|*}" = "$key" ] && row="$g"; done
