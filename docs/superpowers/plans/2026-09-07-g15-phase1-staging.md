@@ -672,7 +672,7 @@ git push
 - Consumes: nothing.
 - Produces: a live distro with a verified keepalive holder; `latitude:/mnt/immich-mirror/g15-staging/` existing and owned by `me`; the identity record committed.
 
-- [ ] **Step 1: Confirm OneDrive has actually finished uploading — by hand, on the box**
+- [x] **Step 1: Confirm OneDrive has actually finished uploading — by hand, on the box**
 
 This is a **manual step and stays one.** The spec's disposition for `OneDrive` (3.7 GB: Documents, Desktop, Pictures) is *no action, already in the cloud* — and that is only true if the client has finished, not if the folder merely exists. There is no reliable command for "is OneDrive caught up"; the client's own UI is the authority.
 
@@ -689,7 +689,7 @@ On g15, in the Windows session: click the OneDrive cloud icon in the tray. It mu
 
 It reads through `/mnt/c` and is drvfs, so it takes the `music` flag set verbatim. 3.7 GB adds under a minute.
 
-- [ ] **Step 2: Re-arm the keepalive, and verify it by PID**
+- [x] **Step 2: Re-arm the keepalive, and verify it by PID**
 
 `State: Ready` means *not running*. The task last ran 2026-09-05 21:42 and exited `3221225786` (`STATUS_CONTROL_C_EXIT`) — it was killed. The distro is currently up only because stray `wsl.exe` clients from interactive sessions happen to be attached, and a distro dies when the last one detaches, taking any `setsid nohup`'d transfer with it.
 
@@ -722,7 +722,7 @@ Expected: one line, `root ... /bin/sleep infinity`. **If that line is absent, st
 ssh -o ServerAliveInterval=30 methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- /bin/sleep 14400'
 ```
 
-- [ ] **Step 3: Create the staging root on latitude**
+- [x] **Step 3: Create the staging root on latitude**
 
 ```bash
 ssh latitude.gg.ez 'sudo mkdir -p /mnt/immich-mirror/g15-staging && \
@@ -732,7 +732,7 @@ ssh latitude.gg.ez 'sudo mkdir -p /mnt/immich-mirror/g15-staging && \
 
 Expected: the directory exists owned by `me:me`, and `Avail` is at least **293 GB**. It was 610 GB on 2026-09-07. If it is under 350 GB, stop and find out what grew — the immich mirror shares this drive.
 
-- [ ] **Step 4: Record the identity set**
+- [x] **Step 4: Record the identity set**
 
 The spec's phase 0 asks for the identities that must move together. Capture them from live commands rather than retyping them:
 
@@ -761,7 +761,7 @@ cat hosts/g15/staging/identity-snapshot.txt
 
 Expected: two tailnet rows, two `fleet-authorized-keys` line numbers (40 and 41 as of `de1fad2`), and `g15-wsl: g15-wsl`.
 
-- [ ] **Step 5: Commit the snapshot**
+- [x] **Step 5: Commit the snapshot**
 
 ```bash
 git add hosts/g15/staging/identity-snapshot.txt

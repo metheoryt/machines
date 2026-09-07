@@ -1,0 +1,20 @@
+g15 identity snapshot — 2026-09-07T06:59:06Z
+
+## tailnet nodes (tailscale status)
+100.64.0.9  g15-wsl      fleet  linux    active; relay "headscale", tx 26077092 rx 1050020836     
+100.64.0.3  g15          fleet  windows  active; direct 192.168.8.170:41641, tx 102944 rx 91456   
+
+## fleet-authorized-keys entries
+40:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOfq1AtXFnPCuIuY1iIhL66F4Qb8B15+S9V8W6fOAR6l methe@g15
+41:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDzgLmdZv1ZYoG5wNujBWADuQlzg6xPweUa78JYW9NcW me@g15-wsl
+
+## dotfiles branches
+g15-wsl: g15-wsl
+
+## what phase 5 does with each of these
+100.64.0.3  g15      windows -> becomes linux; the NODE IS KEPT, g15 inherits it
+100.64.0.9  g15-wsl  linux   -> RETIRED with the distro
+fleet-authorized-keys: methe@g15 kept; me@g15-wsl removed
+dotfiles branch g15-wsl: retired. Its host-local content is not on main, so the
+  only copies of those files are the branch on the remote and the /home/me
+  staging copy from Task 6. Do not delete the branch in phase 5 — leave it.
