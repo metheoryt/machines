@@ -45,36 +45,46 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
   `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
 - **g15 / g513ie** — ASUS ROG **G15** 2023 (model G513IE), Ryzen 7 4800H,
-  31 GB, RTX 3050 Ti, Windows 11 Pro, tailnet `100.64.0.3`. **Was `server` until
-  2026-08-27** — renamed because the word had stopped naming anything: latitude
-  holds the services role, and `server` is ALSO the `linux.sh` profile latitude
-  runs, so one token meant two things in one manifest. **Back in `fleet.json`
-  since 2026-08-27** as the **personal-projects host**, roles `base,
+  31 GB, RTX 3050 Ti, **Ubuntu 26.04 resolute**, tailnet `100.64.0.10`. **Was
+  `server` until 2026-08-27** — renamed because the word had stopped naming
+  anything: latitude holds the services role, and `server` is ALSO the `linux.sh`
+  profile latitude runs, so one token meant two things in one manifest. **Back in
+  `fleet.json` since 2026-08-27** as the **personal-projects host**, roles `base,
   ssh-server, agents, dotfiles, repos` — its own `~/.claude` is the point, so a
   personal Claude account needs no Orca profile juggling. The 2026-08-01
   decommission (`docs/fleet-roadmap.md` P2) is history; what it did is not undone
   — `hosts/server/` stays deleted and Forgejo stays wiped (inspection found zero
   repositories; it was never used).
-- **The Linux side of `g15` is a WSL distro, not a reinstall** — for now. It is
-  provisioned as the self-declared fleet host **`g15-wsl`** (`dispatch:direct`,
-  its own tailnet node — Windows `g15` keeps node 3), so it never appears in
-  `fleet.json`.
-  **The reason Windows was kept did not survive measurement.** This entry read
-  "C: holds ~416 GB nobody has reviewed, so a native Debian install would have to
-  start with that review" — measured 2026-09-07, `C:\Users\methe` is 510 GB of
-  which **366 GB is two virtual disks** (207.9 GB the g15-wsl distro itself,
-  158.2 GB Docker Desktop's store), and `C:\Documents and Settings` /
-  `Local Settings` are junctions that were being counted twice. The real review
-  is two items, both since decided. The migration to **Debian 13 trixie** is
-  therefore designed and approved in direction, not deferred:
-  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`. Read that
-  before quoting the old rationale back at anyone.
-- **Reach `g15` as `me@g15.gg.ez`** — since the 2026-09-07 Ubuntu reinstall its
-  user is `me`, and its `fleet.json` entry carries no `ssh` block at all because
-  `ssh.user` defaults to `me`. It was `methe@` while the box ran Windows. The
-  bare `ssh g15` alias works from any box that has re-provisioned since.
-  `g15-wsl.gg.ez` and `server.gg.ez` no longer resolve — that distro died with
-  the disk.
+- **Windows and the `g15-wsl` distro are GONE — reinstalled 2026-09-07.** This
+  entry described a Windows 11 box with an Ubuntu WSL distro inside it
+  (`dispatch:direct`, tailnet node 3, never in `fleet.json`) for the whole day
+  after that stopped being true, which is the trap this file keeps warning about.
+  The design is
+  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`; it named
+  Debian 13 and the box shipped Ubuntu because the ≥6.19 kernel the asus-linux
+  stack needs is there out of the box (live: `7.0.0-31-generic`). Consequences
+  that bite elsewhere:
+  - **Its `fleet.json` platform is `debian`, on an Ubuntu box, deliberately.**
+    Every posix role executor allowlists `nixos|wsl|debian|darwin` and its
+    fallback prints "no posix executor for platform 'X' (skipped)" and returns
+    **0** — so `platform: ubuntu` would have skipped `dotfiles`, `repos` and
+    `backup-client` while `--apply` reported success. The token is a class name
+    meaning "posix, not darwin, not WSL"; renaming it fleet-wide is five role
+    files plus suites, and is roadmap work, not a rename to do in passing.
+  - **`repo_groups` in the manifest is per-machine** and g15 declares `["my"]`
+    only. `pure` and `cyphy671` are not wanted there.
+  - Reach it as **`me@g15.gg.ez`** — its entry carries no `ssh` block at all,
+    because `ssh.user` defaults to `me`. It was `methe@` under Windows, so a box
+    that has not re-provisioned since still has the old user and a stale host key
+    (`accept-new` refuses a CHANGED key — `ssh-keygen -R` is the fix, and no
+    provision run does it for you).
+  - `g15-wsl.gg.ez` and `server.gg.ez` no longer resolve. Headscale nodes 3
+    (renamed `g15-retired`) and 9 (`g15-wsl`) are dead and still listed.
+  - **Orca runs natively now, so `provision/orca-serve.sh` must NOT autostart
+    here** — see its header. A headless `serve` holds Electron's
+    one-instance-per-userData lock and the desktop app cannot open at all. The
+    script gates that on WSL since `63472aa`; the box was in exactly that state
+    for a day.
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).

@@ -2585,3 +2585,66 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
   text explains that by pointing at "only a NixOS host" — none has existed since
   2026-08-01. `dockerd` is what qaz-law needs to come back up. Undecided: by
   hand as a phase-4 step, or a `tier_docker`.
+
+## g15 phase 4 — what the Ubuntu box actually cost us (2026-09-07)
+
+The migration itself went as designed. Everything below is a thing that was NOT
+in the spec and that a future session would otherwise rediscover.
+
+**An AppImage does not "install" on Ubuntu 26.04.** There is no `libfuse2` in the
+release, only fuse3, and AppImageKit type-2 needs the second — so `chmod +x` and
+run dies on `libfuse.so.2`. `--appimage-extract` is the install, and it needs no
+FUSE and no root. `provision/orca-serve.sh` has always done it that way; the trap
+is only for a hand-downloaded AppImage.
+
+**Setting setuid on `chrome-sandbox` does nothing for Orca, and leaves a
+setuid-root binary in `$HOME`.** `AppRun` decides the sandbox by probing
+`unshare -Ur true`; Ubuntu ships
+`kernel.apparmor_restrict_unprivileged_userns = 1`, so that probe fails and
+AppRun appends `--no-sandbox` unconditionally. It never looks at `chrome-sandbox`
+at all. Two sudo commands were spent on this before reading `AppRun`. The real
+route to a sandbox here is an AppArmor profile granting userns to the launcher
+path — not setuid, and not `--no-sandbox` for a tool that runs agent code.
+
+**`cat > path` follows a symlink and truncates its TARGET.** That is how
+`~/.local/opt/orca/squashfs-root/resources/bin/orca-ide` — Orca's own 1592-byte
+CLI shim — got replaced by a four-line wrapper: `~/.local/bin/orca-ide` is a
+symlink into the install, and writing "to the symlink" wrote through it.
+Restored byte-for-byte from a second extraction of the same AppImage. Worth
+knowing that `orca-serve.sh` line 170 already carried `rm -f` before its `>`
+with a comment saying exactly this; the lesson was in the repo and not applied.
+
+**uid 999 is `dnsmasq` on Ubuntu and `postgres` in the container.** A restored
+PGDATA at `999:0` mode 700 looks alarming in `ls -l` on the host and is exactly
+right. Check ownership numerically (`stat -c %u`), never by name — and postgres
+validates PGDATA's mode at startup, so it cannot be handed to `me` without also
+running the container as uid 1000, which then needs the socket dir moved.
+
+**qaz-code's 184 GB lives in the DEFAULT `postgres` database**, not a named one —
+`\l` shows only the three system DBs and that is not a failed restore.
+`act_version` 104 GB, `act_version_chunk` 80 GB, extension `vector 0.8.4`. The
+compose project is named `qaz-law` while the directory is `qaz-code`; the only
+path that needed changing was the bind mount in the untracked, host-local
+`compose.override.yml` (which has no home in git — `hosts/g15/` is where it
+belongs).
+
+**Restoring by PULL needs `--rsync-path="sudo rsync"`.** The *sending* side's
+rsync is what must be able to read the tree, and local sudo does nothing for it.
+Phase 1 never hit this because it pushed.
+
+**Music went desktop-wsl → g15 direct, ~40 MB/s.** Not via latitude: that plan
+existed because g15-under-Windows could not pull from OpenSSH by key, which
+stopped being true. The 99 MB/s figure recorded elsewhere for this box is
+tailnet throughput with no disk in the path; reading 88 GB off `/mnt/c` through
+9p is the real ceiling.
+
+**`fleet-selfpull` refuses a dirty tree silently and forever.** `air` sat 43
+commits behind for eight days with 87 skipped runs, and the only evidence was a
+counter in `~/.local/state/fleet-selfpull/dirty-<path>`. Nothing escalates. The
+tree was dirty because of one uncommitted `AGENTS.md` edit; see `294c1ad` for
+what was salvaged out of it.
+
+**`orca-serve.sh`'s "none of [libxkbcommon0] installed" warnings over ssh are a
+sudo artifact**, not missing packages. `_apt_try` runs `$SUDO apt-get install`,
+and `me` has no NOPASSWD sudo on g15, so every dep install fails
+non-interactively and warns. On a desktop box the libs come with GNOME anyway.

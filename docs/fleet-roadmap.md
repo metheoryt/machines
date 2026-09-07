@@ -591,6 +591,28 @@ be diffed against a remembered failure count.
 
 ## P6 — Housekeeping.
 
+**Two one-line bugs found during g15 phase 4 (2026-09-07), both deliberately
+left for their own change rather than fixed mid-migration:**
+
+- `ts_mint_key` in `provision/tailscale-wsl.sh` defaults to
+  `ssh debian@cyphy.kz`, which resolves from nowhere in the fleet: the generated
+  `~/.ssh/config` only has `Host hub hub.gg.ez` with `HostName cyphy.kz`, so the
+  literal address matches no block, falls to the default identity and fails with
+  `Host key verification failed`. Worked around with `HEADSCALE_SSH=hub`. The
+  default should be `hub`.
+- `fleet-selfpull` skips a dirty tree silently and forever — `air` was 43 commits
+  behind for eight days across 87 skipped runs, evidenced only by a counter in
+  `~/.local/state/fleet-selfpull/dirty-<path>`. It should escalate after N
+  consecutive skips. This is a behaviour change to a timer on every box, so it
+  wants its own change and its own suite.
+
+**Also still missing, and bigger than a line each:** there is no
+`tier_tailscale` (the transport the whole fleet depends on is hand-installed on
+every Linux box), no tier installs `just` (the documented command surface —
+`air` has it from brew, by luck rather than provisioning), and the `tier_*`
+functions cannot be run outside a driver because `info`/`warn`/`ok`/`have` are
+defined in `linux.sh` and `macos.sh` rather than a shared lib.
+
 - [ ] **`SB_PARKS` in the status board is still keyed by sd node**, which
   2026-08-19 established is not an identity: `sb_series_keep` prunes a node that
   vanishes and does nothing when the letter survives onto a DIFFERENT disk, so
