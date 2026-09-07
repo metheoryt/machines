@@ -150,6 +150,102 @@ is what made the right work obvious._
   rotation needs no new infrastructure, but capacity does.
 - [ ] **`/mnt/xs` is at 95%** (36 G free). Fine for a closed set, but it means
   the archive drive has no room for anything else — do not plan to share it.
+  **And as of 2026-09-07 it is not mounted at all** — `sda3` is present, `/mnt/xs`
+  is an empty dir, so the byte-verified second copy of the 663 G archive is
+  offline. Same shape as the 2026-08-23 USB drop; remount and re-verify before
+  counting it as a copy.
+
+- [ ] **8 TB drive for `/mnt/servarr` — ORDERED 2026-09-07: WD Blue `WD80EAAZ`,
+  188 090 ₸ at dns-shop.kz.** The criteria are written down here because the
+  original plan (2026-08-16) lived only in a transcript and had to be recovered
+  by grepping `~/.claude/projects`. The first attempt at this purchase arrived
+  defective; **how it failed was never recorded**, which is why the acceptance
+  test below is generic rather than targeted.
+
+  **Internal 3.5″ CMR, not a consumer external** — no shucking, warranty in your
+  own name at an official store, and SMART reaching the host instead of being
+  masked by a USB bridge (a defect has to be *provable* next time). CMR is the
+  one non-negotiable spec: SMR handles a seeding library's rewrite pattern badly.
+  `WD80EAAZ` is CMR, 5640 rpm, 256 MB — verified against vendor/reviewer
+  documentation, not from recall. **Never trust a model list written from
+  memory; check the exact part number off the box against the vendor's own
+  CMR/SMR table before paying.**
+
+  **The NAS-class premium was declined deliberately.** Same page carried
+  IronWolf `ST8000VN004` (253 990 ₸ on shop.kz, 180 TB/yr, 3 y + Rescue, 7200 rpm)
+  and the same `WD80EAAZ` at 249 600 ₸ — DNS was 61 500 ₸ cheaper for the
+  identical part number, and 66 000 ₸ under the IronWolf. The reason it is the
+  right call rather than a saving: this drive holds **ServarrMedia, the one
+  dataset in the fleet this file marks "deliberately unprotected — replaceable
+  torrent data"**. What is bought instead is 2 years of warranty and no workload
+  rating, which is a real downgrade against wear but not against the failure
+  actually experienced — infant mortality shows up in weeks and the acceptance
+  test catches it. **If the 8 TB ever ends up holding something irreplaceable,
+  this trade is void and it wants a NAS-class drive.** By the allocation below,
+  the irreplaceable copies live on the freed HGST and on nvme, not here.
+
+  **No enclosure purchase is needed for the new drive** — the two Ugreen CM198
+  docks are already in place and one bay is being vacated (below). The standalone
+  SATA-USB enclosure is for the *displaced* `spare320`, not for the 8 TB.
+
+  **The "self-powered" argument does not survive measurement — buy for capacity,
+  not for reliability.** Measured on latitude 2026-09-07: both docks are **Ugreen
+  CM198** dual-bay units on JMicron **JMS561U** bridges (`152d:1561`), each with
+  its own 12 V brick, and they sit on **ports 1 and 2 of the same xhci root hub**
+  (`usb4`, 5 Gbps). So nothing on latitude is bus-powered, and the August reading
+  of the 04:08/10:28 double drop — "shared bus power against four spinning
+  drives" — is not supported by the topology. The element the two docks actually
+  share is the host controller, which a new drive with its own PSU also shares.
+  Whatever caused that drop is still undiagnosed; the reason to buy is headroom.
+
+  **SMART passes through these docks** — `smartctl -i -d sat` returns model,
+  rotation rate and `SMART support is: Enabled` on all four drives, so the
+  acceptance test below is executable through a CM198 without extra hardware.
+  Both docks run the `usb-storage` (BOT) driver, not `uas`, while the XS2000 on
+  another bus does negotiate `uas`; assume BOT for anything plugged into them.
+
+  **Bay allocation — the 8 TB replaces `spare320`, not an archive drive.** The
+  current map is dock `4-1` = {`sdb` servarr, `sdc` spare320}, dock `4-2` =
+  {`sdd` immich-mirror, `sde` immich-2024}. Note what that means today: **the
+  archive source and its mirror-to-be are on the same bridge**, which the August
+  plan asserted they would not be. Put the 8 TB in `sdc`'s bay and move
+  `spare320` (ST320LT020, 36 202 power-on hours) to a standalone SATA-USB
+  enclosure, and the end state separates every source from its copy:
+  `4-1` = {8 TB servarr, freed 931 G HGST as archive mirror}, `4-2` = {library
+  mirror, archive source}, standalone = spare320. Keep spare320 mounted at
+  `/mnt/spare320` by UUID `3a78fd88-deb0-4c1a-a576-14abd0631d57` — restic repo
+  `14f4eab544` lives on it and resticprofile addresses it by path. The standalone
+  enclosure needs the same SMART pass-through check as the docks.
+
+  **8 TB, not 16.** ~6.4 TB headroom after the move — ~14 months even at the
+  2026-08-05 burst rate, years at the quiet rate; 16 TB is real money against
+  growth nobody can measure. Sizing input the August plan didn't have: this
+  purchase frees a 931 G spindle, and that spindle covers **either** the archive
+  mirror **or** the deferred 815 G versioned backup above, not both.
+
+  **Acceptance test — start it the day the drive arrives.** 8 TB write+read is
+  ~30 h round trip **if the path sustains ~150 MB/s — which is unmeasured here**:
+  every existing throughput number on these docks (86 MB/s, 97 MB/s, 36 MB/s on
+  the SMR drive) comes from 2.5″ 5400 rpm spindles hitting their own ceiling, not
+  the bridge's. Measure the first hour of the write pass and extrapolate before
+  promising anyone a finish time, and do not run it concurrently with the monthly
+  archive copy — the two docks share a root hub. Either way a test begun late
+  lands outside DNS's return window, which is the only window that matters here —
+  the warranty behind it is 2 years, not 3. SMART baseline → full-surface write+read verify (`badblocks -w`,
+  or `f3write`/`f3read`) → SMART after, checking Reallocated/Pending sectors and
+  that `smartctl -d sat` returns attributes through the bridge at all. Nothing
+  moves off the source until that passes, and the source stays intact until the
+  copy is byte-verified.
+
+  **The migration half of the August plan needs re-deriving at move time** — it
+  names `sdf2` and a mounted `/mnt/xs`, and neither matches the current shape
+  (servarr is `sdb2` at 72%, mirror is `sdd2` at 509 G used and now holds
+  `g15-staging`). Two constraints from it that do still hold verbatim: mount the
+  new drive at **exactly** `/mnt/servarr` (seven containers bind-mount
+  `/mnt/servarr/ServarrMedia/{torrents,movies,tv,xxx}` and qbittorrent holds 39
+  stored save paths — keep the path, swap the device, change no app config), and
+  copy with **one single `rsync -aH` pass over all four dirs** (526 GiB actual
+  vs 1.03 TB apparent; split it or drop `-H` and it will not even fit).
 
 - [ ] **Decide what the mirror does with the deleted `Media/` tree.**
   `/mnt/immich-mirror` is 287G against `/mnt/immich`'s 249G; the difference is
