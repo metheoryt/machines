@@ -260,17 +260,26 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
 ### 4. Provision as a normal Linux fleet member
 
 - `just provision --machine g15 --dry-run`, then `--apply`.
-- **The provisioner installs neither docker nor a desktop toolchain, and its
-  closing text says so while pointing at a host that no longer exists**:
-  "Not installed by design (only a NixOS host gets these): the declarative dev
-  toolchain (docker, language servers, the full fish/ghostty/GNOME setup)"
-  (`provision/linux.sh`). The last Nix host went 2026-08-01. So on the new g15
-  those are nobody's job — and `dockerd` is exactly what qaz-law needs to come
-  back up. This is independent of the distro choice; the Ubuntu decision only
-  surfaced it. Two options, and the choice is not made here: install docker by
-  hand as a phase-4 step, or add a `tier_docker` and let every future Linux
-  workstation inherit it. The stale prose in `linux.sh` needs deleting either
-  way.
+- **Docker is `tier_docker`, decided and built 2026-09-07** (owner's call), so
+  `--apply` installs the engine here with no extra step. It is in the
+  `workstation` list only, installs from Docker's own apt repo (the source
+  latitude is already on), and **never upgrades an existing engine** — it is
+  inert wherever `dockerd` is present, which is what makes a docker tier safe to
+  put in a driver's list at all. Two properties matter for this box:
+    - **It skips a WSL distro**, where Docker Desktop owns the engine and
+      `provision/wsl-fixes.sh` owns the CLI. Irrelevant to native g15; it is why
+      the tier could land while `g15-wsl` was still alive.
+    - **It probes `dists/<codename>/Release` before writing the apt source**,
+      because a source file naming a suite Docker does not publish breaks every
+      later `apt-get update` on the box. Checked live 2026-09-07: Docker
+      publishes **`resolute`** for Ubuntu, so 26.04 needs no fallback.
+  The tier adds the invoking user to the `docker` group — root-equivalent, and a
+  deliberate grant on a single-user workstation (owner's call, 2026-09-07).
+  The stale prose in `linux.sh` ("only a NixOS host gets these … docker") is
+  deleted in the same change.
+- **A desktop toolchain is still nobody's job.** Language servers and the
+  fish/ghostty/GNOME setup were named in the same deleted sentence and have no
+  tier. Not blocking: install by hand and decide later whether it earns one.
 - **`ssh-server` is still an unimplemented stub** (roadmap P3) and is named in
   `PLANNED_ROLES`, so `--apply` will not fail on it — it will also not configure
   sshd. Expect to hand-roll it as latitude was, and take the firewall shape from

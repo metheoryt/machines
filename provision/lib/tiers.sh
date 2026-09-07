@@ -224,6 +224,167 @@ tier_apt_dev() {
   return 0
 }
 
+# ── BEST-EFFORT: the Docker engine (workstation) ──────────────────────────────
+# Installs dockerd from Docker's OWN apt repository. That is not a taste call:
+# latitude already runs docker-ce out of /etc/apt/sources.list.d/docker.list, so
+# this is the source the fleet is on. Distro-neutral — the repo path and the
+# suite are read from /etc/os-release, so one body serves Debian and Ubuntu, and
+# no codename is written down anywhere (the probe below is the authority on
+# which suites exist).
+#
+# It INSTALLS ONLY WHEN THE ENGINE IS ABSENT, and never upgrades. That is what
+# makes a docker tier safe to put in a driver's list at all: latitude's engine
+# predates this tier and runs immich, and `apt-get install -y docker-ce` against
+# an already-installed older package would upgrade and RESTART dockerd under an
+# unattended converge. Inert wherever an engine exists. Currently workstation
+# only; adding `server` is a one-token change and a no-op on latitude today.
+#
+# Absence is probed on dockerd, never on `docker`: Docker Desktop leaves a
+# /usr/bin/docker symlink that outlives its target, which is the trap
+# wsl_fixes_docker_needs_install documents one layer down.
+# Paths, env-overridable so provision/tests/docker-tier.test.sh can drive the
+# write path in a tmpdir with no root — the same shape wsl-fixes.sh uses for its
+# docker constants.
+DOCKER_TIER_KEYRING="${DOCKER_TIER_KEYRING:-/etc/apt/keyrings/docker.asc}"
+DOCKER_TIER_LIST="${DOCKER_TIER_LIST:-/etc/apt/sources.list.d/docker.list}"
+DOCKER_TIER_DOCKERD="${DOCKER_TIER_DOCKERD:-/usr/bin/dockerd}"
+
+_docker_packages() {
+  printf 'docker-ce\ndocker-ce-cli\ncontainerd.io\ndocker-buildx-plugin\ndocker-compose-plugin\n'
+}
+
+# _docker_repo_line <arch> <keyring> <os-id> <codename>
+_docker_repo_line() {
+  printf 'deb [arch=%s signed-by=%s] https://download.docker.com/linux/%s %s stable' \
+    "$1" "$2" "$3" "$4"
+}
+
+# _docker_release_url <os-id> <codename> — what the pre-write probe fetches.
+_docker_release_url() {
+  printf 'https://download.docker.com/linux/%s/dists/%s/Release' "$1" "$2"
+}
+
+# WSL keys on /proc/version, with $WSL_DISTRO_NAME only as an extra OR. The
+# order is load-bearing: sshd does not set WSL_DISTRO_NAME, so a detached
+# converge or a /ship over ssh reads it empty — and here that failure direction
+# would install a daemon into the distro Docker Desktop already serves.
+# Deliberately NOT /proc/sys/fs/binfmt_misc/WSLInterop: provision/wsl-fixes.sh
+# exists because that handler goes missing, and a distro that has lost it is
+# still a WSL distro.
+_docker_is_wsl() {
+  grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]
+}
+
+tier_docker() {
+  local keyring="$DOCKER_TIER_KEYRING" list="$DOCKER_TIER_LIST"
+  local arch id codename want url pkgs user
+
+  have apt-get || { warn "no apt-get — skipping the docker engine"; return 0; }
+
+  # Docker Desktop owns the engine on a WSL distro and provision/wsl-fixes.sh
+  # owns the CLI there (docker-ce-cli + the plugins, behind a dpkg-divert). A
+  # dockerd installed here would fight both.
+  if _docker_is_wsl; then
+    warn "WSL distro — the engine stays Docker Desktop's (provision/wsl-fixes.sh owns the CLI)"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the docker engine"
+    return 0
+  fi
+
+  if [ -x "$DOCKER_TIER_DOCKERD" ]; then
+    ok "docker engine already present — not touching it (this tier never upgrades)"
+  else
+    info "Installing the docker engine (apt, download.docker.com)…"
+    arch="$(dpkg --print-architecture 2>/dev/null || printf '')"
+    id="$(. /etc/os-release 2>/dev/null && printf '%s' "${ID:-}")"
+    codename="$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_CODENAME:-}")"
+    if [ -z "$arch" ] || [ -z "$id" ] || [ -z "$codename" ]; then
+      warn "cannot read arch/ID/VERSION_CODENAME — skipping the docker engine"
+      return 0
+    fi
+
+    # PROBE BEFORE WRITING, and this is the highest-consequence line in the
+    # tier. A sources.list.d entry naming a suite Docker does not publish makes
+    # every later `apt-get update` fail — hence every later tier and every
+    # converge run on the box. A fresh distro release is exactly the case that
+    # is missing upstream for a while. On a failed probe (no such suite, or no
+    # network under a detached converge) we warn and leave any EXISTING correct
+    # list untouched: never delete, never rewrite on a failure.
+    url="$(_docker_release_url "$id" "$codename")"
+    if ! curl -fsL --max-time 20 -o /dev/null "$url"; then
+      warn "docker publishes no '$codename' suite for $id (or the probe had no network): $url — skipping"
+      return 0
+    fi
+
+    if [ ! -s "$keyring" ]; then
+      $SUDO install -m 0755 -d "$(dirname "$keyring")"
+      if curl -fsL --max-time 20 "https://download.docker.com/linux/$id/gpg" | $SUDO tee "$keyring" >/dev/null; then
+        $SUDO chmod a+r "$keyring"
+        ok "installed $keyring"
+      else
+        $SUDO rm -f "$keyring"
+        warn "cannot fetch the docker apt key — skipping the docker engine"
+        return 0
+      fi
+    fi
+
+    want="$(_docker_repo_line "$arch" "$keyring" "$id" "$codename")"
+    if [ "$(cat "$list" 2>/dev/null)" != "$want" ]; then
+      printf '%s\n' "$want" | $SUDO tee "$list" >/dev/null
+      ok "wrote $list ($id $codename)"
+    fi
+
+    export DEBIAN_FRONTEND=noninteractive
+    pkgs="$(_docker_packages | tr '\n' ' ')"
+    # A new source file means the cached index cannot possibly know these
+    # packages, so refresh unconditionally rather than honouring APT_UPDATED.
+    $SUDO apt-get update -qq || { warn "apt-get update failed after adding the docker repo"; return 0; }
+    APT_UPDATED=1
+    # shellcheck disable=SC2086
+    if $SUDO apt-get install -y --no-install-recommends $pkgs; then
+      ok "docker engine installed"
+    else
+      warn "docker engine install failed"
+      return 0
+    fi
+  fi
+
+  # Group membership. THIS IS A REAL PRIVILEGE GRANT, not a nicety: the docker
+  # group is root-equivalent — a member can `docker run -v /:/host` and own the
+  # box. It is the norm on a single-user workstation, and without it every
+  # `docker` call needs sudo. It is why this tier stays off the profiles a
+  # multi-user or exposed box would use.
+  # Resolved as SUDO_USER first: under a hand-run `sudo bash linux.sh` id -un is
+  # root, and adding root to the group is both useless and confusing.
+  user="${SUDO_USER:-$(id -un 2>/dev/null || printf '')}"
+  if ! getent group docker >/dev/null 2>&1; then
+    warn "no docker group — engine install must have been skipped"
+  elif [ -z "$user" ] || [ "$user" = root ]; then
+    info "running as root with no SUDO_USER — no docker group membership to grant"
+  elif id -nG "$user" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+    ok "$user already in the docker group"
+  elif $SUDO usermod -aG docker "$user"; then
+    ok "added $user to the docker group — takes effect at the next login"
+  else
+    warn "could not add $user to the docker group — docker will need sudo"
+  fi
+
+  # The Debian/Ubuntu postinst enables docker.service itself, so this is the
+  # net for a box where it was masked or disabled by hand.
+  if have systemctl && [ -x "$DOCKER_TIER_DOCKERD" ]; then
+    if $SUDO systemctl is-enabled --quiet docker.service 2>/dev/null; then
+      ok "docker.service enabled"
+    elif $SUDO systemctl enable --now docker.service >/dev/null 2>&1; then
+      ok "docker.service enabled and started"
+    else
+      warn "docker.service would not enable — the engine is installed but not running"
+    fi
+  fi
+  return 0
+}
+
 # ── BEST-EFFORT: the physical-display status board ────────────────────────────
 # Packages only. The board itself is installed by a deliberate act
 # (provision/statusboard/statusboard.sh --install for the text board on tty2-6,

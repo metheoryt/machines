@@ -34,7 +34,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_apt_min tier_apt_dev tier_docker tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex.
@@ -101,6 +101,27 @@ has   "$srv" '^tier_statusboard$'      "server installs the status-board package
 hasnt "$ws"  '^tier_statusboard$'      "workstation omits the status-board packages"
 hasnt "$hub" '^tier_statusboard$'      "hub omits the status-board packages"
 hasnt "$mac" '^tier_statusboard$'      "macOS omits the status-board packages"
+# ── docker: workstation ONLY ──────────────────────────────────────────────────
+# The engine belongs on the box someone develops on. It is off `server` for a
+# specific reason rather than by omission: latitude's docker-ce predates the
+# tier and runs immich, and while the tier never upgrades (so it would be inert
+# there today), putting it in that list would make a future engine install a
+# side effect of an unattended converge on the services box. Off `hub` because
+# a 960MB VPS runs no containers. Off macOS because the engine there is Docker
+# Desktop, a cask, with no dockerd to apt-install.
+# Behaviour is pinned by provision/tests/docker-tier.test.sh; this is placement.
+has   "$ws"  '^tier_docker$' "workstation installs the docker engine"
+hasnt "$srv" '^tier_docker$' "server does NOT install docker (latitude's engine predates the tier)"
+hasnt "$hub" '^tier_docker$' "hub omits docker (960MB VPS)"
+hasnt "$mac" '^tier_docker$' "macOS omits docker (the engine there is a cask)"
+# It rides with the apt layer it extends, and must stay after tier_apt_min:
+# that tier is what installs curl and ca-certificates, which the suite probe and
+# the key fetch both need.
+ws_min="$(printf '%s\n' "$ws" | grep -n '^tier_apt_min$' | cut -d: -f1)"
+ws_dock="$(printf '%s\n' "$ws" | grep -n '^tier_docker$' | cut -d: -f1)"
+[ "$ws_min" -lt "$ws_dock" ] \
+  && pass "workstation runs apt_min BEFORE docker (curl + ca-certificates)" \
+  || die "tier_docker must run after tier_apt_min — it needs curl and ca-certificates"
 # Packages only — the tier must never take a VT from the login prompt. That is the
 # deliberate `statusboard.sh --install` / `statusboard-gui.sh --install`.
 body="$(awk '/^tier_statusboard\(\)/,/^}/' "$TIERS")"
@@ -333,7 +354,13 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # have, per the exception above); macOS therefore lists tier_dotfiles_sync
 # directly. Same timer, same script, one entry each — so the two lists are still
 # equivalent, just not textually equal. Asserted positively above.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync)$' | tr '\n' ' '; }
+#
+# tier_docker is the fifth, and it is a package-manager exception like the first:
+# the Linux engine is dockerd out of Docker's apt repo, and macOS has no dockerd
+# to install at all — the engine there is Docker Desktop, a cask. Adding it to
+# tier_brew_cask to keep the lists textually equal would change what installs on
+# air, which is a different decision from this one.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

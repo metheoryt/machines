@@ -250,6 +250,18 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   band (`gortex upgrade`) is silently reverted to the pin by the next provision
   run for any reason. Fix a drift by bumping the pin, never by teaching the tier
   to disobey it.
+- **`tier_docker`** — installs the engine from Docker's own apt repo on the
+  `workstation` profile, and encodes two fleet traps rather than a hardware one.
+  It **never upgrades**: `apt-get install -y docker-ce` against an older
+  installed package would restart dockerd, and latitude runs immich on one — so
+  the tier is inert wherever `dockerd` exists, which is what lets it live in a
+  driver's tier list. And it **skips a WSL distro**, where Docker Desktop owns
+  the engine and `provision/wsl-fixes.sh` owns the CLI behind a `dpkg-divert`;
+  the WSL check reads `/proc/version`, never `$WSL_DISTRO_NAME` alone (sshd does
+  not set it, and that failure direction installs a daemon). It probes
+  `dists/<codename>/Release` before writing the apt source, because a source
+  naming an unpublished suite breaks every later `apt-get update` on the box.
+  Pinned by `provision/tests/docker-tier.test.sh` (7 live branch cases).
 - **`tier_gortex_autoupdate`** — the counterpart, and the only tier in the
   `server` profile that workstation lacks. It installs a weekly timer running
   `provision/gortex-autoupdate.sh`, which bumps `provision/gortex.version` to the

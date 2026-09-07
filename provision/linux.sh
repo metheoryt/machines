@@ -7,7 +7,10 @@
 #   • the core CLI dev tools (gortex, claude, ripgrep/fd/fzf, …)
 #
 # Profiles exist so a lean box can converge without the workstation dev layer:
-#   workstation — the default (WSL dev distros): every tier
+#   workstation — the default (WSL dev distros, and a native Linux desktop):
+#                 every tier. The one tier that is not uniform across it is
+#                 docker, which skips a WSL distro where Docker Desktop owns
+#                 the engine.
 #   hub         — the 960MB Debian VPS: no dev apt layer, no gortex,
 #                 and deliberately no ssh_accounts (it would overwrite that
 #                 box's ~/.ssh/config and kill its only GitHub auth)
@@ -68,7 +71,11 @@ fi
 # One list per profile; a new profile is a new list, not a new code path.
 case "$PROFILE" in
   workstation)
-    TIERS=(apt_min apt_dev agents_config git_base gortex
+    # docker rides next to the apt layer it extends. It is a NO-OP on a WSL
+    # distro — Docker Desktop owns the engine there and provision/wsl-fixes.sh
+    # owns the CLI — so it reaches only a native Linux desktop, which is what
+    # this profile now also covers. See the tier for why it never upgrades.
+    TIERS=(apt_min apt_dev docker agents_config git_base gortex
            "agent_clis claude" shell_init autofetch
            ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
@@ -197,8 +204,10 @@ Next steps:
   • This box's clone auto-relinks agent config on git pull (core.hooksPath set
     by agents/bootstrap.sh). Commit from any fleet machine, pull here.
 
-Not installed by design (only a NixOS host gets these): the declarative dev
-toolchain (docker, language servers, the full fish/ghostty/GNOME setup).
+Not installed by design: language servers and a desktop toolchain (the full
+fish/ghostty/GNOME setup). This text used to say "only a NixOS host gets
+these" and to list docker among them — the last Nix host went 2026-08-01, and
+docker is tier_docker on the workstation profile since 2026-09-07.
 EOF
 
 exit 0
