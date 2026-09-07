@@ -649,6 +649,20 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   `_streak_bump` / `_streak_clear` and `FLEET_SELFPULL_DIRTY_LIMIT`, and give the
   `.ps1` its first suite.
 
+- [ ] **`provision/wsl-fixes.sh` should own desktop-wsl's ssh port**, and does
+  not. In `networkingMode=mirrored` the distro shares the Windows adapters and
+  `ssh.socket` loses the bind on `0.0.0.0:22` to the Windows OpenSSH server —
+  `Dependency failed for ssh.service` every boot from 2026-08-29, unnoticed for
+  five weeks while this repo documented the box as reachable. The fix is a
+  drop-in moving it to 2222, now **tracked but not provisioned** at
+  `hosts/desktop/wsl/ssh-socket-override.conf`: reprovisioning the distro still
+  does not restore it. Doing it properly means gating on the real precondition
+  (mirrored networking plus port 22 already taken, not the distro's name) and a
+  Windows-side arm for the inbound firewall rule, which mirrored mode makes
+  necessary and which `wsl-fixes.sh` has no business issuing today. A behaviour
+  change to a script every WSL distro runs, for one host — its own change, with
+  its own suite.
+
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
   desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh
   config pins `id_fleet`. Removing it is a real revocation, not a cleanup.
