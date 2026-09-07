@@ -79,14 +79,12 @@ for p in pgdata home music; do
     printf '%s' "$c" | grep -q -- "id_fleet"
     check $? "$p: ssh names id_fleet"
 
-    printf '%s' "$c" | grep -q -- "rsync-path=sudo"
-    check $? "$p: destination runs rsync under sudo (ownership preserved at copy time)"
-
     printf '%s' "$c" | grep -qE -- "(^| )-x( |$)|(^| )'-x'( |$)"
     check $? "$p: -x (one file system), so the copy and the manifest agree"
 
-    printf '%s' "$c" | grep -q -- "192.168.8.155"
-    check $? "$p: targets latitude's LAN address, not the relayed tailnet name"
+    case "$p" in music) want=192.168.8.145 ;; *) want=192.168.8.155 ;; esac
+    printf '%s' "$c" | grep -q -- "$want"
+    check $? "$p: targets $want over the LAN, not a relayed tailnet name"
 
     printf '%s' "$c" | grep -q -- "gg.ez"
     if [ $? -eq 0 ]; then
@@ -339,6 +337,57 @@ if [ $? -eq 0 ]; then
     fail "plain stage runs rsync WITH --delete — the first pass must not delete"
 else
     pass "plain stage runs rsync without --delete"
+fi
+
+# ── 11. The split destination ─────────────────────────────────────────────────
+# pgdata and /home/me go to latitude; Music goes to desktop. Two reasons, both
+# measured 2026-09-07 and neither about space:
+#   - drvfs on desktop INVENTS ownership and modes: after chown 999:999 +
+#     chmod 600, stat reads `me:me 777`. pgdata's files are 999:999 mode 600
+#     under directories in four different combinations, and /home/me carries
+#     .ssh — neither survives NTFS. Music has no metadata worth keeping.
+#   - drvfs costs 6.6 ms per file (19.8 s for 3000 files, against 0.03 s on
+#     ext4). /home/me is 226003 files, so NTFS would add ~25 minutes of pure
+#     per-file overhead. Music is 14878 files averaging 6 MB.
+# desktop-wsl's own ext4 is not an option either: 99 GB total, 60 GB free.
+for p in pgdata home; do
+    c="$("$SH" cmd "$p" 2>/dev/null)"
+    printf '%s' "$c" | grep -q -- "rsync-path=sudo"
+    check $? "$p: destination runs rsync under sudo (ownership preserved numerically at copy time)"
+    printf '%s' "$c" | grep -q -- "2222"
+    if [ $? -eq 0 ]; then
+        fail "$p: carries desktop's ssh port — it goes to latitude on 22"
+    else
+        pass "$p: does not carry desktop's ssh port"
+    fi
+done
+
+mu="$("$SH" cmd music 2>/dev/null)"
+# The port lives inside the single -e argument, so printf %q escapes the space:
+# the composed text reads `-p\ 2222`, not `-p 2222`. Matching the literal space
+# is the third time that escaping has broken an assertion in this suite.
+printf '%s' "$mu" | grep -qE -- '-p[^a-zA-Z0-9]{0,2}2222'
+check $? "music: ssh uses port 2222 (Windows OpenSSH owns 22 on desktop, mirrored networking)"
+printf '%s' "$mu" | grep -q -- "rsync-path=sudo"
+if [ $? -eq 0 ]; then
+    fail "music: runs the destination rsync under sudo — desktop-wsl's \`me\` has NO passwordless sudo, so it would hang for a password"
+else
+    pass "music: does not run the destination rsync under sudo"
+fi
+printf '%s' "$mu" | grep -q "/mnt/c/Users/methe/g15-staging/Music"
+check $? "music: destination is under the user's own directory (C:\\ root refuses a mkdir without admin)"
+printf '%s' "$("$SH" manifest-cmd music dst 2>/dev/null)" | grep -q "/mnt/c/Users/methe/g15-staging/Music"
+check $? "manifest-cmd music dst points at the desktop tree"
+
+STAGE_DESK="me@10.0.0.2" "$SH" cmd music 2>/dev/null | grep -q "me@10.0.0.2"
+check $? "STAGE_DESK overrides the Music destination host"
+STAGE_DESK_PORT=2323 "$SH" cmd music 2>/dev/null | grep -q "2323"
+check $? "STAGE_DESK_PORT overrides the Music destination port"
+STAGE_DESK="me@10.0.0.2" "$SH" cmd pgdata 2>/dev/null | grep -q "me@10.0.0.2"
+if [ $? -eq 0 ]; then
+    fail "STAGE_DESK leaks into the pgdata destination"
+else
+    pass "STAGE_DESK does not affect pgdata"
 fi
 
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi

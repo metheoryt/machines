@@ -13,7 +13,8 @@
 #   ./stage.sh verify       <payload>         manifest both sides and diff
 #   ./stage.sh status                         sizes on both sides + log tails
 #
-#   payload: pgdata | home | music
+#   payload: pgdata | home  -> latitude (ext4)
+#            music          -> desktop  (NTFS, port 2222)
 #   kind:    go | dry | delete | delete-dry
 #   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
 #            mismatch · 5 restage into a missing or empty destination
@@ -69,7 +70,15 @@ set -uo pipefail
 
 KEY="${STAGE_KEY:-/home/me/.ssh/id_fleet}"
 LAT="${STAGE_LAT:-me@192.168.8.155}"
+# Music goes to desktop, not latitude — his machine, his call. Port 2222 because
+# .wslconfig puts desktop-wsl in mirrored networking, so the distro shares the
+# Windows adapters and the Windows OpenSSH server already owns 22 (ssh.socket
+# had been losing that bind race since 2026-08-29). Inbound 2222 needs a
+# Windows firewall rule; it is in place, scoped to 192.168.8.0/24.
+DESK="${STAGE_DESK:-me@192.168.8.145}"
+DESK_PORT="${STAGE_DESK_PORT:-2222}"
 STAGE="${STAGE_DIR:-/mnt/immich-mirror/g15-staging}"
+DESKDIR="${STAGE_DESKDIR:-/mnt/c/Users/methe/g15-staging}"
 LOGDIR="${STAGE_LOGDIR:-/var/log/g15-staging}"
 PGPID="${STAGE_PGPID:-/data/qaz-law/pgdata/18/docker/postmaster.pid}"
 
@@ -97,7 +106,8 @@ stage.sh — move g15's payload onto latitude. Runs ON g15-wsl, AS ROOT.
   ./stage.sh verify       <payload>         manifest both sides and diff
   ./stage.sh status                         sizes on both sides + log tails
 
-  payload: pgdata | home | music
+  payload: pgdata | home  -> latitude (ext4)
+           music          -> desktop  (NTFS, port 2222)
   kind:    go | dry | delete | delete-dry
   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
            mismatch · 5 restage into a missing or empty destination
@@ -133,9 +143,72 @@ payload_dst() {
     case "$1" in
         pgdata) printf '%s\n' "$STAGE/pgdata" ;;
         home)   printf '%s\n' "$STAGE/home-me" ;;
-        music)  printf '%s\n' "$STAGE/Music" ;;
+        # Under the user's own directory: a mkdir at C:\ root is refused
+        # without admin (measured 2026-09-07).
+        music)  printf '%s\n' "$DESKDIR/Music" ;;
         *)      return 1 ;;
     esac
+}
+
+# WHY THE DESTINATION IS SPLIT. Two facts, both measured 2026-09-07 on desktop,
+# and neither of them about free space:
+#   - drvfs INVENTS ownership and modes. After chown 999:999 + chmod 600, stat
+#     reads `me:me 777`. pgdata's files are 999:999 mode 600 under directories
+#     in four different combinations, and /home/me carries .ssh — on NTFS both
+#     arrive with fictional metadata and a restore would have to guess.
+#   - drvfs costs 6.6 ms per file: 19.8 s for 3000 files against 0.03 s on ext4.
+#     /home/me is 226003 files, so NTFS would add ~25 minutes of pure per-file
+#     overhead. Music is 14878 files averaging 6 MB and loses nothing.
+# desktop-wsl's own ext4 is not a third option: 99 GB total, 60 GB free.
+#
+# The cost is throughput: g15 and desktop are both on wifi, so their traffic
+# crosses the access point twice — 40 MB/s measured, against 78 MB/s to
+# latitude, which sits on cable (enp0s31f6). Music therefore takes ~37 minutes
+# rather than ~19. Inherent to the path, not a setting.
+payload_host() {
+    case "$1" in
+        pgdata|home) printf '%s\n' "$LAT" ;;
+        music)       printf '%s\n' "$DESK" ;;
+        *)           return 1 ;;
+    esac
+}
+
+payload_port() {
+    case "$1" in
+        pgdata|home) printf '%s\n' 22 ;;
+        music)       printf '%s\n' "$DESK_PORT" ;;
+        *)           return 1 ;;
+    esac
+}
+
+# `me` on latitude HAS NOPASSWD sudo; `me` on desktop-wsl does NOT — measured,
+# it answers "sudo: A terminal is required to authenticate". A sudo there would
+# hang a 37-minute transfer waiting for a password nobody can type, and Music
+# needs no privilege anyway: drvfs would discard the metadata regardless.
+payload_remote_sudo() {
+    case "$1" in
+        pgdata|home) printf '%s\n' yes ;;
+        music)       printf '%s\n' no ;;
+        *)           return 1 ;;
+    esac
+}
+
+# The destination manifest must descend pgdata's mode-700 directories, so it
+# needs root there; on desktop everything is drvfs and readable as `me`, and
+# sudo would block on a password prompt.
+remote_sh() {   # $1 payload
+    case "$(payload_remote_sudo "$1")" in
+        yes) printf '%s\n' 'sudo bash -s' ;;
+        no)  printf '%s\n' 'bash -s' ;;
+        *)   return 1 ;;
+    esac
+}
+
+ssh_opts_for() {   # $1 payload
+    local port
+    port="$(payload_port "$1")" || return 1
+    printf '%s' "$SSH_OPTS"
+    [ "$port" = 22 ] || printf ' -p %s' "$port"
 }
 
 payload_flags() {
@@ -161,9 +234,11 @@ payload_flags() {
 
 CMD=()
 build_cmd() {   # $1 payload  $2 go|dry|delete|delete-dry
-    local src dst
+    local src dst host opts
     src="$(payload_src "$1")" || return 1
     dst="$(payload_dst "$1")" || return 1
+    host="$(payload_host "$1")" || return 1
+    opts="$(ssh_opts_for "$1")" || return 1
     local -a f=()
     mapfile -t f < <(payload_flags "$1")
     f+=(--partial --partial-dir=.rsync-partial '--exclude=.rsync-partial/'
@@ -176,8 +251,10 @@ build_cmd() {   # $1 payload  $2 go|dry|delete|delete-dry
         delete)     f+=(--delete) ;;
         delete-dry) f+=(--delete -n) ;;
     esac
-    CMD=(rsync "${f[@]}" -e "ssh $SSH_OPTS" --rsync-path='sudo rsync'
-         "$src/" "$LAT:$dst/")
+    local -a rp=()
+    [ "$(payload_remote_sudo "$1")" = yes ] && rp=(--rsync-path='sudo rsync')
+    CMD=(rsync "${f[@]}" -e "ssh $opts" "${rp[@]+"${rp[@]}"}"
+         "$src/" "$host:$dst/")
     return 0
 }
 
@@ -271,8 +348,8 @@ hosts/latitude/debian/mirror-refresh.sh's header. Stop it first:
             q="$(printf 'test -d %q && [ -n "$(ls -A %q)" ]' "$dstq" "$dstq")"
             # A here-string, not a pipe: with pipefail on, a pipe would let the
             # writer's EPIPE outvote ssh's own exit code.
-            ssh $SSH_OPTS "$LAT" 'sudo bash -s' <<<"$q" \
-                || die "restage refuses: $LAT:$dstq is missing or empty.
+            ssh $(ssh_opts_for "$P") "$(payload_host "$P")" "$(remote_sh "$P")" <<<"$q" \
+                || die "restage refuses: $(payload_host "$P"):$dstq is missing or empty.
 A delete pass is only ever a SECOND pass over a destination that already holds
 one. Run 'stage $P' first, or fix STAGE_DIR." 5
         fi
@@ -283,8 +360,11 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         # Windows for root.
         exec >>"$LOGDIR/$P.log" 2>&1
         say "=== $MODE $P"
-        say "src=$(payload_src "$P")  dst=$LAT:$(payload_dst "$P")"
-        ssh $SSH_OPTS "$LAT" "sudo mkdir -p $(payload_dst "$P") && sudo chown me:me $(payload_dst "$P")" </dev/null \
+        say "src=$(payload_src "$P")  dst=$(payload_host "$P"):$(payload_dst "$P")"
+        mk="mkdir -p $(payload_dst "$P")"
+        [ "$(payload_remote_sudo "$P")" = yes ] \
+            && mk="sudo $mk && sudo chown me:me $(payload_dst "$P")"
+        ssh $(ssh_opts_for "$P") "$(payload_host "$P")" "$mk" </dev/null \
             || die "could not create the destination directory"
         "${CMD[@]}"; rc=$?
         case "$rc" in
@@ -304,9 +384,9 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         s="$LOGDIR/$P.src.manifest"; d="$LOGDIR/$P.dst.manifest"
         say "manifest: source $(payload_src "$P")"
         manifest_cmd "$P" src | bash > "$s" || die "source manifest failed"
-        say "manifest: destination $LAT:$(payload_dst "$P")"
-        manifest_cmd "$P" dst | ssh $SSH_OPTS "$LAT" 'sudo bash -s' > "$d" \
-            || die "destination manifest failed"
+        say "manifest: destination $(payload_host "$P"):$(payload_dst "$P")"
+        manifest_cmd "$P" dst | ssh $(ssh_opts_for "$P") "$(payload_host "$P")" \
+            "$(remote_sh "$P")" > "$d" || die "destination manifest failed"
         sn=$(wc -l < "$s"); dn=$(wc -l < "$d")
         say "entries: src=$sn dst=$dn"
         if cmp -s "$s" "$d"; then
@@ -326,8 +406,15 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
                 "$(du -sh "$(payload_src "$p")" 2>/dev/null | cut -f1)" \
                 "$(payload_src "$p")"
         done
-        printf -- '--- destination:\n'
-        ssh $SSH_OPTS "$LAT" "df -h $STAGE; sudo du -sh $STAGE/* 2>/dev/null" </dev/null
+        printf -- '--- destinations:\n'
+        for p in pgdata home music; do
+            dd="$(payload_dst "$p")"; pre=""
+            [ "$(payload_remote_sudo "$p")" = yes ] && pre="sudo "
+            printf '%-7s %s:%s\n' "$p" "$(payload_host "$p")" "$dd"
+            ssh $(ssh_opts_for "$p") "$(payload_host "$p")" \
+                "df -h ${dd%/*} | tail -1; ${pre}du -sh $dd 2>/dev/null" </dev/null \
+                | sed 's/^/  /'
+        done
         printf -- '--- logs:\n'
         for f in "$LOGDIR"/*.log; do
             [ -e "$f" ] || continue

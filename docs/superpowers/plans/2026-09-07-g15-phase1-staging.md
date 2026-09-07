@@ -16,11 +16,15 @@ These apply to every task below, without being repeated in it.
 
 - **`< /dev/null` (or `-n`) on every `ssh`, `docker` and `wsl` call inside a script fed on stdin.** Those commands read stdin to EOF and will eat the rest of the script. This bit during planning: a probe's last two lines silently never ran. Same class of failure as the `just test` gate skipping 17 suites.
 - **Root on g15-wsl comes from Windows, not from `sudo`.** `me` is in the `sudo` group but has **no NOPASSWD**, so `sudo -n` fails. The route is `ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'` with the script on stdin. Never try to `sudo` inside the distro non-interactively.
-- **`me` on latitude DOES have NOPASSWD sudo** (checked 2026-09-07). That is why the destination side of every rsync is `--rsync-path='sudo rsync'` — ownership and modes are preserved numerically at copy time instead of being reconstructed on restore.
+- **`me` on latitude DOES have NOPASSWD sudo; `me` on desktop-wsl does NOT** (both checked 2026-09-07 — desktop answers `sudo: A terminal is required to authenticate`). So `--rsync-path='sudo rsync'` is used for the two latitude payloads, where ownership and modes are preserved numerically at copy time instead of being reconstructed on restore, and is **never** used for `music`: a sudo there would hang a 37-minute transfer waiting for a password nobody can type.
+- **The destination is SPLIT: `pgdata` and `/home/me` go to latitude, `Music` goes to desktop.** His call, and the boundary is not arbitrary — drvfs on desktop invents ownership and modes (`chown 999:999 && chmod 600` reads back as `me:me 777`), which pgdata and `/home/me`'s `.ssh` cannot survive, and it costs 6.6 ms per file, which `/home/me`'s 226 003 files cannot afford. `Music` has no metadata worth keeping and averages 6 MB a file. desktop-wsl's own ext4 was never an option: 99 GB total, 60 GB free.
+- **Music's route is port 2222, and that needed two changes on desktop.** `.wslconfig` puts desktop-wsl in `networkingMode=mirrored`, so the distro shares the Windows adapters and the Windows OpenSSH server already owns 22 — `ssh.socket` had been losing that bind race, and failing, every boot since 2026-08-29. An override moves it to 2222 (both address families spelled out: a bare `ListenStream=2222` bound only `[::]` and IPv4 clients got `Connection refused`), and an inbound Windows firewall rule scoped to `192.168.8.0/24` admits it.
+- **Music's destination lives under the user's own directory.** `mkdir /mnt/c/g15-staging` is refused without admin; `/mnt/c/Users/methe/g15-staging` is not.
 - **Scripts reach a Windows fleet host as a heredoc on stdin, never as a quoted argument.** PowerShell parses the command line first and eats quotes; a `-printf "%s\t%P\n"` passed as an argument silently returns one line.
 - **`pv` and `zstd` are NOT installed on g15-wsl** and installing them needs the password-gated sudo. No step may reach for either. `--info=stats2` is the progress report.
 - **`ssh` to a bare IP does not pick up the fleet identity.** The generated config keys on `Host *.gg.ez`, so `ssh me@192.168.8.155` falls through to the default identity and fails in 0.2 s having moved nothing — which reads exactly like having no bandwidth. Always `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`. This produced three false measurements on 2026-09-07.
 - **Do not switch g15 to `networkingMode=mirrored`.** It would probably work, and it would also expose the Windows Tailscale adapter inside the distro while g15 has two tailnet nodes (`100.64.0.3` Windows, `100.64.0.9` distro) to fight over routes. Changing the network mode of the box you are about to read 204 GB out of, to save half an hour on a route that already runs at 78 MB/s, is the wrong trade.
+- **g15 → desktop is 40 MB/s and that is inherent.** Both are on wifi (desktop has only an `Intel Wi-Fi 6E AX211`), so their traffic crosses the access point twice; latitude sits on cable (`enp0s31f6` holds `192.168.8.155`) and takes 78 MB/s from the same source. Do not go looking for a setting.
 - **Postgres stays stopped once Task 3 stops it.** Any restart rewrites `pgdata` and invalidates the manifest taken in Task 7. The container's restart policy is set to `no` deliberately and is **not** restored — the container dies with the disk.
 - **Nothing in this plan wipes, formats, deletes or reinstalls anything.** Phase 1 is additive on both boxes. Rollback until Phase 2 is "delete the staging copy".
 
@@ -49,6 +53,15 @@ plan and the disk agree.
    not; `restage` additionally refuses (exit 5) a destination that does not
    already hold a first pass. `./stage.sh plan <payload> delete` previews the
    removals. Exit 5 joins the documented codes.
+3. **The destination is split, so `stage.sh` resolves host, port, remote shell
+   and `--rsync-path` per payload** (`payload_host`, `payload_port`,
+   `payload_remote_sudo`, `remote_sh`, `ssh_opts_for`), with `STAGE_DESK`,
+   `STAGE_DESK_PORT` and `STAGE_DESKDIR` as the overrides. `Music` goes to
+   desktop over port 2222 with no remote sudo; `pgdata` and `/home/me` go to
+   latitude on 22 under `sudo rsync`. Task 5's budget moves from ~19 to
+   ~37 minutes. The reasons are in the Global Constraints above and, measured,
+   in `stage.sh`'s header; the one that decides it is that NTFS cannot hold
+   pgdata's ownership or `/home/me`'s modes at all.
 
 ---
 
@@ -193,14 +206,12 @@ for p in pgdata home music; do
     printf '%s' "$c" | grep -q -- "id_fleet"
     check $? "$p: ssh names id_fleet"
 
-    printf '%s' "$c" | grep -q -- "rsync-path=sudo"
-    check $? "$p: destination runs rsync under sudo (ownership preserved at copy time)"
-
     printf '%s' "$c" | grep -qE -- "(^| )-x( |$)|(^| )'-x'( |$)"
     check $? "$p: -x (one file system), so the copy and the manifest agree"
 
-    printf '%s' "$c" | grep -q -- "192.168.8.155"
-    check $? "$p: targets latitude's LAN address, not the relayed tailnet name"
+    case "$p" in music) want=192.168.8.145 ;; *) want=192.168.8.155 ;; esac
+    printf '%s' "$c" | grep -q -- "$want"
+    check $? "$p: targets $want over the LAN, not a relayed tailnet name"
 
     printf '%s' "$c" | grep -q -- "gg.ez"
     if [ $? -eq 0 ]; then
@@ -455,6 +466,57 @@ else
     pass "plain stage runs rsync without --delete"
 fi
 
+# ── 11. The split destination ─────────────────────────────────────────────────
+# pgdata and /home/me go to latitude; Music goes to desktop. Two reasons, both
+# measured 2026-09-07 and neither about space:
+#   - drvfs on desktop INVENTS ownership and modes: after chown 999:999 +
+#     chmod 600, stat reads `me:me 777`. pgdata's files are 999:999 mode 600
+#     under directories in four different combinations, and /home/me carries
+#     .ssh — neither survives NTFS. Music has no metadata worth keeping.
+#   - drvfs costs 6.6 ms per file (19.8 s for 3000 files, against 0.03 s on
+#     ext4). /home/me is 226003 files, so NTFS would add ~25 minutes of pure
+#     per-file overhead. Music is 14878 files averaging 6 MB.
+# desktop-wsl's own ext4 is not an option either: 99 GB total, 60 GB free.
+for p in pgdata home; do
+    c="$("$SH" cmd "$p" 2>/dev/null)"
+    printf '%s' "$c" | grep -q -- "rsync-path=sudo"
+    check $? "$p: destination runs rsync under sudo (ownership preserved numerically at copy time)"
+    printf '%s' "$c" | grep -q -- "2222"
+    if [ $? -eq 0 ]; then
+        fail "$p: carries desktop's ssh port — it goes to latitude on 22"
+    else
+        pass "$p: does not carry desktop's ssh port"
+    fi
+done
+
+mu="$("$SH" cmd music 2>/dev/null)"
+# The port lives inside the single -e argument, so printf %q escapes the space:
+# the composed text reads `-p\ 2222`, not `-p 2222`. Matching the literal space
+# is the third time that escaping has broken an assertion in this suite.
+printf '%s' "$mu" | grep -qE -- '-p[^a-zA-Z0-9]{0,2}2222'
+check $? "music: ssh uses port 2222 (Windows OpenSSH owns 22 on desktop, mirrored networking)"
+printf '%s' "$mu" | grep -q -- "rsync-path=sudo"
+if [ $? -eq 0 ]; then
+    fail "music: runs the destination rsync under sudo — desktop-wsl's \`me\` has NO passwordless sudo, so it would hang for a password"
+else
+    pass "music: does not run the destination rsync under sudo"
+fi
+printf '%s' "$mu" | grep -q "/mnt/c/Users/methe/g15-staging/Music"
+check $? "music: destination is under the user's own directory (C:\\ root refuses a mkdir without admin)"
+printf '%s' "$("$SH" manifest-cmd music dst 2>/dev/null)" | grep -q "/mnt/c/Users/methe/g15-staging/Music"
+check $? "manifest-cmd music dst points at the desktop tree"
+
+STAGE_DESK="me@10.0.0.2" "$SH" cmd music 2>/dev/null | grep -q "me@10.0.0.2"
+check $? "STAGE_DESK overrides the Music destination host"
+STAGE_DESK_PORT=2323 "$SH" cmd music 2>/dev/null | grep -q "2323"
+check $? "STAGE_DESK_PORT overrides the Music destination port"
+STAGE_DESK="me@10.0.0.2" "$SH" cmd pgdata 2>/dev/null | grep -q "me@10.0.0.2"
+if [ $? -eq 0 ]; then
+    fail "STAGE_DESK leaks into the pgdata destination"
+else
+    pass "STAGE_DESK does not affect pgdata"
+fi
+
 if [ "$FAIL" = 0 ]; then echo "ALL PASS"; else echo "$FAIL FAILED" >&2; exit 1; fi
 ```
 
@@ -486,7 +548,8 @@ Create `hosts/g15/staging/stage.sh`, then `chmod +x` it:
 #   ./stage.sh verify       <payload>         manifest both sides and diff
 #   ./stage.sh status                         sizes on both sides + log tails
 #
-#   payload: pgdata | home | music
+#   payload: pgdata | home  -> latitude (ext4)
+#            music          -> desktop  (NTFS, port 2222)
 #   kind:    go | dry | delete | delete-dry
 #   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
 #            mismatch · 5 restage into a missing or empty destination
@@ -542,7 +605,15 @@ set -uo pipefail
 
 KEY="${STAGE_KEY:-/home/me/.ssh/id_fleet}"
 LAT="${STAGE_LAT:-me@192.168.8.155}"
+# Music goes to desktop, not latitude — his machine, his call. Port 2222 because
+# .wslconfig puts desktop-wsl in mirrored networking, so the distro shares the
+# Windows adapters and the Windows OpenSSH server already owns 22 (ssh.socket
+# had been losing that bind race since 2026-08-29). Inbound 2222 needs a
+# Windows firewall rule; it is in place, scoped to 192.168.8.0/24.
+DESK="${STAGE_DESK:-me@192.168.8.145}"
+DESK_PORT="${STAGE_DESK_PORT:-2222}"
 STAGE="${STAGE_DIR:-/mnt/immich-mirror/g15-staging}"
+DESKDIR="${STAGE_DESKDIR:-/mnt/c/Users/methe/g15-staging}"
 LOGDIR="${STAGE_LOGDIR:-/var/log/g15-staging}"
 PGPID="${STAGE_PGPID:-/data/qaz-law/pgdata/18/docker/postmaster.pid}"
 
@@ -570,7 +641,8 @@ stage.sh — move g15's payload onto latitude. Runs ON g15-wsl, AS ROOT.
   ./stage.sh verify       <payload>         manifest both sides and diff
   ./stage.sh status                         sizes on both sides + log tails
 
-  payload: pgdata | home | music
+  payload: pgdata | home  -> latitude (ext4)
+           music          -> desktop  (NTFS, port 2222)
   kind:    go | dry | delete | delete-dry
   exit:    0 ok · 1 not root · 2 usage · 3 postgres running · 4 manifest
            mismatch · 5 restage into a missing or empty destination
@@ -606,9 +678,72 @@ payload_dst() {
     case "$1" in
         pgdata) printf '%s\n' "$STAGE/pgdata" ;;
         home)   printf '%s\n' "$STAGE/home-me" ;;
-        music)  printf '%s\n' "$STAGE/Music" ;;
+        # Under the user's own directory: a mkdir at C:\ root is refused
+        # without admin (measured 2026-09-07).
+        music)  printf '%s\n' "$DESKDIR/Music" ;;
         *)      return 1 ;;
     esac
+}
+
+# WHY THE DESTINATION IS SPLIT. Two facts, both measured 2026-09-07 on desktop,
+# and neither of them about free space:
+#   - drvfs INVENTS ownership and modes. After chown 999:999 + chmod 600, stat
+#     reads `me:me 777`. pgdata's files are 999:999 mode 600 under directories
+#     in four different combinations, and /home/me carries .ssh — on NTFS both
+#     arrive with fictional metadata and a restore would have to guess.
+#   - drvfs costs 6.6 ms per file: 19.8 s for 3000 files against 0.03 s on ext4.
+#     /home/me is 226003 files, so NTFS would add ~25 minutes of pure per-file
+#     overhead. Music is 14878 files averaging 6 MB and loses nothing.
+# desktop-wsl's own ext4 is not a third option: 99 GB total, 60 GB free.
+#
+# The cost is throughput: g15 and desktop are both on wifi, so their traffic
+# crosses the access point twice — 40 MB/s measured, against 78 MB/s to
+# latitude, which sits on cable (enp0s31f6). Music therefore takes ~37 minutes
+# rather than ~19. Inherent to the path, not a setting.
+payload_host() {
+    case "$1" in
+        pgdata|home) printf '%s\n' "$LAT" ;;
+        music)       printf '%s\n' "$DESK" ;;
+        *)           return 1 ;;
+    esac
+}
+
+payload_port() {
+    case "$1" in
+        pgdata|home) printf '%s\n' 22 ;;
+        music)       printf '%s\n' "$DESK_PORT" ;;
+        *)           return 1 ;;
+    esac
+}
+
+# `me` on latitude HAS NOPASSWD sudo; `me` on desktop-wsl does NOT — measured,
+# it answers "sudo: A terminal is required to authenticate". A sudo there would
+# hang a 37-minute transfer waiting for a password nobody can type, and Music
+# needs no privilege anyway: drvfs would discard the metadata regardless.
+payload_remote_sudo() {
+    case "$1" in
+        pgdata|home) printf '%s\n' yes ;;
+        music)       printf '%s\n' no ;;
+        *)           return 1 ;;
+    esac
+}
+
+# The destination manifest must descend pgdata's mode-700 directories, so it
+# needs root there; on desktop everything is drvfs and readable as `me`, and
+# sudo would block on a password prompt.
+remote_sh() {   # $1 payload
+    case "$(payload_remote_sudo "$1")" in
+        yes) printf '%s\n' 'sudo bash -s' ;;
+        no)  printf '%s\n' 'bash -s' ;;
+        *)   return 1 ;;
+    esac
+}
+
+ssh_opts_for() {   # $1 payload
+    local port
+    port="$(payload_port "$1")" || return 1
+    printf '%s' "$SSH_OPTS"
+    [ "$port" = 22 ] || printf ' -p %s' "$port"
 }
 
 payload_flags() {
@@ -634,9 +769,11 @@ payload_flags() {
 
 CMD=()
 build_cmd() {   # $1 payload  $2 go|dry|delete|delete-dry
-    local src dst
+    local src dst host opts
     src="$(payload_src "$1")" || return 1
     dst="$(payload_dst "$1")" || return 1
+    host="$(payload_host "$1")" || return 1
+    opts="$(ssh_opts_for "$1")" || return 1
     local -a f=()
     mapfile -t f < <(payload_flags "$1")
     f+=(--partial --partial-dir=.rsync-partial '--exclude=.rsync-partial/'
@@ -649,8 +786,10 @@ build_cmd() {   # $1 payload  $2 go|dry|delete|delete-dry
         delete)     f+=(--delete) ;;
         delete-dry) f+=(--delete -n) ;;
     esac
-    CMD=(rsync "${f[@]}" -e "ssh $SSH_OPTS" --rsync-path='sudo rsync'
-         "$src/" "$LAT:$dst/")
+    local -a rp=()
+    [ "$(payload_remote_sudo "$1")" = yes ] && rp=(--rsync-path='sudo rsync')
+    CMD=(rsync "${f[@]}" -e "ssh $opts" "${rp[@]+"${rp[@]}"}"
+         "$src/" "$host:$dst/")
     return 0
 }
 
@@ -744,8 +883,8 @@ hosts/latitude/debian/mirror-refresh.sh's header. Stop it first:
             q="$(printf 'test -d %q && [ -n "$(ls -A %q)" ]' "$dstq" "$dstq")"
             # A here-string, not a pipe: with pipefail on, a pipe would let the
             # writer's EPIPE outvote ssh's own exit code.
-            ssh $SSH_OPTS "$LAT" 'sudo bash -s' <<<"$q" \
-                || die "restage refuses: $LAT:$dstq is missing or empty.
+            ssh $(ssh_opts_for "$P") "$(payload_host "$P")" "$(remote_sh "$P")" <<<"$q" \
+                || die "restage refuses: $(payload_host "$P"):$dstq is missing or empty.
 A delete pass is only ever a SECOND pass over a destination that already holds
 one. Run 'stage $P' first, or fix STAGE_DIR." 5
         fi
@@ -756,8 +895,11 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         # Windows for root.
         exec >>"$LOGDIR/$P.log" 2>&1
         say "=== $MODE $P"
-        say "src=$(payload_src "$P")  dst=$LAT:$(payload_dst "$P")"
-        ssh $SSH_OPTS "$LAT" "sudo mkdir -p $(payload_dst "$P") && sudo chown me:me $(payload_dst "$P")" </dev/null \
+        say "src=$(payload_src "$P")  dst=$(payload_host "$P"):$(payload_dst "$P")"
+        mk="mkdir -p $(payload_dst "$P")"
+        [ "$(payload_remote_sudo "$P")" = yes ] \
+            && mk="sudo $mk && sudo chown me:me $(payload_dst "$P")"
+        ssh $(ssh_opts_for "$P") "$(payload_host "$P")" "$mk" </dev/null \
             || die "could not create the destination directory"
         "${CMD[@]}"; rc=$?
         case "$rc" in
@@ -777,9 +919,9 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
         s="$LOGDIR/$P.src.manifest"; d="$LOGDIR/$P.dst.manifest"
         say "manifest: source $(payload_src "$P")"
         manifest_cmd "$P" src | bash > "$s" || die "source manifest failed"
-        say "manifest: destination $LAT:$(payload_dst "$P")"
-        manifest_cmd "$P" dst | ssh $SSH_OPTS "$LAT" 'sudo bash -s' > "$d" \
-            || die "destination manifest failed"
+        say "manifest: destination $(payload_host "$P"):$(payload_dst "$P")"
+        manifest_cmd "$P" dst | ssh $(ssh_opts_for "$P") "$(payload_host "$P")" \
+            "$(remote_sh "$P")" > "$d" || die "destination manifest failed"
         sn=$(wc -l < "$s"); dn=$(wc -l < "$d")
         say "entries: src=$sn dst=$dn"
         if cmp -s "$s" "$d"; then
@@ -799,8 +941,15 @@ one. Run 'stage $P' first, or fix STAGE_DIR." 5
                 "$(du -sh "$(payload_src "$p")" 2>/dev/null | cut -f1)" \
                 "$(payload_src "$p")"
         done
-        printf -- '--- destination:\n'
-        ssh $SSH_OPTS "$LAT" "df -h $STAGE; sudo du -sh $STAGE/* 2>/dev/null" </dev/null
+        printf -- '--- destinations:\n'
+        for p in pgdata home music; do
+            dd="$(payload_dst "$p")"; pre=""
+            [ "$(payload_remote_sudo "$p")" = yes ] && pre="sudo "
+            printf '%-7s %s:%s\n' "$p" "$(payload_host "$p")" "$dd"
+            ssh $(ssh_opts_for "$p") "$(payload_host "$p")" \
+                "df -h ${dd%/*} | tail -1; ${pre}du -sh $dd 2>/dev/null" </dev/null \
+                | sed 's/^/  /'
+        done
         printf -- '--- logs:\n'
         for f in "$LOGDIR"/*.log; do
             [ -e "$f" ] || continue
@@ -909,7 +1058,7 @@ Expected: one line, `root ... /bin/sleep infinity`. **If that line is absent, st
 ssh -o ServerAliveInterval=30 methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- /bin/sleep 14400'
 ```
 
-- [x] **Step 3: Create the staging root on latitude**
+- [x] **Step 3: Create the staging root on latitude — and on desktop**
 
 ```bash
 ssh latitude.gg.ez 'sudo mkdir -p /mnt/immich-mirror/g15-staging && \
@@ -917,7 +1066,16 @@ ssh latitude.gg.ez 'sudo mkdir -p /mnt/immich-mirror/g15-staging && \
   df -h /mnt/immich-mirror && ls -ld /mnt/immich-mirror/g15-staging'
 ```
 
-Expected: the directory exists owned by `me:me`, and `Avail` is at least **293 GB**. It was 610 GB on 2026-09-07. If it is under 350 GB, stop and find out what grew — the immich mirror shares this drive.
+Expected: the directory exists owned by `me:me`, and `Avail` is at least **204 GB** — that is what latitude now takes, `Music` having moved to desktop. It was 610 GB on 2026-09-07. If it is under 350 GB, stop and find out what grew — the immich mirror shares this drive.
+
+Then Music's destination on desktop. It must sit under the user's own directory: a `mkdir` at the `C:\` root is refused without admin.
+
+```bash
+ssh -p 2222 me@192.168.8.145 'mkdir -p /mnt/c/Users/methe/g15-staging && \
+  df -h /mnt/c | tail -1 && ls -ld /mnt/c/Users/methe/g15-staging'
+```
+
+Expected: the directory exists and `/mnt/c` shows at least **90 GB** free; it was 1.2 TB on 2026-09-07. If that ssh is refused rather than timing out, `ssh.socket` in desktop-wsl is down again — see the Global Constraints for the override that fixes it.
 
 - [x] **Step 4: Record the identity set**
 
@@ -1081,9 +1239,9 @@ Expected: `rsync clean` then `=== done rc=0`. Any other `rc` is reported with th
 
 ---
 
-### Task 5: Stage `Music` — 89 GB, ~19 minutes
+### Task 5: Stage `Music` — 89 GB, ~37 minutes, to DESKTOP
 
-**Files:** none — this task produces `latitude:/mnt/immich-mirror/g15-staging/Music/`.
+**Files:** none — this task produces `desktop:C:\Users\methe\g15-staging\Music\`.
 
 **Interfaces:**
 - Consumes: Task 1's `stage.sh`, Task 4's finished transfer (the payloads share one link and run one at a time).
@@ -1098,7 +1256,7 @@ printf '%s\n' \
   | ssh methe@g15.gg.ez 'wsl -d Ubuntu-26.04 -u root -- bash -s'
 ```
 
-Expected: about **14 878 files and ~89 GB**. Read from `/mnt/c/Users/methe/Music` inside the distro — there is no separate Windows-side transfer, and `desktop.ini` in that tree is expected and harmless.
+Expected: about **14 878 files and 94.81 G bytes** (the same 88.3 GiB the spec names — rsync reports decimal). Read from `/mnt/c/Users/methe/Music` inside g15's distro and written to `/mnt/c/Users/methe/g15-staging/Music` inside desktop-wsl, so drvfs is on both ends; there is no separate Windows-side transfer, and `desktop.ini` in that tree is expected and harmless. **Confirm the destination line reads `me@192.168.8.145`, not latitude.**
 
 - [ ] **Step 2: Launch it detached**
 
@@ -1119,7 +1277,7 @@ Expected: one `ps` line.
 ssh g15-wsl.gg.ez 'tail -f /var/log/g15-staging/music.log'
 ```
 
-Expected: `rsync clean`, `=== done rc=0`, in **~19 minutes**. Reads come through drvfs (`/mnt/c`), which is slower per-file than ext4, so 14 878 files may run somewhat behind the byte-rate budget — that is expected, not a fault.
+Expected: `rsync clean`, `=== done rc=0`, in **~37 minutes**. Two independent reasons it runs behind the byte budget, both measured and neither a fault: the link is 40 MB/s because g15 and desktop are both on wifi and the traffic crosses the access point twice, and drvfs is on both ends at 6.6 ms per file. 14 878 files averaging 6 MB is the one payload where that per-file cost is affordable.
 
 ---
 

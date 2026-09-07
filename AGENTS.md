@@ -384,7 +384,23 @@ distros, and making it interop-aware would unmask a second bug — `fleet-pull`'
 **Gotcha:** a self-declared WSL host has no `fleet.json` entry, so the generated
 `~/.ssh/config` has no `Host` block for its bare name — only the catch-all
 `Host *.gg.ez`. From `air`, `ssh desktop-wsl` falls through to the default
-identity and fails; `ssh desktop-wsl.gg.ez` works.
+identity and fails; `ssh desktop-wsl.gg.ez` is the form that resolves.
+
+**But `desktop-wsl` answers on port 2222, not 22** — and until 2026-09-07 it
+answered on neither, for five weeks, while this file said it worked.
+`.wslconfig` puts that distro in `networkingMode=mirrored`, so it shares the
+Windows adapters and its `ssh.socket` lost the bind on `0.0.0.0:22` to the
+Windows OpenSSH server. systemd reported that as `Dependency failed for
+ssh.service` on every boot from 2026-08-29 on, and nothing looked. A drop-in at
+`/etc/systemd/system/ssh.socket.d/override.conf` moves it to 2222, spelling out
+**both address families**: a bare `ListenStream=2222` bound only `[::]:2222`
+here, and an IPv4 client got `Connection refused` rather than a timeout, which
+is a different symptom from the firewall's. Reaching it from another box over
+the LAN also needs an inbound Windows firewall rule (`New-NetFirewallRule
+-LocalPort 2222 -RemoteAddress 192.168.8.0/24`), because in mirrored mode the
+Windows firewall governs the distro's ports; over the tailnet no rule is needed.
+The override is host-local and untracked — reprovisioning desktop-wsl does not
+restore it.
 
 ### Host configurations
 
