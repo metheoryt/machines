@@ -1,4 +1,4 @@
-# g15: Windows 11 → Debian 13 trixie
+# g15: Windows 11 → Ubuntu 26.04 LTS
 
 **Status:** design, approved in direction 2026-09-07. Not started.
 **Box:** `g15` / ASUS ROG G16 G513IE — Ryzen 7 4800H, 31 GB, RTX 3050 Ti,
@@ -169,7 +169,37 @@ truncated, which is exactly what a killed `tar` leaves behind.
 Budget: ~292 GB at 78 MB/s ≈ **1 h 5 m**. The Ethernet cable (117 MB/s) would
 save ~20 minutes and is not worth unplugging anything for.
 
-### 2. Install Debian 13 trixie
+### 2. Install Ubuntu 26.04 LTS
+
+**The distro was Debian 13 trixie until 2026-09-07, and the owner changed it.**
+His reason: he reads Debian as a headless server OS, and g15 is a workstation
+that wants a desktop and the utilities around it. That is a preference and does
+not need defending — but it turns out to have a technical argument he did not
+make, and the argument is the one that matters here:
+
+- **The kernel floor for this hardware is met out of the box.** The asus-linux
+  project does not officially support Debian-based distros and names the reason:
+  a minimum recommended kernel of **6.19+**, because most of the patches that
+  improve ASUS/ROG laptops land upstream first. trixie ships 6.12 LTS —
+  answerable via `trixie-backports` (7.1.8), but answerable is not the same as
+  free. Ubuntu 26.04 LTS ships **7.0** as its GA kernel, so the floor is met
+  with nothing added.
+- **The fleet provisioner does not care.** `provision/linux.sh`'s own header
+  declares "Debian 11+ / Ubuntu 22.04+", its only distro gate is `have apt-get`,
+  and `tier_apt_dev` already handles both distros' package-name quirks
+  (`fdfind` → `fd`, `batcat` → `bat`). `fleet.json` carries **no distro field
+  at all** — only `platform` — so g15's manifest entry changes exactly as §5
+  already describes and no further. `tier_dotfiles` derives `platform=debian`,
+  but that token is a class name meaning "not darwin, not WSL"; Ubuntu passes
+  the gate unchanged. It is now a misnomer and should become `linux`, which is
+  a rename in `tier_dotfiles` + `role_dotfiles`, not a behaviour change.
+- **It is the release qaz-law is already developed on.** `g15-wsl` runs Ubuntu
+  26.04.1 LTS today, so the native install is the same userland the project's
+  compose stack has been running against — one fewer variable when the database
+  comes back up in phase 4.
+
+The cost, stated plainly: the fleet gains a second apt distro, so latitude is
+Debian and g15 is Ubuntu. That is a real divergence and it buys the kernel.
 
 Mirror latitude's shape where the reasons still apply, and only there:
 
@@ -177,18 +207,30 @@ Mirror latitude's shape where the reasons still apply, and only there:
   "must boot unattended", which does not transfer. The reason here is g15's own:
   it is a home box that does not get carried around (owner, 2026-09-07). Had it
   travelled, this is where LUKS would have gone in.
-- GUI: install a desktop environment. The whole point of the reinstall is that
-  this is a workstation, not a services host.
+- GUI: **Ubuntu Desktop** (GNOME 50 on 26.04) — the stock image, not the
+  server one. The whole point of the reinstall is that this is a workstation,
+  not a services host. See §4 on why the provisioner will not supply this.
 - Hostname `g513ie` (the OS-hostname layer keeps the SKU, per the two-layer
-  convention). Logical name `g15` does not change.
+  convention). Logical name `g15` does not change. Note the release codename
+  ("Resolute Raccoon") enters nothing — the two-layer convention has no slot
+  for it, and `fleet.json` has no distro field to put it in.
 
 ### 3. Hybrid graphics — the one item that can eat a weekend
 
-Ryzen 4800H iGPU + RTX 3050 Ti. `nvidia-driver` from trixie plus `supergfxctl`
-for mode switching; the G513 is supported by the asus-linux project, and
-`asusctl` replaces G-Helper for fan curves and charge limit. Treat this as its
-own phase with its own rollback (the box is usable on the iGPU alone), not as a
-step inside the install.
+Ryzen 4800H iGPU + RTX 3050 Ti. `ubuntu-drivers autoinstall` plus
+`supergfxctl` for mode switching; the G513 is supported by the asus-linux
+project, and `asusctl` replaces G-Helper for fan curves and charge limit. Treat
+this as its own phase with its own rollback (the box is usable on the iGPU
+alone), not as a step inside the install.
+
+**`asusctl` and `supergfxctl` are not packaged for any Debian-based distro** —
+build from source (Rust) or use one of the third-party Debian/Mint installers.
+Before paying that, check what the kernel already gives: `asus-wmi` exposes the
+charge threshold as plain sysfs (which is what `tier_battery_limit` already
+writes) and, on supported models, fan curves through hwmon
+(`asus_custom_fan_curve`). **Verify on the box whether the G513IE exposes that
+hwmon node.** If it does, `asusctl` is convenience rather than a requirement,
+and the weekend this section warns about is mostly the GPU half.
 
 Also verify the wifi band here: `.claude/memory/project.md` records g15 stuck on
 2.4 GHz channel 12 under Windows because the MT7921 exposed no band-preference
@@ -198,6 +240,17 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
 ### 4. Provision as a normal Linux fleet member
 
 - `just provision --machine g15 --dry-run`, then `--apply`.
+- **The provisioner installs neither docker nor a desktop toolchain, and its
+  closing text says so while pointing at a host that no longer exists**:
+  "Not installed by design (only a NixOS host gets these): the declarative dev
+  toolchain (docker, language servers, the full fish/ghostty/GNOME setup)"
+  (`provision/linux.sh`). The last Nix host went 2026-08-01. So on the new g15
+  those are nobody's job — and `dockerd` is exactly what qaz-law needs to come
+  back up. This is independent of the distro choice; the Ubuntu decision only
+  surfaced it. Two options, and the choice is not made here: install docker by
+  hand as a phase-4 step, or add a `tier_docker` and let every future Linux
+  workstation inherit it. The stale prose in `linux.sh` needs deleting either
+  way.
 - **`ssh-server` is still an unimplemented stub** (roadmap P3) and is named in
   `PLANNED_ROLES`, so `--apply` will not fail on it — it will also not configure
   sshd. Expect to hand-roll it as latitude was, and take the firewall shape from

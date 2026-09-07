@@ -62,7 +62,7 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   `Local Settings` are junctions that were being counted twice. The real review
   is two items, both since decided. The migration to **Debian 13 trixie** is
   therefore designed and approved in direction, not deferred:
-  `docs/superpowers/specs/2026-09-07-g15-debian-migration-design.md`. Read that
+  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`. Read that
   before quoting the old rationale back at anyone.
 - **Reach `g15` as `methe@g15.gg.ez`, naming the user** — its Windows user is
   `methe`, and with the member block restored the bare `ssh g15` alias works from

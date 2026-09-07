@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# hosts/g15/staging/stage.sh — move g15's payload onto latitude before the
-# Windows -> Debian 13 wipe. Phase 1 of
-# docs/superpowers/specs/2026-09-07-g15-debian-migration-design.md
+# hosts/g15/staging/stage.sh — move g15's payload off the box before the
+# Windows -> Linux wipe. Phase 1 of
+# docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md
 #
 # RUNS ON g15-wsl, AS ROOT. Not on latitude, not on Windows.
 #

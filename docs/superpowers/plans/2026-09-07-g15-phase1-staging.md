@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move g15's entire 293 GB payload off the box onto latitude and prove by manifest that nothing was lost, so the Debian installer can be booted without a second copy anywhere.
+**Goal:** Move g15's entire 293 GB payload off the box onto latitude and prove by manifest that nothing was lost, so the installer can be booted without a second copy anywhere. (The target distro moved from Debian 13 to Ubuntu 26.04 LTS on 2026-09-07 — see the spec’s §2. Phase 1 moves bytes and is indifferent to it.)
 
 **Architecture:** One tool, `hosts/g15/staging/stage.sh`, run as root **on g15-wsl**, which pushes each of three payloads outbound over the LAN to `latitude:/mnt/immich-mirror/g15-staging/` with rsync. The distro is NATed, so the tailnet path to latitude is DERP-relayed at 3.3 MB/s while the outbound LAN path is 78 MB/s — NAT blocks reaching *in*, not going out, and that asymmetry is the whole transport design. Verification is a path+size manifest taken on both sides and diffed, never a `du` comparison.
 
 **Tech Stack:** bash, rsync 3.4.1 (both ends), OpenSSH, docker (to quiesce postgres), Windows Task Scheduler (to hold the distro up), `find -printf` manifests.
 
-**Spec:** `docs/superpowers/specs/2026-09-07-g15-debian-migration-design.md`
+**Spec:** `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`
 
 ## Global Constraints
 
@@ -121,7 +121,7 @@ All measured 2026-09-07. If a number here disagrees with the box, trust the box 
 | `hosts/g15/staging/stage.test.sh` | **Create.** Gate suite. Asserts the guards and the *composed* command lines without moving a byte, so it runs on any box, non-root, inside `just test`. |
 | `hosts/g15/staging/identity-snapshot.txt` | **Create in Task 2.** The identity set that must move together, captured from live commands rather than retyped. |
 
-`hosts/g15/` is new — `hosts/server/` was deleted with the 2026-08-01 decommission and `hosts/g15/debian/` will appear in Phase 4. Nothing existing is modified. The tests directory convention in this repo is co-location (`agents/plugin/skills/*/tests/`, `provision/*.test.sh`), and `just _test-suites` is a recursive `find`, so a suite here is picked up by the gate with no wiring.
+`hosts/g15/` is new — `hosts/server/` was deleted with the 2026-08-01 decommission and `hosts/g15/<platform>/` will appear in Phase 4 — and what that directory is called is an open question now that the box is Ubuntu and latitude’s is `hosts/latitude/debian/`: the convention says `<platform>`, and whether that means the distro or the class has never had to be decided. Nothing existing is modified. The tests directory convention in this repo is co-location (`agents/plugin/skills/*/tests/`, `provision/*.test.sh`), and `just _test-suites` is a recursive `find`, so a suite here is picked up by the gate with no wiring.
 
 **Why one script with modes rather than three scripts:** the three payloads differ only in source path and four rsync flags. The parts that are easy to get wrong — the ssh identity, `--partial-dir`, `--rsync-path='sudo rsync'`, the manifest pipeline — are identical, and duplicating them three times is how two of the three end up subtly different. Same shape `hosts/latitude/debian/archive-mirror.sh` uses (`-n` / `-go` / `-verify` in one file).
 
@@ -616,9 +616,9 @@ Create `hosts/g15/staging/stage.sh`, then `chmod +x` it:
 
 ```bash
 #!/usr/bin/env bash
-# hosts/g15/staging/stage.sh — move g15's payload onto latitude before the
-# Windows -> Debian 13 wipe. Phase 1 of
-# docs/superpowers/specs/2026-09-07-g15-debian-migration-design.md
+# hosts/g15/staging/stage.sh — move g15's payload off the box before the
+# Windows -> Linux wipe. Phase 1 of
+# docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md
 #
 # RUNS ON g15-wsl, AS ROOT. Not on latitude, not on Windows.
 #
