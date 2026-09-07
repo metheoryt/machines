@@ -1244,7 +1244,7 @@ Expected: `rsync clean` then `=== done rc=0`. Any other `rc` is reported with th
 **Files:** none — this task produces `desktop:C:\Users\methe\g15-staging\Music\`.
 
 **Interfaces:**
-- Consumes: Task 1's `stage.sh`, Task 4's finished transfer (the payloads share one link and run one at a time).
+- Consumes: Task 1's `stage.sh`, Task 4's finished transfer. **Still run one at a time, though the shared link is no longer the reason** — Music crosses a different link to a different host now. What is shared is g15's radio: 78 + 40 MB/s is 944 Mbps against a 1201 Mbps nominal association, so running both would bid against itself for a marginal gain and give up clean failure attribution.
 - Produces: the staged tree, and `/var/log/g15-staging/music.log`.
 
 - [ ] **Step 1: Dry run**
