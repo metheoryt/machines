@@ -30,7 +30,12 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   Reinstalled from NixOS during the 2026-07/08 fleet migration.
 - **air** — MacBook, `platform: darwin`, tailnet `100.64.0.7`, roles `base,
   ssh-server, agents, dotfiles, repos`. The **primary dev box**. Provisioned with
-  `just provision-mac air` plus the dotfiles role.
+  `just provision-mac air` plus the dotfiles role. It runs a **pre-release macOS
+  27 (Tahoe)**, which Homebrew says out loud it does not support — bottles come
+  tagged `arm64_tahoe` and `brew doctor` opens with the unsupported-version
+  warning. Expect brew oddities here and do not file them as box faults; equally,
+  do not let that become a blanket excuse, because "environmental" is the label
+  this repo has already been burned by (see the suite section below).
 - **hub** — Debian VPS at `cyphy.kz` (tailnet `100.64.0.1`), a first-class
   `fleet.json` member (roles `base, ssh-server, agents, dotfiles,
   backup-client`); runs the Headscale control server + the AmneziaWG VPN hub.
