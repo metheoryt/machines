@@ -2648,3 +2648,37 @@ what was salvaged out of it.
 sudo artifact**, not missing packages. `_apt_try` runs `$SUDO apt-get install`,
 and `me` has no NOPASSWD sudo on g15, so every dep install fails
 non-interactively and warns. On a desktop box the libs come with GNOME anyway.
+
+### All three staging legs are verified — the staging copies are now redundant (2026-09-07)
+
+Proof, not confidence — the gate for deleting 292 GB of staging:
+
+- **pgdata** — byte-identical, 198,834,159,212 B / 1268 files, postgres 18.4 up
+  on 5436 with a clean recovery.
+- **Music** — manifest match, **18377 entries**, path+type+size+symlink-target
+  identical, and the count agrees with phase 1's `src=18377 dst=18377`.
+  rsync's own tally: 14,878 regular files, 94,813,954,726 B, 0 matched (a fresh
+  copy, not a resume).
+- **home-me** — checked as a **subset, deliberately not a diff**: g15's live home
+  has legitimately diverged (`.config` 4.3 G vs 11 M staged, `.claude` 8.6 M vs
+  596 K) because the box is a new install that has been running for a day. Of
+  226,123 staged regular files, **57 did not match on path+size**, and every one
+  is named divergence: `machines`/`.dotfiles`/`.cache` (repos advanced 4 commits
+  this session), `.config/orca/*` runtime state (Orca runs natively now),
+  `.ssh/known_hosts*` (new host keys), `my/*/.git/FETCH_HEAD`,
+  `my/qaz-code/compose.override.yml` (we edited it), `.local/state/dotfiles-sync/branch`
+  (g15-wsl → g15), and **`.local/bin/orca`** — absent because `orca-serve.sh`'s
+  new guard installed it as `orca-cli` instead. A green subset check with a
+  reason for each miss is the useful shape here; a plain `diff` would have been
+  57 lines of noise and no signal.
+
+Where they sit: `latitude:/mnt/immich-mirror/g15-staging` (203 G — `home-me` 18 G
++ `pgdata` 186 G) and `desktop:/mnt/c/Users/methe/g15-staging/Music` (89 G).
+`hosts/g15/staging/stage.sh` logged phase 1 to `/var/log/g15-staging` **on the
+source box**, which was the wiped `g15-wsl` — so those logs are gone and this
+section is the only surviving record of the phase-1 counts.
+
+**Deleting the latitude staging also closes the `id_fleet` second copy** (its
+private half is in `home-me/.ssh/`), which was one of the two arguments for
+rotating the key. What survives rotation-wise is hygiene only: `methe@g15` and
+`me@g15-wsl` are stale entries in `provision/fleet-authorized-keys`.
