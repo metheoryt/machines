@@ -297,10 +297,27 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
 
 ### 5. Flip the manifest — one change, not several
 
-- `fleet.json`: `g15` becomes `platform: linux`, `detect.hostname` stays
-  `g513ie`. This changes how `fd_probe`/`fd_run` reach it — the Git-Bash-through-
-  PowerShell arm in `agents/plugin/skills/lib/fleet-dispatch.sh` is keyed on
-  `platform: windows` and must stop applying to g15.
+- `fleet.json`: `g15` becomes **`platform: debian`** — not `linux`, which this
+  section said until 2026-09-07 and which would have provisioned nothing.
+  Every posix role executor gates on an explicit allowlist,
+  `nixos|wsl|debian|darwin`, and its fallback arm prints "no posix executor for
+  platform 'X' (skipped)" and returns **0**. So `linux` would have made
+  `dotfiles`, `repos` and `backup-client` skip while `--apply` reported success —
+  the same silent-green shape the Windows front door was fixed for in §4's
+  `PLANNED_ROLES` note. `debian` is the token latitude and hub already carry, and
+  it is a class name meaning "posix, not darwin, not WSL"; an Ubuntu box passing
+  under it is the misnomer §2 already records, not a new one. Renaming the token
+  to `linux` fleet-wide is a real change — five role files plus their suites, not
+  the two files §2 estimated — and is not part of this migration.
+  `detect.hostname` stays `g513ie`.
+- **Drop g15's `ssh: { user: methe }` block entirely**, rather than editing it to
+  `me`. `ssh.user` defaults to `me` where the key is absent (`// "me"`), which is
+  why latitude and air carry no block at all. The Windows user is gone with the
+  Windows install.
+- Both together change how `fd_probe`/`fd_run` reach it — the
+  Git-Bash-through-PowerShell arm in
+  `agents/plugin/skills/lib/fleet-dispatch.sh` is keyed on `platform: windows`
+  and stops applying to g15.
 - **`g15-wsl` ceases to exist.** It is a self-declared host
   (`fleet.local.json`), never in `fleet.json`, so removing it is deleting that
   file with the distro. One host replaces two, and `g15` inherits the tailnet

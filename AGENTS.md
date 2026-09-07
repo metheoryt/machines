@@ -64,10 +64,12 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   therefore designed and approved in direction, not deferred:
   `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`. Read that
   before quoting the old rationale back at anyone.
-- **Reach `g15` as `methe@g15.gg.ez`, naming the user** — its Windows user is
-  `methe`, and with the member block restored the bare `ssh g15` alias works from
-  any box that has re-provisioned since. Reach the Linux side directly at
-  `g15-wsl.gg.ez` (user `me`). `server.gg.ez` no longer resolves.
+- **Reach `g15` as `me@g15.gg.ez`** — since the 2026-09-07 Ubuntu reinstall its
+  user is `me`, and its `fleet.json` entry carries no `ssh` block at all because
+  `ssh.user` defaults to `me`. It was `methe@` while the box ran Windows. The
+  bare `ssh g15` alias works from any box that has re-provisioned since.
+  `g15-wsl.gg.ez` and `server.gg.ez` no longer resolve — that distro died with
+  the disk.
 
 The repo also carries Windows install/reinstall + backup scripts
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).

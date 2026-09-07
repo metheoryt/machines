@@ -21,9 +21,8 @@
       "detect": { "hostname": "g614jv" }
     },
     "g15": {
-      "platform": "windows",
+      "platform": "debian",
       "tailnet": { "ip": "100.64.0.3" },
-      "ssh": { "user": "methe" },
       "roles": ["base", "ssh-server", "agents", "dotfiles", "repos"],
       "detect": { "hostname": "g513ie" }
     },
