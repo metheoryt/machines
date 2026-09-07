@@ -1560,19 +1560,26 @@ Expected at this point: `MANIFEST MATCH` for `pgdata` and for `music`, each nami
 
 "Quiesced" meant "close your editors" until 2026-09-07, and that was not enough. `/home/me`'s first pass came out 20 lines short of a match and **not one of those lines was a human's edit** — three of this box's own user timers fired inside the five-minute transfer window, and Orca's trace log grew throughout. They will fire inside Task 8's window exactly the same way, and here a mismatch is a stop at the point of no return.
 
+All four writers are stopped from here — **none of this is a manual step for the owner**, which is worth saying because "close Orca" reads like one and is not:
+
 ```bash
-ssh g15-wsl.gg.ez 'systemctl --user stop dotfiles-sync.timer git-autofetch.timer fleet-selfpull.timer && \
-  systemctl --user is-active dotfiles-sync.service git-autofetch.service fleet-selfpull.service; \
-  systemctl --user list-timers --all --no-pager | head -8'
+ssh g15-wsl.gg.ez 'systemctl --user stop orca-serve.service dotfiles-sync.timer git-autofetch.timer fleet-selfpull.timer && \
+  systemctl --user is-active orca-serve.service dotfiles-sync.service git-autofetch.service fleet-selfpull.service; \
+  systemctl --user list-timers --all --no-pager | head -8; \
+  pgrep -af "[o]rca-ide" | head -3 || echo "no orca processes left"'
 ```
 
-Expected: three `inactive` lines from `is-active` (it exits non-zero when nothing is active — that is the good case, not a failure), and no `dotfiles-sync` / `git-autofetch` / `fleet-selfpull` row with a `NEXT` in the timer list. **Stopping a timer does not kill a service already mid-run**, which is why `is-active` is checked on the `.service` units and not just the timers.
+Expected: four `inactive` lines from `is-active` (it exits non-zero when nothing is active — that is the good case, not a failure), no `dotfiles-sync` / `git-autofetch` / `fleet-selfpull` row with a `NEXT` in the timer list, and `no orca processes left`. **Stopping a timer does not kill a service already mid-run**, which is why `is-active` is checked on the `.service` units and not just the timers.
 
-**Orca is the fourth writer and it is not a timer** — `.config/orca/logs/main.trace.ndjson` grows whenever the runtime is up. Close Orca on the box. Do not "solve" it by adding the log to `--exclude`: excluded means protected from `--delete`, so the file would then be frozen at the destination in whatever state the first pass caught, and the manifest would match while holding a stale file. Closing it is honest; excluding it is a match that means less than it says.
+**Orca is the fourth writer and it is not a timer** — `.config/orca/logs/main.trace.ndjson` grows whenever the runtime is up. It runs as the user unit **`orca-serve.service`** (`orca serve --port 6768`, under `script -qefc` for the pty, with `Restart=on-failure` and linger enabled), so it stops by name and a clean `stop` is not a failure and does not trigger the restart. Verify with `pgrep -af "[o]rca-ide"` — the Electron children are what actually hold the log open, and the bracket keeps the pattern from matching your own command line (see amendment 7).
+
+**This darkens the `g15-wsl` Orca environment on both `air` and `desktop`**, which are paired to `ws://100.64.0.9:6768`. That is expected: the distro is deleted in Phase 2 and the node retired, so those environments were going away regardless. Do not restore the unit to keep them alive.
+
+Do not "solve" the log by adding it to `--exclude`: excluded means protected from `--delete`, so the file would then be frozen at the destination in whatever state the first pass caught, and the manifest would match while holding a stale file. Stopping the writer is honest; excluding it is a match that means less than it says.
 
 These stops are not undone. The distro is deleted in Phase 2.
 
-Then close every editor, terminal, Orca window and agent session that writes under `/home/me` on g15-wsl, and confirm nothing is still writing:
+Then close every editor, terminal and agent session that writes under `/home/me` on g15-wsl — those are the ones no unit name covers — and confirm nothing is still writing:
 
 ```bash
 ssh g15-wsl.gg.ez 'who; echo "---"; ps -eo user,pid,args | grep -E "^me " | grep -vE "sshd|ps -eo|grep" | head -20'
