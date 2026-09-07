@@ -416,6 +416,18 @@ Windows firewall governs the distro's ports; over the tailnet no rule is needed.
 The override is host-local and untracked — reprovisioning desktop-wsl does not
 restore it.
 
+**And it was declared `dispatch:direct` until 2026-08-31, which is how those five
+weeks stayed quiet.** `fd_probe` keys on that field, so every fleet-wide run
+(`/ship`, kb-refresh) resolved the name, got refused, and printed
+`SKIP unreachable` while the run itself stayed green — a successful `tailscale
+ping` proves nothing about reachability here. It is `dispatch:parent` now,
+reached as `wsl.exe -d desktop-wsl` through `desktop`. Two consequences of
+mirrored mode that follow from this: the distro's own tailnet node
+(`100.64.0.6`) is still registered but no longer load-bearing, and reverting
+`networkingMode` is not the fix — besides the route fight above, NAT breaks the
+WSL projects' reach to the VPN-only `10.99.x` hosts, which is why mirrored was
+chosen in the first place (its `.wslconfig` comment records that).
+
 ### Host configurations
 
 `hosts/<name>/<platform>/` — per-machine ops scripts, no build system.
