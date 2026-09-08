@@ -2754,3 +2754,60 @@ Dropping this leg would leave 184 GB of qaz-code database (`act_version` 104 GB 
 `act_version_chunk` 80 GB) as a single copy on one NVMe. The fix is to give g15
 the `backup-client` role and let restic take it, then drop the staging — not to
 keep the staging forever. His call; roadmap P6.
+
+## g15 has a restic client — and what is still NOT in it (2026-09-08)
+
+`backup/g15/` exists, `backup-client` is in g15's roles, and the client covers
+`~/my` (8.7 G) + `~/Music` (89 G). Repo is `rest:.../g513ie` on latitude's REST
+server. What a future session would otherwise re-derive:
+
+- **`~/my` earns its place on the GITIGNORED half.** All eleven checkouts have
+  GitHub remotes; the tracked content is not what this protects.
+  `qaz-code/laws` is 7.6 G of scraped corpus (`laws/` is in .gitignore) and is
+  **the INPUT the 184 G database was built from** — the cheapest thing in the
+  fleet to lose expensively. Plus four `.env` files, `buton/google-account.json`,
+  `buton/harvester.db`, `telegrind/local/*.json`, and unpushed commits in the
+  four repos that have been dirty for 65+ fleet-selfpull ticks.
+- **PGDATA is excluded and the reason is STORAGE, not method.** Do not "fix"
+  this by adding the source. Method is settled: a cleanly stopped PGDATA copied
+  physically is proven on this exact data (phase 1), the container's STOPSIGNAL
+  is SIGINT = postgres fast shutdown, and `me` is in `docker` so stop/start
+  needs no privilege. Reading it needs root (`999:0` mode 700). The blocker is
+  that `/mnt/spare320` has 164 G free against a ~130 G leg, i.e. under 12% left
+  with no room for prune. **The 186 G staging leg is still the only second copy.**
+- **`schedule-permission: user_logged_on`, not `user`.** resticprofile's `user`
+  means a ROOT-OWNED unit that merely runs as the user, so installing it needs
+  sudo — and g15 has NO NOPASSWD sudo (`sudo -n` fails; latitude's works). The
+  generated user timer carries `Persistent=true`, so a 05:00 window missed while
+  the laptop was suspended fires on resume. `Linger=yes` here.
+- **`schedule-ignore-on-battery` stays `true` on g15**, unlike BOTH of
+  latitude's profiles which override it to false. Same key, opposite decision,
+  and the reason is the box: latitude has sleep/suspend/hibernate masked, so
+  "on battery" there means the mains failed; g15 is a laptop that gets carried
+  around, where it is ordinary operation.
+- **resticprofile is in `~/.local/bin` on g15, not `/usr/local/bin`.**
+  `backup/restic-install.sh` is `sudo apt-get` + a curl'd installer into
+  `/usr/local/bin`, so it cannot run on a box without NOPASSWD sudo at all.
+  Installed with `install.sh -b "$HOME/.local/bin"` (0.33.1, matching the rest
+  of the fleet). `backup_client_install` now appends `~/.local/bin` to PATH
+  **before** its binary probe, because a non-interactive ssh PATH excludes it
+  and the probe's wrong verdict was a hard role failure, not a slow path.
+- **Three host-local secrets, escrowed once each — the machines repo is PUBLIC.**
+  `~/.config/restic/{pass.txt,transport.txt,repo.txt}` on g15, tracked on the
+  `g15` dotfiles branch (anchored `!` lines). `pass.txt` is escrowed a SECOND
+  time on latitude as `~/.config/restic/g513ie.pass.txt`, because
+  `g513ie-maintenance` prunes and checks the repo there — `--append-only` means
+  the client cannot. Verified the two copies by sha256, not by eye.
+- **The htpasswd user is created live, not from a repo:**
+  `docker exec -i restic-server sh -c 'htpasswd -iB /data/.htpasswd g513ie'`.
+  `-i` keeps the password out of argv; `create_user`'s two-arg form does not.
+  The file lives inside the container's volume and is in no repo.
+- **Six resticprofile timers on latitude now** (was four): the two new ones are
+  `forget@profile-g513ie-maintenance` 09:30 and `check@profile-g513ie-maintenance`
+  Sun 10:30, both clear of the four writers already on that drive.
+- **The client declares no `check` schedule on purpose.** The integrity check
+  runs on latitude, the box that HOLDS the repo — a client-side check goes dark
+  at exactly the failure it should catch, a client that quietly stopped. Same
+  argument as `g614jv-maintenance`, and the `check:` section is kept on the
+  client only so nobody adds `check-before` without noticing it would inherit
+  `read-data-subset` from there.

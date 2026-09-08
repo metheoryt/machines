@@ -24,7 +24,7 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 | Node | Tailnet IP | Platform | State |
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
-| `g15` | `100.64.0.10` | **Ubuntu 26.04 resolute** (`g513ie`) | the personal-projects host. **Windows was wiped 2026-09-07** and with it the `g15-wsl` distro — one host replaces two. Reach it as `me@g15.gg.ez` (no `ssh` block in the manifest; `ssh.user` defaults to `me`). Its old tailnet node `100.64.0.3` is retired. **In restic nowhere** — see the item at the end of P6 |
+| `g15` | `100.64.0.10` | **Ubuntu 26.04 resolute** (`g513ie`) | the personal-projects host. **Windows was wiped 2026-09-07** and with it the `g15-wsl` distro — one host replaces two. Reach it as `me@g15.gg.ez` (no `ssh` block in the manifest; `ssh.user` defaults to `me`). Its old tailnet node `100.64.0.3` is retired. **In restic since 2026-09-08** (`~/my` + `~/Music`); its 184 GB database is not, see the item at the end of P6 |
 | `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
@@ -773,13 +773,42 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
 
 ---
 
-- **g15 is in restic nowhere.** Its roles are `base, ssh-server, agents,
-  dotfiles, repos` — no `backup-client` — so the 184 GB qaz-code database
-  restored on 2026-09-07 is a single copy on one NVMe. The staging leg on
-  latitude (`/mnt/immich-mirror/g15-staging/pgdata`, 186 GB) is being held only
-  because of this, which is the wrong shape: a hand-made copy nothing refreshes
-  is not a backup. Add `backup-client` to g15 with a profile for
-  `/data/qaz-code`, verify a restore, then drop the staging.
+- **g15's database leg needs a drive, and that is the whole remaining item.**
+  g15 got the `backup-client` role on 2026-09-08: `backup/g15/profiles.yaml`
+  covers `~/my` (8.7 G — the gitignored half is what earns it: `qaz-code/laws`
+  is 7.6 G of scraped corpus and is the INPUT the database was built from) and
+  `~/Music` (89 G), retention and the weekly check run from
+  `g513ie-maintenance` on latitude because the REST server is `--append-only`.
+
+  `/data/qaz-code/pgdata` (186 G) is deliberately excluded, and **the reason is
+  storage, not method**:
+  - Method is settled and proven on this exact data — phase 1 staged it with
+    the DB cleanly shut down and postgres 18.4 came up with a clean recovery.
+    A `pg_dump` would be the wrong branch (hours, local space, and compressed
+    custom-format output dedupes badly across snapshots). The container's
+    STOPSIGNAL is `SIGINT`, i.e. postgres fast shutdown, and `me` is in the
+    `docker` group, so `run-before`/`run-finally` need no privilege.
+  - Scope needs root: PGDATA is `999:0` mode 700, so that leg is
+    `schedule-permission: system` and one sudo'd `resticprofile schedule` on a
+    box with no NOPASSWD sudo.
+  - **Space is the blocker.** The REST server's data path is
+    `/mnt/spare320/restic-rest` — a 293 G drive with **164 G free**, already
+    carrying latitude's own repo (12 G) and desktop-wsl's (29 G), plus the 89 G
+    `music-from-g513ie` staging pile. A ~130 G DB leg leaves that drive under
+    12% free with no room for prune to work in.
+
+  **The decision is which drive.** `/mnt/immich` (internal nvme0n1p1, 655 G
+  free, not one of the flaky docks) is the obvious home, but `RESTIC_DATA_PATH`
+  lives in the `vps` repo's `homeserver/restic-server` stack — the server is a
+  service, and services live there — and moving it means relocating the 29 G
+  g614jv repo too. Until then the 186 G staging leg at
+  `/mnt/immich-mirror/g15-staging/pgdata` is the **only** second copy of that
+  database and must not be deleted.
+
+  Separately and much smaller: once g15's first snapshot has been verified,
+  `latitude:/mnt/spare320/music-from-g513ie` (89 G) is redundant — the same
+  drive now holds those bytes as a snapshot that gets refreshed and checked.
+  Deleting it is a tidiness win, not a redundancy one.
 
 ## Done
 

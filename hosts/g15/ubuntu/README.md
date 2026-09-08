@@ -35,8 +35,20 @@ Facts worth having before touching the database:
   Check numerically (`stat -c %u`), never by name. postgres validates the mode
   at startup, so it cannot be handed to `me` without also running the container
   as uid 1000, which then needs the socket dir moved.
-- **g15 is in restic nowhere** — its roles carry no `backup-client`. This
-  database is a single copy on one NVMe. Roadmap, end of P6.
+- **This database is still the one thing on g15 that is NOT in restic.** g15
+  got the `backup-client` role on 2026-09-08 and `backup/g15/profiles.yaml`
+  covers `~/my` and `~/Music`, but PGDATA is deliberately excluded and the
+  reason is storage, not method — the profile header carries the full argument.
+  Two consequences here:
+  - The 186 GB staging leg at
+    `latitude:/mnt/immich-mirror/g15-staging/pgdata` is the ONLY second copy
+    and must not be deleted.
+  - The method is already proven on this exact data (phase 1 staged it with
+    the DB shut down; postgres 18.4 came up with a clean recovery), and the
+    container's STOPSIGNAL is `SIGINT`, i.e. postgres fast shutdown — a clean
+    one. `me` is in the `docker` group, so the stop/start needs no privilege;
+    reading PGDATA does, because of the mode above. What is missing is a drive
+    with ~130 GB to spare. Roadmap, end of P6.
 
 ## Orca desktop install — the traps, not a script
 
