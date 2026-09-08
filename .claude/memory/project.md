@@ -2774,6 +2774,23 @@ Dropping this leg would leave 184 GB of qaz-code database (`act_version` 104 GB 
 the `backup-client` role and let restic take it, then drop the staging — not to
 keep the staging forever. His call; roadmap P6.
 
+### A WSL-era shim survived the native reinstall and shadowed xdg-open (2026-09-08)
+
+- **Symptom:** Orca could not add a second Claude account — clicking it opened no
+  browser, silently. Cause was not Orca at all: `~/.local/bin/xdg-open` was a
+  symlink to `wslopen`, the WSL browser opener `provision/wsl-fixes.sh` installs
+  (`provision/assets/wslopen`, dated Aug 27, from the g15-wsl era). It shells out
+  to `powershell.exe`; on the native Ubuntu box that does not exist, so it exited
+  1 and every `shell.openExternal` in every Electron app did nothing.
+  `~/.local/bin` precedes `/usr/bin` on PATH, so the real `/usr/bin/xdg-open` was
+  never reached. Fixed by deleting `xdg-open`, `wslview` and `wslopen` there; no
+  Orca restart needed (PATH is resolved per exec).
+- **The class, which is the point:** `$HOME` survived the 2026-09-07 Windows→Ubuntu
+  reinstall, so every host-local shim installed for WSL is still sitting in
+  `~/.local/bin` shadowing a system binary. They are untracked, so no provision
+  run removes them and nothing reports them. When a GUI/tooling failure on g15
+  makes no sense, check `command -v <tool>` before believing the app is broken.
+
 ## g15 has a restic client — and what is still NOT in it (2026-09-08)
 
 `backup/g15/` exists, `backup-client` is in g15's roles, and the client covers
