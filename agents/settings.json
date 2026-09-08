@@ -16,11 +16,9 @@
     "claude-md-management@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
-    "sentry@claude-plugins-official": true,
     "pure-connectors@pure-team": true,
     "pure-dev@pure-team": true,
-    "caveman@caveman": false,
-    "atlassian@claude-plugins-official": true
+    "caveman@caveman": false
   },
   "extraKnownMarketplaces": {
     "pure-team": {
