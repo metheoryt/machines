@@ -68,11 +68,21 @@ ssh_wsl_sanitize() {
     | sed -E 's/[^a-z0-9-]+/-/g; s/-+/-/g; s/^-+//; s/-+$//'
 }
 
-# Render the fleet client-config stanzas from fleet.json content (passed as $1),
-# HostName only for the hub (its ssh.host); User, IdentityFile and
-# StrictHostKeyChecking on EVERY block. Blocks are separated by a blank line, no
-# trailing blank. Markers are added by the caller. Deterministic; the only IO is
-# invoking jq on $1.
+# Render the fleet client-config stanzas from fleet.json content (passed as $1).
+# HostName, User, IdentityFile and StrictHostKeyChecking on EVERY block. Blocks
+# are separated by a blank line, no trailing blank. Markers are added by the
+# caller. Deterministic; the only IO is invoking jq on $1.
+#
+# HostName is unconditional as of 2026-09-08, defaulting to the member's MagicDNS
+# FQDN; before that only the hub (which declares ssh.host) got one. Without it the
+# bare alias is resolved by the SYSTEM resolver, and on a box whose LAN DNS answers
+# for that name it never reaches the tailnet at all: from g15, `ssh latitude` got
+# `latitude.lan` = 192.168.8.154 from the router — a stale address — and died with
+# `No route to host` while `tailscale ping latitude` answered direct in 3 ms and
+# `ssh latitude.gg.ez` connected fine. fd_probe reports that as `SKIP unreachable`,
+# so every /ship and kb-refresh run from that box had been silently skipping
+# latitude. The FQDN is what we mean; spell it out rather than hoping the search
+# domain wins the race.
 #
 # User is unconditional as of 2026-07-29. It used to be emitted only when
 # ssh.user != "me", which silently assumed the LOCAL user is also `me` — true on
@@ -100,7 +110,7 @@ ssh_wsl_render_config() {
   jq -r '
     ( [ .machines | to_entries[] |
       ( [ "Host " + .key + " " + .key + ".gg.ez" ]
-        + ( if (.value.ssh.host // null) != null then [ "  HostName " + .value.ssh.host ] else [] end )
+        + [ "  HostName " + (.value.ssh.host // (.key + ".gg.ez")) ]
         + [ "  User " + (.value.ssh.user // "me") ]
         + [ "  IdentityFile ~/.ssh/id_fleet", "  StrictHostKeyChecking accept-new" ]
       ) | join("\n")

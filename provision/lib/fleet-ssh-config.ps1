@@ -37,7 +37,10 @@ function Get-FleetSshMarkers {
 }
 
 # Render-FleetSshConfig: fleet.json content -> stanza text (no markers).
-# HostName only when the member declares ssh.host (the hub). User always.
+# HostName always: the member's ssh.host when it declares one (the hub), else its
+# MagicDNS FQDN. Leaving it off let the system resolver answer the bare alias --
+# see the ssh-wsl.sh header for the LAN-DNS hijack that cost latitude every
+# fleet-wide run from g15. User always.
 # Trailing wildcard block last, so a *.gg.ez MagicDNS name still resolves to the
 # right user and key even for a member absent from the manifest.
 function Render-FleetSshConfig {
@@ -72,9 +75,11 @@ function Render-FleetSshConfig {
         # `ssh server` worked — the two spellings must behave identically.
         $lines.Add("Host $name $name.gg.ez")
 
+        $hostName = "$name.gg.ez"
         if ($sshNode -and ($sshNode.PSObject.Properties.Name -contains 'host') -and $sshNode.host) {
-            $lines.Add("  HostName $($sshNode.host)")
+            $hostName = $sshNode.host
         }
+        $lines.Add("  HostName $hostName")
 
         $user = 'me'
         if ($sshNode -and ($sshNode.PSObject.Properties.Name -contains 'user') -and $sshNode.user) {
@@ -148,8 +153,11 @@ if ($SelfTest) {
     # Only the wildcard may be a single-pattern Host line; anything else falling
     # through to it would pick up the wrong `User me`.
     T ((([regex]::Matches($r, '(?m)^Host [^ ]+$')).Count) -eq 1) 'only the wildcard is a single-pattern Host line'
-    T ($r -match '(?m)^  HostName cyphy\.kz$')           'hub gets HostName'
-    T ((([regex]::Matches($r, '(?m)^  HostName ')).Count) -eq 1) 'only the hub gets a HostName'
+    T ($r -match '(?m)^  HostName cyphy\.kz$')           'hub gets its declared ssh.host as HostName'
+    T ($r -match '(?m)^  HostName latitude\.gg\.ez$')    'a member without ssh.host gets its FQDN as HostName'
+    # One per member block and no more -- the wildcard must NOT carry one, since
+    # %h there is already the FQDN the caller typed.
+    T ((([regex]::Matches($r, '(?m)^  HostName ')).Count) -eq (([regex]::Matches($r, '(?m)^Host [^ ]+ [^ ]+$')).Count)) 'every member block carries exactly one HostName'
     # The regression this file exists for: a member with no ssh.user must still
     # get an explicit `User me`, because the local user here is not `me`.
     T ((([regex]::Matches($r, '(?m)^  User ')).Count) -eq 4)     'every block + wildcard carries User'

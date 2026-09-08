@@ -44,7 +44,14 @@ if command -v jq >/dev/null 2>&1; then
   RENDERED="$(ssh_wsl_render_config "$FIXTURE")"
 
   echo "$RENDERED" | grep -q '^  HostName cyphy.kz$' || fail 'render: hub HostName cyphy.kz'
-  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 1 ] || fail 'render: only the hub gets a HostName'
+  # HostName on every member block (2026-09-08), the FQDN where ssh.host is absent.
+  # Without it the bare alias goes to the system resolver, and a LAN DNS that
+  # answers for the name wins: `ssh latitude` from g15 reached a stale
+  # `latitude.lan` and failed while the tailnet address was 3 ms away.
+  echo "$RENDERED" | grep -q '^  HostName latitude.gg.ez$' || fail 'render: latitude defaults to its FQDN'
+  echo "$RENDERED" | grep -q '^  HostName server.gg.ez$'   || fail 'render: server defaults to its FQDN'
+  # 3 members, and NOT the wildcard: %h there is already the FQDN the caller typed.
+  [ "$(printf '%s\n' "$RENDERED" | grep -c '^  HostName ')" = 3 ] || fail 'render: one HostName per member, none on the wildcard'
   # 4 User lines: EVERY block carries one now — latitude (me, defaulted), server
   # (methe), hub (debian), plus the trailing *.gg.ez wildcard (me). Emitting it
   # unconditionally is the fix for the Windows members, whose local user is
@@ -71,6 +78,7 @@ if command -v jq >/dev/null 2>&1; then
   # username is only correct where that username happens to be `me`.
   LAT_BLOCK="$(printf '%s\n' "$RENDERED" | awk '/^Host latitude /{f=1} f&&/^$/{exit} f{print}')"
   EXPECTED_LAT='Host latitude latitude.gg.ez
+  HostName latitude.gg.ez
   User me
   IdentityFile ~/.ssh/id_fleet
   StrictHostKeyChecking accept-new'

@@ -55,9 +55,24 @@ for h in $(jq -r '.machines | keys[]' "$REPO/fleet.json"); do
   has "$cfg" "^Host ${h} ${h}\.gg\.ez\$" "config has a Host block for ${h} + its FQDN"
 done
 
-# Mirrors modules/home/ssh.nix: HostName only for hub, User only when != me.
 has "$cfg" '^Host hub hub\.gg\.ez$'      "hub block present"
 has "$cfg" '^  HostName cyphy\.kz$'      "hub carries its ssh.host HostName"
+
+# EVERY member carries a HostName, defaulting to its MagicDNS FQDN (2026-09-08).
+# Without it ssh hands the bare alias to the system resolver: on g15 the router
+# answered `latitude.lan` = 192.168.8.154, a stale address, so `ssh latitude` died
+# with No route to host and fleet-pull printed SKIP unreachable for a box that was
+# up and 3 ms away. Derived from the manifest, like the block loop above.
+for h in $(jq -r '.machines | keys[]' "$REPO/fleet.json"); do
+  want="$(jq -r --arg h "$h" '.machines[$h].ssh.host // ($h + ".gg.ez")' "$REPO/fleet.json")"
+  has "$cfg" "^  HostName ${want//./\\.}\$" "${h} resolves via HostName ${want}"
+done
+# ...and the wildcard does NOT: %h there is already the FQDN the caller typed, so
+# a HostName line would be a no-op at best and a loop at worst.
+n_hostname="$(grep -c '^  HostName ' "$CFG")"
+n_members="$(jq -r '.machines | length' "$REPO/fleet.json")"
+[ "$n_hostname" = "$n_members" ] && pass "one HostName per member block, none on the wildcard" \
+  || die "expected $n_members HostName lines, got $n_hostname"
 has "$cfg" '^  User debian$'             "hub carries User debian"
 has "$cfg" '^  User methe$'              "windows members carry User methe"
 has "$cfg" '^Host \*\.gg\.ez$'           "the MagicDNS wildcard block is present"
