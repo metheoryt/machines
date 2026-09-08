@@ -2899,6 +2899,46 @@ server. What a future session would otherwise re-derive:
   work, and the posix selfpull DOES escalate ("dirty for 97 consecutive
   ticks — still not pulling"). It is the PowerShell one that has no escalation.
 
+## What was still left of the g15 Ubuntu setup — audited on the box (2026-09-08)
+
+Asked "is anything left"; answered by measuring g15 itself rather than reading
+the spec's checkboxes. Three of the four open phase items were already closed by
+the distro, one was never applied and would never have applied.
+
+- **`tier_battery_limit` never ran here, and `--apply` cannot make it run.**
+  `charge_control_end_threshold` = 100, no `/usr/local/bin/charge-upto`, no
+  `/etc/default/charge-upto`, no `charge-upto.service`. The tier's first guard is
+  `[ "$PRIV" -eq 0 ] && warn … && return 0`, and `linux.sh` sets `PRIV=0` unless
+  root is reachable **non-interactively** — g15 has no NOPASSWD sudo, so that is
+  every remote, converge and ssh run: skipped, warned, **exit 0**. Same
+  silent-green family as `PLANNED_ROLES` and the `platform: linux` trap, reached
+  through the privilege gate instead. `linux.sh` picks prompting `SUDO="sudo"`
+  only on a TTY, so the fix is `bash provision/linux.sh` **at the box's own
+  keyboard**; nothing remote installs it. Generalises to every privileged tier on
+  a no-NOPASSWD box — this is the class, not one bug.
+- **The kernel had already absorbed the asus-linux stack, which inverts the
+  spec's phase 3.** Open NVIDIA module 595.84 with `prime-select` = `on-demand`
+  (both GPUs enumerated), `asus_custom_fan_curve` exposed at hwmon7 under
+  `asus-nb-wmi`, charge threshold as plain `asus-wmi` sysfs. So `asusctl` /
+  `supergfxctl` — the "build from source, own phase, own rollback, could eat a
+  weekend" item — are convenience and were never installed. The ≥6.19 kernel
+  floor that chose Ubuntu is exactly why.
+- **The 2.4 GHz wifi record is retired.** g15 associates on **ch112 / 5560 MHz /
+  80 MHz / 1170 Mbit/s**. "Stuck on 2.4 GHz channel 12, no band-preference
+  property" was a property of the wiped Windows driver, not of MT7921.
+- **`just` is not installed on g15** — the whole documented command surface. No
+  tier installs it anywhere (roadmap P6 names the gap); `air` has it from brew by
+  luck. Run the scripts under `provision/` directly until then.
+- **A second Claude session had committed `70422f9` here and not pushed it**, so
+  `~/machines` sat **ahead 1 / behind 5** — and `fleet-selfpull` is ff-only, so
+  its next tick could not pull either. Worth knowing that a clean tree is not
+  evidence selfpull is current; check `status -sb`, not `status --short`.
+- Nothing else is outstanding that is g15-specific: the desktop toolchain (nvim,
+  rust, go, ghostty) is deliberately nobody's job, `ssh-server` is the fleet-wide
+  P3 stub (latitude is hand-rolled too), and `buton`/`skep` at 124 dirty
+  selfpull ticks are his own uncommitted work.
+
+
 ## Приёмка нового диска: identity-гейт впереди surface (2026-09-08)
 
 Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —

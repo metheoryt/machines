@@ -235,27 +235,34 @@ Mirror latitude's shape where the reasons still apply, and only there:
   ("Resolute Raccoon") enters nothing — the two-layer convention has no slot
   for it, and `fleet.json` has no distro field to put it in.
 
-### 3. Hybrid graphics — the one item that can eat a weekend
+### 3. Hybrid graphics — ✅ the weekend never happened (measured 2026-09-08)
 
-Ryzen 4800H iGPU + RTX 3050 Ti. `ubuntu-drivers autoinstall` plus
-`supergfxctl` for mode switching; the G513 is supported by the asus-linux
-project, and `asusctl` replaces G-Helper for fan curves and charge limit. Treat
-this as its own phase with its own rollback (the box is usable on the iGPU
-alone), not as a step inside the install.
+Ryzen 4800H iGPU + RTX 3050 Ti. This section budgeted its own phase and its own
+rollback; the box needed neither, and the reason is worth keeping because it
+inverts the section's own recommendation:
 
-**`asusctl` and `supergfxctl` are not packaged for any Debian-based distro** —
-build from source (Rust) or use one of the third-party Debian/Mint installers.
-Before paying that, check what the kernel already gives: `asus-wmi` exposes the
-charge threshold as plain sysfs (which is what `tier_battery_limit` already
-writes) and, on supported models, fan curves through hwmon
-(`asus_custom_fan_curve`). **Verify on the box whether the G513IE exposes that
-hwmon node.** If it does, `asusctl` is convenience rather than a requirement,
-and the weekend this section warns about is mostly the GPU half.
+- **Both GPUs are live on the stock Ubuntu install and nothing was built from
+  source.** `01:00.0` RTX 3050 Ti Mobile on the **open** NVIDIA kernel module
+  **595.84**, `05:00.0` Renoir iGPU, `prime-select query` → **`on-demand`**.
+  That is exactly the switching `supergfxctl` was going to provide.
+- **`asusctl` and `supergfxctl` are installed on neither count, and are not
+  wanted.** The check this section asked for was run: `asus_custom_fan_curve`
+  **is** exposed (hwmon7 under `/sys/devices/platform/asus-nb-wmi`, alongside
+  the plain `asus` hwmon6), and the charge threshold is plain `asus-wmi` sysfs
+  at `/sys/class/power_supply/BAT0/charge_control_end_threshold` — which is what
+  `tier_battery_limit` already writes. So both G-Helper replacements are
+  convenience here, and the Rust build (or a third-party Debian installer) buys
+  nothing this box lacks.
+- **The wifi record was a Windows fact, not a hardware one.** g15 associates at
+  **channel 112 / 5560 MHz, 80 MHz wide, 1170 Mbit/s** — 5 GHz, WiFi 6 rates.
+  `.claude/memory/project.md`'s "stuck on 2.4 GHz channel 12 because the MT7921
+  exposed no band-preference property" was true of the wiped Windows driver
+  only; in-kernel `mt7921e` simply does the right thing.
 
-Also verify the wifi band here: `.claude/memory/project.md` records g15 stuck on
-2.4 GHz channel 12 under Windows because the MT7921 exposed no band-preference
-property. It now associates at a WiFi 6 rate, so either that changed or the
-record is stale — `mt7921e` is in-kernel and may simply behave better.
+The generalisable half: **the kernel had already absorbed the vendor stack.**
+Every item in this section's original plan was a package to add on top of a
+distro that was assumed not to carry it, and the 6.19+ kernel floor that chose
+Ubuntu in the first place is precisely why none of them were needed.
 
 ### 4. Provision as a normal Linux fleet member
 
@@ -286,7 +293,20 @@ record is stale — `mt7921e` is in-kernel and may simply behave better.
   `docs/2026-08-01-nixos-harvest.md`: port 22 on `tailscale0` only, plus the one
   explicit `192.168.8.0/24` carve-out. That harvest is the only written spec for
   the role.
-- Charge limit via `tier_battery_limit`.
+- **Charge limit via `tier_battery_limit` — it did NOT apply, and re-running
+  `--apply` will not fix it.** Measured 2026-09-08: `charge_control_end_threshold`
+  is `100`, with no `/usr/local/bin/charge-upto`, no `/etc/default/charge-upto`
+  and no `charge-upto.service`. The tier opens with
+  `if [ "$PRIV" -eq 0 ]; then warn …; return 0`, and `linux.sh` sets `PRIV=0`
+  whenever root is not reachable **non-interactively** — which on g15 is always,
+  because it has no NOPASSWD sudo. So converge, an ssh-driven run and a
+  `--dry-run`/`--apply` from another box all skip the charge cap and report
+  success: the silent-green shape §5 and `PLANNED_ROLES` exist to prevent, here
+  reached through the privilege gate instead of the executor map. `linux.sh`
+  picks `SUDO="sudo"` (prompting) only on a TTY, so **the fix is to run
+  `bash provision/linux.sh` from the box's own terminal and type the password**;
+  nothing remote can install it. A laptop that is carried around and left on AC
+  is the case the cap is for.
 - Restore `/home/me`, then `pgdata`, then `Music` — **pulled** from latitude,
   which is now a direct 2 ms peer. The direction is forced by the asymmetry in
   the next bullet: latitude cannot originate fleet ssh, so it cannot push. And
