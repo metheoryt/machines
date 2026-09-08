@@ -264,7 +264,13 @@ is what made the right work obvious._
   half a day), and `badblocks` needs **`-b 4096`** — at the default 1024 B an
   8 TB drive is 7.8e9 blocks, past badblocks' own 2^32 ceiling, and it aborts.
   8 TB write+read is
-  ~30 h round trip **if the path sustains ~150 MB/s — which is unmeasured here**:
+  ~30 h round trip **if the path sustains ~150 MB/s — MEASURED 2026-09-08 at
+  227 MB/s** on the WD80EAAZ's outer tracks, i.e. a 9.8 h write pass and ~27 h
+  for write+read with the inner-track factor. That is the fleet's first
+  throughput figure for a **3.5″** drive through a CM198, and it confirms this
+  paragraph's own suspicion: the existing numbers were 2.5″ spindles hitting
+  their own ceiling, not the bridge's. The sentence below is kept for the
+  reasoning that led there:
   every existing throughput number on these docks (86 MB/s, 97 MB/s, 36 MB/s on
   the SMR drive) comes from 2.5″ 5400 rpm spindles hitting their own ceiling, not
   the bridge's. Measure the first hour of the write pass and extrapolate before
