@@ -97,6 +97,14 @@ has "$(unsafe_reasons /dev/sdb ABC123 ABC123 "" "" "" "")" "not a /dev/disk/by-i
 has "$(unsafe_reasons /dev/disk/by-id/usb-Kingston_XS2000-0:0 ABC123 ABC123 "" "" "" "")" "not a /dev/disk/by-id/ata-*" "even a by-id usb-* path is refused (the docks expose ata-* too)"
 has "$(unsafe_reasons "$SAFE" "" ABC123 "" "" "" "")" "--serial not given" "no --serial is refused"
 has "$(unsafe_reasons "$SAFE" WANTED ABC123 "" "" "" "")" "serial mismatch" "a serial mismatch is refused"
+# WD prints the bare serial on the label and reports it with a "WD-" prefix over
+# ATA (measured on this very drive: label RD2RRPWH, device WD-RD2RRPWH). The
+# gate must not cry fraud over a vendor prefix -- a false RETURN in the one gate
+# that has to be trusted is worse than no gate.
+eq "$(unsafe_reasons "$SAFE" RD2RRPWH WD-RD2RRPWH "" "" "" "")" "" "the sticker serial matches the ATA serial across WD's own prefix"
+eq "$(unsafe_reasons "$SAFE" WD-RD2RRPWH RD2RRPWH "" "" "" "")" "" "and in the other direction"
+has "$(unsafe_reasons "$SAFE" RD2RRPWH WD-RD2RRPWI "" "" "" "")" "serial mismatch" "one character off is still a mismatch"
+serial_matches "" ABC123 && bad "an empty expectation must never match" || pass "an empty expectation never matches"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 gpt "" "" "")" "partition table" "an existing partition table is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 "" "")" "ext4 signature" "an existing filesystem is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 /mnt/servarr "")" "mounted at /mnt/servarr" "a mounted device is refused"

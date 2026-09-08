@@ -128,6 +128,20 @@ verdict_surface(){
   fi
 }
 
+# Sticker serial vs ATA serial. WD prepends "WD-" in the ATA IDENTIFY field
+# while the label prints the bare form: measured 2026-09-08 on the WD80EAAZ,
+# label `RD2RRPWH`, device `WD-RD2RRPWH`. So a bare exact compare would fire
+# "SERIAL MISMATCH — RETURN" on a perfectly good drive, and a false alarm in the
+# one gate that has to be trusted is worse than no gate. A vendor prefix is
+# tolerated; anything else is still a mismatch.
+serial_matches(){
+  local want=${1:-} got=${2:-}
+  [ -n "$want" ] || return 1
+  [ "$want" = "$got" ] && return 0
+  [ "${want#WD-}" = "${got#WD-}" ] && return 0
+  return 1
+}
+
 # Every reason this target must not be written to. Empty output == safe.
 # Kept pure (all state passed in) so the suite can drive every branch.
 unsafe_reasons(){
@@ -137,7 +151,7 @@ unsafe_reasons(){
     *) echo "target is not a /dev/disk/by-id/ata-* path (sdX letters reshuffle every boot)" ;;
   esac
   [ -n "$want_serial" ] || echo "--serial not given (it is what makes -go safe rather than theatrical)"
-  [ -n "$want_serial" ] && [ "$want_serial" != "$got_serial" ] && \
+  [ -n "$want_serial" ] && ! serial_matches "$want_serial" "$got_serial" && \
     echo "serial mismatch: expected '$want_serial', device reports '$got_serial'"
   [ -n "$parttable" ] && echo "device carries a $parttable partition table"
   [ -n "$fstype" ] && echo "device carries a $fstype signature"
@@ -233,7 +247,7 @@ phase_identity(){
   if [ -n "$want_model" ] && ! grep -qi "$want_model" "$ev/identity.txt"; then
     printf 'MODEL MISMATCH : nothing on the device reports %s — RETURN on this alone\n' "$want_model"
   fi
-  if [ -n "$want_serial" ] && [ "$want_serial" != "$(dev_serial "$dev")" ]; then
+  if [ -n "$want_serial" ] && ! serial_matches "$want_serial" "$(dev_serial "$dev")"; then
     printf 'SERIAL MISMATCH: device disagrees with the invoice/sticker — RETURN on this alone\n'
   fi
   # The WWN is burned in at the factory and carries the maker's OUI, so it is the
