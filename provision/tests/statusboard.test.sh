@@ -1348,5 +1348,39 @@ font_ln="$(grep -n 'if \[ "\$MODE" = bigfont \]' "$SB" | cut -d: -f1)"
 [ -n "$inst_ln" ] && [ -n "$font_ln" ] && [ "$font_ln" -lt "$inst_ln" ]
 eq "$?" '0' 'font: the bigfont mode exits before the install path is reached'
 
+# ── locale independence ────────────────────────────────────────
+# This suite ran 9 failures deep on any box with a comma decimal separator until
+# 2026-09-08 -- LANG=ru_RU.UTF-8 is the fleet's normal desktop setting, so "all
+# suites passed" was only ever true where nobody had one. awk's printf follows
+# LC_NUMERIC, so 45.6W printed as 45,6W.
+#
+# Both cases below matter, and the second is the one that catches a regression:
+# LC_ALL OVERRIDES LC_NUMERIC, so "just export LC_NUMERIC=C at the top" is
+# silently defeated and would pass the first assertion while failing the second.
+# The fix has to be per-call on the awk that formats.
+#
+# Honest about coverage: without a comma locale generated on the box these
+# assertions still run but cannot fail. Find a real one rather than assuming
+# ru_RU exists, and say so when there is none.
+COMMA_LOCALE=""
+for L in ru_RU.UTF-8 ru_RU.utf8 de_DE.UTF-8 de_DE.utf8 fr_FR.UTF-8 fr_FR.utf8; do
+  if [ "$(LC_ALL="$L" awk 'BEGIN { printf "%.1f", 1.5 }' 2>/dev/null)" = "1,5" ]; then
+    COMMA_LOCALE="$L"; break
+  fi
+done
+if [ -z "$COMMA_LOCALE" ]; then
+  printf '  NOTE no comma-decimal locale on this box - the locale assertions cannot fail here\n'
+fi
+eq "$(LC_NUMERIC="${COMMA_LOCALE:-C}" sb_micro_to_unit 20000000 W)" '20.0W' \
+  'locale: LC_NUMERIC cannot put a comma in a wattage'
+eq "$(LC_ALL="${COMMA_LOCALE:-C}" sb_micro_to_unit 3300000 A)" '3.3A' \
+  'locale: LC_ALL cannot either (it overrides LC_NUMERIC)'
+eq "$(LC_ALL="${COMMA_LOCALE:-C}" sb_mib 3221225472)" '3.0G' \
+  'locale: nor in a container memory figure'
+# The glyphs must survive the same environment: LC_ALL=C would fix the numbers
+# and break these, which is the trap this pair exists to hold shut.
+eq "$(LC_ALL="${COMMA_LOCALE:-C}" sb_bar 50 10)" '[█████░░░░░]' \
+  'locale: the bar keeps its multibyte glyphs'
+
 if [ "$FAIL" -gt 0 ]; then printf 'FAILURES: %d\n' "$FAIL" >&2; exit 1; fi
 printf 'PASS: %s\n' "$(basename "${BASH_SOURCE[0]}")"

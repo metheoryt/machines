@@ -46,6 +46,30 @@
 # Every value-formatting helper is a pure function of its arguments so
 # provision/tests/statusboard.test.sh can exercise the logic with fixtures
 # instead of needing a battery.
+#
+# NUMBERS ARE FORMATTED IN C, GLYPHS ARE NOT — and the split is per-command, not
+# global. On a box with a comma decimal separator (LANG=ru_RU.UTF-8 is the
+# fleet's normal desktop setting) awk's printf renders 45.6 as `45,6`, and the
+# board reads wrong beside every other number the fleet prints. So the four awk
+# calls that format a number carry an `LC_ALL=C` prefix.
+#
+# WHY LC_ALL AND NOT LC_NUMERIC, WHICH IS THE CATEGORY ACTUALLY AT FAULT: LC_ALL
+# OVERRIDES LC_NUMERIC. Prefixing the narrower category is silently defeated by
+# an LC_ALL sitting in the caller's environment, and so is an exported
+# LC_NUMERIC=C at the top of this file. That is not hypothetical — it is what the
+# first attempt at this fix did, and provision/tests/statusboard.test.sh caught
+# it in the same commit.
+#
+# WHY THIS DOES NOT COST THE GLYPHS, which is the trap on the other side:
+# LC_ALL=C drops LC_CTYPE and makes the ramp and bar characters (▁▅█░, three
+# bytes each) unprintable — running the WHOLE script under LC_ALL=C turns 9
+# failures into 14, every extra one a width assertion counting `?`. It is safe
+# HERE because these four awk calls emit pure ASCII (digits plus a W/A/G suffix)
+# and the glyphs are painted by bash, not awk. Keep it that way: an awk that
+# prints a glyph must not carry this prefix.
+#
+# Per-call also keeps the promise made just above — that every formatter is a
+# pure function of its arguments. A helper reading the ambient locale is not.
 set -u
 
 # Two cadences, deliberately. INTERVAL is how often the frame is REPAINTED — it
@@ -145,7 +169,7 @@ sb_hi_colour() {
 sb_micro_to_unit() {
   local v="${1:-}" suffix="${2:-}"
   case "$v" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
-  awk -v v="$v" -v s="$suffix" 'BEGIN { printf "%.1f%s", v / 1000000, s }'
+  LC_ALL=C awk -v v="$v" -v s="$suffix" 'BEGIN { printf "%.1f%s", v / 1000000, s }'
 }
 
 # sb_secs_to_hm <seconds>: 5400 → "1h30m". Used for uptime and battery estimates.
@@ -229,7 +253,7 @@ sb_source_watts() {
   case "$uv" in '' | *[!0-9]*) printf ''; return ;; esac
   case "$ua" in '' | *[!0-9]*) printf ''; return ;; esac
   { [ "$uv" -gt 0 ] && [ "$ua" -gt 0 ]; } || { printf ''; return; }
-  watts="$(awk -v v="$uv" -v a="$ua" 'BEGIN { printf "%.0f", v / 1000000 * (a / 1000000) }')"
+  watts="$(LC_ALL=C awk -v v="$uv" -v a="$ua" 'BEGIN { printf "%.0f", v / 1000000 * (a / 1000000) }')"
   [ "$watts" = 0 ] && { printf ''; return; }
   printf '%s' "$watts"
 }
@@ -842,7 +866,7 @@ sb_rtt_tenths() {
 sb_kb_to_gib() {
   local kb="${1:-}"
   case "$kb" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
-  awk -v k="$kb" 'BEGIN { printf "%.0f", k / 1048576 }'
+  LC_ALL=C awk -v k="$kb" 'BEGIN { printf "%.0f", k / 1048576 }'
 }
 
 # Layout constants for the disk block, named because two functions and a test all
@@ -1291,7 +1315,7 @@ sb_ts_parse() {
 sb_mib() {
   local b="${1:-}"
   case "$b" in '' | *[!0-9]*) printf 'n/a'; return ;; esac
-  awk -v b="$b" 'BEGIN {
+  LC_ALL=C awk -v b="$b" 'BEGIN {
     if (b >= 1073741824) printf "%.1fG", b / 1073741824
     else printf "%dM", b / 1048576
   }'
