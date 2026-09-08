@@ -668,6 +668,19 @@ left for their own change rather than fixed mid-migration:**
   hit the comment saying the accessor replaced three expansions. It asserts over
   non-comment lines now. An assertion about what runs must look only at what
   runs.
+- [ ] **Delete latitude's `/etc/systemd/logind.conf.d/99-server.conf`.**
+  `tier_lid_ignore` (2026-09-08) now writes lid policy on both posix profiles,
+  closing the gap the 2026-08-03 review called the flagship —
+  `docs/2026-08-03-repo-review.md:320`: that hand-written file was the only thing
+  keeping the services host awake on a lid close, and nothing in the repo produced
+  it. The two files coexist harmlessly (identical values; the tier's own warn names
+  the survivor on every run), so this is tidying, not a fix — but do it AFTER
+  latitude's next converge run has written `99-fleet-lid.conf`, not before, or the
+  box spends the gap suspending on a lid close. `provision/lib/tiers.sh` is a
+  `_touches_driver` trigger, so that run needs no prompting. The masked
+  `sleep.target` / `suspend.target` / `hibernate.target` are NOT part of this and
+  stay a host-local hand-edit — see the tier's comment for why that half is not
+  portable.
 - `fleet-selfpull` skips a dirty tree silently and forever — `air` was 43 commits
   behind for eight days across 87 skipped runs, evidenced only by a counter in
   `~/.local/state/fleet-selfpull/dirty-<path>`. It should escalate after N

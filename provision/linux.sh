@@ -95,7 +95,12 @@ case "$PROFILE" in
     # A future CARRIED Linux laptop would inherit a cap it may not want. That is
     # the accepted cost of keying on the profile rather than on a per-machine
     # knob, and the fix then is a fleet.json field, not a re-split of this list.
-    TIERS=(apt_min apt_dev docker battery_limit agents_config git_base gortex
+    # lid_ignore rides beside battery_limit on the same mains axis: a box wired to
+    # the wall must not suspend when its lid shuts. It is a no-op with no lid
+    # (/proc/acpi/button/lid is absent in a WSL distro), and it writes lid policy
+    # only — it does NOT mask the sleep targets, so `systemctl suspend` still
+    # works on a box someone sits at. See the tier for why that split matters.
+    TIERS=(apt_min apt_dev docker battery_limit lid_ignore agents_config git_base gortex
            "agent_clis claude" shell_init autofetch
            ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
@@ -156,7 +161,14 @@ case "$PROFILE" in
     # one box — two writers race on the push and strand a commit — so the
     # always-on box that never runs gortex itself is the natural writer. It sits
     # after ssh_accounts because the push needs that tier's GitHub key.
-    TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit rapl_read agents_config git_base "agent_clis claude"
+    # lid_ignore is the other half of battery_limit's hardware story, and it closes
+    # a gap the 2026-08-03 review named: latitude's no-lid-sleep config was a hand
+    # written /etc/systemd/logind.conf.d/99-server.conf that NOTHING in this repo
+    # produced, so a reinstall following the repo yielded a services host that
+    # suspends when the lid closes. The tier writes lid policy only; the sleep
+    # target masking this box also carries stays host-local, being a services-host
+    # decision rather than a portable one.
+    TIERS=(sudo_nopasswd apt_min apt_dev statusboard battery_limit lid_ignore rapl_read agents_config git_base "agent_clis claude"
            shell_init autofetch ssh_accounts selfpull gortex_autoupdate ssh_trust dotfiles) ;;
   *)
     die "unknown profile '$PROFILE' ($PROFILE_SRC) — expected workstation|hub|server" ;;

@@ -3094,3 +3094,43 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   считает от производства, если нет подтверждения даты покупки). Срок возврата
   DNS 14 дней от 2026-09-07 → **до 2026-09-21**, surface стартовать **не позже
   2026-09-18**.
+
+## Lid close no longer sleeps a mains-bound box — `tier_lid_ignore` (2026-09-08)
+
+- **g15 shipped stock: `HandleLidSwitch=suspend`, `HandleLidSwitchExternalPower=suspend`.**
+  Nothing else was in play — `/etc/systemd/logind.conf.d/` did not exist, GNOME's
+  idle suspend is already `nothing` on both AC and battery
+  (`org.gnome.settings-daemon.plugins.power sleep-inactive-*-type`), and
+  `systemd-inhibit --list` showed **no** `handle-lid-switch` block from gsd-power
+  (GNOME only takes that one with an external monitor attached). So logind's own
+  config was the whole lever, and the lid was the only route to sleep.
+- **The gap it closed is the one the 2026-08-03 review called the flagship**
+  (`docs/2026-08-03-repo-review.md:320`): latitude's four `ignore` keys lived in a
+  **hand-written** `/etc/systemd/logind.conf.d/99-server.conf` that nothing in the
+  repo produced. A reinstall following the repo would have yielded a services host
+  that suspends when the lid shuts, with no error anywhere.
+- **Two keys, not four.** `HandleLidSwitchDocked` and `IdleAction` are `ignore` in
+  systemd already (`systemd-analyze cat-config systemd/logind.conf`, systemd 259
+  on g513ie), so the tier writes only the two that change behaviour. That is also
+  why deleting latitude's hand file changes nothing.
+- **It masks no sleep target, and that is the decision, not an omission.**
+  latitude additionally masks `sleep/suspend/hibernate.target` — correct for a
+  services host, wrong for a box someone sits at, where it would also kill the
+  GNOME suspend menu and a deliberate `systemctl suspend`. Lid policy is the
+  portable half; the masking stays host-local on latitude.
+- **Gate on the hardware, not the platform:** `/proc/acpi/button/lid` (LID0 on
+  both g513ie and latitude5520) is absent in a WSL distro and on the VPS, so those
+  are no-ops without a platform check to keep in sync.
+- **Reload logind, never restart it.** `CanReload=yes` on systemd 257 (latitude)
+  and 259 (g15); a restart is the one that can take a live graphical session with
+  it. The `ok` line reads the value back from `systemd-analyze cat-config`, whose
+  LAST assignment is the effective one — reading back the file the tier just wrote
+  proves nothing about precedence when another drop-in sorts after it.
+- **Drop-ins merge in filename order, so a competing file silently owns the key.**
+  The tier warns by name when another drop-in in that dir sets a lid key —
+  latitude has exactly one (`99-server.conf`, identical values, sorts after
+  `99-fleet-lid.conf`), which is how the warn will keep nagging until P6 retires
+  it. Retire it AFTER latitude's next converge run, never before: `tiers.sh` is a
+  `_touches_driver` trigger, so that run comes on its own.
+- Both mutations bite: masking a sleep target, and dropping the lid gate, each
+  turn an assertion red. Suite green, 54 suites.

@@ -140,6 +140,11 @@ installed by `tier_battery_limit` on both posix profiles. `air` is deliberately
 uncapped: it gets carried and discharged, so a ceiling would just shorten its
 runtime.
 
+The same two boxes also **ignore the lid switch** — `tier_lid_ignore` writes
+`/etc/systemd/logind.conf.d/99-fleet-lid.conf`, so shutting the lid drops
+neither an ssh session nor a timer. It caps nothing else: `systemctl suspend`
+still suspends on purpose, because only the lid stops meaning "sleep".
+
 
 ```bash
 charge-upto 80         # ceiling, applied now and persisted

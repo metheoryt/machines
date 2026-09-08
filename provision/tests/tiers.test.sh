@@ -40,7 +40,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_lid_ignore tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex.
@@ -60,7 +60,7 @@ has "$hub" '^tier_shell_init --no-fish$' "hub skips the fish config"
 # It is workstation MINUS the code-graph and secondary-agent tiers — NOT the hub
 # tier, which is lean only because the hub is a 960MB VPS.
 eq "$(printf '%s\n' "$srv" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_rapl_read tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_gortex_autoupdate tier_ssh_trust tier_dotfiles " \
+   "tier_sudo_nopasswd tier_apt_min tier_apt_dev tier_statusboard tier_battery_limit tier_lid_ignore tier_rapl_read tier_agents_config tier_git_base tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_gortex_autoupdate tier_ssh_trust tier_dotfiles " \
    "server tier list and order"
 
 # sudo_nopasswd is server-ONLY and must run first: every later privileged tier then
@@ -235,6 +235,33 @@ if [ -n "$end_ln" ] && [ -n "$mode_ln" ] && [ "$end_ln" -lt "$mode_ln" ]; then
 else
   die "tier_battery_limit writes the ceiling before switching the EC to Custom (end=$end_ln mode=$mode_ln)"
 fi
+
+# ── lid_ignore: a mains-bound laptop must not suspend when its lid shuts ─────
+# Same axis as battery_limit — mains, not profile — so the same four assertions,
+# and the `mac` one is again the load-bearing half: macOS has no logind at all,
+# so a lid policy there would be different code, not this tier in a second list.
+has   "$srv" '^tier_lid_ignore$'  "server ignores the lid switch (it drops immich otherwise)"
+has   "$ws"  '^tier_lid_ignore$'  "workstation ignores it too (g15 is mains-bound)"
+hasnt "$hub" '^tier_lid_ignore$'  "hub omits it — a VPS has no lid"
+hasnt "$mac" '^tier_lid_ignore$'  "macOS omits it — no logind, and air is carried"
+
+lbody="$(awk '/^tier_lid_ignore\(\)/,/^}/' "$TIERS")"
+has "$lbody" 'HandleLidSwitch=ignore' "tier_lid_ignore ignores a lid close on battery"
+has "$lbody" 'HandleLidSwitchExternalPower=ignore' \
+  "tier_lid_ignore ignores a lid close on AC — the case that actually applies here"
+# THE DECISION, not a detail: latitude masks sleep/suspend/hibernate.target by
+# hand because a services host must never sleep at all. This tier must NOT, or a
+# box someone sits at loses the GNOME suspend menu and `systemctl suspend` too.
+# Over code only — the tier's own comment explains the masking it declines to do.
+hasnt "$(code "$lbody")" 'systemctl mask' \
+  "tier_lid_ignore masks no sleep target — a deliberate suspend stays available"
+hasnt "$(code "$lbody")" 'restart systemd-logind' \
+  "tier_lid_ignore reloads logind, never restarts it (a restart can take the session)"
+has "$lbody" 'reload systemd-logind' "tier_lid_ignore applies the policy without a reboot"
+# The gate is the hardware, so a lidless box (WSL distro, VPS) is a no-op rather
+# than a platform check that has to be kept in sync with the fleet.
+has "$lbody" '/proc/acpi/button/lid' "tier_lid_ignore gates on the lid device itself"
+has "$lbody" 'PRIV'  "tier_lid_ignore honours the no-root warn-and-skip contract"
 
 # rapl_read is server-only, and it is the one tier here that widens a permission the
 # kernel deliberately tightened — so the guards on HOW MUCH it widens are the point
@@ -423,7 +450,13 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # writes `charge_control_*` and `charge_types` under /sys, which macOS has not
 # got. A macOS charge cap would be different code, not this tier in a second
 # list.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit)$' | tr '\n' ' '; }
+#
+# tier_lid_ignore is the seventh, added 2026-09-08, and it is the second hardware
+# exception — the same mains axis as battery_limit. It writes a systemd-logind
+# drop-in, and macOS has no logind: the equivalent there is `pmset`/`caffeinate`,
+# i.e. different code rather than this tier in a second list. `air` gets no lid
+# policy on purpose anyway, being the laptop that is carried.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit|lid_ignore)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

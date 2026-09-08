@@ -646,6 +646,89 @@ CUS
   return 0
 }
 
+# ── BOTH posix profiles: a lid close must not suspend a box that lives on mains ─
+# The same axis as tier_battery_limit and for the same reason: latitude (server)
+# and g15 (workstation) both sit on AC forever, and a box that suspends when its
+# lid shuts is a box that drops ssh, the backup timers and — on latitude — every
+# container, the moment someone tidies the desk.
+#
+# Until 2026-09-08 latitude's version of this was a HAND-WRITTEN
+# /etc/systemd/logind.conf.d/99-server.conf that nothing in the repo produced.
+# docs/2026-08-03-repo-review.md:320 named it exactly — "a reinstall that follows
+# the repo produces a services host that suspends on a lid close, with no error."
+# This tier is what produces it.
+#
+# TWO KEYS, because they are the only two that are not already systemd's shipped
+# default: `systemd-analyze cat-config systemd/logind.conf` on g513ie (systemd
+# 259) reports HandleLidSwitchDocked and IdleAction as `ignore` upstream already,
+# so writing them would assert a change that isn't one. latitude's hand file sets
+# all four, which is why deleting it changes nothing.
+#
+# It writes LID POLICY ONLY. It deliberately does NOT mask sleep.target /
+# suspend.target / hibernate.target the way latitude does by hand: that is a
+# services-host decision, and on a box someone sits at it would also kill the
+# GNOME suspend menu and a deliberate `systemctl suspend`. Lid policy is the
+# portable half; the masking stays host-local.
+#
+# The gate is the hardware, not the platform: /proc/acpi/button/lid exists on
+# both fleet laptops (LID0 on g513ie and on latitude5520, measured 2026-09-08)
+# and on neither a WSL distro nor the VPS, so a lidless box reports and returns 0.
+tier_lid_ignore() {
+  local dir=/etc/systemd/logind.conf.d f other eff
+  f="$dir/99-fleet-lid.conf"
+  if [ ! -d /proc/acpi/button/lid ]; then
+    info "no lid switch on this box — skipping the lid policy"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the lid policy"
+    return 0
+  fi
+  info "Installing lid policy (a lid close suspends nothing)…"
+
+  $SUDO mkdir -p "$dir"
+  $SUDO tee "$f" >/dev/null <<'LID'
+# Written by tier_lid_ignore in machines/provision/lib/tiers.sh — edit the tier
+# and re-provision rather than editing this copy.
+#
+# A fleet laptop lives on mains and has to keep running with the lid shut: ssh,
+# the backup timers, and on the services host every container. Only these two
+# keys differ from systemd's own defaults — HandleLidSwitchDocked and IdleAction
+# are `ignore` upstream already.
+#
+# Deliberately NOT masking sleep/suspend/hibernate.target: a deliberate
+# `systemctl suspend` stays available. Only the lid stops meaning "sleep".
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+LID
+
+  # A competing drop-in is the drift this tier exists to end, and it is otherwise
+  # invisible: logind merges drop-ins in filename order, so a later-sorting file
+  # silently owns the key. latitude carries exactly one — the hand-written
+  # 99-server.conf, whose values are identical, which is why nothing changes
+  # there and why it can simply be deleted.
+  other="$(grep -ilE '^[^#]*HandleLidSwitch' "$dir"/*.conf 2>/dev/null | grep -vFx "$f" | tr '\n' ' ')"
+  if [ -n "$other" ]; then
+    warn "another logind drop-in also sets a lid key: ${other% } — retire it, this tier owns lid policy"
+  fi
+
+  # RELOAD, never restart. logind supports reload on both fleet systemds
+  # (CanReload=yes on 257 and 259, measured 2026-09-08); a restart is the one
+  # that can take a live graphical session with it.
+  if $SUDO systemctl reload systemd-logind >/dev/null 2>&1; then
+    # The readback is the concatenation logind actually sees, last assignment
+    # winning — not the file this tier just wrote, which proves nothing about
+    # precedence when another drop-in sorts after it.
+    eff="$(systemd-analyze cat-config systemd/logind.conf 2>/dev/null \
+      | grep -E '^HandleLidSwitch=' | tail -1)"
+    ok "lid policy applied — effective ${eff:-HandleLidSwitch=? (could not read back)}"
+  else
+    warn "lid policy written but systemd-logind would not reload — it takes effect at the next boot"
+  fi
+  return 0
+}
+
 # ── SERVER: let the status board read the CPU's energy counter ─────────────────
 # The board's `power` row is the machine's actual consumption, and RAPL's psys domain
 # is the only place on this hardware that number exists. The battery reports zero

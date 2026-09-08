@@ -273,6 +273,18 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   this one, which writes `/sys` nodes macOS lacks. It needs root, so on a box
   with no NOPASSWD sudo (g15) it warns and skips on every non-interactive run —
   applying it there means `bash provision/linux.sh` at that keyboard.
+- **`tier_lid_ignore`** — the other half of the same hardware story, and it exists
+  because the 2026-08-03 review found the flagship gap: latitude's no-lid-sleep
+  config was a hand-written `/etc/systemd/logind.conf.d/99-server.conf` that
+  **nothing in the repo wrote**, so a reinstall following the repo produced a
+  services host that suspends on a lid close, silently. On **both posix profiles**
+  for the mains reason above. It writes two keys — the other two latitude's hand
+  file sets are systemd defaults already — and it **masks no sleep target**, so a
+  deliberate `systemctl suspend` still works on a box someone sits at. It gates on
+  `/proc/acpi/button/lid` rather than on a platform check (absent in a WSL distro
+  and on the VPS, so both are no-ops), and it **reloads** logind rather than
+  restarting it: `CanReload=yes` on both fleet systemds, and a restart is the one
+  that can take a live graphical session with it.
 - **`tier_gortex`** — installs the release named in `provision/gortex.version`
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
   darwin_arm64, darwin_amd64). It untars the pinned release **unconditionally,
@@ -564,11 +576,19 @@ survived the Debian reinstall.
 - **Root is unencrypted ext4** — a deliberate decision for a plugged-in home
   machine that must boot unattended. Do not re-raise it.
 - Swap: a **14.9 GB partition** (not ZRAM), ~1.7 GB in use against 23 GB RAM.
-- **It never sleeps, by design.** `HandleLidSwitch`, `HandleLidSwitchDocked`,
-  `HandleLidSwitchExternalPower` and `IdleAction` are all `ignore` in
-  `/etc/systemd/logind.conf`, *and* `sleep.target` / `suspend.target` /
-  `hibernate.target` are masked. Closing the lid must not take immich and the
-  backup timers down with it. Do not "restore" the old laptop power management.
+- **It never sleeps, by design**, and since 2026-09-08 half of that is
+  reproducible. The lid half is `tier_lid_ignore`, on both posix profiles:
+  `HandleLidSwitch` and `HandleLidSwitchExternalPower` `ignore` in
+  `/etc/systemd/logind.conf.d/99-fleet-lid.conf` (`HandleLidSwitchDocked` and
+  `IdleAction` are already `ignore` upstream, so the tier does not write them).
+  Closing the lid must not take immich and the backup timers down with it. The
+  OTHER half — `sleep.target` / `suspend.target` / `hibernate.target` **masked** —
+  is still a hand-edit, and stays one on purpose: never sleeping AT ALL is a
+  services-host decision, and masking those targets on a box someone sits at also
+  kills the GNOME suspend menu. **This box also still carries the hand-written
+  `/etc/systemd/logind.conf.d/99-server.conf`** the tier supersedes — identical
+  values, so nothing changes, and the tier warns about it by name until it is
+  deleted (P6). Do not "restore" the old laptop power management.
 - Battery charge window 80–85% via `/usr/local/bin/charge-upto` +
   `/etc/default/charge-upto`, installed by `tier_battery_limit`. A laptop held at
   100% on AC 24/7 swells its cell, which is the whole point.
