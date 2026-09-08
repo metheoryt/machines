@@ -447,9 +447,9 @@ chosen in the first place (its `.wslconfig` comment records that).
 
 `hosts/<name>/<platform>/` — per-machine ops scripts, no build system.
 
-**`hosts/latitude/debian/`** — the services host's recurring jobs. All three are
-worth reading headers-first; they record decisions that are not re-derivable
-from the code.
+**`hosts/latitude/debian/`** — the services host's recurring jobs and its boot
+guards. All of them are worth reading headers-first; they record decisions that
+are not re-derivable from the code.
 
 - `mirror-refresh.sh` — `/mnt/immich` → `/mnt/immich-mirror`. Why live PGDATA is
   excluded (an rsync of a running postgres dir is a torn copy that *looks* like a
@@ -461,6 +461,11 @@ from the code.
 - `install-timers.sh` + `systemd/` — installs both as system timers. It **copies**
   units into `/etc/systemd/system` rather than symlinking, so a `git pull` cannot
   change what root runs on a timer without review.
+- `install-docker-ordering.sh` — the three guards that keep containers from
+  starting before the host is ready. **Read this one before touching anything
+  about latitude's mounts, docker, or a compose file that binds `/mnt`.** Its
+  `MOUNTS` array is a live-derived fact, not a preference: see the bind-source
+  race in *Key patterns* below.
 
 `hosts/desktop/windows/` carries install/reinstall + backup scripts.
 (`hosts/server/` was deleted with the decommission — git history has it.)
@@ -478,6 +483,29 @@ from the code.
   the five is bus-powered — the XS2000 stick; the four spinners sit in two
   self-powered Ugreen CM198 docks (measured 2026-09-07, correcting a
   "bus-powered" claim this file and `project.md` both carried).
+- **Docker CREATES a missing bind source, and that is the fleet's most expensive
+  failure mode.** A container that starts before its disk mounts does not error —
+  it silently gets an empty auto-created dir on the root filesystem, the disk then
+  mounts over the top, and the host looks perfectly healthy while the service
+  serves nothing. It has now happened twice: servarr on 2026-08-03 (Jellyfin
+  playback 404'd for a day) and immich-2024 on 2026-09-03 (five days of ENOENT on
+  every 2007–2024 photo download, with the container reporting `(healthy)` and
+  IntegrityService logging ~20,400 missing files nightly to nobody). The guards
+  live in `hosts/latitude/debian/install-docker-ordering.sh`; two rules follow
+  from them:
+    - **Adding a `/mnt` bind to any compose file means adding that mount to
+      `MOUNTS`.** The second incident happened because the array excluded
+      immich-2024 on the belief that it "belongs to the rsync timers" — true of
+      its other job, false about who binds it, and never re-checked. Derive the
+      list from live binds (`docker inspect -f '{{range .HostConfig.Binds}}…'`),
+      never from what a disk is *for*.
+    - **The mountpoint dirs underneath the mounts are `chattr +i`.** That is
+      deliberate: it turns Docker's auto-mkdir into EPERM so a missing disk stops
+      the container visibly instead of emptying it invisibly. A mount still covers
+      an immutable dir (measured), and `lsattr` at the mountpoint path shows no
+      `i` while mounted — you are reading the mounted fs, not the frozen inode.
+      Never `chattr -i` one by hand; `install-docker-ordering.sh -off` is the
+      symmetric revert.
 - **Verify a scheduled job by firing its schedule, not by running the script.**
   `mirror-refresh.sh -go` passed by hand for weeks while every timer run reported
   `Failed` — its last command was falsy under `-go`. `systemctl start <unit>` then
