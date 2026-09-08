@@ -11,6 +11,12 @@ die()  { echo "FAIL $1"; fail=1; }
 eq()   { [ "$1" = "$2" ] && pass "$3" || die "$3: expected '$2' got '$1'"; }
 has()  { printf '%s\n' "$1" | grep -qE "$2" && pass "$3" || die "$3"; }
 hasnt(){ printf '%s\n' "$1" | grep -qE "$2" && die "$3" || pass "$3"; }
+# CODE lines only — drops comments. Use it for any assertion that a construct is
+# ABSENT: a tier that documents the wrong way to do something contains the wrong
+# way as prose, so a `hasnt` over the raw body fires on the explanation. That has
+# now bitten in two suites (here and tailscale-wsl.test.sh) and cost four wrong
+# assertions between them. `has` is usually fine raw; `hasnt` usually is not.
+code(){ printf '%s\n' "$1" | grep -vE '^[[:space:]]*#'; }
 
 MACDRIVER="$HERE/../macos.sh"
 
@@ -154,7 +160,18 @@ has   "$srv" '^tier_battery_limit$'      "server installs the battery charge lim
 has   "$ws"  '^tier_battery_limit$'      "workstation installs it too (g15 is mains-bound)"
 hasnt "$hub" '^tier_battery_limit$'      "hub omits the battery charge limit"
 hasnt "$mac" '^tier_battery_limit$'      "macOS omits it — air is carried"
-bbody="$(awk '/^tier_battery_limit\(\)/,/^}/' "$TIERS")"
+# Body extraction runs to the NEXT tier definition, not to the first column-0 `}`.
+# The range form the other four still use silently truncates a tier that defines a
+# nested shell function, which tier_battery_limit's emitted script now does
+# (charge_mode): five unrelated assertions in this block went red at once and none
+# of them was about a regression. If another tier grows a nested function, give it
+# this form too — do NOT indent the function's brace to placate the awk.
+# …then trimmed back to the LAST column-0 `}` in that span, which is the tier's
+# own closing brace. Without the trim the span runs on into the next tier's
+# leading comment block, and an assertion here could pass on text that belongs to
+# a different tier — a false green, which is worse than the truncation it fixes.
+bbody="$(awk '/^tier_battery_limit\(\)/{f=1} f&&/^tier_[a-z_]+\(\) *\{/&&!/^tier_battery_limit/{exit} f' "$TIERS" \
+  | awk '{a[NR]=$0} /^}$/{last=NR} END{for(i=1;i<=last;i++) print a[i]}')"
 has "$bbody" 'charge_types'  "tier_battery_limit writes charge_types, not just the threshold"
 has "$bbody" 'Custom'        "tier_battery_limit selects the EC's Custom charge mode"
 has "$bbody" 'charge_control_end_threshold' "tier_battery_limit writes the ceiling"
@@ -171,6 +188,35 @@ eq "$(printf '%s\n' "$bbody" | grep -c "> \"\$b/charge_control_start_threshold\"
 # The EC clamps inside a successful write, so a silent difference between what was
 # asked and what landed is the failure mode worth naming.
 has "$bbody" 'the EC applied' "tier_battery_limit reports a ceiling the EC clamped"
+
+# ── the report line must survive hardware that exposes only the ceiling ───────
+# g513ie (ASUS asus-wmi) has charge_control_end_threshold and nothing else: no
+# start threshold, no charge_types. Measured 2026-09-08, after the cap went on.
+# The mode column read charge_types inline and was wrong twice — the shell's own
+# redirection error leaked past `2>/dev/null` (a redirection is processed before
+# the command's stderr redirect applies), and `|| echo n/a` never fired because
+# `||` binds to the last command of the pipeline, which succeeds on empty input.
+# Result: an error line in the journal on every boot and resume of a unit that
+# exits 0, plus an empty mode column instead of the n/a it meant to print.
+has "$bbody" 'charge_mode' "tier_battery_limit reads charge_types through a guarded helper"
+# Two ways this assertion was wrong before it worked, both worth naming because
+# `hasnt` invites them: written as `< "$b/charge_types"` the `$` is a regex
+# end-of-line anchor, so it could never fire (a mutation putting the inline
+# redirect straight back passed clean); and over the raw body it fires on the
+# helper's own comment, which quotes the bad form to explain it. Anchored, and
+# over code only.
+hasnt "$(code "$bbody")" '< "\$b/charge_types"' \
+  "tier_battery_limit never redirects from charge_types inline (the shell leaks that error)"
+mbody="$(printf '%s\n' "$bbody" | awk '/^charge_mode\(\)/,/^}/')"
+has "$mbody" '\-r "\$1/charge_types"' "charge_mode tests readability before reading"
+has "$mbody" 'n/a' "charge_mode falls back to n/a"
+eq "$(printf '%s\n' "$mbody" | grep -c 'n/a')" '2' \
+   "charge_mode's n/a is reachable on BOTH arms — absent file and empty file"
+
+# The emitted script is #!/bin/sh, so the helper must be POSIX: no `local`, and
+# it has to parse under dash, which is what /bin/sh is on Debian and Ubuntu.
+hasnt "$mbody" 'local ' "charge_mode uses no bashism (the emitted script is #!/bin/sh)"
+
 has "$bbody" 'PRIV'          "tier_battery_limit honours the no-root warn-and-skip contract"
 # The no-battery path must report and return 0, never fail a provision run on a
 # desktop or a VPS.

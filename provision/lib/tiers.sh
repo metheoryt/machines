@@ -524,6 +524,25 @@ if [ "$START" -ge "$PCT" ]; then
   printf 'charge-upto: floor lowered to %s%% to stay under the %s%% ceiling\n' "$START" "$PCT" >&2
 fi
 
+# The active charge mode, or `n/a` where the EC exposes none. A helper because the
+# obvious inline form is wrong twice over, both found on g513ie (ASUS asus-wmi),
+# which exposes charge_control_end_threshold and NOTHING else — no
+# charge_control_start_threshold, no charge_types:
+#   1. `tr ' ' '\n' < "$b/charge_types" 2>/dev/null` leaks. A redirection is
+#      processed before the command's own stderr redirect applies, so the SHELL
+#      prints `cannot open …: No such file` on its own stderr. The unit exited 0
+#      and still logged an error line on every boot and resume — success that
+#      reads like a failure, which is worse than either.
+#   2. `… | tr -d '[]' || echo n/a` never fired: `||` binds to the LAST command
+#      of the pipeline, and that one succeeds on empty input. So an absent
+#      charge_types printed `mode ` with nothing after it.
+# Test readability first, and let the fallback be a real branch.
+charge_mode() {
+  [ -r "$1/charge_types" ] || { echo n/a; return 0; }
+  m="$(tr ' ' '\n' < "$1/charge_types" | grep '^\[' | tr -d '[]')"
+  [ -n "$m" ] && echo "$m" || echo n/a
+}
+
 found=0
 for b in /sys/class/power_supply/BAT*; do
   [ -f "$b/charge_control_end_threshold" ] || continue
@@ -573,7 +592,7 @@ for b in /sys/class/power_supply/BAT*; do
     "$(basename "$b")" \
     "$(cat "$b/charge_control_start_threshold" 2>/dev/null || echo '?')" \
     "$(cat "$b/charge_control_end_threshold")" \
-    "$(tr ' ' '\n' < "$b/charge_types" 2>/dev/null | grep '^\[' | tr -d '[]' || echo n/a)" \
+    "$(charge_mode "$b")" \
     "$(cat "$b/capacity")" "$(cat "$b/status")"
 done
 

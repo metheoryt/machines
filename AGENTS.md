@@ -260,6 +260,11 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   only in Custom charge mode and comes up in `[Fast]`, so the old NixOS module
   displayed a limit it was not enforcing. This one writes the mode too, and adds
   a start/floor threshold so the cell holds steady instead of cycling.
+  **All of that is Dell-specific and inert on the ASUS box**: measured on g513ie
+  2026-09-08, `BAT0` exposes `charge_control_end_threshold` and nothing else — no
+  start threshold, no `charge_types` — so the mode write never happens and
+  `CHARGE_START` has nothing to write to. The ceiling still applies (85, unit
+  enabled, exit 0).
   **On BOTH posix profiles since 2026-09-08, and the axis is mains, not
   profile** — latitude (`server`) and g15 (`workstation`) both live on AC.
   `workstation` used to omit it as "a laptop someone carries", which described

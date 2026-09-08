@@ -2940,6 +2940,44 @@ not a step anyone missed.
   - **It still needs one privileged run at g15's keyboard.** The tier is in the
     plan now and `--dry-run` says "no root available non-interactively —
     skipping the battery charge limit"; only a TTY run applies it.
+- **The cap is APPLIED on g15 (2026-09-08): ceiling 85, unit enabled,
+  `Result=success`, `ExecMainStatus=0`.** He ran `bash provision/linux.sh` at the
+  keyboard. What the run revealed about this hardware and about the tier:
+  - **g513ie exposes ONLY `charge_control_end_threshold`.** No
+    `charge_control_start_threshold`, no `charge_types` — so the whole Dell story
+    the tier was built around (the EC honours the ceiling only in `Custom` mode,
+    which is why the mode write exists) is inert on ASUS asus-wmi, and the
+    `CHARGE_START=80` in `/etc/default/charge-upto` is a knob with nothing to
+    write. The cap itself works: `charge-upto` reported
+    `BAT0 ?-85% mode  — now 100%, Full`.
+  - **That report line carried a real bug, now fixed.** It read `charge_types`
+    inline and was wrong twice: `tr … < "$b/charge_types" 2>/dev/null` **leaks**,
+    because a redirection is processed before the command's own stderr redirect
+    applies, so the SHELL prints `cannot open …: No such file` — an error line in
+    the journal on every boot and resume of a unit that exits 0. And
+    `… | tr -d '[]' || echo n/a` never fired, because `||` binds to the last
+    command of the pipeline, which succeeds on empty input, so the mode column
+    printed empty instead of `n/a`. Both reproduced before fixing, both covered.
+    Replaced by a guarded `charge_mode()` helper.
+  - **The installed `/usr/local/bin/charge-upto` is still the buggy copy** — the
+    tier writes it, so the fix reaches the box only on the next privileged run.
+    Harmless (one stderr line, cosmetic mode column), but it is why the journal
+    still shows the error until then.
+  - **A nested function in a tier broke five unrelated assertions at once.**
+    `tiers.test.sh` extracted tier bodies with `awk '/^tier_x\(\)/,/^}/'`, which
+    stops at the first column-0 `}` — `charge_mode`'s. The fix is in the test
+    (run to the next tier definition, then trim back to the last column-0 `}`),
+    NOT indenting the function's brace to placate the awk. The other four tiers
+    still use the fragile form; give it this one the moment one of them grows a
+    nested function.
+- **`hasnt` invites two mistakes and I made both, in two suites.** Its pattern
+  goes to `grep -E`, so (1) a `$` in it is an end-of-line anchor, not a literal —
+  `hasnt … '< "$b/charge_types"'` could never fire, and a mutation restoring the
+  exact bad line passed clean; and (2) over a raw body it matches the COMMENT
+  that quotes the bad form to explain it. Four wrong assertions between this and
+  `tailscale-wsl.test.sh` before both were right. There is now a `code()` filter
+  next to `has`/`hasnt` in `tiers.test.sh`: **an assertion about what runs must
+  read only what runs.** `has` is usually safe raw; `hasnt` usually is not.
 - **The PRIV=0 observation survives on its own, as a class.** g15 has no NOPASSWD
   sudo, so on any non-interactive run every privileged tier that IS in its list
   degrades to a warn and exit 0 — `bash provision/linux.sh` prints "no root
