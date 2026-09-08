@@ -85,8 +85,12 @@ case "$PROFILE" in
     #
     # `air` is excluded by being darwin, not by being workstation: macos.sh has
     # its own tier list and no battery tier, so nothing here reaches it. The one
-    # box this newly touches is desktop-wsl, where it is a no-op — a WSL distro
-    # exposes no /sys/class/power_supply/BAT*, so the tier reports and returns 0.
+    # box this newly touches is desktop-wsl, where it is a no-op — but NOT for the
+    # reason it is tempting to write down. Measured there 2026-09-08: the distro
+    # DOES expose /sys/class/power_supply/BAT1 (and AC1); what it has not got is
+    # `charge_control_end_threshold` inside it. The tier's loop tests for that
+    # file rather than for a battery, which is what makes it return 0 here — a
+    # check for the directory would have run on and failed.
     #
     # A future CARRIED Linux laptop would inherit a cap it may not want. That is
     # the accepted cost of keying on the profile rather than on a per-machine

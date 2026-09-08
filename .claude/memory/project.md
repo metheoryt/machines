@@ -2928,6 +2928,11 @@ not a step anyone missed.
     battery tier, and the tier could not be shared anyway — it writes
     `charge_control_*` and `charge_types` under `/sys`. So the assertion that
     actually guards the carried laptop is `hasnt "$mac"`, not `hasnt "$ws"`.
+  - **desktop-wsl no-ops, but not for the obvious reason.** Measured: the distro
+    exposes `BAT1` and `AC1` under `/sys/class/power_supply/`; what is absent is
+    `charge_control_end_threshold` inside it. `tier_battery_limit` loops testing
+    for that FILE, not for a battery directory, which is the only reason it
+    returns 0 there — I first wrote "WSL exposes no BAT*" and that is false.
   - **`tiers.test.sh` has a macos↔linux parity check** that reads any
     one-driver-only tier as drift unless it is an enumerated exception; adding
     the tier broke it, correctly. `battery_limit` is now its sixth documented
