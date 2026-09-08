@@ -75,6 +75,18 @@ backup_client_install() {
         return 1
     fi
 
+    # ~/.local/bin BEFORE THE PROBE, not after it. The probe decides whether to
+    # run backup/restic-install.sh, which is `sudo apt-get` plus a curl'd
+    # installer into /usr/local/bin -- so on a box with no NOPASSWD sudo it
+    # cannot succeed, and a wrong "missing" verdict there is a hard failure of
+    # the role rather than a slow path. g15 is that box: resticprofile is
+    # installed in ~/.local/bin (the same place tier_gortex puts gortex, for the
+    # same reason) and a NON-INTERACTIVE ssh PATH does not include it, so a
+    # provision run driven over ssh saw a binary that is plainly installed as
+    # absent. Appended, not prepended: a system-wide install still wins, which
+    # is what keeps latitude's and hub's behaviour unchanged.
+    export PATH="$PATH:$HOME/.local/bin"
+
     local missing=""
     command -v restic        >/dev/null 2>&1 || missing="restic"
     command -v resticprofile >/dev/null 2>&1 || missing="$missing resticprofile"

@@ -115,6 +115,38 @@ PATH="$tmp/bin:$PATH" TRIPWIRE="$TRIPWIRE" bash "$r/provision/backup-client.sh" 
 [ -e "$TRIPWIRE" ] && pass "apply runs install-tasks.sh" \
   || die "apply did NOT run install-tasks.sh — the whole point of the role"
 
+# ── 8b. resticprofile in ~/.local/bin is FOUND, not reported missing ────────
+# g15 has no NOPASSWD sudo, so backup/restic-install.sh (apt + a curl'd
+# installer into /usr/local/bin) cannot run there at all -- which makes a wrong
+# "missing" verdict a hard failure of the role rather than a slow path. It
+# installs resticprofile in ~/.local/bin instead, the same place tier_gortex
+# puts gortex, and a NON-INTERACTIVE ssh PATH does not include that directory.
+# Asserted through the dry-run message because that is the branch the verdict
+# feeds; the tripwire proves the install was not even considered.
+r="$tmp/localbin"; mkrepo "$r"; mkdir -p "$r/backup/whoever" "$tmp/lbin" "$tmp/fakehome/.local/bin"
+printf '#!/bin/sh\necho ran > "$TRIPWIRE"\n' > "$r/backup/whoever/install-tasks.sh"
+printf '#!/bin/sh\nexit 0\n' > "$tmp/lbin/restic"; chmod +x "$tmp/lbin/restic"
+printf '#!/bin/sh\nexit 0\n' > "$tmp/fakehome/.local/bin/resticprofile"
+chmod +x "$tmp/fakehome/.local/bin/resticprofile"
+rm -f "$TRIPWIRE"
+out="$(HOME="$tmp/fakehome" PATH="$tmp/lbin:/usr/bin:/bin" TRIPWIRE="$TRIPWIRE" \
+       bash "$r/provision/backup-client.sh" --dry-run whoever 2>&1)"
+case "$out" in
+  *"restic + resticprofile present"*)
+    pass "resticprofile in ~/.local/bin counts as present" ;;
+  *"would install"*)
+    die "resticprofile in ~/.local/bin reported MISSING — the role would try a sudo install" ;;
+  *) die "unexpected dry-run output — $out" ;;
+esac
+# And the mirror: with ~/.local/bin empty it must still report it missing, or
+# the case above would pass for the wrong reason.
+out="$(HOME="$tmp/emptyhome" PATH="$tmp/lbin:/usr/bin:/bin" TRIPWIRE="$TRIPWIRE" \
+       bash "$r/provision/backup-client.sh" --dry-run whoever 2>&1)"
+case "$out" in
+  *"would install"*resticprofile*) pass "with no ~/.local/bin, resticprofile is still missing" ;;
+  *) die "missing resticprofile was not reported — $out" ;;
+esac
+
 # ── 9. The Windows half is REGISTERED ───────────────────────────────────────
 # provision.ps1 has no PLANNED_ROLES equivalent: a role missing from its
 # $RoleExecutors map prints "not yet implemented (skipped)" and leaves $rc at 0.

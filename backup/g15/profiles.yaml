@@ -1,0 +1,211 @@
+# yaml-language-server: $schema=https://creativeprojects.github.io/resticprofile/jsonschema/config-1.json
+#
+# g15's restic client — the personal-projects host, Ubuntu 26.04 since
+# 2026-09-07. Until this file existed, **g15 was in restic nowhere**: its roles
+# were `base, ssh-server, agents, dotfiles, repos` and the only second copy of
+# anything on it was a hand-made staging pile on latitude, left over from the
+# Windows wipe. A copy nothing refreshes is not a backup, which is the whole
+# argument for this file.
+#
+# ── WHAT IS IN, AND WHY EACH ONE EARNS IT ────────────────────────────────────
+#
+#   /home/me/my      8.7 G. Eleven personal-project checkouts. All have GitHub
+#                    remotes, so the tracked content is not what this protects —
+#                    the gitignored content is, and it is not reconstructible:
+#                      qaz-code/laws        7.6 G scraped corpus (codes,
+#                                           ministerial, local, government).
+#                                           `laws/` is in .gitignore. It is the
+#                                           INPUT the 184 G database was built
+#                                           from, so it is the cheapest thing in
+#                                           the fleet to lose expensively.
+#                      qaz-code/build-manifest   48 M
+#                      .env × 4             arbuz-concierge, buton, embedthat,
+#                                           telegrind
+#                      buton/google-account.json, buton/harvester.db,
+#                      telegrind/local/*.json
+#                    Plus unpushed commits: four of these repos
+#                    (buton, embedthat, skep, vps) have been dirty for 65+
+#                    fleet-selfpull ticks and their work only exists here.
+#
+#   /home/me/Music   89 G, 18377 entries. Not reconstructible. It has a second
+#                    copy today at latitude:/mnt/spare320/music-from-g513ie —
+#                    the phase-1 staging pile, which is exactly the shape this
+#                    file replaces. ONCE THE FIRST SNAPSHOT VERIFIES, that
+#                    directory is redundant and should be deleted; it is
+#                    deliberately NOT deleted in the same change that creates
+#                    this repo, and it sits on the same drive as the repo, so
+#                    removing it is a tidiness win rather than a redundancy one.
+#
+# ── WHAT IS DELIBERATELY OUT ─────────────────────────────────────────────────
+#
+#   /data/qaz-code/pgdata — 186 G, qaz-law's postgres (the DEFAULT `postgres`
+#   database: act_version 104 G + act_version_chunk 80 G, pgvector 0.8.4). It is
+#   NOT here, and the reason is storage, not method:
+#
+#     * Method is settled. A dump is the wrong branch — `pg_dump -Fc` of 184 G
+#       costs hours and local space, and compressed custom-format output dedupes
+#       badly across snapshots. A cleanly stopped PGDATA copied physically is
+#       already PROVEN on this exact data: phase 1 staged it with the DB shut
+#       down (198,834,159,212 B / 1268 files) and postgres 18.4 came up on the
+#       restore with a clean recovery. The container's STOPSIGNAL is SIGINT —
+#       postgres fast shutdown, i.e. a clean one — and `me` is in the `docker`
+#       group here, so stop/start needs no privilege.
+#     * Scope does. PGDATA is `999:0` mode 700 (uid 999 is `postgres` in the
+#       container and `dnsmasq` on this host — check it numerically), so reading
+#       it needs root, i.e. `schedule-permission: system` and a sudo'd
+#       `resticprofile schedule`. g15 has no NOPASSWD sudo.
+#     * Space is the blocker. The REST server's data path is
+#       /mnt/spare320/restic-rest on a 293 G drive with 164 G free, already
+#       carrying latitude's own repo (12 G) and desktop-wsl's (29 G). A ~130 G
+#       DB leg would leave that drive under 12% free with no room for prune to
+#       work in. Declaring the profile anyway would produce a config that fails
+#       every night, which is the mistake ../latitude/profiles.yaml already
+#       documents for the photo libraries.
+#
+#   So the DB leg waits on ONE decision: which drive holds it. /mnt/immich
+#   (internal nvme0n1p1, 655 G free — not one of the flaky docks) is the obvious
+#   home, but RESTIC_DATA_PATH lives in the `vps` repo's
+#   homeserver/restic-server stack, because the server is a service and services
+#   live there. Until then the 186 G staging leg at
+#   latitude:/mnt/immich-mirror/g15-staging/pgdata is the ONLY second copy and
+#   must not be deleted.
+#
+#   Also out: ~/.config (4.3 G, almost all Orca runtime state), ~/snap,
+#   ~/Applications (extracted AppImages, re-downloadable), and everything the
+#   dotfiles bare repo already tracks on the `g15` branch.
+#
+# ── THE REPOSITORY, AND WHY NO URL IS COMMITTED ──────────────────────────────
+#
+# Same arrangement as ../desktop-wsl/profiles.yaml, for the same reason: the
+# REST server requires htpasswd auth, restic's REST backend accepts credentials
+# only inside the URL, and this file is tracked and the repo is PUBLIC. A URL
+# here would commit a transport password; a URL on the command line would put it
+# in `ps`. It lives in /home/me/.config/restic/repo.txt, read via
+# RESTIC_REPOSITORY_FILE, and expands to:
+#
+#     rest:http://g513ie:<transport-password>@100.64.0.8:8001/g513ie
+#
+# Raw tailnet IP, not MagicDNS, to match the rest of the fleet — a name would
+# add a dependency on --accept-dns wherever this runs. The path segment `g513ie`
+# is also the htpasswd USERNAME, which is what the server's --private-repos
+# requires: it maps a user to one top-level directory, so g513ie may reach
+# /g513ie and nothing else. The name is the OS hostname, matching g614jv's
+# precedent rather than the logical fleet name.
+#
+# THREE host-local files, none of them in any repo, all mode 600:
+#   ~/.config/restic/pass.txt       the repo encryption password
+#   ~/.config/restic/transport.txt  the htpasswd password, kept separately so
+#                                   repo.txt can be regenerated from it
+#   ~/.config/restic/repo.txt       the URL above
+# They are escrowed in the private dotfiles repo on this machine's `g15` branch,
+# which is the authoritative off-box copy — a rebuilt g15 restores them from
+# there. pass.txt is escrowed a SECOND time on latitude's branch, as
+# ~/.config/restic/g513ie.pass.txt, because retention for this repo runs there
+# (see the g513ie-maintenance profile in ../latitude/profiles.yaml).
+#
+# TRUST FACT, stated rather than worked around: /home/me/my/vps/backup/wsl/pass.txt
+# is desktop-wsl's restic password, and it is inside this backup's source. That
+# is fine — this repo is encrypted — but it means whoever holds g15's key can
+# read desktop-wsl's repo. It is not excluded: dropping one file out of a backup
+# to make a trust boundary look tidier would leave the file itself unprotected,
+# which is worse.
+
+version: "1"
+
+includes:
+  - ../base.yaml
+
+g15:
+  inherit: base-job
+  # Music is FLAC/MP3 and will not shrink; `laws/` is 7.6 G of text and will.
+  # `auto` costs nothing on the incompressible half — restic skips a chunk whose
+  # compressed form is no smaller.
+  compression: auto
+  # /home/me and /data are both on nvme0n1p2; nothing under the sources is a
+  # separate mount today. Set anyway so a future external drive mounted inside
+  # ~/my cannot silently join the backup.
+  one-file-system: true
+  password-file: "/home/me/.config/restic/pass.txt"
+  env:
+    RESTIC_PASSWORD_FILE: "/home/me/.config/restic/pass.txt"
+    RESTIC_REPOSITORY_FILE: "/home/me/.config/restic/repo.txt"
+  # OPT-IN INITIALISATION, AND THIS PROFILE DOES NOT OPT IN. base.yaml declares
+  # no `initialize` anywhere on purpose (a global one can never be overridden by
+  # a profile — measured on 0.33.1; see that file), so the only way a client
+  # creates a repository is by asking. This one never asks.
+  #
+  # The hazard is the same one that cost desktop-wsl its history-restart risk:
+  # /mnt/spare320 on latitude is mounted `nofail`, so when that USB drive is
+  # absent docker bind-mounts an empty directory and the REST server serves it
+  # happily. An initialising client would create a fresh zero-history repo
+  # against it and report success. That drive was genuinely gone for four and a
+  # half hours on 2026-08-04. Not opting in turns that into a loud "repository
+  # does not exist" that writes nothing.
+  #
+  # The repo is created ONCE, by hand: `resticprofile -n g15 init`.
+  initialize: false
+  pack-size: 16
+  backup:
+    source:
+      - "/home/me/my"
+      - "/home/me/Music"
+    exclude:
+      # 1.1 G of rebuildable caches across ~/my, measured 2026-09-08.
+      - "**/node_modules/"
+      - "**/.venv/"
+      - "**/__pycache__/"
+      - "**/.ruff_cache/"
+      - "**/.pytest_cache/"
+      - "**/.mypy_cache/"
+      - "**/.gortex/"
+      - "**/.DS_Store"
+      - "**/*.tmp"
+    exclude-caches: true
+    # 05:00. latitude's own backup is 04:30 and took 3 s; desktop-wsl's client
+    # is 06:00. This lands between them so three clients are not chunking
+    # against one USB drive at once.
+    schedule: "05:00"
+    # NOT base.yaml's `user`, for the same reason ../desktop-wsl/profiles.yaml
+    # spells out: resticprofile's `user` permission means a ROOT-OWNED unit that
+    # merely runs as the user, so installing it needs sudo — and g15 has no
+    # NOPASSWD sudo and no TTY when driven over ssh. `user_logged_on` produces a
+    # genuine `systemctl --user` unit and needs no privilege at all.
+    #
+    # The name is misleading: it does not mean the backup only runs while
+    # someone is logged in. `loginctl show-user me -p Linger` is `yes` here, so
+    # the user manager persists without a session — which is how this box's
+    # dotfiles-sync, git-autofetch and fleet-selfpull user timers already fire
+    # unattended. If linger is ever turned off this schedule stops silently.
+    schedule-permission: user_logged_on
+    # KEPT at base.yaml's `true`, unlike both of latitude's profiles, which
+    # override it to false. That override is right there and wrong here:
+    # latitude has sleep/suspend/hibernate masked and every lid action set to
+    # ignore, so running on battery means the mains failed. g15 is a real
+    # laptop that suspends and gets carried around, so "on battery" is ordinary
+    # operation and chunking 96 G off it would be rude. The cost is that a
+    # missed window is silent — the unit still exits 0 with
+    # `WARN running on battery, leaving now`.
+    schedule-ignore-on-battery: true
+  retention:
+    # OFF, and it must stay off — the server runs --append-only, so `forget` and
+    # `prune` get 403 on every DELETE but a lock, and with base.yaml's
+    # `after-backup: true` inherited that 403 fails the whole backup run rather
+    # than just the retention step. Retention for this repo runs on latitude,
+    # against the filesystem, bypassing the server: see the
+    # `g513ie-maintenance` profile in ../latitude/profiles.yaml. Unlike
+    # desktop-wsl's client, whose comment records a gap that had no home, this
+    # one has a home from the start.
+    before-backup: false
+    after-backup: false
+    prune: false
+  check:
+    # NO SCHEDULE HERE, deliberately. The integrity check for this repository is
+    # `g513ie-maintenance`'s, on latitude — the box that HOLDS the repo, not the
+    # one that writes it. A client-side check only runs when the client runs, so
+    # it goes dark at exactly the failure this system is most exposed to: a
+    # client that quietly stopped. That argument is written out at length on the
+    # g614jv-maintenance profile and applies here unchanged. This section exists
+    # only so `check-before` is never added without noticing it would inherit
+    # `read-data-subset` from here.
+    read-data-subset: 5%
+    schedule-permission: user_logged_on

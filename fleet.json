@@ -23,7 +23,7 @@
     "g15": {
       "platform": "debian",
       "tailnet": { "ip": "100.64.0.10" },
-      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos"],
+      "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-client"],
       "repo_groups": ["my"],
       "detect": { "hostname": "g513ie" }
     },

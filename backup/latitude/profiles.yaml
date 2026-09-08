@@ -294,3 +294,77 @@ g614jv-maintenance:
     schedule-permission: system
     schedule-lock-wait: 15m
     read-data-subset: 5%
+
+# g15's repo, pruned and checked from the host that HOLDS it.
+#
+# Second instance of the g614jv-maintenance arrangement above, and written as a
+# copy on purpose rather than factored into a template: the two differ in
+# repository path, password path and schedule, and every one of those is a
+# decision with a reason attached. A shared template would hide the reasons and
+# save four lines.
+#
+# WHY IT IS HERE AT ALL: the REST server runs --append-only, so g15's client
+# cannot forget or prune — every DELETE but a lock gets 403, and with
+# base.yaml's `after-backup: true` that 403 would fail the whole backup run.
+# Retention therefore runs on the filesystem, bypassing the server. Unlike
+# desktop-wsl, whose profile documents a pruning gap that had no home for four
+# days, g15's client has this from the moment it was created.
+#
+# The password is escrowed TWICE by design: on g15's dotfiles branch for its own
+# restore, and at /home/me/.config/restic/g513ie.pass.txt on THIS host's branch
+# for this job, mode 600, readable by the root unit below. Same trust boundary
+# note as g614jv: --append-only protects against a compromised CLIENT, not
+# against latitude, which holds both the data and the key.
+g513ie-maintenance:
+  inherit: base-job
+  # Filesystem path, NOT rest:. That is the whole point — the server is what
+  # forbids the deletes this profile exists to perform.
+  repository: "/mnt/spare320/restic-rest/g513ie"
+  password-file: "/home/me/.config/restic/g513ie.pass.txt"
+  env:
+    RESTIC_PASSWORD_FILE: "/home/me/.config/restic/g513ie.pass.txt"
+
+  # MOUNT ASSERTION, for the reason spelled out on the two profiles above:
+  # /mnt/spare320 is `nofail`, so when the drive is absent the mountpoint is an
+  # ordinary empty directory and every path under it still "exists". Testing the
+  # repo's own `config` object covers drive-absent and repo-absent in one check.
+  run-before:
+    - test -f /mnt/spare320/restic-rest/g513ie/config
+
+  forget:
+    # base-job's 7/8/12/10 would be wrong here in one direction that matters:
+    # g15's sources are a scraped corpus and a music library, both of which
+    # change rarely and matter years later, so the monthly/yearly end is worth
+    # more than a long daily tail.
+    keep-daily: 14
+    keep-weekly: 8
+    keep-monthly: 12
+    keep-yearly: 10
+    prune: true
+    # 09:30. The drive already carries four scheduled writers — latitude's
+    # backup 04:30, g15's client 05:00, desktop-wsl's 06:00, g614jv's forget
+    # 07:30 (and its check Sun 08:30). This is clear of all of them, and clear
+    # of a slow g15 first run in particular.
+    schedule: "09:30"
+    # System scope: the repo directory is root-owned (drwx------) because the
+    # container writes it as root.
+    schedule-permission: system
+    schedule-lock-wait: 10m
+
+  retention:
+    # Inert — this profile never runs a backup — but base-job's policy would
+    # forget with the WRONG numbers if anyone ever invoked `backup` on it. Off
+    # explicitly rather than by nobody doing that.
+    before-backup: false
+    after-backup: false
+    prune: false
+
+  check:
+    # SUNDAY 10:30, after this profile's own prune and after g614jv's check at
+    # 08:30. `restic check` takes an EXCLUSIVE lock, so ordering it after the
+    # prune rather than between the writers is deliberate: a check holding that
+    # lock at 09:25 would make the prune wait out its 10m and then fail.
+    schedule: "Sun 10:30"
+    schedule-permission: system
+    schedule-lock-wait: 15m
+    read-data-subset: 5%
