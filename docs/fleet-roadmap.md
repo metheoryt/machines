@@ -864,7 +864,17 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   `/mnt/immich-mirror/g15-staging/pgdata` is the **only** second copy of that
   database and must not be deleted.
 
-  Separately, and now PROVEN rather than pending:
+  **Update 2026-09-08 — the drive decision is DEFERRED pending the new 8 TB HDD.**
+  It is in acceptance testing (identity gate passed, surface test to start by
+  2026-09-18 — see project memory's *Приёмка нового диска*), and a disk that may
+  yet go back to DNS is not something to build a backup target on. Until it is
+  accepted, **the 186 G `pgdata` staging leg at
+  `/mnt/immich-mirror/g15-staging/pgdata` stays put and must not be deleted** —
+  it remains the ONLY second copy of that database, and it sits on `/dev/sdd2`,
+  the dock this repo calls the flaky one. Space is no longer the binding
+  constraint (see below); the drive is.
+
+  Separately, and now DONE rather than pending:
   **`latitude:/mnt/spare320/music-from-g513ie` (89 G) is redundant to the restic
   snapshot** — verified 2026-09-08 against snapshot `b46c563d` directly, not
   through g15's live tree:
@@ -882,10 +892,17 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   exactly like a broken backup. `--recursive` is required whenever a path filter
   is given.
 
-  Deleting it frees **89 G on spare320 (82 G → 171 G free)**, which is the only
-  thing that makes a DB leg fit at all — so it is no longer merely a tidiness
-  win, it is the first half of the decision above. **Not deleted: awaiting the
-  owner's go, since it is 89 G on another box.**
+  **Deleted 2026-09-08 with the owner's go: spare320 went 82 G → 170 G free.**
+  Two things worth carrying forward from doing it:
+  - **The pile was root-owned**, so the unprivileged `rm -rf` failed part-way
+    through with `Permission denied` on most of the tree (14878 files → 537) and
+    left the directory standing. `sudo rm -rf` finished it. latitude has
+    NOPASSWD sudo; g15 does not — the asymmetry that decides which box can do
+    this kind of cleanup at all.
+  - **The pre-flight guard asserted the exact file count and byte total before
+    deleting**, which is what made a two-step deletion safe to finish: the
+    identity was established on the full tree, so the partial state needed no
+    re-derivation.
 
 ## Done
 

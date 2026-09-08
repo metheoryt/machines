@@ -34,7 +34,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_docker tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex.
@@ -141,12 +141,19 @@ has   "$body" 'PRIV'        "tier_statusboard honours the no-root warn-and-skip 
 # gets a hwmon node. Without it the disk block's temperature column is dashes.
 has   "$body" 'smartmontools' "tier_statusboard installs smartmontools (USB drive temperatures)"
 
-# battery_limit is server-only, and its whole reason for existing is the mode
-# write: the retired NixOS module set the threshold alone and the EC ignored it.
+# battery_limit's reason for existing is the mode write: the retired NixOS module
+# set the threshold alone and the EC ignored it.
+#
+# It is on BOTH posix profiles since 2026-09-08, and the rule is MAINS, not
+# profile: latitude (server) and g15 (workstation) both live on AC, so both cap
+# the cell. `air` is excluded by being darwin — macos.sh has its own list — and
+# NOT by its profile, which is why the `mac` assertion below is the one that
+# actually protects the carried laptop. Flip these two and you have said
+# something about hardware you did not mean.
 has   "$srv" '^tier_battery_limit$'      "server installs the battery charge limit"
-hasnt "$ws"  '^tier_battery_limit$'      "workstation omits the battery charge limit"
+has   "$ws"  '^tier_battery_limit$'      "workstation installs it too (g15 is mains-bound)"
 hasnt "$hub" '^tier_battery_limit$'      "hub omits the battery charge limit"
-hasnt "$mac" '^tier_battery_limit$'      "macOS omits the battery charge limit"
+hasnt "$mac" '^tier_battery_limit$'      "macOS omits it — air is carried"
 bbody="$(awk '/^tier_battery_limit\(\)/,/^}/' "$TIERS")"
 has "$bbody" 'charge_types'  "tier_battery_limit writes charge_types, not just the threshold"
 has "$bbody" 'Custom'        "tier_battery_limit selects the EC's Custom charge mode"
@@ -360,7 +367,17 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # to install at all — the engine there is Docker Desktop, a cask. Adding it to
 # tier_brew_cask to keep the lists textually equal would change what installs on
 # air, which is a different decision from this one.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker)$' | tr '\n' ' '; }
+#
+# tier_battery_limit is the sixth, added 2026-09-08, and it is the one exception
+# that is about the HARDWARE rather than the packaging. The cap is for a box that
+# lives on mains: latitude and g15 do, so both posix profiles carry it; `air` is
+# a laptop that gets carried, so macos.sh does not. Two things make this a real
+# exception rather than the drift this assertion hunts for — the omission is the
+# decision (owner, 2026-09-08), and the tier could not be shared anyway, since it
+# writes `charge_control_*` and `charge_types` under /sys, which macOS has not
+# got. A macOS charge cap would be different code, not this tier in a second
+# list.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

@@ -260,6 +260,14 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   only in Custom charge mode and comes up in `[Fast]`, so the old NixOS module
   displayed a limit it was not enforcing. This one writes the mode too, and adds
   a start/floor threshold so the cell holds steady instead of cycling.
+  **On BOTH posix profiles since 2026-09-08, and the axis is mains, not
+  profile** — latitude (`server`) and g15 (`workstation`) both live on AC.
+  `workstation` used to omit it as "a laptop someone carries", which described
+  `air` and was untrue of both workstation laptops the fleet has. `air` is
+  excluded by being darwin: `macos.sh` has no battery tier and could not share
+  this one, which writes `/sys` nodes macOS lacks. It needs root, so on a box
+  with no NOPASSWD sudo (g15) it warns and skips on every non-interactive run —
+  applying it there means `bash provision/linux.sh` at that keyboard.
 - **`tier_gortex`** — installs the release named in `provision/gortex.version`
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
   darwin_arm64, darwin_amd64). It untars the pinned release **unconditionally,

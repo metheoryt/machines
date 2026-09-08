@@ -75,7 +75,23 @@ case "$PROFILE" in
     # distro — Docker Desktop owns the engine there and provision/wsl-fixes.sh
     # owns the CLI — so it reaches only a native Linux desktop, which is what
     # this profile now also covers. See the tier for why it never upgrades.
-    TIERS=(apt_min apt_dev docker agents_config git_base gortex
+    # battery_limit rides here as of 2026-09-08, and the axis is NOT the profile:
+    # it is whether the box lives on mains. This list used to omit it with the
+    # comment "a laptop someone carries", which described `air` and was simply
+    # untrue of the two workstation-profile laptops the fleet actually has —
+    # g15 sits on AC as the personal-projects host, desktop as the Windows box
+    # (whose cap is G-Helper's, not this repo's). A cell held at 100% on AC
+    # swells, which is the whole reason latitude has the cap.
+    #
+    # `air` is excluded by being darwin, not by being workstation: macos.sh has
+    # its own tier list and no battery tier, so nothing here reaches it. The one
+    # box this newly touches is desktop-wsl, where it is a no-op — a WSL distro
+    # exposes no /sys/class/power_supply/BAT*, so the tier reports and returns 0.
+    #
+    # A future CARRIED Linux laptop would inherit a cap it may not want. That is
+    # the accepted cost of keying on the profile rather than on a per-machine
+    # knob, and the fix then is a fleet.json field, not a re-split of this list.
+    TIERS=(apt_min apt_dev docker battery_limit agents_config git_base gortex
            "agent_clis claude" shell_init autofetch
            ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
@@ -121,7 +137,10 @@ case "$PROFILE" in
     # whose hardware is a fact of the deployment rather than of the profile. A
     # laptop wired to the wall forever needs its charge ceiling enforced, and the
     # tier is a no-op wherever the EC exposes no threshold — so it costs a mains-
-    # only box nothing to have it in the plan.
+    # only box nothing to have it in the plan. NOT server-only since 2026-09-08:
+    # workstation carries it too, because g15 is also mains-bound. See that
+    # list's comment for why the old "workstation = a carried laptop" split was
+    # wrong.
     # rapl_read follows statusboard for the same reason and with the same shape: the
     # board's power row reads the CPU's energy counter, which ships root-only, and
     # this widens it to the board's group. It is a no-op on hardware with no RAPL

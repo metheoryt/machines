@@ -135,7 +135,11 @@ backup scripts.
 
 ### Battery charge limiting
 
-The laptops cap charging via `charge-upto`, installed by `tier_battery_limit`:
+The mains-bound laptops — latitude and g15 — cap charging via `charge-upto`,
+installed by `tier_battery_limit` on both posix profiles. `air` is deliberately
+uncapped: it gets carried and discharged, so a ceiling would just shorten its
+runtime.
+
 
 ```bash
 charge-upto 80         # ceiling, applied now and persisted

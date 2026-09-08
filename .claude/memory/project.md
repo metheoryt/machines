@@ -2906,20 +2906,35 @@ the spec's checkboxes. Three of the four open phase items were already closed by
 the distro; the fourth turned out to be a decision the profile had already made,
 not a step anyone missed.
 
-- **The charge cap is a DECISION on this box, not a missed step — and my first
-  read of it was wrong in a way worth recording.** Measured: `BAT0`
-  `charge_control_end_threshold` = 100, no `charge-upto` script, default file or
-  unit. I diagnosed that as `tier_battery_limit`'s `PRIV=0` guard skipping it and
-  told him to re-run the driver at the keyboard. The tier is **never in g15's
-  plan at all**: g15 resolves to `workstation` and `battery_limit` is in the
-  `server` list only, deliberately — `linux.sh`'s comment says the cap is for "a
-  laptop wired to the wall forever", "deliberately absent from workstation (a
-  laptop someone carries)", and `provision/tests/tiers.test.sh:147` asserts that
-  absence. **Read the profile's tier list before explaining why a tier did not
-  run**; a plausible mechanism inside the tier body is not evidence the tier was
-  reached. The spec's own §4 bullet ("Charge limit via `tier_battery_limit`") is
-  what seeded the assumption, so the spec was wrong first — which is the case for
-  checking the code over the plan even when the plan is this repo's.
+- **The charge cap: my first read of WHY it was missing was wrong, and the rule
+  it turned up is worth more than the fix.** Measured: `BAT0`
+  `charge_control_end_threshold` = 100, no `charge-upto`, no default file, no
+  unit. I diagnosed `tier_battery_limit`'s `PRIV=0` guard and told him to re-run
+  the driver. The tier was **never in g15's plan**: g15 is `workstation`, which
+  listed no `battery_limit`, and `tiers.test.sh` asserted that absence.
+  **Read the profile's tier list before explaining why a tier did not run** — a
+  plausible mechanism inside a tier body is not evidence the tier was reached.
+  The spec's own §4 said "Charge limit via `tier_battery_limit`", so the plan was
+  wrong first, which is the case for checking the code even against this repo's
+  own documents.
+- **THE RULE, from him (2026-09-08): a charge cap follows MAINS, not the profile
+  and not the form factor.** "Both g15 and desktop (g16) are always-on-power
+  hosts. So they both need a battery cap… Air won't get a cap because it's
+  carried." So `battery_limit` is now on **both** posix profiles;
+  `linux.sh`'s old "workstation = a laptop someone carries" described `air`
+  alone and was untrue of both workstation-profile laptops the fleet has.
+  desktop's cap is G-Helper's under Windows, not this repo's. Three consequences:
+  - **`air` is protected by being darwin, not by its profile.** `macos.sh` has no
+    battery tier, and the tier could not be shared anyway — it writes
+    `charge_control_*` and `charge_types` under `/sys`. So the assertion that
+    actually guards the carried laptop is `hasnt "$mac"`, not `hasnt "$ws"`.
+  - **`tiers.test.sh` has a macos↔linux parity check** that reads any
+    one-driver-only tier as drift unless it is an enumerated exception; adding
+    the tier broke it, correctly. `battery_limit` is now its sixth documented
+    exception — the first that is about hardware rather than packaging.
+  - **It still needs one privileged run at g15's keyboard.** The tier is in the
+    plan now and `--dry-run` says "no root available non-interactively —
+    skipping the battery charge limit"; only a TTY run applies it.
 - **The PRIV=0 observation survives on its own, as a class.** g15 has no NOPASSWD
   sudo, so on any non-interactive run every privileged tier that IS in its list
   degrades to a warn and exit 0 — `bash provision/linux.sh` prints "no root
@@ -2945,15 +2960,26 @@ not a step anyone missed.
   `~/.local/bin`. `just test` then reported the gate itself — **54 suites, all
   passed** — which is also the count AGENTS.md was carrying as 48. No tier
   installs `just` on any box (roadmap P6); this closes g15, not the fleet.
-- **The 89 G music pile on latitude is PROVEN redundant to the restic snapshot,
-  and it is the DB leg's blocker, not a tidiness item.** Verified against
-  snapshot `b46c563d` directly rather than through g15's live tree: path+size
+- **The 89 G music pile on latitude was proven redundant and is DELETED
+  (2026-09-08, his go). spare320: 82 G → 170 G free.** The proof was run against
+  snapshot `b46c563d` **directly, not through g15's live tree**: path+size
   manifest identical (14878 rows, empty `diff`, byte totals equal to the digit),
-  plus five sha256 matches picked to break a lazy comparison — the largest file
-  (528 MB), the smallest non-empty (74 B), two random, Cyrillic paths
-  throughout — hashed from an actual restore, so the check covers stored bytes.
-  Deleting it takes spare320 from 82 G to 171 G free, which is what makes a
-  ~120–130 G DB leg possible at all.
+  plus five sha256 matches hashed from an actual restore — largest file (528 MB),
+  smallest non-empty (74 B), two random, Cyrillic paths throughout. Two things
+  the deletion itself taught:
+  - **The pile was root-owned**, so an unprivileged `rm -rf` died with
+    `Permission denied` across most of the tree and left the directory standing
+    at 537 files. latitude has NOPASSWD sudo and g15 does not — that asymmetry
+    decides which box can clean up its own disks.
+  - **Assert the identity (count + bytes) BEFORE the destructive command**, not
+    after: because the full tree had already been pinned, finishing a
+    half-deleted state needed no re-derivation and no second judgement call.
+- **The DB leg's drive is DEFERRED until the new 8 TB HDD passes acceptance**
+  (his call, 2026-09-08). Space stopped being the blocker the moment the music
+  pile went — 170 G free against a ~120–130 G leg — so what is left is genuinely
+  the drive choice, and a disk that may still go back to DNS is not a backup
+  target. **The 186 G `pgdata` staging leg stays and must not be deleted**: it
+  is the only second copy of that database, on `/dev/sdd2`, the flaky dock.
 - **`restic ls <snapshot> <path>` is not recursive.** It reported 1 file / 3 dirs
   for that 14878-file tree — indistinguishable at a glance from a backup that
   stored almost nothing. `--recursive` is mandatory whenever a path filter is
