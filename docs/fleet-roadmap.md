@@ -646,12 +646,28 @@ be diffed against a remembered failure count.
 **Two one-line bugs found during g15 phase 4 (2026-09-07), both deliberately
 left for their own change rather than fixed mid-migration:**
 
-- `ts_mint_key` in `provision/tailscale-wsl.sh` defaults to
-  `ssh debian@cyphy.kz`, which resolves from nowhere in the fleet: the generated
-  `~/.ssh/config` only has `Host hub hub.gg.ez` with `HostName cyphy.kz`, so the
-  literal address matches no block, falls to the default identity and fails with
-  `Host key verification failed`. Worked around with `HEADSCALE_SSH=hub`. The
-  default should be `hub`.
+- [x] **`ts_mint_key`'s control-server default — FIXED 2026-09-08.** It defaulted
+  to `ssh debian@cyphy.kz`, which resolves from nowhere in the fleet: the
+  generated `~/.ssh/config` only has `Host hub hub.gg.ez` with
+  `HostName cyphy.kz`, so the literal address matched no block, fell to the
+  default identity with no `IdentityFile` and no `accept-new`, and failed with
+  `Host key verification failed` (worked around during g15's migration with
+  `HEADSCALE_SSH=hub`). The alias carries the User, the `id_fleet` identity and
+  the host-key policy; the bare address carries none of them.
+
+  The default now lives in **one** place, `ts_headscale_target()` — it was three
+  (`ts_mint_key`, the progress line, the `--help` text), and a default
+  duplicated across three sites is a default that drifts. Covered by three new
+  cases in `provision/tailscale-wsl.test.sh`, mutation-tested against both
+  regressions (reverting the value; re-inlining a second expansion).
+
+  Worth keeping from writing that test: **it took three attempts because the
+  assertion kept matching its own documentation.** A grep for `debian@cyphy.kz`
+  hit the comment explaining why that address is wrong; a grep for
+  `${HEADSCALE_SSH:-` hit the accessor it was protecting; a count over all lines
+  hit the comment saying the accessor replaced three expansions. It asserts over
+  non-comment lines now. An assertion about what runs must look only at what
+  runs.
 - `fleet-selfpull` skips a dirty tree silently and forever — `air` was 43 commits
   behind for eight days across 87 skipped runs, evidenced only by a counter in
   `~/.local/state/fleet-selfpull/dirty-<path>`. It should escalate after N
@@ -848,10 +864,28 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   `/mnt/immich-mirror/g15-staging/pgdata` is the **only** second copy of that
   database and must not be deleted.
 
-  Separately and much smaller: once g15's first snapshot has been verified,
-  `latitude:/mnt/spare320/music-from-g513ie` (89 G) is redundant — the same
-  drive now holds those bytes as a snapshot that gets refreshed and checked.
-  Deleting it is a tidiness win, not a redundancy one.
+  Separately, and now PROVEN rather than pending:
+  **`latitude:/mnt/spare320/music-from-g513ie` (89 G) is redundant to the restic
+  snapshot** — verified 2026-09-08 against snapshot `b46c563d` directly, not
+  through g15's live tree:
+  - path+size manifest **identical, 14878 rows, `diff` empty**, byte totals equal
+    to the digit (94,813,954,726 B both sides).
+  - **five sha256 matches**, chosen to break a lazy comparison rather than to
+    confirm one: the largest file (528 MB `.MPG`), the smallest non-empty (74 B
+    `.url`), two random picks, and Cyrillic paths throughout
+    (`OldMusic/Со старых дисков 2009-10/…`).
+  - the restic side was restored from the snapshot and hashed, so the check
+    covers the stored bytes, not an index claim.
+
+  One trap that produced a wrong number first: **`restic ls <snap> <path>` is NOT
+  recursive** — it listed 1 file and 3 dirs for a 14878-file tree, which reads
+  exactly like a broken backup. `--recursive` is required whenever a path filter
+  is given.
+
+  Deleting it frees **89 G on spare320 (82 G → 171 G free)**, which is the only
+  thing that makes a DB leg fit at all — so it is no longer merely a tidiness
+  win, it is the first half of the decision above. **Not deleted: awaiting the
+  owner's go, since it is 89 G on another box.**
 
 ## Done
 

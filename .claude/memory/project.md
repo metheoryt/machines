@@ -2903,19 +2903,31 @@ server. What a future session would otherwise re-derive:
 
 Asked "is anything left"; answered by measuring g15 itself rather than reading
 the spec's checkboxes. Three of the four open phase items were already closed by
-the distro, one was never applied and would never have applied.
+the distro; the fourth turned out to be a decision the profile had already made,
+not a step anyone missed.
 
-- **`tier_battery_limit` never ran here, and `--apply` cannot make it run.**
-  `charge_control_end_threshold` = 100, no `/usr/local/bin/charge-upto`, no
-  `/etc/default/charge-upto`, no `charge-upto.service`. The tier's first guard is
-  `[ "$PRIV" -eq 0 ] && warn … && return 0`, and `linux.sh` sets `PRIV=0` unless
-  root is reachable **non-interactively** — g15 has no NOPASSWD sudo, so that is
-  every remote, converge and ssh run: skipped, warned, **exit 0**. Same
-  silent-green family as `PLANNED_ROLES` and the `platform: linux` trap, reached
-  through the privilege gate instead. `linux.sh` picks prompting `SUDO="sudo"`
-  only on a TTY, so the fix is `bash provision/linux.sh` **at the box's own
-  keyboard**; nothing remote installs it. Generalises to every privileged tier on
-  a no-NOPASSWD box — this is the class, not one bug.
+- **The charge cap is a DECISION on this box, not a missed step — and my first
+  read of it was wrong in a way worth recording.** Measured: `BAT0`
+  `charge_control_end_threshold` = 100, no `charge-upto` script, default file or
+  unit. I diagnosed that as `tier_battery_limit`'s `PRIV=0` guard skipping it and
+  told him to re-run the driver at the keyboard. The tier is **never in g15's
+  plan at all**: g15 resolves to `workstation` and `battery_limit` is in the
+  `server` list only, deliberately — `linux.sh`'s comment says the cap is for "a
+  laptop wired to the wall forever", "deliberately absent from workstation (a
+  laptop someone carries)", and `provision/tests/tiers.test.sh:147` asserts that
+  absence. **Read the profile's tier list before explaining why a tier did not
+  run**; a plausible mechanism inside the tier body is not evidence the tier was
+  reached. The spec's own §4 bullet ("Charge limit via `tier_battery_limit`") is
+  what seeded the assumption, so the spec was wrong first — which is the case for
+  checking the code over the plan even when the plan is this repo's.
+- **The PRIV=0 observation survives on its own, as a class.** g15 has no NOPASSWD
+  sudo, so on any non-interactive run every privileged tier that IS in its list
+  degrades to a warn and exit 0 — `bash provision/linux.sh` prints "no root
+  available non-interactively — skipping" for `apt_min`, `apt_dev` and `docker`
+  in a row, then finishes green. Same silent-green family as `PLANNED_ROLES` and
+  the `platform: linux` trap, reached through the privilege gate. `linux.sh`
+  takes prompting `sudo` only on a TTY, so a privileged tier can be applied here
+  only from the box's own keyboard.
 - **The kernel had already absorbed the asus-linux stack, which inverts the
   spec's phase 3.** Open NVIDIA module 595.84 with `prime-select` = `on-demand`
   (both GPUs enumerated), `asus_custom_fan_curve` exposed at hwmon7 under
@@ -2926,9 +2938,26 @@ the distro, one was never applied and would never have applied.
 - **The 2.4 GHz wifi record is retired.** g15 associates on **ch112 / 5560 MHz /
   80 MHz / 1170 Mbit/s**. "Stuck on 2.4 GHz channel 12, no band-preference
   property" was a property of the wiped Windows driver, not of MT7921.
-- **`just` is not installed on g15** — the whole documented command surface. No
-  tier installs it anywhere (roadmap P6 names the gap); `air` has it from brew by
-  luck. Run the scripts under `provision/` directly until then.
+- **`just` is installed now — 1.58.0 into `~/.local/bin`, not apt's 1.45.0.**
+  The archive has `just` (`resolute` ships 1.45.0-1) but installing it needs
+  sudo, which this box does not have non-interactively, so it went in the way
+  `gortex` and `resticprofile` already live here: a prebuilt musl tarball into
+  `~/.local/bin`. `just test` then reported the gate itself — **54 suites, all
+  passed** — which is also the count AGENTS.md was carrying as 48. No tier
+  installs `just` on any box (roadmap P6); this closes g15, not the fleet.
+- **The 89 G music pile on latitude is PROVEN redundant to the restic snapshot,
+  and it is the DB leg's blocker, not a tidiness item.** Verified against
+  snapshot `b46c563d` directly rather than through g15's live tree: path+size
+  manifest identical (14878 rows, empty `diff`, byte totals equal to the digit),
+  plus five sha256 matches picked to break a lazy comparison — the largest file
+  (528 MB), the smallest non-empty (74 B), two random, Cyrillic paths
+  throughout — hashed from an actual restore, so the check covers stored bytes.
+  Deleting it takes spare320 from 82 G to 171 G free, which is what makes a
+  ~120–130 G DB leg possible at all.
+- **`restic ls <snapshot> <path>` is not recursive.** It reported 1 file / 3 dirs
+  for that 14878-file tree — indistinguishable at a glance from a backup that
+  stored almost nothing. `--recursive` is mandatory whenever a path filter is
+  given, and the first number I read off it was wrong because of this.
 - **A second Claude session had committed `70422f9` here and not pushed it**, so
   `~/machines` sat **ahead 1 / behind 5** — and `fleet-selfpull` is ff-only, so
   its next tick could not pull either. Worth knowing that a clean tree is not

@@ -293,20 +293,36 @@ Ubuntu in the first place is precisely why none of them were needed.
   `docs/2026-08-01-nixos-harvest.md`: port 22 on `tailscale0` only, plus the one
   explicit `192.168.8.0/24` carve-out. That harvest is the only written spec for
   the role.
-- **Charge limit via `tier_battery_limit` — it did NOT apply, and re-running
-  `--apply` will not fix it.** Measured 2026-09-08: `charge_control_end_threshold`
-  is `100`, with no `/usr/local/bin/charge-upto`, no `/etc/default/charge-upto`
-  and no `charge-upto.service`. The tier opens with
-  `if [ "$PRIV" -eq 0 ]; then warn …; return 0`, and `linux.sh` sets `PRIV=0`
-  whenever root is not reachable **non-interactively** — which on g15 is always,
-  because it has no NOPASSWD sudo. So converge, an ssh-driven run and a
-  `--dry-run`/`--apply` from another box all skip the charge cap and report
-  success: the silent-green shape §5 and `PLANNED_ROLES` exist to prevent, here
-  reached through the privilege gate instead of the executor map. `linux.sh`
-  picks `SUDO="sudo"` (prompting) only on a TTY, so **the fix is to run
-  `bash provision/linux.sh` from the box's own terminal and type the password**;
-  nothing remote can install it. A laptop that is carried around and left on AC
-  is the case the cap is for.
+- **Charge limit — this bullet said "via `tier_battery_limit`" and that was never
+  true of this box.** g15 resolves to the **`workstation`** profile
+  (`fleet.json` carries no `profile` key; `linux.sh` takes it from the hostname
+  and lands on the default), and `battery_limit` is in the **`server`** tier list
+  only. Not an oversight in either place: `linux.sh`'s comment above the server
+  list spells out the intent — the cap is for "a laptop wired to the wall
+  forever", "deliberately absent from workstation (a laptop someone carries)" —
+  and `provision/tests/tiers.test.sh:147` asserts `workstation omits the battery
+  charge limit`. So no provisioning run of any kind installs it here, with or
+  without a TTY, and measured 2026-09-08 g15 has
+  `charge_control_end_threshold` = 100, no `/usr/local/bin/charge-upto`, no
+  `/etc/default/charge-upto`, no `charge-upto.service`.
+
+  **What is left is therefore a decision, not a step:** g15 is a laptop that gets
+  carried (its own restic profile keeps `schedule-ignore-on-battery: true` for
+  exactly that reason) *and* it currently lives on AC at 100%, which is the cell
+  swelling this repo caps latitude to avoid. Two honest routes, both for the
+  owner: hand-run the cap on this box only, or move `battery_limit` into the
+  workstation list — a fleet-wide change that also flips the test above and
+  reaches desktop-wsl, where it is a no-op (no threshold file in a WSL distro).
+
+  **A separate, real finding that this bullet originally mis-attributed:** on a
+  box with no NOPASSWD sudo, *every* privileged tier in g15's list degrades to a
+  warn and exit 0 on any non-interactive run — `bash provision/linux.sh` here
+  prints "no root available non-interactively — skipping" for `apt_min`,
+  `apt_dev` and `docker` in a row. That is the silent-green class `PLANNED_ROLES`
+  exists to close, arrived at through the privilege gate rather than the executor
+  map, and it holds regardless of the battery question. `linux.sh` picks
+  prompting `SUDO="sudo"` only on a TTY, so a privileged tier can only ever be
+  (re)applied from the box's own keyboard.
 - Restore `/home/me`, then `pgdata`, then `Music` — **pulled** from latitude,
   which is now a direct 2 ms peer. The direction is forced by the asymmetry in
   the next bullet: latitude cannot originate fleet ssh, so it cannot push. And

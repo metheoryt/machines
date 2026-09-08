@@ -62,7 +62,8 @@ hands-free after a rebuild/logout.
   -h, --help              show this help
 
 Env: HEADSCALE_AUTHKEY (key), ORCA_TS_HOSTNAME (node name; default wsl-<distro>),
-     HEADSCALE_SSH (default debian@cyphy.kz), HEADSCALE_USER_ID (default 1),
+     HEADSCALE_SSH (default hub — the ssh alias, not a bare address),
+     HEADSCALE_USER_ID (default 1),
      HEADSCALE_KEY_EXPIRY (default 2160h) — the last three drive --enroll.
 EOF
 }
@@ -104,8 +105,22 @@ ts_extract_key_json() {
 # runs via `sudo headscale` — the SSH user needs passwordless sudo on the control
 # server. Echoes the key on success; returns non-zero on ssh/headscale failure.
 # Overridable via $HEADSCALE_SSH, $HEADSCALE_USER_ID, $HEADSCALE_KEY_EXPIRY.
+# The control-server ssh target. `hub`, NOT `debian@cyphy.kz`, which is what this
+# defaulted to until 2026-09-08 and which resolves from NOWHERE in the fleet: the
+# generated ~/.ssh/config has one block for the VPS, `Host hub hub.gg.ez`, whose
+# HostName is cyphy.kz — so a literal `debian@cyphy.kz` matches no block, falls
+# through to the default identity with no IdentityFile and no accept-new, and dies
+# with `Host key verification failed`. The alias carries the User, the id_fleet
+# identity and the host-key policy; the bare address carries none of them. Found
+# during g15's migration (worked around with HEADSCALE_SSH=hub), roadmap P6.
+#
+# It is a function rather than three `${HEADSCALE_SSH:-…}` expansions because it
+# WAS three, and a default duplicated across the help text, the mint and the
+# progress line is a default that drifts.
+ts_headscale_target() { printf '%s\n' "${HEADSCALE_SSH:-hub}"; }
+
 ts_mint_key() {
-  local target="${HEADSCALE_SSH:-debian@cyphy.kz}"
+  local target; target="$(ts_headscale_target)"
   local uid="${HEADSCALE_USER_ID:-1}"
   local ttl="${HEADSCALE_KEY_EXPIRY:-2160h}"
   local json
@@ -178,7 +193,7 @@ STORE_KEY=""
 [ -e "$AUTHKEY_STORE" ] && STORE_KEY="$($SUDO cat "$AUTHKEY_STORE" 2>/dev/null | tr -d '[:space:]')"
 
 if [ "$ENROLL" = 1 ]; then
-  info "Minting a reusable key via ${HEADSCALE_SSH:-debian@cyphy.kz} (user ${HEADSCALE_USER_ID:-1}, expiry ${HEADSCALE_KEY_EXPIRY:-2160h})…"
+  info "Minting a reusable key via $(ts_headscale_target) (user ${HEADSCALE_USER_ID:-1}, expiry ${HEADSCALE_KEY_EXPIRY:-2160h})…"
   AUTHKEY="$(ts_mint_key)" || die "mint failed — check \$HEADSCALE_SSH, your SSH access, and passwordless sudo for headscale on the control server."
   [ -n "$AUTHKEY" ] || die "mint returned no key — check 'headscale preauthkeys create' on the control server."
   KEY_SRC="enroll"
