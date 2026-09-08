@@ -169,9 +169,22 @@ is what made the right work obvious._
 - [ ] **8 TB drive for `/mnt/servarr` — ORDERED 2026-09-07: WD Blue `WD80EAAZ`,
   188 090 ₸ at dns-shop.kz.** The criteria are written down here because the
   original plan (2026-08-16) lived only in a transcript and had to be recovered
-  by grepping `~/.claude/projects`. The first attempt at this purchase arrived
-  defective; **how it failed was never recorded**, which is why the acceptance
-  test below is generic rather than targeted.
+  by grepping `~/.claude/projects`.
+
+  **The first attempt was not a defective drive — it was a SUBSTITUTED one, and
+  it is fully recorded** (confirmed 2026-09-08; this item said "how it failed was
+  never recorded" until then, and that sentence is why the acceptance test was
+  designed generic). 2026-07-30, sold as a new 6 TB WD Purple `WD63PURZ`, what
+  arrived was a 2015 HGST Ultrastar `HUS726060ALE611` — 74 502 power-on hours,
+  3.02 PB written — wearing a WD Purple sticker:
+  `docs/superpowers/specs/2026-07-30-6tb-return-claim-ru.md` plus the raw SMART
+  bundle beside it. **A surface test would have passed that drive.** So the
+  acceptance test is now TWO gates on two different clocks — identity (~5 min,
+  decides keep-or-return, runs on the shop's return window) before surface
+  (~41 h, decides whether it may hold data, runs on the warranty) — scripted in
+  `hosts/latitude/debian/disk-acceptance.sh`, unit-tested in
+  `provision/tests/disk-acceptance.test.sh`, runbook in
+  `docs/2026-09-08-8tb-acceptance-plan.md`.
 
   **Internal 3.5″ CMR, not a consumer external** — no shucking, warranty in your
   own name at an official store, and SMART reaching the host instead of being
@@ -241,7 +254,16 @@ is what made the right work obvious._
   purchase frees a 931 G spindle, and that spindle covers **either** the archive
   mirror **or** the deferred 815 G versioned backup above, not both.
 
-  **Acceptance test — start it the day the drive arrives.** 8 TB write+read is
+  **Acceptance test — start it the day the drive arrives.** Runbook and the
+  numeric FAIL gates: `docs/2026-09-08-8tb-acceptance-plan.md`. Return window is
+  **14 days from 2026-09-07, i.e. 2026-09-21**, so the surface pass must START by
+  **2026-09-18** to leave room for one restart after a bus fault. Two corrections
+  to what this paragraph assumed: the round trip is **~41 h, not ~30 h** (the
+  first hour runs the outer tracks and a CMR spindle falls to roughly half that
+  rate at the inner ones, so extrapolating the first hour flat under-promises by
+  half a day), and `badblocks` needs **`-b 4096`** — at the default 1024 B an
+  8 TB drive is 7.8e9 blocks, past badblocks' own 2^32 ceiling, and it aborts.
+  8 TB write+read is
   ~30 h round trip **if the path sustains ~150 MB/s — which is unmeasured here**:
   every existing throughput number on these docks (86 MB/s, 97 MB/s, 36 MB/s on
   the SMR drive) comes from 2.5″ 5400 rpm spindles hitting their own ceiling, not
@@ -253,7 +275,18 @@ is what made the right work obvious._
   or `f3write`/`f3read`) → SMART after, checking Reallocated/Pending sectors and
   that `smartctl -d sat` returns attributes through the bridge at all. Nothing
   moves off the source until that passes, and the source stays intact until the
-  copy is byte-verified.
+  copy is byte-verified. (`f3` is not installed on latitude; `badblocks` and
+  `smartmontools` are, so the script uses those.)
+
+  **The bay to borrow for the test is `/mnt/immich-mirror`'s (dock A bay 1), not
+  `spare320`'s** — decided 2026-09-08. No container binds `/mnt/immich-mirror`
+  (checked live against `.HostConfig.Binds`), it holds a copy rather than a sole
+  copy, and `mirror-refresh.service`'s `ConditionPathIsMountPoint` makes the timer
+  skip cleanly; evicting `spare320` instead would take the fleet's restic hub down
+  for the whole 41 h, since `restic-server` binds `/mnt/spare320/restic-rest`.
+  Testing in dock A also keeps the flaky dock out of the measurement.
+  **Restoring that mount is a manual step** — the fstab entries are `nofail` and
+  nothing re-pulls them when the device returns (2026-08-23, 20 h of silence).
 
   **The migration half of the August plan needs re-deriving at move time** — it
   names `sdf2` and a mounted `/mnt/xs`, and neither matches the current shape

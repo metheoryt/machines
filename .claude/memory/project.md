@@ -2862,3 +2862,47 @@ server. What a future session would otherwise re-derive:
   consecutive dirty ticks and `airdrome` SKIPs — pre-existing, his uncommitted
   work, and the posix selfpull DOES escalate ("dirty for 97 consecutive
   ticks — still not pulling"). It is the PowerShell one that has no escalation.
+
+## Приёмка нового диска: identity-гейт впереди surface (2026-09-08)
+
+Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
+`hosts/latitude/debian/disk-acceptance.sh`, тесты —
+`provision/tests/disk-acceptance.test.sh`.
+
+- **Прошлая потеря была ПОДМЕНОЙ товара, а не смертью диска** (подтверждено им
+  же 2026-09-08). Роадмап писал «как именно сломался — не записано»; записано:
+  `docs/superpowers/specs/2026-07-30-6tb-return-claim-ru.md` — вместо нового
+  6 ТБ WD Purple приехал HGST Ultrastar `HUS726060ALE611` 2015 г., 74 502 ч,
+  3.02 ПБ, под наклейкой WD Purple. **Поверхностный тест такой диск прошёл бы.**
+  Отсюда порядок: identity (~5 мин, решает возврат, идёт по часам магазина)
+  строго перед surface (~41 ч, решает доверие данным, идёт по гарантии).
+- **WWN — единственный идентификатор, который перенаклейкой не подделать:**
+  прожжён на заводе и несёт OUI. `50014EE2…` = Western Digital,
+  `5000CCA…` = HGST (подпись июльской подмены). Парсить только то, что **после
+  двоеточия**: слова «LU WWN Device Id» сами состоят из валидных hex-цифр и
+  давали мусорный префикс `deced…` (поймано живым прогоном).
+- **JMS561U (оба CM198) пропускает 48-битные GP-log чтения** — измерено на доках
+  2026-09-08: через `-d sat` читаются каталог логов 0x00 и SATA Phy 0x11. Четыре
+  старых 2.5″ шпинделя отвечают «Device Statistics (GP 0x04) not supported`
+  потому что сами старше ACS-3, а не из-за моста. `-d sat,12` не может работать
+  в принципе (12-байтный passthrough не несёт 48-битную команду). То есть от
+  диска 2025 года Head Flying Hours / Logical Sectors Written **ожидаются
+  читаемыми**, и их отсутствие — вопрос к диску.
+- **`badblocks -b 4096` обязателен на 8 ТБ.** При дефолтных 1024 B это 7.8e9
+  блоков — выше потолка badblocks в 2^32, и он падает. `-c 4096` — потому что
+  дефолтный буфер в 64 блока морит BOT-мост. `badblocks` **не возобновляется** →
+  только под `systemd-run`.
+- **ETA считать с коэффициентом 1.4.** Первый час идёт по внешним дорожкам, к
+  внутренним CMR-шпиндель падает примерно вдвое: 8 ТБ write+read — **~41 ч, а не
+  ~30 ч**, как считал роадмап.
+- **Бэй под тест берём у `/mnt/immich-mirror` (dock A bay 1), не у `spare320`.**
+  Проверено живьём по `.HostConfig.Binds`: `/mnt/immich-mirror` не биндит ни один
+  контейнер, это копия, и `mirror-refresh.service` несёт
+  `ConditionPathIsMountPoint`. Выселение `spare320` уложило бы backup-hub всего
+  парка на 41 ч (`restic-server` биндит `/mnt/spare320/restic-rest`). Возврат
+  монтирования — **руками**: fstab-записи `nofail`, никто их не перетягивает.
+- Диск на руках: `WD80EAAZ-22BXBB0`, S/N `RD2RRPWH`, WWN `50014EE216C6BF75`,
+  R/N `3VAHA2`, Thailand **19 MAY 2025** (за 16 мес. до покупки — гарантию WD
+  считает от производства, если нет подтверждения даты покупки). Срок возврата
+  DNS 14 дней от 2026-09-07 → **до 2026-09-21**, surface стартовать **не позже
+  2026-09-18**.
