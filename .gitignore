@@ -80,3 +80,9 @@ fleet.local.json
 **/pass.txt
 **/.env
 backup/**/*.log
+# And the lock resticprofile holds for the duration of a run. It is removed on
+# exit, so it never survives — but `fleet-selfpull` refuses a DIRTY TREE, and a
+# tick landing inside a run window would count one. That counter is silent and
+# has already cost this fleet eight days of no pulls on air, so a transient
+# untracked file in a checkout selfpull manages is not acceptable dirt.
+backup/**/*.lock

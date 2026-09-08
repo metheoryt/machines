@@ -27,6 +27,17 @@
 #   resticprofile -n g15 init
 # `initialize` is opt-in per profile precisely so an unmounted drive on the
 # server side cannot fabricate a fresh zero-history repo. See ../base.yaml.
+# ONE INVOCATION IS ENOUGH ONLY WHILE EVERY PROFILE HERE IS USER-SCOPE.
+# `schedule --all` ignores `-n` and schedules every profile in the config at
+# whatever privilege it was started with, so the day a
+# `schedule-permission: system` profile is added here — the qaz-code PGDATA leg
+# is the one waiting on a drive — this line stops being correct. resticprofile
+# refuses a system job from an unprivileged process ("user is not allowed to
+# create a system job: please restart resticprofile as root"), and running the
+# whole thing under sudo would put the USER profile's units in the system
+# manager, where they run as root and read the wrong password path. Split it
+# into `resticprofile -n g15 schedule` plus a sudo'd `-n <db-profile> schedule`
+# at that point, and note that g15 has no NOPASSWD sudo.
 set -e
 export PATH="$PATH:$HOME/.local/bin"
 cd "$(dirname "$0")"

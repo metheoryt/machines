@@ -2831,3 +2831,34 @@ server. What a future session would otherwise re-derive:
 - **`--private-repos` isolation verified rather than assumed**: g513ie's
   transport credentials against `/g614jv` return **401**, so one client cannot
   read another's repo even though both live in one volume on one drive.
+
+### Verifying it the way the repo demands — and the dirt that found (2026-09-08)
+
+- **Fired the systemd USER unit, not the script.** AGENTS.md's rule ("verify a
+  scheduled job by firing its schedule") earns its place here: the hand run had
+  `export PATH=…` and cwd in the config dir, and the unit has neither.
+  `systemctl --user start resticprofile-backup@profile-g15.service` →
+  `Result=success`, `ExecMainStatus=0`, incremental in 0:11 / 207 KiB added
+  (`skip-if-unchanged` plus the parent snapshot). **Check AC first** — with
+  `schedule-ignore-on-battery: true` a battery run logs `WARN running on
+  battery, leaving now` and exits 0, so a green Result would prove nothing.
+- **`~/machines` on g15 had stopped pulling, and nothing said so.**
+  `fleet.local.json.pre-migration` (137 B, the wiped g15-wsl's self-declaration,
+  restored with `/home/me`) is untracked and `.gitignore`'s line is the exact
+  name `fleet.local.json`, so the suffixed copy did not match. `git pull
+  --ff-only` by hand ignores untracked files and worked, which is why this was
+  invisible — `fleet-selfpull` does not, and had it counted as dirty. Deleted;
+  the next tick pulled `69e61fb..993ef06`. **A hand pull succeeding is not
+  evidence selfpull is pulling.**
+- Latent hazard worth knowing: had that file been named `fleet.local.json`,
+  `backup_client_identity` would have taken its nickname `g15-wsl` outright and
+  looked for `backup/g15-wsl/`, i.e. skipped the backup on a green run. g15 is
+  a `fleet.json` member and must carry no self-declaration at all.
+- `backup/**/*.lock` is now ignored alongside `*.log`: resticprofile holds a
+  lock in the profile dir for the length of a run and removes it on exit, so it
+  never survives — but a selfpull tick inside a 36-minute first run would have
+  counted a dirty tick against `~/machines`.
+- Three repos under `~/my` on g15 (`buton`, `skep`, `vps`) are STALE at 97
+  consecutive dirty ticks and `airdrome` SKIPs — pre-existing, his uncommitted
+  work, and the posix selfpull DOES escalate ("dirty for 97 consecutive
+  ticks — still not pulling"). It is the PowerShell one that has no escalation.
