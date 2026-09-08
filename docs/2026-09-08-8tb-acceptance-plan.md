@@ -73,10 +73,18 @@ Runbook на приёмку одного диска. Скрипт — `hosts/lat
 # на latitude
 sudo systemctl mask archive-mirror.timer mirror-refresh.timer   # на время окна
 sudo systemctl stop /mnt/immich-mirror
+sudo systemctl mask mnt-immich\\x2dmirror.mount      # см. ниже — одного stop мало
 findmnt /mnt/immich-mirror || echo "отмонтировано"
 # физически: вынуть sdd (ST1000LM024, серийник S2U5J9ECA34541) из dock A bay 1,
 # вставить 8 ТБ
 ```
+
+**Одного `stop` недостаточно: запись в fstab остаётся живой.** Любой
+`daemon-reload` с последующим подтягиванием mount-таргета (прогон converge,
+apt-job, тронувший systemd, `install-docker-ordering.sh`) переактивирует юнит,
+устройства на месте не окажется — и отказ будет выглядеть в точности как форма
+2026-08-23, то есть съест расследование посреди прогона. Поэтому mount-юнит на
+окно маскируется, а не только останавливается.
 
 `mirror-refresh.service` несёт `ConditionPathIsMountPoint=/mnt/immich-mirror` —
 даже без mask он бы скипнулся чисто, а не залил 254 ГБ immich в корневую ФС.
@@ -178,6 +186,7 @@ cat /var/tmp/disk-acceptance/RD2RRPWH/{identity,smart-before,smart-x-before,devs
 перемонтирует никто (ровно этим 2026-08-23 обошёлся в 20 часов тишины):
 
 ```sh
+sudo systemctl unmask mnt-immich\\x2dmirror.mount   # ПЕРВЫМ: иначе start молча ничего не сделает
 sudo systemctl start /mnt/immich-mirror
 findmnt /mnt/immich-mirror                       # обязательная проверка
 sudo systemctl unmask archive-mirror.timer mirror-refresh.timer
