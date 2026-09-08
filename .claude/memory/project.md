@@ -695,6 +695,25 @@ global + per-host). One bullet per fact under a topical heading.
   keypair; cross-machine SSH trust needs each host's *public* key collected
   centrally (see fleet-mesh-vpn-ssh-design.md), not one key copied around.
 
+### `SKIP unreachable` was a lie — the bare alias had no HostName (2026-09-08)
+
+- `tier_fleet_ssh` emitted `HostName` only for `hub` (the one member declaring
+  `ssh.host`), so every other block let the SYSTEM resolver answer the bare name.
+  On g15 the router owns `.lan` and returned `latitude.lan = 192.168.8.154` — a
+  stale address — so `ssh latitude` died with `No route to host` while
+  `tailscale ping latitude` was direct in 3 ms and `ssh latitude.gg.ez` worked.
+- `fd_probe` renders that as `SKIP unreachable`, and the run stays green. Every
+  `/ship` and kb-refresh from g15 had been skipping latitude silently. **A SKIP
+  row is a claim about the network; check it against `tailscale ping` before
+  believing it** — same lesson as the five quiet weeks on desktop-wsl.
+- Fixed in `d7427db`: both renderers (`ssh_wsl_render_config`,
+  `Render-FleetSshConfig`) now emit `HostName` on every member block, defaulting
+  to `<name>.gg.ez`; `ssh.host` still wins. The `Host *.gg.ez` wildcard gets
+  none on purpose — `%h` there is already the FQDN the caller typed.
+- Regenerating the config also cleared a second stale fact on g15: its own block
+  still said `User methe` from the Windows era.
+
+
 ## Backups
 
 > **The per-drive operational record of the 2026-07 storage migration — UUIDs,
