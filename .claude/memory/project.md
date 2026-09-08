@@ -2811,3 +2811,23 @@ server. What a future session would otherwise re-derive:
   argument as `g614jv-maintenance`, and the `check:` section is kept on the
   client only so nobody adds `check-before` without noticing it would inherit
   `read-data-subset` from there.
+
+### The first snapshot, measured (2026-09-08)
+
+- **`e5940ee8`** — 124985 files, 95.540 GiB processed → **88.945 GiB added,
+  82.012 GiB stored**, in **36:34** (≈44 MB/s end to end, not the 99 MB/s
+  tailnet ceiling: the `laws` corpus is ~125k small files and per-file overhead
+  dominates the music half). On disk: **83 G**, leaving **82 G free** on
+  spare320. That is the number that decides the DB leg — it does not fit today
+  at all, and dropping the redundant 89 G `music-from-g513ie` pile would give
+  171 G against an unmeasured ~120–130 G leg.
+- **Restore verified per source class, not just per repo**: `arbuz-concierge/.env`
+  (362 B, gitignored), a `laws/codes/**/rus.md` (47983 B), and an mp3
+  (1989603 B) — sha256 identical to the live files. `restic restore --include`
+  restored 16 dirs for 3 files, which is the expected shape.
+- **`check --read-data-subset=5%` from latitude: no errors**, 248 packs in 2:00.
+  Run it there, not on the client — local disk, no tailnet, and the box that
+  holds the repo cannot hide its own failure.
+- **`--private-repos` isolation verified rather than assumed**: g513ie's
+  transport credentials against `/g614jv` return **401**, so one client cannot
+  read another's repo even though both live in one volume on one drive.

@@ -791,14 +791,18 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   - Scope needs root: PGDATA is `999:0` mode 700, so that leg is
     `schedule-permission: system` and one sudo'd `resticprofile schedule` on a
     box with no NOPASSWD sudo.
-  - **Space is the blocker.** The REST server's data path is
-    `/mnt/spare320/restic-rest` — a 293 G drive with **164 G free**, already
-    carrying latitude's own repo (12 G) and desktop-wsl's (29 G), plus the 89 G
-    `music-from-g513ie` staging pile. A ~130 G DB leg leaves that drive under
-    12% free with no room for prune to work in.
+  - **Space is the blocker, and the first snapshot narrowed it.** The REST
+    server's data path is `/mnt/spare320/restic-rest` on a 293 G drive.
+    g15's repo landed at **83 G** (95.540 GiB processed → 88.945 GiB added →
+    82.012 GiB stored), which leaves **82 G free** against latitude's own repo
+    (12 G), desktop-wsl's (29 G) and the 89 G `music-from-g513ie` pile. So a
+    DB leg does not fit today at all; dropping that pile would give 171 G,
+    against an unmeasured ~120–130 G leg — feasible, with no growth headroom
+    and no temp room for prune.
 
-  **The decision is which drive.** `/mnt/immich` (internal nvme0n1p1, 655 G
-  free, not one of the flaky docks) is the obvious home, but `RESTIC_DATA_PATH`
+  **The decision is which drive, and the recommendation is to move rather than
+  squeeze.** `/mnt/immich` (internal nvme0n1p1, 655 G free, not one of the
+  flaky docks) is the obvious home, but `RESTIC_DATA_PATH`
   lives in the `vps` repo's `homeserver/restic-server` stack — the server is a
   service, and services live there — and moving it means relocating the 29 G
   g614jv repo too. Until then the 186 G staging leg at
