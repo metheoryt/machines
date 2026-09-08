@@ -2,8 +2,9 @@
 # Make Docker on latitude survive a reboot with its media drive attached.
 #   ./install-docker-ordering.sh        show what would change
 #   ./install-docker-ordering.sh -go    apply (edits fstab, writes daemon.json,
-#                                       restarts dockerd -- bounces immich)
-#   ./install-docker-ordering.sh -off   revert both changes
+#                                       freezes mountpoints, restarts dockerd if
+#                                       daemon.json changed -- bounces immich)
+#   ./install-docker-ordering.sh -off   revert all three changes
 #
 # THE BUG THIS FIXES, from the 2026-08-03 reboot that broke Jellyfin playback
 # and Seerr's library sync at once. Boot timeline that day:
@@ -37,7 +38,8 @@
 #
 # Both halves are ONE root cause: containers starting before the host was ready.
 # Two independent guards, because the two resources become ready at different
-# times and neither implies the other.
+# times and neither implies the other. A third was added 2026-09-08 after the
+# same race recurred on a different disk -- see GUARD 3.
 #
 # GUARD 1 - fstab ordering, not a hard dependency. `x-systemd.before=` makes the
 # mount unit order itself before docker.service, so Docker waits for the mount
@@ -53,6 +55,61 @@
 # fallback for when Tailscale is down. Quad100 is reachable from the docker
 # bridge - verified from a container on servarr_default before this was written.
 #
+# GUARD 3 - make the silent failure impossible, not merely unlikely. Ordering
+# NARROWS the race window; it cannot close it. A dock that is powered off has no
+# window at all, it simply never arrives, and Docker's own behaviour does the
+# rest: a missing bind source is CREATED, so the container comes up healthy on an
+# empty directory and nothing anywhere reports an error.
+#
+# So take the mkdir away. `chattr +i` on the mountpoint dir UNDERNEATH the mount
+# makes Docker's auto-create fail with EPERM and the container refuse to start.
+# While the disk is mounted that immutable inode is shadowed and every write goes
+# to the real filesystem, so it costs nothing in the happy path. What it buys is
+# a stopped container you can see in `docker ps`, instead of an empty library you
+# cannot see anywhere.
+#
+# Reaching the underlying dir needs a second view of the root filesystem
+# (`mount --bind /`), because the mount hides it. No unmount, no container stop.
+#
+# THE ASSUMPTION THE WHOLE GUARD RESTS ON, AND IT IS MEASURED, NOT RECALLED:
+# mount() does not write to the target inode, so a filesystem CAN still be
+# mounted over an immutable directory. If that were false this guard would leave
+# every disk unmounted at boot AND every container refusing to start -- a
+# whole-box outage traded for a one-service one. Measured on latitude
+# 2026-09-08, and the check is four lines if it ever needs re-measuring:
+#
+#   sudo mkdir -p /tmp/g3/{target,src} && sudo touch /tmp/g3/src/canary
+#   sudo chattr +i /tmp/g3/target
+#   sudo mount --bind /tmp/g3/src /tmp/g3/target && ls /tmp/g3/target   # -> canary
+#   sudo umount /tmp/g3/target; sudo chattr -i /tmp/g3/target; rm -rf /tmp/g3
+#
+# The live consequence, same day: `lsattr -d /mnt/immich-2024` shows NO `i` while
+# the disk is mounted. That is not the bit having been lost -- it is lsattr
+# reading sde2's root dir, with the frozen root-fs inode correctly shadowed
+# underneath. Check the bit through $ROOTVIEW, never at the mountpoint path.
+#
+# THE RECURRENCE THAT FORCED THIS, 2026-09-08. Same race, different disk. Boot
+# timeline of 2026-09-03:
+#
+#   18:44:24  boot
+#   18:45:02  docker up               <- containers start HERE
+#   (later)   /mnt/immich-2024 up     <- USB dock, too late again
+#
+# immich_server's 19 archive binds (${LOCATION_1970}..${LOCATION_2024}) resolved
+# against the empty mountpoint, Docker created them on the root filesystem, and
+# sde2 mounted over the top. For five days every 2007-2024 photo download
+# returned
+#
+#   ERROR [Api:LoggingRepository] Unable to send file: Error: ENOENT:
+#   no such file or directory, access '/data/library/admin/2023/.../IMG_1842.JPG'
+#
+# while the host showed a healthy, fully-populated /mnt/immich-2024 and the
+# container reported (healthy). Immich's own IntegrityService logged ~20,400
+# missing files at 03:05 daily and nobody was reading it. Guard 1 would have
+# prevented it -- immich-2024 was excluded from MOUNTS on a premise nobody
+# re-checked. Guard 3 exists because "nobody re-checked" is not a fault you can
+# fix by being more careful next time.
+#
 # Applying guard 2 needs a dockerd restart: the `dns` key is read at daemon
 # start, and SIGHUP does not cover it. That bounces immich and its postgres.
 set -uo pipefail
@@ -61,11 +118,38 @@ export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 FSTAB=/etc/fstab
 DAEMON_JSON=/etc/docker/daemon.json
 OPT='x-systemd.before=docker.service'
-# Only the mounts Docker actually binds. Deliberately NOT every /mnt entry:
-# immich-2024 / immich-mirror / spare320 / xs belong to the rsync timers, and
-# immich-2024+immich-mirror sit on the enclosure that logged 24 USB resets in a
-# day. Ordering Docker behind those would hand that dock a veto over immich.
-MOUNTS=(/mnt/immich /mnt/servarr)
+# Only the mounts Docker actually binds -- DERIVED FROM THE LIVE BINDS, not from
+# memory. The command that produces this list, run on latitude 2026-09-08:
+#
+#   for c in $(docker ps -a --format '{{.Names}}'); do
+#     docker inspect -f '{{range .HostConfig.Binds}}{{println .}}{{end}}' "$c"
+#   done | cut -d: -f1 | grep ^/mnt/ | cut -d/ -f1-3 | sort -u
+#
+# It says: immich_server binds 19 year-dirs under /mnt/immich-2024, restic-server
+# binds /mnt/spare320/restic-rest, the servarr stack binds /mnt/servarr, and
+# immich binds /mnt/immich.
+#
+# THIS LIST WAS WRONG UNTIL 2026-09-08, AND THAT IS WHY THE BUG RECURRED. It read
+# `(/mnt/immich /mnt/servarr)` under a comment asserting that "immich-2024 /
+# immich-mirror / spare320 / xs belong to the rsync timers" and that ordering
+# Docker behind them "would hand that dock a veto over immich". Both halves were
+# false:
+#
+#   - immich-2024 and spare320 are bound by CONTAINERS, not merely rsync'd. The
+#     archive mounts have been in immich's compose.yml since the migration; the
+#     comment described the disks' other job and mistook it for their only one.
+#   - There is no veto to hand out. `nofail` is on every one of these lines, so
+#     an absent disk costs x-systemd.device-timeout=60 and Docker starts anyway
+#     -- which is exactly what the GUARD 1 paragraph above already argued. The
+#     exclusion contradicted its own stated rationale and nobody noticed.
+#
+# Re-derive this list from live binds before trusting it. A disk's membership
+# here is a fact about what Docker binds today, not about what the disk is for.
+#
+# immich-mirror and xs stay out on a CHECKED premise: no container binds either
+# (mirror is rsync-only, written by mirror-refresh.sh; xs is archive-mirror.sh's
+# removable target and is marked `transient` in the statusboard disk map).
+MOUNTS=(/mnt/immich /mnt/servarr /mnt/immich-2024 /mnt/spare320)
 DNS_JSON='{"dns": ["100.100.100.100", "1.1.1.1"]}'
 
 MODE=show
@@ -187,6 +271,127 @@ PY
   RESTART_NEEDED=1
 }
 
+
+# --- guard 3: immutable mountpoints ------------------------------------------
+# The rationale is in the header. Mechanics only from here.
+#
+# Everything operates on $ROOTVIEW$m -- the dir as it exists on the ROOT
+# filesystem -- never on $m, which is whatever is mounted there right now.
+ROOTVIEW=/mnt/rootview
+
+rootview_open() {
+  sudo mkdir -p "$ROOTVIEW" || return 1
+  mountpoint -q "$ROOTVIEW" && return 0
+  sudo mount --bind / "$ROOTVIEW"
+}
+rootview_close() { mountpoint -q "$ROOTVIEW" && sudo umount "$ROOTVIEW"; return 0; }
+
+is_frozen() { sudo lsattr -d "$1" 2>/dev/null | awk '{print $1}' | grep -q i; }
+
+# Split the mounts into those whose ghost tree is safe to delete (empty dirs
+# only) and those that are not.
+#
+# NEVER DELETE BLINDLY. A container that started against a ghost may have
+# WRITTEN into it -- qbittorrent downloading into /mnt/servarr/ServarrMedia is
+# the obvious way this stops being cosmetic and becomes data loss. Empty dirs go;
+# a single non-empty regular file anywhere in the tree stops the script and is
+# reported for a human to move.
+#
+# 2026-09-08, the only file the fleet had: a 0-byte
+# /mnt/spare320/restic-rest/.htpasswd, auto-created during the 2026-08-27 race.
+# The populated 136-byte original was safe on sdc1 the whole time. That is the
+# failure restic-hub-selfcheck.sh's "one .htpasswd" check exists to catch, and
+# it is why this function reports rather than assumes.
+ghost_scan() {
+  local m under
+  GHOSTS=(); KEEPERS=()
+  for m in "${MOUNTS[@]}"; do
+    under="$ROOTVIEW$m"
+    [ -d "$under" ] || continue
+    [ -n "$(sudo ls -A "$under" 2>/dev/null)" ] || continue
+    if sudo find "$under" -type f ! -empty -print -quit 2>/dev/null | grep -q .; then
+      KEEPERS+=("$m")
+    else
+      GHOSTS+=("$m")
+    fi
+  done
+}
+
+guard3_apply() {
+  local action="$1" m under
+  rootview_open || { say "FATAL cannot bind-mount / at $ROOTVIEW"; return 1; }
+
+  if [ "$action" = remove ]; then
+    for m in "${MOUNTS[@]}"; do
+      under="$ROOTVIEW$m"
+      [ -d "$under" ] || continue
+      is_frozen "$under" || { say "guard3: $m already mutable"; continue; }
+      if [ "$MODE" = show ]; then say "would unfreeze (chattr -i) $m"; continue; fi
+      sudo chattr -i "$under" && say "guard3: unfroze $m"
+    done
+    rootview_close
+    return 0
+  fi
+
+  ghost_scan
+  # Clear the debris BEFORE freezing. Freezing first would preserve the ghost
+  # tree under an immutable parent -- and a ghost dir is itself writable, so
+  # Docker's mkdir would still succeed one level down and the guard would be
+  # decorative.
+  if [ "${#KEEPERS[@]}" -gt 0 ]; then
+    say "FATAL ghost trees under ${KEEPERS[*]} hold NON-EMPTY files."
+    say "      Something wrote real data while the disk was absent. Move it by"
+    say "      hand, then re-run; this script will not delete it for you."
+    for m in "${KEEPERS[@]}"; do
+      sudo find "$ROOTVIEW$m" -type f ! -empty -printf '        %10s  %p\n' 2>/dev/null | head -20
+    done
+    rootview_close
+    return 1
+  fi
+
+  for m in "${GHOSTS[@]}"; do
+    if [ "$MODE" = show ]; then
+      say "would delete ghost tree under $m (empty dirs only):"
+      sudo find "$ROOTVIEW$m" -mindepth 1 2>/dev/null | sed "s|$ROOTVIEW||; s|^|        |" | head -25
+      continue
+    fi
+    is_frozen "$ROOTVIEW$m" && sudo chattr -i "$ROOTVIEW$m"
+    sudo find "$ROOTVIEW$m" -mindepth 1 -delete 2>/dev/null
+    say "guard3: cleared ghost tree under $m"
+  done
+
+  for m in "${MOUNTS[@]}"; do
+    under="$ROOTVIEW$m"
+    if [ ! -d "$under" ]; then say "guard3: $m has no underlying dir (?)"; continue; fi
+    if is_frozen "$under"; then say "guard3: $m already frozen"; continue; fi
+    if [ "$MODE" = show ]; then say "would freeze (chattr +i) $m"; continue; fi
+    sudo chattr +i "$under" && say "guard3: froze $m"
+  done
+
+  rootview_close
+}
+
+# Prove the guard, do not trust the bit. An immutable flag that does not actually
+# stop Docker's mkdir is worth nothing, and the bind sources are up to three
+# levels below the frozen dir (jellyfin binds /mnt/servarr/ServarrMedia/movies),
+# so "the top-level dir is enough" is an assumption that has to be measured.
+guard3_verify() {
+  local m under probe rc
+  rootview_open || return 1
+  for m in "${MOUNTS[@]}"; do
+    under="$ROOTVIEW$m"
+    probe="$under/.guard3probe/deep/deeper"
+    sudo mkdir -p "$probe" 2>/dev/null; rc=$?
+    if [ $rc -ne 0 ]; then
+      say "verified: mkdir under $m refused (EPERM) - Docker cannot ghost this mount"
+    else
+      say "WARNING: mkdir under $m SUCCEEDED - guard 3 is not effective here"
+      sudo rm -rf "$under/.guard3probe"
+    fi
+  done
+  rootview_close
+}
+
 # --- run ---------------------------------------------------------------------
 ACTION=add; [ "$MODE" = off ] && ACTION=remove
 
@@ -206,6 +411,7 @@ if [ "$MODE" != show ]; then
 fi
 
 daemon_json_apply "$ACTION" || exit 1
+guard3_apply "$ACTION" || exit 1
 
 if [ "$MODE" = show ]; then
   say "(dry run - pass -go to apply)"
@@ -219,6 +425,7 @@ if [ "$RESTART_NEEDED" -eq 1 ]; then
 fi
 
 say "--- state ---"
+[ "$ACTION" = add ] && guard3_verify
 # --fstab, not the live table: x-systemd.* are generator directives, not kernel
 # mount options, so `findmnt /mnt/servarr` shows only "rw,noatime" and looks like
 # the edit did not land. The Before= check above is the real verification.
