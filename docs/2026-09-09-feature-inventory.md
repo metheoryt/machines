@@ -90,10 +90,14 @@ encodes (NAT-mode DERP throughput, port 2222 to desktop, uid 999 pgdata) is
 already written into `AGENTS.md` and the design spec. Six commits in the last 30
 days, all of them the migration itself. Nothing calls it; nothing can.
 
-**`prose-hedge`, 208 lines.** A session hook with **zero** lines describing it in
-any tracked prose, live or archive. It is the only row that scores 0. Either it
-earns a sentence or it goes; an undocumented hook that rewrites how replies read
-is exactly the class of thing that "needs to be remembered" and isn't.
+**`prose-hedge`, 208 lines — a decision, not a dead file.** It is registered and
+live (`agents/plugin/hooks/hooks.json:54`) and has **zero** lines describing it in
+any tracked prose, live or archive — the only row that scores 0, confirmed by a
+grep for `prose` and `hedge` under any name across the six live-prose files. So
+unlike `g15-staging` this is not provably dead; it is a behaviour that may be
+wanted and is undocumented. Either it earns a sentence or it goes. An
+undocumented hook that rewrites how replies read is exactly the class of thing
+that "needs to be remembered" and isn't.
 
 Cold-surface residue, small but worth one sweep: `g15-wsl` is still named in 11
 tracked files and `nixos-rebuild` / `/etc/NIXOS` in 10, five weeks after the last
@@ -110,10 +114,20 @@ The extreme outlier on every axis: highest code, near-lowest prose (11 live
 lines), a single consumer (`server` profile → latitude), and a display *nobody
 sits at*. `tier_rapl_read` exists solely to widen a root-only energy counter so
 the board's power row works, and `statusboard-gui.sh` is 749 lines of kiosk
-compositor plumbing. **netdata** covers the whole surface — disks, SMART, temps,
-RAPL power — zero-config from apt, with its own systemd unit; the kiosk becomes a
-browser in kiosk mode on tty1. This is the single largest code win in the repo
-and it touches one machine. What must be carried across, not lost: the
+compositor plumbing. **netdata** is the candidate — disks, SMART, temps
+and RAPL power, zero-config from apt with its own systemd unit — with the kiosk
+becoming a browser in kiosk mode on tty1. This is the single largest code win in
+the repo and it touches one machine.
+
+**But it is a candidate, not a measurement, and it is the only load-bearing claim
+in this document not sourced from the tree.** Two questions decide the actual
+size of the win and neither has been probed: (a) does netdata read the RAPL
+energy counter without the group-widening `tier_rapl_read` performs — if not,
+that tier survives the replacement; (b) is a browser kiosk on tty1 genuinely
+smaller than 749 lines on a box with no X session configured for one. Until a
+spike answers both, do not bank the 6,694. This is the same class of error the
+repo already records — "expected and accepted" surviving as a stale
+measurement. What must be carried across, not lost: the
 per-host disk config (`disks.latitude5520.conf`) encodes UUID-keyed identity for
 five external drives on two docks, one of which reports a fake serial. Roadmap P6
 already flags `SB_PARKS` as keyed by `sd` node — which is the bug this repo's own
@@ -124,6 +138,12 @@ mount rule forbids, and an argument for retiring rather than fixing it.
 reprovisions, records `converged-rev`, writes a status file. That is
 `ansible-pull`. Off-the-shelf here also brings the change detection and the
 status reporting the 619 test lines currently defend by hand.
+
+One constraint the replacement relocates rather than removes: converge fires
+`linux.sh` detached with no controlling terminal, so on a box without
+passwordless sudo (g15) the driver takes its `PRIV=0` path and privileged tiers
+warn-and-skip. `ansible-pull` inherits exactly that, and it will be the first
+thing to surface on execution.
 
 **`tiers-engine` → Ansible is the highest-risk item on the board, and should be
 proposed as "port the loop, keep the traps."** All 24 tier functions are live —
@@ -206,16 +226,19 @@ of backup work to the wrong repo."
 
 ## Bottom line
 
-| bucket | impl | test | total |
-|---|---:|---:|---:|
-| delete outright | 591 | 551 | **1,142** |
-| replace with off-the-shelf (statusboard + converge) | 4,253 | 2,441 | **6,694** |
-| consolidate (orca) | 816 | 494 | **1,310** |
-| **reachable without touching `tiers.sh`** | 5,660 | 3,486 | **9,146** |
+| bucket | impl | test | total | confidence |
+|---|---:|---:|---:|---|
+| delete — `g15-staging`, provably dead | 484 | 450 | **934** | measured |
+| delete — `prose-hedge`, pending your call | 107 | 101 | **208** | your decision |
+| consolidate — Orca triplicate | 816 | 494 | **1,310** | measured |
+| replace — `converge` → `ansible-pull` | 397 | 619 | **1,016** | strong candidate |
+| replace — `statusboard` → netdata | 3,856 | 1,822 | **6,694** | unprobed (see above) |
+| **reachable without touching `tiers.sh`** | 5,660 | 3,486 | **9,146** | |
 
-9,146 of 27,444 lines — a third of the executable repo — is reachable by three
+9,146 of 27,444 lines — a third of the executable repo — is reachable by four
 independent moves, none of which touches the tier bodies where the hardware
-knowledge lives. The highest-risk item (`tiers.sh` → Ansible) is therefore not
+knowledge lives. Only 2,244 of that is measured-and-decided; the statusboard
+6,694 is the bulk and the least certain. The highest-risk item (`tiers.sh` → Ansible) is therefore not
 needed to make the repo materially smaller, and should be decided separately.
 
 Remembered surface is a different axis and moves differently: the wins there are
