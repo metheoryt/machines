@@ -114,7 +114,43 @@ is what made the right work obvious._
   to) has been `Exited (0)` for 3 days. `latitude` has the restic binary but no
   repo, timer, or container; `hub` has no restic at all.
 
-### Done 2026-08-01
+### P7 — DPI bypass: the LAN is done at the router; `hub` and off-LAN are not.
+
+The ISP filters by **TLS SNI only** and drops the packet — proofs and the measured
+block list are in `~/.claude/memory/global.md` (`## ISP-level TLS-SNI filtering in
+KZ`); the fleet-side consequences are in `.claude/memory/project.md`
+(`## hub is in Almaty`). `ciadpi -r1+s` (byedpi) restores the filtered names with no
+tunnel and no detour. State:
+
+- [x] g15 — `~/.local/bin/ciadpi` + a systemd **user** unit, SOCKS5 `127.0.0.1:1080`,
+      suffix whitelist at `~/.config/byedpi/hosts.txt`. Verified across a restart.
+- [x] **The LAN, at the router — DONE 2026-09-09.** `ciadpi -E` under
+      `/etc/init.d/byedpi` on the GL-MT6000, with dnsmasq populating an ipset and a
+      fw3 include redirecting only those destinations, so nothing else takes the
+      userspace hop. Verified from `latitude` with no local proxy. Full shape,
+      limits and rollback: `~/.claude/memory/global.md`
+      (`### Deployed at the router, not per box`).
+      **Its limit is the DNS path, not the desync:** the set only holds IPs the
+      router's own dnsmasq answered, so a DoH client, a stale cache, or a box
+      resolving through MagicDNS is not covered.
+- [x] `latitude` — covered BY the router, nothing installed on it (verified
+      2026-09-09, no local proxy). Its tailscaled forwards DNS to the router, which is
+      exactly why it is covered where g15 is not.
+- [ ] **g15 stays on its own local byedpi** — `tailscale0` carries DNS domain `~.`,
+      so every query goes to MagicDNS and a public upstream, and the router never
+      learns the IPs this box will connect to. Options if it should be covered by the
+      router instead: change what tailscaled forwards to, or accept the per-box unit.
+      Not urgent — the unit works.
+- [ ] `hub` — NOT behind that router, so it needs its own install, and its own list:
+      on AS48716 `archive.org` and `change.org` come back with `-r1+s` but
+      **`torproject.org` stays 000**, which the LAN's fix does restore. Diagnose there
+      before copying the LAN parameters over.
+- [ ] Only if the router route dies: a `tier_byedpi` on the `tier_gortex` pattern
+      (pinned `provision/byedpi.version`, per-arch asset, `~/.local/bin`, no root) plus
+      its own suite. Deliberately NOT started — a per-box tier is the fallback, not the
+      plan, and it would leave the phones and the TV uncovered.
+
+## Done 2026-08-01
 
 - [x] **Disabled the three dead tasks on `server`.** All three now `Disabled`.
   Note `Disable-ScheduledTask -TaskName x` without `-TaskPath` silently no-ops —

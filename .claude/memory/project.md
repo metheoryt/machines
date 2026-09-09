@@ -3137,3 +3137,38 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   `_touches_driver` trigger, so that run comes on its own.
 - Both mutations bite: masking a sleep target, and dropping the lid gate, each
   turn an assertion red. Suite green, 54 suites.
+
+## `hub` is in Almaty — it cannot be a censorship-bypass exit node (2026-09-09)
+
+- **`hub`'s egress is `78.40.108.102`, Almaty KZ, AS48716 PS Internet Company** —
+  measured on the box, not inferred. So the VPS lives in the same jurisdiction as
+  every other fleet member and is behind the **same ISP-level DPI**: `curl
+  https://archive.org/` times out there exactly as it does on g15, while
+  `openssl s_client -noservername` to the same IP handshakes fine.
+- **Consequence for any "route around a block" design: no existing fleet box is a
+  usable exit node**, `hub` included. `tailscale exit-node list` is empty and no
+  member advertises one. A foreign node would have to be rented (Oracle Always
+  Free / GCP e2-micro joined to Headscale with `--advertise-exit-node`).
+- **But the local fix is usually enough, because the filter reads only the TLS SNI
+  field.** Port 80 with a `Host:` header sails through; a TLS record boundary
+  placed inside the SNI string (`ciadpi -r1+s`, byedpi) restores the domain with no
+  tunnel, no detour and no speed cost. Full measurements — which strategies failed,
+  which names are on the block list — are in g15's `~/.claude/host-memory.md`.
+- The block list is a **name list, not a domain match**: `web.archive.org` is
+  reachable while `archive.org`, `www.archive.org` and the `ia*.us.archive.org`
+  download nodes are not. Do not conclude "the domain is blocked" from one probe.
+- Not provisioned by this repo (no tier, no role): the byedpi install on g15 is a
+  hand-rolled systemd **user** unit. If a second box needs it, that is the moment
+  to make it a tier — a `~/.local/bin` binary plus a user unit needs no root, so it
+  would fit `agents`-style user-scope provisioning rather than `linux.sh`.
+- **Superseded the same day: the deploy target is the ROUTER, not a per-box tier.**
+  The home LAN is one NAT behind a GL-iNet **GL-MT6000** (`192.168.8.1`), so one
+  install there covers every LAN member *and* the phones, the TV, Windows and macOS —
+  none of which a `tier_*` could reach. What makes it viable was measured: upstream's
+  aarch64 release binary is **static-pie**, so the same tarball runs on OpenWrt/musl
+  with no cross-compile. **Landed the same day** (`ciadpi -E` + dnsmasq-populated ipset +
+  an fw3 include; verified from latitude with no local proxy) — the shape, its
+  DNS-path limit and the rollback are in `~/.claude/memory/global.md`
+  (`### Deployed at the router, not per box`). `hub` is NOT behind that router and
+  keeps its own per-box install — and it needs its own block list anyway (`torproject.org` stays 000 there
+  with `-r1+s` that works on the LAN).
