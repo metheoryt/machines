@@ -298,15 +298,22 @@ tunnel and no detour. State:
   numeric FAIL gates: `docs/2026-09-08-8tb-acceptance-plan.md`. Return window is
   **14 days from 2026-09-07, i.e. 2026-09-21**, so the surface pass must START by
   **2026-09-18** to leave room for one restart after a bus fault. Two corrections
-  to what this paragraph assumed: the round trip is **~41 h, not ~30 h** (the
+  to what this paragraph assumed: the round trip is **~41 h, not ~30 h** (it
+  came in at 26.5 h — the 41 h estimate was itself built on the fleet's 2.5″
+  numbers, which is the same error one layer up) (the
   first hour runs the outer tracks and a CMR spindle falls to roughly half that
   rate at the inner ones, so extrapolating the first hour flat under-promises by
   half a day), and `badblocks` needs **`-b 4096`** — at the default 1024 B an
   8 TB drive is 7.8e9 blocks, past badblocks' own 2^32 ceiling, and it aborts.
   8 TB write+read is
-  ~30 h round trip **if the path sustains ~150 MB/s — MEASURED 2026-09-08 at
-  227 MB/s** on the WD80EAAZ's outer tracks, i.e. a 9.8 h write pass and ~27 h
-  for write+read with the inner-track factor. That is the fleet's first
+  ~30 h round trip **if the path sustains ~150 MB/s — RUN TO COMPLETION
+  2026-09-09: 26 h 27 m for the full 16 TB round trip, 168 MB/s sustained**, no
+  bad blocks. Two numbers, and only one of them is a constant: 227 MB/s was the
+  outer-track peak from a 180 s sample at the start, and **168 MB/s is what the
+  whole surface actually sustains** — use that for an ETA. The 1.4 inner-track
+  factor applied to the peak predicted 27 h against an actual 26.5 h, so the
+  method holds; extrapolating the peak flat would have promised 20 h.
+  That is the fleet's first
   throughput figure for a **3.5″** drive through a CM198, and it confirms this
   paragraph's own suspicion: the existing numbers were 2.5″ spindles hitting
   their own ceiling, not the bridge's. The sentence below is kept for the
