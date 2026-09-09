@@ -134,13 +134,17 @@ tunnel and no detour. State:
       router's own dnsmasq answered, so a DoH client, a stale cache, or a box
       resolving through MagicDNS is not covered.
 - [x] `latitude` — covered BY the router, nothing installed on it (verified
-      2026-09-09, no local proxy). Its tailscaled forwards DNS to the router, which is
-      exactly why it is covered where g15 is not.
-- [ ] **g15 stays on its own local byedpi** — `tailscale0` carries DNS domain `~.`,
-      so every query goes to MagicDNS and a public upstream, and the router never
-      learns the IPs this box will connect to. Options if it should be covered by the
-      router instead: change what tailscaled forwards to, or accept the per-box unit.
-      Not urgent — the unit works.
+      2026-09-09, no local proxy).
+- [x] `g15` — also covered by the router, `www.change.org` included (re-measured
+      2026-09-09 with no local transparent proxy). Its systemd user unit stays as the
+      off-LAN fallback, not because the router misses it.
+- [x] **No fleet box asks the router's dnsmasq** — Headscale pushes `1.1.1.1` as the
+      tailnet resolver and every node runs `accept-dns=true`, so the ipset is filled by
+      the router's own seeding plus the non-tailnet devices, and fleet coverage rests on
+      Cloudflare and the ISP resolver returning the same CDN edges — hardened
+      2026-09-09 by `/etc/byedpi/seed.sh` on a `*/15` cron, which asks `1.1.1.1` as
+      well as the router's own resolver. Remaining gap: a name whose edge pool rotates
+      faster than 15 minutes.
 - [ ] `hub` — NOT behind that router, so it needs its own install, and its own list:
       on AS48716 `archive.org` and `change.org` come back with `-r1+s` but
       **`torproject.org` stays 000**, which the LAN's fix does restore. Diagnose there
