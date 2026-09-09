@@ -367,4 +367,49 @@ check "the canonical checkout is NOT refused" \
   '! printf "%s" "$out8d" | grep -q "refusing to bootstrap from"'
 fi
 
+# Case 10: refuse an Orca-managed account dir, and write nothing into it.
+#
+# This is the assertion the three deleted orca-profile-*.test.sh suites used to
+# carry between them. The scripts went on 2026-09-09 (Orca's own account switcher
+# replaced them); the guard did NOT, because it does not depend on them. It exists
+# because an account dir's basename is `auth`, so the .claude-<postfix> convention
+# resolves POSTFIX=auth, finds no settings.auth.json, and falls through to
+# deploying the tracked baseline into a directory this repo does not own — which
+# happened on 2026-08-01 via a `git stash` round-trip in an Orca terminal.
+#
+# Deliberately NOT run under DRY_RUN: the contract is "writes nothing", and the
+# only honest way to test that is to let it write and then count. A temp dir keeps
+# the cost of a regression at zero.
+#
+# Both detection paths, because they are independent and either alone would let
+# the other rot: the canonical */orca/claude-accounts/*/auth path shape, and the
+# .orca-managed-claude-auth marker anywhere.
+orca_tmp="$(mktemp -d)"
+mkdir -p "$orca_tmp/orca/claude-accounts/deadbeef/auth"
+out10a="$(CLAUDE_CONFIG_DIR="$orca_tmp/orca/claude-accounts/deadbeef/auth" bash "$boot" 2>&1)"
+rc10a=$?
+check "an Orca account dir (canonical path) is refused, exit 3" '[ "$rc10a" -eq 3 ]'
+check "the refusal says which dir it refused" \
+  'printf "%s" "$out10a" | grep -q "Orca-managed account dir"'
+check "the refusal names the way out" \
+  'printf "%s" "$out10a" | grep -q "env -u CLAUDE_CONFIG_DIR"'
+check "nothing was deployed into the account dir" \
+  '[ "$(ls -A "$orca_tmp/orca/claude-accounts/deadbeef/auth" | wc -l)" -eq 0 ]'
+
+mkdir -p "$orca_tmp/marked"
+: > "$orca_tmp/marked/.orca-managed-claude-auth"
+CLAUDE_CONFIG_DIR="$orca_tmp/marked" bash "$boot" >/dev/null 2>&1
+rc10b=$?
+check "the .orca-managed-claude-auth marker is refused too, exit 3" '[ "$rc10b" -eq 3 ]'
+check "nothing was deployed beside the marker" \
+  '[ "$(ls -A "$orca_tmp/marked" | wc -l)" -eq 1 ]'
+
+# And the guard must not fire for a caller that only wants the helper functions —
+# BOOTSTRAP_LIB_ONLY sources this file, where an exit would kill the caller.
+rc10c=0
+( BOOTSTRAP_LIB_ONLY=1 CLAUDE_CONFIG_DIR="$orca_tmp/orca/claude-accounts/deadbeef/auth" \
+  bash -c 'source "'"$boot"'" >/dev/null 2>&1' ) || rc10c=$?
+check "BOOTSTRAP_LIB_ONLY sources an Orca dir without exiting" '[ "$rc10c" -eq 0 ]'
+rm -rf "$orca_tmp"
+
 [ "$fail" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

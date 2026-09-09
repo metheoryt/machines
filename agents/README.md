@@ -185,200 +185,50 @@ agents/bootstrap.sh` (personal) or `CLAUDE_CONFIG_DIR=<dir> bash
 agents/bootstrap.sh` (any other profile — SHARED set + the matching
 `settings.<postfix>.json`).
 
-### Orca-managed profiles
+### Orca-managed profiles — retired 2026-09-09
 
 Orca runs Claude Code against a **per-account** config dir it creates at login
-and owns, keyed by an Orca-internal id (not the account UUID):
+and owns, keyed by an Orca-internal id:
 
 ```
 ~/.local/share/orca/claude-accounts/<orca-profile-id>/auth
 ```
 
-Two separate problems, two scripts.
+Three scripts used to manage that dir — `orca-profile-sync.sh` (mirror the
+primary profile in), `orca-profile-harvest.sh` (archive it out to
+`~/.claude-profiles/<name>` so transcripts outlived it), `orca-profile-link.sh`
+(relocate it into `$HOME` and symlink Orca's dir back). **All three are deleted,
+along with their three suites: 1,809 lines.** Orca's own account switcher is what
+the fleet uses now, so the state they managed is not produced any more — checked
+2026-09-09: `claude-accounts` was an EMPTY directory on air (created 4 Aug, never
+populated), absent on g15, and no box had a `~/.claude-profiles`.
 
-**1. The profile is empty** — that dir holds only account/session state, and its
-name (`auth`) matches no `.claude-<postfix>` convention, so neither
-`bootstrap.sh` recipe can reach it. Switching to an Orca-managed profile drops
-the whole config: settings + hooks + statusline, `CLAUDE.md`, `memory/` and
-`host-memory.md` (the cyphy `global-memory-load.sh` hook reads
-`$CLAUDE_CONFIG_DIR/memory`, so the synced stores go dark), every entry under
-`skills/` including the `cyphy` link, `agents/` and `commands/`.
-
-**2. Everything it accumulates is disposable** — transcripts under `projects/`,
-`sessions/`, prompt history and per-project auto-memory all live inside a
-directory only Orca manages, and nothing else backs up WSL `$HOME`. Two answers,
-in increasing order of coupling: **harvest** it out on a schedule (default), or
-**relocate** it into `$HOME` and symlink it back.
-
-#### `orca-profile-harvest.sh` — copy the profile out (the default)
-
-One-way rsync, Orca -> `~/.claude-profiles/<name>/`. Read-only with respect to
-Orca: nothing in its tree changes, there is no symlink for it to trip over, and
-there is nothing to migrate. The live profile keeps working exactly as it does
-today — which, verified 2026-08-01, it does.
-
-- `just agent-harvest-orca` — every account. Names a new copy from the account's
-  org (else the email local part, else the Orca id) and records the pairing in
-  `.orca-source`, so later runs find the same destination and a hand-rename
-  sticks. `--name` overrides; `--dry-run` previews.
-- Runs at the end of every personal `bootstrap.sh`, after the sync — delta-only,
-  so it costs ~nothing per pull.
-- `just agent-harvest-orca --restore <name>` — copy a snapshot back after Orca
-  loses the dir. Refuses into a live profile, and never deletes: the live dir
-  keeps anything newer than the snapshot. `--to <auth-dir>` names the target by
-  hand when it cannot be worked out — and is checked, because it is the one path
-  where a typo (`--to ~/.claude`) would bury a whole profile: the target must sit
-  under the accounts root or carry Orca's `.orca-managed-claude-auth` marker,
-  unless `--force`.
-
-**A deleted-and-re-added account keeps its copy.** Signing back in mints a fresh
-`<orca-profile-id>`, so the copy is paired to the account's own `accountUuid`
-(from `oauth-account.json`) rather than to Orca's directory id: harvest tops the
-same copy up instead of refusing it as a stranger, and `--restore` follows the
-account to its new directory instead of writing into the dead one. Copies made
-before uuids were recorded still pair by directory id, and gain a uuid on the
-next run. Two genuinely different accounts are still refused — and an account
-with no `oauth-account.json` counts as unidentified, never as matching another
-unidentified one.
-
-The snapshot itself is never at risk in any of this: with no `--delete`, a
-blank or missing source copies nothing and removes nothing.
-
-**Archive semantics — no `--delete`.** A file that vanishes from the live profile
-stays in the copy. That is the entire point; a faithful mirror would reproduce
-the deletion it exists to protect against. `--mirror` opts into exact copying.
-
-**The copy is a working profile, not a blob.** The curated set arrives as
-symlinks (absolute `~/.claude` paths, so they still resolve), which means
-`CLAUDE_CONFIG_DIR=~/.claude-profiles/pure claude` reads the old sessions outside
-Orca, and moving transcripts between profiles is `mv`.
-
-Excluded because they regenerate — 18MB of the live profile's 26MB: `plugins/`
-(rebuilt from `settings.json` on launch), `cache/`, `file-history/`,
-`shell-snapshots/`, `session-env/`, `tmp/` and the `*-cache` dirs. What is left
-is ~5MB, mostly transcripts.
-
-The trade against relocating: the copy is a **snapshot**, so sessions since the
-last run are not in it.
-
-#### `orca-profile-link.sh` — the stronger alternative
-
-Relocates instead of copying, so there is no snapshot lag — at the cost of
-putting a symlink in Orca's tree and needing a one-time migration with Orca
-closed. Harvesting is the default because it couples to nothing; reach for this
-when losing even one session between harvests is unacceptable.
-
-
-Relocates the profile into `$HOME` and leaves a symlink in Orca's tree:
-
-```
-~/.claude-profiles/<name>/                        ← the real profile, yours
-…/claude-accounts/<orca-id>/auth -> ~/.claude-profiles/<name>
-```
-
-Nothing about how Claude Code reads the profile changes — a symlinked config dir
-resolves like any other, and Orca's `mkdir -p` is satisfied by it. What changes
-is the **failure mode**: Orca replacing that dir now costs you *the link*, not
-the data. The profile sits untouched in `$HOME` and `--relink` puts it back.
-Sessions become yours to move between profiles with `mv`.
-
-`~/.claude-profiles/` is its own namespace on purpose — a profile named
-`~/.claude-<postfix>` would be claimed by `bootstrap.sh`'s secondary-profile
-registry and have the tracked baseline deployed over it.
-
-- `just agent-link-orca <name>` — migrate one account (**Orca closed**). Names
-  the account dir explicitly, or discovers it when exactly one is un-migrated.
-- `just agent-link-orca --status` — every account dir and profile, and whether
-  the two are joined.
-- `just agent-link-orca --relink` — re-heal after Orca re-created the dir: folds
-  the fresh auth state in (`.credentials.json`, `oauth-account.json`,
-  `.claude.json`, Orca's marker) while keeping everything the profile already
-  has, then restores the link. Runs automatically before each sync.
-
-It **refuses to relocate a profile with a live session** — checked via this
-shell's `CLAUDE_CONFIG_DIR` and, on Linux, a `/proc` sweep for any other process
-pointed at it. A same-filesystem `mv` keeps open file descriptors valid so it
-would usually survive, but "usually" is a poor bet against a live transcript.
-`--force-live` overrides. `--relink` *skips* a live profile instead of aborting,
-since it sweeps every profile and runs unattended after each pull.
-
-#### `orca-profile-sync.sh` — the curated population
-
-`PROFILE_FILES` + `PROFILE_DIRS` at the top of the script **are** the answer to
-"what do I want in every profile". Everything else in a profile stays
-profile-specific.
-
-- `just agent-sync-orca` — populate **every** discovered profile. Idempotent.
-  Takes an explicit dir, `--dry-run` to preview, `--force` to accept a path with
-  no marker.
-- Runs automatically at the end of a personal `bootstrap.sh` — last, so it
-  mirrors the primary in its final state (after the `settings.json` re-seed and
-  the gortex hook merge), and after `--relink`, so it writes to the real profile
-  rather than into a dir Orca is about to own.
-- It follows the link to the real profile (backups and the settings stamp land in
-  `$HOME`, and the output names the link it followed), and it discovers a
-  migrated profile whose link is currently broken by its `.orca-account` pairing
-  marker — population never depends on Orca's dir being intact.
-
-What it mirrors, and how:
-
-| Path | Mechanism |
-|---|---|
-| `CLAUDE.md`, `host-memory.md`, `statusline-command.sh`, `balance-refresh.py` | symlink at `~/.claude/…` |
-| `skills/`, `agents/`, `commands/`, `memory/` | symlink **per entry**, so machine-local additions inside the Orca profile coexist |
-| `settings.json` | real file, deep-merged — primary wins per key, Orca-only keys survive, `permissions.allow/deny/ask` are unioned |
-
-Unlike `bootstrap.sh` the source is the **live primary profile**, not this repo:
-an Orca profile also needs the machine-local parts the repo never carries
-(`gortex install`'s skills/agents/commands, plugin state written through
-`/plugin` and `/config`).
-
-**It only fills gaps — a real file in the destination is never overwritten.**
-`gortex install` regenerates `commands/`, `agents/` and the `gortex-*` skills
-*per profile*, and the destination's copy is routinely the newer one: on
-`desktop` the Orca profile already held the consolidated-tool commands
-(`explore` / `search` / `relations`) while `~/.claude` still had the previous
-generation. Linking would have downgraded them, gortex would rewrite them, and
-the next sync would link again — churn, plus a `.bootstrap-bak` tree growing on
-every round trip. A fresh profile still gets the primary's copy of everything;
-any generator that later writes its own version wins permanently.
-
-`settings.json` is the one path that is not a symlink — for the same reason
-`copy_managed` exists: Claude (`/config`, `/plugin`) and Orca (its agent-hooks
-block, re-injected on every launch) both write through the live file, and a
-symlink would push those writes into the primary and on into a dirty working
-tree. The pre-merge original is snapshotted once to
-`.settings.json.pre-orca-sync` and never overwritten again.
-
-Never touched — mirroring them would cross-wire two accounts' auth or corrupt
-live session state: `.credentials.json`, `oauth-account.json`, `.claude.json`,
-`.orca-managed-claude-auth`, `projects/`, `sessions/`, `history.jsonl`,
-`shell-snapshots/`, `session-env/`, `backups/`, `cache/`, `policy-limits.json`,
-`remote-settings.json`. `plugins/` is excluded too: `enabledPlugins` and
-`extraKnownMarketplaces` ride along in `settings.json`, and Claude Code installs
-the declared marketplaces into the profile itself on the next launch.
-
-A link whose primary source has since been deleted is pruned on the next run; a
-real file the Orca profile owns, and a symlink pointing anywhere other than the
-primary, are both left alone.
-
-**Restart the Orca session** to pick up a fresh sync — Claude Code reads the
-config dir at startup.
+Their reasoning is in git — `git log --diff-filter=D -- 'agents/orca-profile-*'`
+— and it was reasoning, not accretion: `review/2026-08-03-path-ledger.md` rows
+134-136 examined all three and marked each *keep*, because sync was the only one
+that pushed config in, harvest was an archive with no `--delete`, and
+`bootstrap.sh` ran `link --relink` then sync then harvest in that order so a
+re-auth broken link was healed before sync wrote into it. They were not
+redundant. They were answering a question the fleet stopped asking.
 
 #### Never bootstrap an Orca dir as a secondary profile
 
-An account dir's basename is `auth`, so the `.claude-<postfix>` convention
-resolves `POSTFIX=auth`, finds no `settings.auth.json`, and falls back to
-deploying the **tracked baseline** over the mirror. `bootstrap.sh` now detects
-the account dir (its `.orca-managed-claude-auth` marker, or the canonical path)
-and redirects to `orca-profile-sync.sh` instead of taking that path.
+**This is the one piece that survived the deletion, and it changed shape.** An
+account dir's basename is `auth`, so the `.claude-<postfix>` convention resolves
+`POSTFIX=auth`, finds no `settings.auth.json`, and falls back to deploying the
+**tracked baseline** into a directory this repo does not own. `bootstrap.sh`
+detects the account dir (its `.orca-managed-claude-auth` marker, or the canonical
+path) and **now refuses, exit 3**. It used to redirect to the mirror — that
+destination is gone, and deleting the scripts without keeping the check would
+have turned the incident below back on silently. The scripts were the redirect's
+destination, never its reason.
 
 This is what went wrong on 2026-08-01: `git-hooks/_refresh-claude-config` runs
 bootstrap after every pull/checkout/rebase and passed the shell's own
 `CLAUDE_CONFIG_DIR` straight through. Inside an Orca terminal that is the
 account dir, so a single `git stash` round-trip re-seeded that profile's
 `settings.json` from the baseline and moved the merged file into
-`.bootstrap-bak`. Both ends are fixed — the hook drops the variable, and
+`.bootstrap-bak`. Both ends are still closed — the hook drops the variable, and
 bootstrap refuses the dir even when invoked by hand from an Orca terminal.
 
 ### Windows note — Developer Mode

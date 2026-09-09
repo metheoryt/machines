@@ -125,7 +125,7 @@ provision-wsl nickname *args:
 # Relative path (not {{repo_dir}}) for the Windows reason above. No-just
 # fallbacks: `bash agents/bootstrap.sh`, or on Windows provision\windows.ps1.
 [group('fleet')]
-[doc('Link personal agent config (~/.claude + Orca profiles)')]
+[doc('Link personal agent config (~/.claude)')]
 agent-bootstrap:
     @echo "🔗 Bootstrapping agent config (personal ~/.claude)..."
     @env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh
@@ -137,34 +137,6 @@ agent-bootstrap:
 agent-bootstrap-profile postfix:
     @echo "🔗 Bootstrapping agent config (~/.claude-{{postfix}})..."
     @CLAUDE_CONFIG_DIR="$HOME/.claude-{{postfix}}" bash agents/bootstrap.sh
-
-# Mirror ~/.claude into every Orca-managed account profile
-# (~/.local/share/orca/claude-accounts/<uuid>/auth). Once per Orca auth;
-# idempotent, and `just agent-bootstrap` already runs it at the end of a personal
-# run. Pass a dir to target one account, `--dry-run` to preview.
-[group('fleet')]
-[doc('Mirror the base Claude profile into Orca-managed account profiles')]
-agent-sync-orca *args:
-    @echo "🔗 Syncing base Claude profile into Orca-managed profiles..."
-    @bash agents/orca-profile-sync.sh {{args}}
-
-# Move an Orca account profile into ~/.claude-profiles/<name> and leave a symlink
-# in Orca's tree, so transcripts and sessions outlive the account dir. Once per
-# account, with Orca CLOSED — it refuses to relocate a profile with a live session.
-# `--status` shows every pairing; `--relink` re-heals a link Orca replaced.
-[group('fleet')]
-[doc('Move an Orca account profile into $HOME and link it back')]
-agent-link-orca *args:
-    @bash agents/orca-profile-link.sh {{args}}
-
-# Copy Orca's live account profiles OUT to ~/.claude-profiles/<name> so their
-# transcripts and sessions survive Orca dropping the account dir. One-way rsync,
-# archive semantics (no deletions propagate), regenerable trees excluded. Runs at
-# the end of every agent-bootstrap; `--restore <name>` copies a snapshot back.
-[group('fleet')]
-[doc('Harvest Orca account profiles out to $HOME (backup)')]
-agent-harvest-orca *args:
-    @bash agents/orca-profile-harvest.sh {{args}}
 
 # Force the machine-local `gortex install --no-claude-md` wiring: per-profile
 # skills/agents/hooks + user MCP config. bootstrap.sh does this on its own now —

@@ -118,28 +118,38 @@ else
   # ── An Orca-managed per-account dir is NOT a `.claude-<postfix>` profile ───
   # Orca points CLAUDE_CONFIG_DIR at ~/.local/share/orca/claude-accounts/<uuid>/auth.
   # Its basename is `auth`, so POSTFIX lands on `auth`, settings.auth.json does
-  # not exist, and the fallback below deploys the TRACKED BASELINE over the
-  # mirror orca-profile-sync.sh maintains there.
+  # not exist, and the fallback below would deploy the TRACKED BASELINE into that
+  # account's dir.
   #
   # Not hypothetical: git-hooks/_refresh-claude-config runs this script after
-  # every pull/checkout/rebase and (before the fix landing alongside this) passed
-  # the shell's own CLAUDE_CONFIG_DIR straight through — inside an Orca terminal,
-  # the account dir. Observed 2026-08-01: one `git stash` round-trip re-seeded
-  # that account's settings.json from the baseline and moved the merged file into
-  # .bootstrap-bak. A direct `bash agents/bootstrap.sh` typed in an Orca terminal
-  # does the same, which is why the guard lives here and not only in the hook.
+  # every pull/checkout/rebase and once passed the shell's own CLAUDE_CONFIG_DIR
+  # straight through — inside an Orca terminal, the account dir. Observed
+  # 2026-08-01: one `git stash` round-trip re-seeded that account's settings.json
+  # from the baseline and moved the merged file into .bootstrap-bak. A direct
+  # `bash agents/bootstrap.sh` typed in an Orca terminal does the same, which is
+  # why the guard lives here and not only in the hook.
   #
-  # Redirect rather than refuse: for an Orca profile, "bootstrap" IS the mirror.
+  # THIS REFUSES, and it used to redirect. Until 2026-09-09 the three
+  # orca-profile-*.sh scripts mirrored the primary profile into each account dir,
+  # so "bootstrap" for an Orca dir meant "run the mirror" and this arm exec'd it.
+  # Those scripts are retired — Orca's own account switcher is what the fleet uses
+  # now — and the mirror they maintained no longer exists to be clobbered. What
+  # survives is the reason this arm exists at all: reaching the fallback writes the
+  # tracked baseline into a directory this repo does not own. So the check stays and
+  # the answer is a refusal. Deleting the scripts without keeping this would have
+  # turned a documented incident back on, silently.
+  #
   # Skipped under BOOTSTRAP_LIB_ONLY — a caller sourcing the helpers wants the
-  # functions, never an exec.
-  if [ -z "${BOOTSTRAP_LIB_ONLY:-}" ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ] \
+  # functions, never an exit.
+  if [ -z "${BOOTSTRAP_LIB_ONLY:-}" ] \
      && { [ -f "$CLAUDE_DIR/.orca-managed-claude-auth" ] \
           || case "$CLAUDE_DIR" in */orca/claude-accounts/*/auth) true ;; *) false ;; esac; }; then
-    printf 'Orca-managed profile "%s" — running the mirror instead of the\n' "$CLAUDE_DIR"
-    printf 'secondary-profile bootstrap (see agents/orca-profile-sync.sh).\n'
-    printf 'To bootstrap the PRIMARY profile from here:\n'
-    printf '    env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh   (or: just agent-bootstrap)\n\n'
-    exec bash "$SRC_DIR/orca-profile-sync.sh" "$CLAUDE_DIR"
+    printf 'Orca-managed account dir "%s" — refusing.\n' "$CLAUDE_DIR" >&2
+    printf 'This repo does not deploy into Orca account dirs; bootstrapping one as a\n' >&2
+    printf 'secondary profile would seed it from the tracked baseline.\n' >&2
+    printf 'To bootstrap the PRIMARY profile from here:\n' >&2
+    printf '    env -u CLAUDE_CONFIG_DIR bash agents/bootstrap.sh   (or: just agent-bootstrap)\n\n' >&2
+    exit 3
   fi
   printf 'Secondary profile "%s" — SHARED set + settings.%s.json (settings.local.json untouched)\n\n' "$CLAUDE_BASE" "$POSTFIX"
 fi
@@ -662,39 +672,14 @@ ensure_gortex_wired
 # wiring ran. See gortex_merge_hooks for why the merge is needed at all.
 gortex_merge_hooks "$CLAUDE_DIR"
 
-# ── Orca-managed profiles — the fan-out no naming convention can reach ───────
-# Orca runs Claude Code against a per-account config dir
-# (~/.local/share/orca/claude-accounts/<account-uuid>/auth), so the
-# ~/.claude-<postfix> convention above never sees it. orca-profile-sync.sh
-# mirrors the primary profile into each such dir; see its header.
-#
-# Personal run only, and deliberately LAST: the mirror's source is the primary
-# profile in its final state — after copy_managed re-seeded settings.json and
-# gortex_merge_hooks put the hooks back. A secondary-profile run has nothing to
-# contribute (it is not the source), and running it there would fan a
-# secondary's content out to every account.
-if [ "$IS_PERSONAL" -eq 1 ] && [ -f "$SRC_DIR/orca-profile-sync.sh" ]; then
-  # --relink first: a profile migrated into ~/.claude-profiles is reached through
-  # a symlink Orca can replace with a fresh dir on re-auth. Re-heal before
-  # populating, so the sync writes to the real profile rather than into a
-  # throwaway dir Orca will own. No-op when every link is healthy, and it skips
-  # (never aborts on) a profile with a live session — this runs unattended after
-  # every pull.
-  if [ -f "$SRC_DIR/orca-profile-link.sh" ]; then
-    printf '\n'
-    bash "$SRC_DIR/orca-profile-link.sh" --relink || true
-  fi
-  printf '\n'
-  bash "$SRC_DIR/orca-profile-sync.sh" || true
-  # Harvest LAST: the copy should include the curated set the sync just wrote.
-  # One-way rsync out to ~/.claude-profiles/<name>, so transcripts and sessions
-  # survive Orca dropping its account dir. Delta-only, so it costs ~nothing per
-  # pull; never fails the bootstrap.
-  if [ -f "$SRC_DIR/orca-profile-harvest.sh" ]; then
-    printf '\n'
-    bash "$SRC_DIR/orca-profile-harvest.sh" || true
-  fi
-fi
+# The Orca per-account fan-out was here until 2026-09-09 — orca-profile-link.sh
+# --relink, then orca-profile-sync.sh, then orca-profile-harvest.sh, in that
+# order, on a personal run only. All three are deleted: Orca's own account
+# switcher is how the fleet handles multiple accounts now, and the directory they
+# managed (~/.local/share/orca/claude-accounts) was EMPTY on air and absent on
+# g15 when that was checked. Nothing replaces them here; the refusal near the top
+# of this file is the only Orca-aware behaviour left, and it is a guard, not a
+# deployer.
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
 # (merge / rebase / checkout) re-link without a manual bootstrap run. core.hooksPath

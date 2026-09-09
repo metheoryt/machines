@@ -156,17 +156,8 @@ just provision-mac <machine>            # provision THIS Mac end to end
 just provision-wsl <nickname>           # self-declare THIS WSL distro
                                         #   (--no-tailscale for a second distro)
 
-just agent-bootstrap                    # link ~/.claude (+ mirror into Orca profiles)
+just agent-bootstrap                    # link ~/.claude
 just agent-bootstrap-profile <postfix>  # provision ~/.claude-<postfix>
-just agent-sync-orca                    # populate Orca's per-account profiles from
-                                        #   ~/.claude (also runs at agent-bootstrap)
-just agent-harvest-orca                 # copy Orca's live account profiles OUT to
-                                        #   ~/.claude-profiles/<name> (backup; runs at
-                                        #   agent-bootstrap); --restore <name>
-just agent-link-orca <name>             # ALTERNATIVE to harvesting: move the profile to
-                                        #   ~/.claude-profiles/<name> + symlink it back
-                                        #   (once per account, Orca CLOSED);
-                                        #   --status / --relink
 just gortex-setup                       # force a gortex rewire (run after a bump)
 
 just update-gortex                      # bump provision/gortex.version
@@ -174,6 +165,21 @@ just update-gortex                      # bump provision/gortex.version
 
 `update-orca` and `update-rustdesk` are gone — they wrote only into
 `modules/home/*-bin.nix` and nothing else read those files.
+
+**`agent-sync-orca` / `agent-harvest-orca` / `agent-link-orca` are gone too,
+2026-09-09, with the three `agents/orca-profile-*.sh` scripts behind them.** They
+mirrored `~/.claude` into Orca's per-account config dirs, archived those dirs out
+to `~/.claude-profiles/<name>`, and relocated one into `$HOME` with a symlink
+back. **Orca's own account switcher is what the fleet uses now**, so the state
+they managed is not produced any more:
+`~/.local/share/orca/claude-accounts` was EMPTY on air and absent on g15 when
+that was checked on 2026-09-09, and no box had a `~/.claude-profiles` at all.
+One thing survived the deletion on purpose — **`bootstrap.sh` still detects an
+Orca account dir and now REFUSES it (exit 3) rather than redirecting to the
+mirror.** Reaching the secondary-profile fallback with `CLAUDE_CONFIG_DIR` set to
+`…/claude-accounts/<uuid>/auth` deploys the tracked baseline into a directory
+this repo does not own; that happened on 2026-08-01. The scripts were the
+redirect's destination, not its reason.
 
 ### Tests
 
@@ -240,7 +246,7 @@ commit message, that is the moment to measure it.**
 | Dir | What it is |
 |---|---|
 | `provision/` | Cross-platform provisioner — `provision.{sh,ps1}` role front door, `roles/*.{sh,ps1}` executors, `lib/` manifest readers (`fleet.sh`, `Fleet.psm1`, `tiers.sh`), `linux.sh`/`macos.sh` tier drivers, `statusboard/`, `gortex.version` (the pinned gortex release), `tests/`. See `provision/README.md`. |
-| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `orca-profile-sync.sh` (populates Orca's per-account profiles from `~/.claude`), `orca-profile-harvest.sh` (one-way rsync of the live account profiles out to `~/.claude-profiles/<name>` so transcripts outlive Orca's dir), `orca-profile-link.sh` (the stronger alternative — relocates the profile and symlinks it back), `worktree-{setup,teardown}.sh`, `tests/`. See `agents/README.md` and `agents/docs/git-workflow.md`. |
+| `agents/` | Version-controlled agent config — `plugin/` (skills, subagents, hooks, commands), `subagents/`, `git-hooks/`, `bootstrap.sh`, `worktree-{setup,teardown}.sh`, `tests/`. The three `orca-profile-*.sh` scripts were deleted 2026-09-09 (see *Common Commands* above). See `agents/README.md` and `agents/docs/git-workflow.md`. |
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `update-gortex.sh` (bumps the pin). |
 | `hosts/` | Per-machine, per-platform ops scripts: `hosts/<name>/<platform>/`. |
 | `docs/` | `fleet-roadmap.md` is the live backlog; `superpowers/plans/` holds plans and specs. |
