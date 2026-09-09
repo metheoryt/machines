@@ -2711,7 +2711,10 @@ Where they sit: `latitude:/mnt/immich-mirror/g15-staging` (203 G — `home-me` 1
 + `pgdata` 186 G) and `desktop:/mnt/c/Users/methe/g15-staging/Music` (89 G).
 `hosts/g15/staging/stage.sh` logged phase 1 to `/var/log/g15-staging` **on the
 source box**, which was the wiped `g15-wsl` — so those logs are gone and this
-section is the only surviving record of the phase-1 counts.
+section is the only surviving record of the phase-1 counts. The script itself
+was **deleted 2026-09-09** (it could only run on a host that no longer exists);
+the one live fact its `identity-snapshot.txt` carried — `origin/g15-wsl` is the
+last copy of that box's host-local dotfiles — is now roadmap P6.
 
 **Deleting the latitude staging also closes the `id_fleet` second copy** (its
 private half is in `home-me/.ssh/`), which was one of the two arguments for

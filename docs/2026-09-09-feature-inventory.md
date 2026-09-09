@@ -83,21 +83,35 @@ owner file.
 
 ### Delete — no consumer exists
 
-**`g15-staging`, 934 lines (484 impl + 450 test).** A one-shot Windows→Linux
+**`g15-staging`, 934 lines (484 impl + 450 test) — DELETED 2026-09-09.** A one-shot Windows→Linux
 payload move for a migration that completed 2026-09-07. Its own header says
 *"RUNS ON g15-wsl, AS ROOT"* — a distro deleted the same day. Every path it
 encodes (NAT-mode DERP throughput, port 2222 to desktop, uid 999 pgdata) is
 already written into `AGENTS.md` and the design spec. Six commits in the last 30
 days, all of them the migration itself. Nothing calls it; nothing can.
 
-**`prose-hedge`, 208 lines — a decision, not a dead file.** It is registered and
-live (`agents/plugin/hooks/hooks.json:54`) and has **zero** lines describing it in
-any tracked prose, live or archive — the only row that scores 0, confirmed by a
-grep for `prose` and `hedge` under any name across the six live-prose files. So
-unlike `g15-staging` this is not provably dead; it is a behaviour that may be
-wanted and is undocumented. Either it earns a sentence or it goes. An
-undocumented hook that rewrites how replies read is exactly the class of thing
-that "needs to be remembered" and isn't.
+**One live fact had to be carried out before it went**, and it is the reason a
+delete this obvious still needs a read. `identity-snapshot.txt` was the only
+tracked file recording that the dotfiles branch `origin/g15-wsl` holds
+host-local files present on no other branch — and that its second copy,
+`latitude:/mnt/immich-mirror/g15-staging/home-me`, went in the staging cleanup
+that freed 105 GB. The branch is the last copy. That is now roadmap P6. The
+snapshot's other two claims had both gone stale in the meantime — it said
+`methe@g15` was kept (it was removed) and `me@g15-wsl` removed (it was
+*renamed* to `me@g15`, the same key body, because deleting it would have revoked
+g15 from the whole fleet). A record that asserts wrong things is what this
+survey exists to cut.
+
+**`prose-hedge`, 208 lines — RESOLVED 2026-09-09: kept and documented, not
+deleted.** Reading it changed the verdict. It is registered and live
+(`agents/plugin/hooks/hooks.json`), fires only on prose deliverables, is
+non-blocking by design, and exists because the CFT-5051 tech solution came back
+with three of eight corrections sitting behind hedges the author had written
+himself. Its zero prose score was real — re-verified under both `prose` and
+`hedge` across the six live-prose files — but the defect was the missing
+documentation, not the hook. All seven session hooks now have a line in
+`agents/README.md`, which is where the gap actually was: **none** of them was
+described anywhere.
 
 Cold-surface residue, small but worth one sweep: `g15-wsl` is still named in 11
 tracked files and `nixos-rebuild` / `/etc/NIXOS` in 10, five weeks after the last
@@ -228,17 +242,17 @@ of backup work to the wrong repo."
 
 | bucket | impl | test | total | confidence |
 |---|---:|---:|---:|---|
-| delete — `g15-staging`, provably dead | 484 | 450 | **934** | measured |
-| delete — `prose-hedge`, pending your call | 107 | 101 | **208** | your decision |
+| delete — `g15-staging`, provably dead | 484 | 450 | **934** | ✅ done 09-09 |
+| ~~delete — `prose-hedge`~~ | — | — | — | kept + documented |
 | consolidate — Orca triplicate | 816 | 494 | **1,310** | measured |
 | replace — `converge` → `ansible-pull` | 397 | 619 | **1,016** | strong candidate |
 | replace — `statusboard` → netdata | 3,856 | 1,822 | **6,694** | unprobed (see above) |
-| **reachable without touching `tiers.sh`** | 5,660 | 3,486 | **9,146** | |
+| **reachable without touching `tiers.sh`** | 5,553 | 3,385 | **8,938** | |
 
-9,146 of 27,444 lines — a third of the executable repo — is reachable by four
+8,938 of 27,444 lines — a third of the executable repo — is reachable by three
 independent moves, none of which touches the tier bodies where the hardware
-knowledge lives. Only 2,244 of that is measured-and-decided; the statusboard
-6,694 is the bulk and the least certain. The highest-risk item (`tiers.sh` → Ansible) is therefore not
+knowledge lives. Only 2,244 of that is measured-and-decided (934 of it now
+done); the statusboard 6,694 is the bulk and the least certain. The highest-risk item (`tiers.sh` → Ansible) is therefore not
 needed to make the repo materially smaller, and should be decided separately.
 
 Remembered surface is a different axis and moves differently: the wins there are

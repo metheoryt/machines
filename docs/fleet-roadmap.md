@@ -731,6 +731,17 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   change to a script every WSL distro runs, for one host — its own change, with
   its own suite.
 
+- [ ] **The dotfiles branch `origin/g15-wsl` is now the LAST copy of that box's
+  host-local files. Do not delete it.** Host-local content is tracked on the
+  machine branch and is absent from `main` by construction, so the branch is the
+  only place those files exist as files. When
+  `hosts/g15/staging/identity-snapshot.txt` recorded this on 2026-09-07 there
+  were two copies — the branch and `latitude:/mnt/immich-mirror/g15-staging/home-me`
+  — and the staging cleanup then freed 105 GB, taking that leg with it. The
+  branch is the survivor, and it was the only tracked file saying so, which is
+  why the note is here now and the snapshot is deleted. Retiring the branch means
+  first deciding, file by file, what on it still matters — it is not a `branch -d`.
+
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
   desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh
   config pins `id_fleet`. Removing it is a real revocation, not a cleanup.

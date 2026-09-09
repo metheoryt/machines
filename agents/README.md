@@ -58,6 +58,24 @@ machine-local skill/agent dropped directly into `~/.claude/skills/` or
 `~/.claude/agents/` still works fine alongside it — it's just not part of
 `cyphy`.
 
+## Session hooks
+
+Seven scripts under `plugin/hooks/`, registered in `plugin/hooks/hooks.json`.
+None of them was described anywhere until 2026-09-09, which is how one of them
+became a delete candidate in `docs/2026-09-09-feature-inventory.md` on the
+strength of scoring zero prose lines. A hook changes how every session behaves;
+it needs a line here more than a script does.
+
+| Hook | Event | What it does | Mute |
+|---|---|---|---|
+| `global-memory-load.sh` | SessionStart ×2 | Injects `memory/core.md` verbatim plus an INDEX of the other stores (path, size, `##` headings with line numbers). Two registrations because the stdout cap is per invocation. Takes the config dir as `$1` from the caller. | — |
+| `project-memory-check.sh` | SessionStart | Loads the repo's `.claude/memory/project.md`, and offers to start tracking one where it does not exist. | — |
+| `gortex-onboard-check.sh` | SessionStart | Reports whether the cwd's repo is indexed by the gortex daemon. | — |
+| `worktree-workflow.sh` | SessionStart | Injects the git conventions for a session running inside a worktree. | — |
+| `register-reinject.sh` | UserPromptSubmit | Re-states the reply register (`memory/core.md` § Register) each turn, because a rule stated once at session start decays. | — |
+| `dotfiles-offer.sh` | PostToolUse (Edit/Write/NotebookEdit) | Surfaces a just-touched file that has no other home as a tracking candidate, deduped per session. Its rules live in the hook, not in prose — see `$HOME/CLAUDE.md` for the decision it hands you. | — |
+| `prose-hedge-check.sh` | PostToolUse (Edit/Write) | Greps a prose deliverable (`*.md` under `docs/`/`specs/`, or named `*spec*`/`*design*`/`*tech-solution*`) for two phrase classes: a **hedge** the author wrote instead of resolving the question, and an **absolute negative** ("X does not exist") — the shape that is cheap to check and expensive to get wrong. Non-blocking by design: the phrases are legitimate often enough that a gate would train the reader to dismiss it. Born from the CFT-5051 review, where three of eight corrections sat behind the author's own hedges. Skips `memory/`, `CLAUDE.md` and `AGENTS.md` — a note to self is allowed to be tentative. | `PROSE_HEDGE_CHECK_OFF=1` |
+
 ## What's NOT tracked (and never copy in)
 
 Secrets, transcripts, caches and auto-regenerated state stay machine-local in
