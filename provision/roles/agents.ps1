@@ -10,10 +10,6 @@ function Invoke-RoleAgents {
         [Parameter(Mandatory)] [string] $Platform,
         [Parameter(Mandatory)] [string] $Machine
     )
-    if ($Platform -eq 'nixos') {
-        Write-Host "  agents: owned by home-manager — applied by 'just switch'; dispatcher skips."
-        return
-    }
     if ($Platform -ne 'windows') {
         Write-Host "  agents: no Windows executor for platform '$Platform' (skipped)."
         return

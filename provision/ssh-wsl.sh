@@ -335,7 +335,7 @@ elif ssh_wsl_key_present "$PUB_BODY" "$MESH_KEYS"; then
 else
   printf '%s\n' "$(cat "$KEY.pub")" >> "$MESH_KEYS"
   ok "appended id_fleet.pub → provision/fleet-authorized-keys"
-  warn "commit + push fleet-authorized-keys, then re-provision the other boxes (nixos-rebuild switch / windows.ps1) so they trust this key."
+  warn "commit + push fleet-authorized-keys, then re-provision the other boxes (provision/linux.sh, windows.ps1) so they trust this key."
 fi
 
 # ── 4. Trust inward — install fleet-authorized-keys into ~/.ssh/authorized_keys

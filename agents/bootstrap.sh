@@ -547,16 +547,12 @@ ensure_gortex_binary() {
     || printf '  ✗ gortex install failed — run manually: irm https://get.gortex.dev/install.ps1 | iex\n'
 }
 
-# All platforms except nix activation: regenerate machine-local wiring for the
-# profile in $CLAUDE_DIR. Idempotent — skips a profile already wired unless
-# GORTEX_REWIRE=1 forces a refresh (e.g. after a binary upgrade).
+# Regenerate machine-local wiring for the profile in $CLAUDE_DIR. Idempotent —
+# skips a profile already wired unless GORTEX_REWIRE=1 forces a refresh (e.g.
+# after a binary upgrade). A /etc/NIXOS skip and its GORTEX_ALLOW_NIX_WIRE
+# override lived here until 2026-09-09, for the nix-activation caller that no
+# longer exists.
 ensure_gortex_wired() {
-  # nix activation also runs bootstrap.sh; keep that fast/offline. On NixOS the
-  # wiring runs from a login shell via `just gortex-setup` (GORTEX_ALLOW_NIX_WIRE
-  # overrides the skip if ever needed).
-  if [ -e /etc/NIXOS ] && [ -z "${GORTEX_ALLOW_NIX_WIRE:-}" ]; then
-    printf '  = skipping gortex wiring under NixOS (run: just gortex-setup)\n'; return 0
-  fi
   local gx; gx="$(gortex_bin)" || { printf '  ! gortex not installed — skipping wiring\n'; return 0; }
   # Marker: gortex hooks land in this profile's settings.local.json (default
   # posture installs hooks). Cheap, robust across gortex versions.
@@ -683,10 +679,8 @@ gortex_merge_hooks "$CLAUDE_DIR"
 
 # Auto-refresh: point this clone's git hooks at agents/git-hooks so future pulls
 # (merge / rebase / checkout) re-link without a manual bootstrap run. core.hooksPath
-# is LOCAL (per-clone) config, so this only affects this checkout. Skipped on NixOS,
-# where `nixos-rebuild switch` owns the links — the hooks no-op there anyway.
+# is LOCAL (per-clone) config, so this only affects this checkout.
 install_git_hooks() {
-  [ -e /etc/NIXOS ] && return 0
   command -v git >/dev/null 2>&1 || return 0
   local repo hp cur
   repo="$(git -C "$SRC_DIR" rev-parse --show-toplevel 2>/dev/null)" || return 0

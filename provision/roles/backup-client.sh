@@ -20,7 +20,7 @@ role_backup_client() {
     local repo; repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
     case "$platform" in
-        debian|wsl|nixos|darwin)
+        debian|wsl|darwin)
             BACKUP_CLIENT_LIB_ONLY=1
             # shellcheck source=provision/backup-client.sh
             source "$repo/provision/backup-client.sh"

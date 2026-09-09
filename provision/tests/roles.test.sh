@@ -52,27 +52,31 @@ not_skipped "role_dotfiles" "$(role_dotfiles dry-run darwin air 2>&1)"
 not_skipped "role_repos"    "$(role_repos    dry-run darwin air 2>&1)"
 
 # Regression guard on the arms that already worked, so grouping darwin in does
-# not accidentally move nixos/debian into the skip arm.
-not_skipped "role_repos(nixos)"    "$(role_repos    dry-run nixos latitude 2>&1)"
+# not accidentally move debian into the skip arm.
+not_skipped "role_repos(debian)"    "$(role_repos    dry-run debian latitude 2>&1)"
 not_skipped "role_dotfiles(debian)" "$(role_dotfiles dry-run debian hub 2>&1)"
+not_skipped "role_agents(debian)"   "$(role_agents   dry-run debian latitude 2>&1)"
 
-# nixos DOES deliberately skip agents — home-manager owns the profile there.
-# That is a real arm, not the fallthrough, and must keep saying so.
-case "$(role_agents dry-run nixos latitude 2>&1)" in
-  *"owned by home-manager"*) pass "role_agents: nixos still defers to home-manager" ;;
-  *) die "role_agents: nixos arm changed" ;;
-esac
-
-# dotfiles is the OPPOSITE as of spec 2026-07-28: the bare-repo engine has no
-# collision with home-manager (a path is shared XOR host-local, so home-manager
-# -owned paths simply never sit on main), so nixos reaches a REAL arm now. The
-# old "owned by home-manager on nixos" skip would silently leave latitude with
-# no sync timer and no branch checked out.
-not_skipped "role_dotfiles(nixos)" "$(role_dotfiles dry-run nixos latitude 2>&1)"
-case "$(role_dotfiles dry-run nixos latitude 2>&1)" in
-  *"owned by home-manager"*) die "role_dotfiles: nixos still defers to home-manager — spec 2026-07-28 retires that skip" ;;
-  *) pass "role_dotfiles: nixos no longer defers to home-manager" ;;
-esac
+# THREE nixos assertions lived here until 2026-09-09 and they are gone with the
+# arms they pinned. What they recorded is worth keeping even though the platform
+# is not: `role_agents` deliberately SKIPPED nixos (home-manager owned the Claude
+# profile via claude.nix), while `role_dotfiles` deliberately did NOT — spec
+# 2026-07-28 retired that skip, because the bare-repo engine has no collision to
+# avoid (a path is shared XOR host-local, so a home-manager-owned path never sits
+# on `main`), and keeping the skip would have left latitude with no sync timer and
+# no branch checked out. That asymmetry was the interesting part; it is preserved
+# in the executors' headers and in git.
+#
+# What replaces them is the assertion that actually still bites: an UNKNOWN
+# platform must reach the fallthrough and say so. That arm returns 0 by design,
+# which is how `platform: ubuntu` on g15 would have silently skipped three roles
+# while --apply reported success (AGENTS.md records why the token is `debian`).
+for _r in repos dotfiles agents; do
+  case "$("role_$_r" dry-run freebsd latitude 2>&1)" in
+    *"no posix executor"*) pass "role_$_r: an unknown platform hits the fallthrough" ;;
+    *) die "role_$_r: an unknown platform did NOT hit the fallthrough" ;;
+  esac
+done
 
 
 # ── The backup roles (landed 2026-09-01, deleted from PLANNED_ROLES in the same

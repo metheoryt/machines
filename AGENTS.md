@@ -65,7 +65,8 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   stack needs is there out of the box (live: `7.0.0-31-generic`). Consequences
   that bite elsewhere:
   - **Its `fleet.json` platform is `debian`, on an Ubuntu box, deliberately.**
-    Every posix role executor allowlists `nixos|wsl|debian|darwin` and its
+    Every posix role executor allowlists `wsl|debian|darwin` (it was
+    `nixos|wsl|debian|darwin` until 2026-09-09) and its
     fallback prints "no posix executor for platform 'X' (skipped)" and returns
     **0** — so `platform: ubuntu` would have skipped `dotfiles`, `repos` and
     `backup-client` while `--apply` reported success. The token is a class name

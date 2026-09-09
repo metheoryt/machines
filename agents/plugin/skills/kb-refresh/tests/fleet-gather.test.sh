@@ -28,7 +28,7 @@ KB_GATHER_NO_MAIN=1 source "$script"
 fixture_json="$tmp/fleet.json"
 cat > "$fixture_json" <<'JSON'
 { "machines": {
-  "latitude": { "platform": "nixos", "detect": { "hostname": "latitude5520" } },
+  "latitude": { "platform": "debian", "detect": { "hostname": "latitude5520" } },
   "desktop":  { "platform": "windows", "ssh": { "user": "methe" }, "detect": { "hostname": "g614jv" } },
   "server":   { "platform": "windows", "ssh": { "user": "methe" }, "detect": { "hostname": "methe-server" } },
   "hub":      { "platform": "debian", "ssh": { "user": "debian", "host": "cyphy.kz" }, "detect": { "hostname": "27608" } }
@@ -47,7 +47,7 @@ if command -v jq >/dev/null 2>&1; then
   # instead of matching. -Fx is an exact WHOLE-LINE match, which is what these
   # anchored patterns meant, and printf gives us the real tabs.
   has_row() { printf '%s\n' "$1" | grep -Fxq "$(printf "$2")"; }
-  has_row "$fh" 'latitude\tnixos\tlatitude5520\t' || { echo "FAIL: fleet_hosts latitude tuple"; exit 1; }
+  has_row "$fh" 'latitude\tdebian\tlatitude5520\t' || { echo "FAIL: fleet_hosts latitude tuple"; exit 1; }
   has_row "$fh" 'desktop\twindows\tg614jv\tmethe'  || { echo "FAIL: fleet_hosts desktop tuple"; exit 1; }
   has_row "$fh" 'server\twindows\tmethe-server\tmethe' || { echo "FAIL: fleet_hosts server tuple"; exit 1; }
   printf '%s\n' "$fh" | grep -q 'hub' && { echo "FAIL: fleet_hosts must exclude hub"; exit 1; }
@@ -70,7 +70,7 @@ fi
 rw="$(roots_for_platform windows methe)"
 eq "$rw" '~/.claude/projects' 'roots windows: the single profile root'
 [ "$(printf '%s\n' "$rw" | wc -l | tr -d '[:space:]')" = 1 ] || { echo "FAIL: roots windows expected exactly 1 root"; exit 1; }
-ru="$(roots_for_platform nixos '')"
+ru="$(roots_for_platform debian '')"
 eq "$ru" '~/.claude/projects' 'roots unix: single home root'
 eq "$rw" "$ru" 'roots: platform makes no difference now (~ expands per box)'
 

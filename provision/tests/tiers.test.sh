@@ -336,7 +336,7 @@ grep -q 'KillMode=process' "$TIERS" \
 
 # ── provision/macos.sh — the darwin tier driver ───────────────────────────────
 # The dry-run path is deliberately BEFORE the Darwin precondition in both
-# drivers, so the tier list is inspectable from this NixOS box. That is what
+# drivers, so the tier list is inspectable from a non-Mac box. That is what
 # makes these assertions possible at all; if someone moves the precondition
 # above the dry-run exit, every case below starts failing with "targets macOS".
 eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
@@ -361,7 +361,7 @@ eq "$(printf '%s\n' "$mac" | grep '^tier_' | tr '\n' ' ')" \
 # gate being pre-empted.
 # tier_dotfiles passed a LITERAL `wsl` as role_dotfiles' platform argument. It
 # was harmless only by luck: the role uses that argument once, as a gate
-# (`nixos|wsl|debian|darwin`), and every box reaching the tier happened to be
+# (`wsl|debian|darwin`, `nixos` too until 2026-09-09), and every box reaching the tier happened to be
 # inside the accepted set. It was still a lie in the one place a reader checks
 # what platform the code thinks it is on — and the tier is NOT WSL-only despite
 # its comment: linux.sh's workstation and server lists both end in tier_dotfiles,

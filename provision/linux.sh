@@ -22,12 +22,14 @@
 # Resolution order: $MACHINES_PROFILE > fleet.json "profile" by OS hostname >
 # workstation. See docs/superpowers/specs/2026-07-25-hub-fleet-enrollment-tiers-design.md.
 #
-# This is the imperative, apt-based counterpart to the NixOS hosts (hosts/*/nixos/):
+# This is the imperative, apt-based driver (it was written as the counterpart to
+# the NixOS hosts, deleted 2026-08-01 — see docs/2026-08-01-nixos-harvest.md):
 # deliberately NOT a full reproduction of the Nix fleet. It installs a CORE tier
 # (must succeed — the script aborts if these fail) and a BEST-EFFORT tier
-# (nice-to-have; it warns and continues). Full, drift-free fleet parity only
-# exists on a NixOS box; on WSL you trade that for zero Nix and a distro you can
-# `wsl --unregister` and re-provision in minutes.
+# (nice-to-have; it warns and continues). Drift-free parity was a NixOS property
+# and left with the flake on 2026-08-01 — this driver is best-effort by
+# construction, which is the trade the whole repo now runs on. What WSL still
+# buys you is a distro you can `wsl --unregister` and re-provision in minutes.
 #
 # This is also the ONLY complete path for a WSL box: the provision.sh dispatcher
 # has no `base` role executor, so it cannot stand one up. Run this script.
@@ -178,7 +180,7 @@ printf 'profile: %s (%s)\n' "$PROFILE" "$PROFILE_SRC"
 
 # Dry run prints the plan and exits. Deliberately BEFORE the apt/arch
 # preconditions so the tier list is inspectable (and unit-testable) from any box,
-# including a NixOS one.
+# including one that is not the target.
 if [ -n "${MACHINES_TIERS_DRY_RUN:-}" ]; then
   for t in "${TIERS[@]}"; do printf 'tier_%s\n' "$t"; done
   exit 0

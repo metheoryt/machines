@@ -2,8 +2,8 @@
 # Unit tests for the macOS provisioning chain: provision-mac.sh, macos-prep.sh,
 # tailscale-mac.sh.
 #
-# These run on the NixOS dev box, so the privileged and Darwin-only paths cannot
-# execute. The split mirrors how tiers.test.sh handles macos.sh:
+# These run on whatever box is at hand, which is not a Mac, so the privileged
+# and Darwin-only paths cannot execute. The split mirrors how tiers.test.sh handles macos.sh:
 #   • --dry-run prints the stage plan and exits BEFORE the Darwin guard, so the
 #     orchestration is assertable anywhere.
 #   • *_LIB_ONLY=1 sourcing exposes the pure helpers for direct test — the same

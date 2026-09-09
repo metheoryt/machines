@@ -6,18 +6,17 @@
 # is a bare git repo whose work-tree is $HOME, so tracked files already live at
 # their real paths. No symlinks, no render step, no chezmoi.
 #
-# Runs on EVERY platform including nixos. The old nixos no-op existed because
-# chezmoi collided with home-manager; the bare repo does not. Under the spec's
-# shared-XOR-host invariant a home-manager-owned path is simply host-local —
-# allow-listed on non-Nix branches, absent from main and from latitude's branch —
-# so there is nothing for the two mechanisms to fight over.
+# Runs on EVERY posix platform. It once had a `nixos` no-op — chezmoi collided
+# with home-manager there, the bare repo does not — and the whole home-manager
+# half of that reasoning went with the flake on 2026-08-01; the arm was dropped
+# 2026-09-09 with the rest of the dead nixos handling.
 #
-# One consequence of the 2026-07-29 auto-backup: on nixos, a home-manager-owned
-# path present in $HOME would be moved aside rather than reported. Under the same
-# invariant such a path is host-local and absent from a Nix box's branch, so it is
-# not in the tree being checked out and never becomes a collision — but if that
-# invariant is ever broken, the role now RENAMES the generated file instead of
-# stopping. Keep home-manager-owned paths off that box's branch.
+# What survives from it is the invariant, which is about the repo and not about
+# Nix: a path is shared XOR host-local, so a generated file is allow-listed on
+# the branches that want it and absent from `main`. And the 2026-07-29
+# auto-backup behaviour it documented is still live — a generated file sitting in
+# $HOME where a tracked path wants to land is RENAMED aside rather than stopping
+# the role.
 # shellcheck shell=bash
 
 DOTFILES_REMOTE="${DOTFILES_REMOTE:-git@github.com:metheoryt/dotfiles.git}"
@@ -121,7 +120,7 @@ role_dotfiles() {
     local branch; branch="$(_dotfiles_branch "$machine")"
 
     case "$platform" in
-        nixos|wsl|debian|darwin) : ;;
+        wsl|debian|darwin) : ;;
         *)
             echo "  dotfiles: no posix executor for platform '$platform' (skipped)."
             return 0

@@ -1558,7 +1558,7 @@ tier_dotfiles() {
     return 0
   fi
   # Derive the platform rather than asserting one. role_dotfiles uses this
-  # argument once, as a gate (`nixos|wsl|debian|darwin`), so the old literal
+  # argument once, as a gate (`wsl|debian|darwin`), so the old literal
   # `wsl` was harmless — but only by luck, and it was false on the box that
   # reaches this tier most: linux.sh's workstation AND server lists both end in
   # tier_dotfiles, so latitude (debian) came through here claiming to be WSL on

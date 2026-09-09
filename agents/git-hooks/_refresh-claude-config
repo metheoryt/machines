@@ -6,13 +6,9 @@
 # Installed as core.hooksPath by agents/bootstrap.sh; the post-merge /
 # post-rewrite / post-checkout entrypoints in this dir all exec this script.
 #
-# No-op on NixOS, where `nixos-rebuild switch` (modules/home/claude.nix) owns the
-# symlinks — running bootstrap there could race home-manager. Silent when nothing
-# changed; prints a one-liner when it links new entries; dumps full output only on
+# Silent when nothing changed; prints a one-liner when it links new entries; dumps full output only on
 # failure. Never fails the git operation (always exits 0).
 set -u
-
-[ -e /etc/NIXOS ] && exit 0
 
 repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 boot="$repo/agents/bootstrap.sh"

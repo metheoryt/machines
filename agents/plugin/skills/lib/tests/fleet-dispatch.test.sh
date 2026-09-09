@@ -45,7 +45,7 @@ mock_ssh() {
 SSH="mock_ssh"
 
 # fd_probe linux → uses `bash -c true`
-: > "$LOG"; fd_probe latitude nixos && pass "probe linux ok" || die "probe linux failed"
+: > "$LOG"; fd_probe latitude debian && pass "probe linux ok" || die "probe linux failed"
 grep -q $'latitude\tbash -c true' "$LOG" && pass "probe linux uses bash -c true" \
   || die "probe linux argv: $(cat "$LOG")"
 
@@ -58,7 +58,7 @@ grep -q 'Git\\bin\\bash.exe" -c true' "$LOG" && pass "probe windows uses Git Bas
 fd_probe winbox windows && pass "winbox reachable via bash probe" || die "winbox probe should pass"
 
 # fd_run linux → `bash -s` with args; stdin forwarded verbatim.
-out="$(printf 'SCRIPT-BODY' | fd_run latitude nixos target-arg)"
+out="$(printf 'SCRIPT-BODY' | fd_run latitude debian target-arg)"
 [ "$out" = 'bash -s -- target-arg||SCRIPT-BODY' ] && pass "fd_run linux argv+stdin" \
   || die "fd_run linux -> '$out'"
 
@@ -69,7 +69,7 @@ case "$out" in
   *) die "fd_run windows -> '$out'" ;;
 esac
 
-# darwin is a POSIX-SSH member: it must take the SAME arm as nixos/debian, never
+# darwin is a POSIX-SSH member: it must take the SAME arm as debian, never
 # the Windows Git-Bash-through-PowerShell path. A `bash.exe` here would mean the
 # Mac was misclassified as a Windows box and every dispatch to it would fail.
 : > "$LOG"; fd_probe air darwin && pass "probe darwin ok" || die "probe darwin failed"
@@ -104,7 +104,7 @@ SSH="mock_ssh_wsl"
 got="$(fd_wsl_hosts desktop windows)"
 [ "$got" = $'desktop-ubuntu26\tdesktop-ubuntu26.gg.ez\tlinux' ] && pass "fd_wsl_hosts opt-in only" || die "fd_wsl_hosts -> '$got'"
 # non-windows returns nothing
-got="$(fd_wsl_hosts latitude nixos)"
+got="$(fd_wsl_hosts latitude debian)"
 [ -z "$got" ] && pass "fd_wsl_hosts skips non-windows" || die "fd_wsl_hosts non-windows -> '$got'"
 got="$(fd_wsl_hosts air darwin)"
 [ -z "$got" ] && pass "fd_wsl_hosts skips darwin" || die "fd_wsl_hosts darwin -> '$got'"

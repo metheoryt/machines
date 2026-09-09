@@ -2,9 +2,11 @@
 # provision/fleet-selfpull.sh — Trigger B (eventual). For each personal
 # fleet-sync repo under the scan roots, if safe, fast-forward it to origin/main.
 # The pull fires the repo's own post-merge hook (only machines has converge.sh),
-# so this script NEVER converges — it only keeps checkouts fresh. On NixOS there
-# is no post-merge hook, but the HEAD movement trips machines-converge.path
-# (PathChanged on .git/logs/HEAD), so convergence still fires there.
+# so this script NEVER converges — it only keeps checkouts fresh. A box with no
+# post-merge hook still converges: the HEAD movement trips
+# machines-converge.path (PathChanged on .git/logs/HEAD). That belt-and-braces
+# pair was written for NixOS, which had no hook; it is why a checkout with
+# core.hooksPath unset still converges today.
 # Excludes work repos (thepureapp/). Mirrors modules/system/git-autofetch (scan).
 #
 # EXIT STATUS IS MEANINGFUL: non-zero if any repo hit a real error (unreachable

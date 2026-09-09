@@ -2,9 +2,13 @@
 # Sourced by provision.sh (do not execute). Defines role_agents.
 #
 # agents = the synced Claude Code config produced by agents/bootstrap.sh.
-# On nixos it is owned by home-manager (claude.nix, which invokes
-# bootstrap.sh) and applied by `just switch`, so the dispatcher must NOT run
-# bootstrap.sh there.
+#
+# Until 2026-09-09 this carried a `nixos` arm that skipped bootstrap.sh, because
+# home-manager (claude.nix, applied by `just switch`) owned the config there.
+# Both the module and the recipe were deleted 2026-08-01 with the flake, and no
+# fleet.json machine has had `platform: nixos` since — so the arm was a branch
+# no run could take. Every posix platform now runs bootstrap.sh, which is what
+# every posix platform in the fleet already did.
 # shellcheck shell=bash
 
 # role_agents <mode> <platform> <machine>
@@ -17,14 +21,9 @@ role_agents() {
     local boot="$repo/agents/bootstrap.sh"
 
     case "$platform" in
-        nixos)
-            echo "  agents: owned by home-manager (claude.nix, which invokes bootstrap.sh) — applied by 'just switch'; dispatcher skips."
-            return 0
-            ;;
         wsl|debian|darwin)
-            # darwin groups here, NOT with nixos: no home-manager owns the
-            # config on macOS, and bootstrap.sh already branches on `uname -s`
-            # and handles Darwin, so the dispatcher must run it.
+            # darwin is not special here: bootstrap.sh already branches on
+            # `uname -s` and handles Darwin, so the dispatcher just runs it.
             if [ ! -f "$boot" ]; then
                 echo "  agents: bootstrap.sh not found at $boot — is this repo cloned here?" >&2
                 return 1

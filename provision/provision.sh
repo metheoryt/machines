@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provision/provision.sh — fleet front door (WSL / Linux / nixos).
+# provision/provision.sh — fleet front door (WSL / Linux / macOS).
 # Phase 1: detect/select the machine and PRINT the plan. Applies nothing.
 set -euo pipefail
 

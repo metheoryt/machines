@@ -96,7 +96,7 @@ printf 'profile: %s (%s)\n' "$PROFILE" "$PROFILE_SRC"
 
 # Dry run prints the plan and exits. Deliberately BEFORE the platform
 # preconditions so the tier list is inspectable (and unit-testable) from any
-# box — including the NixOS one this repo is usually edited on.
+# box — which is what lets a Linux box assert the macOS plan.
 if [ -n "${MACHINES_TIERS_DRY_RUN:-}" ]; then
   for t in "${TIERS[@]}"; do printf 'tier_%s\n' "$t"; done
   exit 0
@@ -161,8 +161,9 @@ run once, interactively, to install its privileged helper.
         brew install --cask docker-desktop
   • Then launch it once:  open -a Docker   (verify: docker run --rm hello-world)
 
-Not installed by design (only a NixOS host gets these): the declarative dev
-toolchain (language servers, the full fish/ghostty/GNOME setup).
+Not installed by design: the declarative dev toolchain (language servers, the
+full fish/ghostty/GNOME setup). That set only ever existed on the NixOS hosts,
+deleted 2026-08-01, so nothing in the fleet has it now.
 EOF
 
 exit 0

@@ -3,9 +3,8 @@
 #
 # repos = your working repos cloned into the per-account home-dir layout by
 # provision/repos.sh (host-agnostic; DRY_RUN-capable; interactive fzf select on
-# apply). Wrapped here UNCHANGED. Unlike agents/dotfiles this is NOT a nixos
-# no-op — cloning working repos is imperative and not home-manager-managed, so
-# repos.sh runs on nixos too.
+# apply). Wrapped here UNCHANGED. It runs on every posix platform: cloning
+# working repos is plain imperative git with nothing platform-specific in it.
 # shellcheck shell=bash
 
 # role_repos <mode> <platform> <machine>
@@ -17,10 +16,9 @@ role_repos() {
     local script="$repo/provision/repos.sh"
 
     case "$platform" in
-        nixos|wsl|debian|darwin)
+        wsl|debian|darwin)
             # repos.sh is host-agnostic plain git — darwin joins every other
-            # posix platform, including nixos (cloning is imperative, so it is
-            # not a home-manager no-op here).
+            # posix platform with no special case.
             if [ ! -f "$script" ]; then
                 echo "  repos: repos.sh not found at $script — is this repo cloned here?" >&2
                 return 1
