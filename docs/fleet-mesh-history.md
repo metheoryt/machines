@@ -279,7 +279,9 @@
   age). Remaining stub roles: base, mesh-member/mesh-hub, ssh-server, backup-*.
 - Phase 5 = mesh role. DESIGN APPROVED + committed 2026-07-08 (spec
   `docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md`,
-  commit `c09a52a`). **5a EXECUTED 2026-07-08** (commits `f9843bc`..`73d8276`):
+  **deleted 2026-09-09** — every file it designed was deleted by
+  `2026-07-17-fleet-ssh-tailnet-retire-awg-design` §B before any of it shipped
+  past 5a, and the outcome is this bullet; read it at `c09a52a`). **5a EXECUTED 2026-07-08** (commits `f9843bc`..`73d8276`):
   the old "g16/g614jv `.6` collision" is resolved — the ROG G16 is now
   Windows-only, `g614jv` is the live ROG and owns mesh `.6`, and the NixOS
   `g16` install (the `fleet.json` entry, `flake.nix` wiring,
@@ -415,3 +417,24 @@
     + latitude5520 all handshaking, the fleet mesh activation is COMPLETE.
     (Verify freshly with `manage-peers.sh list` before assuming a box is down —
     the checklist can lag the live state.)
+
+## Two mesh specs were deleted 2026-09-09, and what they held is above
+
+`docs/superpowers/specs/2026-07-08-fleet-provisioner-phase5-mesh-executor-design.md`
+designed `mesh-member` / `mesh-hub` role executors and a `provision/lib/mesh.sh`
+that were never built — 5a shipped (`f9843bc`..`73d8276`), 5b did not, and the
+2026-07-17 retirement spec deleted every file the design named. The Phase 5
+bullet above is the whole outcome.
+
+`docs/superpowers/specs/2026-07-13-headscale-fleet-mesh-probe-design.md` was a
+one-time validation exercise; it passed, and its results are in
+`plans/2026-07-13-headscale-probe-results.md` (**Verdict: PASS**). Its Decisions
+box described the control server — `cc.cyphy.kz`, embedded DERP, SQLite, no OIDC
+— which the sibling `vps` repo owns and configures, so nothing there was the only
+copy. The one durable line was the split, and it lives in `AGENTS.md`: **Headscale
+for our own fleet, AmneziaWG only as the VPS's obfuscated VPN for RU relatives.**
+
+Both were `merge -> this file` in `review/2026-08-03-path-ledger.md`. This section
+is that merge. Plans that cite them by path (the phase5a/5b plans, the probe
+results) now point at a deleted file on purpose — those plans are archive, and
+`git log --diff-filter=D -- 'docs/superpowers/specs/*'` is the way back.

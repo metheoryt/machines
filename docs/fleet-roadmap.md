@@ -494,6 +494,22 @@ Nix ever returns. Leave them.
   AGENTS.md reads as though the role is done. It is not, and with the NixOS
   module gone latitude's sshd has no generator either. Windows gotchas for
   whoever implements it are in project memory.
+- [ ] **When `ssh-server` is built, PIN host keys instead of leaning on
+  `accept-new` — and that means PRESERVING each box's `ssh_host_ed25519_key*`
+  across a reinstall.** Carried here 2026-09-09 from
+  `docs/superpowers/specs/2026-07-07-fleet-mesh-vpn-ssh-design.md` §4, which was
+  deleted the same day: its world (the AmneziaWG mesh, the NixOS
+  `programs.ssh.knownHosts` mechanism it proposed) is retired, but this
+  rationale was written nowhere else and still applies. `accept-new` is
+  trust-on-first-use, so it authenticates nothing and it **refuses a CHANGED
+  key** — which is the wall a reinstalled box puts in front of the whole fleet
+  until someone runs `ssh-keygen -R` by hand, and no provision run does it for
+  you. Public host keys are safe to commit, same as `fleet-authorized-keys`. The
+  fleet has now paid for this twice: g15's reinstall on 2026-09-07 (AGENTS.md
+  records the stale-key trap) and latitude's on 2026-08-01. So the host
+  keypair's *private* half belongs on the per-host restore checklist, and the
+  public half belongs in a generated `known_hosts` — the role is where both
+  become one mechanism instead of two habits.
 - [x] **`provision.ps1` had NO `PLANNED_ROLES` equivalent — closed 2026-09-02**,
   a day after it was found while adding `backup-client.ps1`. A role missing from
   its `$RoleExecutors` map fell through to a branch that printed "not yet
