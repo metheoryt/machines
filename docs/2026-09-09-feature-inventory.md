@@ -134,18 +134,43 @@ becoming a browser in kiosk mode on tty1. This is the single largest code win in
 the repo and it touches one machine.
 
 **But it is a candidate, not a measurement, and it is the only load-bearing claim
-in this document not sourced from the tree.** Two questions decide the actual
-size of the win and neither has been probed: (a) does netdata read the RAPL
-energy counter without the group-widening `tier_rapl_read` performs — if not,
-that tier survives the replacement; (b) is a browser kiosk on tty1 genuinely
-smaller than 749 lines on a box with no X session configured for one. Until a
-spike answers both, do not bank the 6,694. This is the same class of error the
-repo already records — "expected and accepted" surviving as a stale
-measurement. What must be carried across, not lost: the
-per-host disk config (`disks.latitude5520.conf`) encodes UUID-keyed identity for
-five external drives on two docks, one of which reports a fake serial. Roadmap P6
-already flags `SB_PARKS` as keyed by `sd` node — which is the bug this repo's own
-mount rule forbids, and an argument for retiring rather than fixing it.
+in this document not sourced from the tree.** Corrected 2026-09-09, and both
+halves of the correction shrink it:
+
+- **The 749 kiosk lines mostly survive a substitution.** The first draft asked
+  whether a browser kiosk beats 749 lines "on a box with no X session" — a false
+  premise, from prose rather than the tree. `tier_statusboard` installs
+  **cage + foot + tmux + fonts-jetbrains-mono + btop + polkitd**, and
+  `statusboard-gui.sh` is not display plumbing to be replaced: it is the argument
+  for *why the kiosk is a login session* (cage must hold a logind seat to become
+  DRM master, so it runs from an autologin getty, and the hook deliberately does
+  not `exec` so a crash lands on a diagnosable tty1 prompt rather than a black
+  screen — "which this box has already been through twice"). A browser under cage
+  inherits the seat, the getty, the failure mode and the font. What a substitution
+  actually removes is **the 3,044-line board**, not the 749-line kiosk.
+- **RAPL is still unprobed.** Does netdata read `energy_uj` without the
+  group-widening `tier_rapl_read` performs? The tier chgrps *only the parent
+  domains* and re-runs on every boot and resume, because a sysfs mode is a
+  property of the live kernel object. If netdata cannot read it as its own user,
+  that tier survives the replacement whole.
+
+**The third option is RETIRE, and it costs least.** Not "keep" and not "replace":
+delete the board and install nothing. It needs no daemon, no browser and no
+probe, and it banks 5,678 rather than 5,678 minus netdata minus a browser. The
+case for it is churn, measured: **43 commits touch `provision/statusboard/`, and
+roughly 40 of them are fixes** — the VT ramp, the chart polarity, the comma
+locale, the tmux split geometry, the twice-black console. That is the highest
+fix-to-feature ratio in the repo, spent on a panel on one box. It also carries an
+open bug that is not fixable as designed: roadmap P6 has `SB_PARKS` keyed by `sd`
+node — the identity error this repo's own mount rule forbids — and getting it
+wrong costs load cycles on a drive already past 639k of them. Retiring closes
+that item by deletion.
+
+This is a decision, not a measurement, and it is the user's: nobody has said the
+board is unwanted, and it was still being committed to on 2026-09-08. What must
+be carried across if it goes either way: `disks.latitude5520.conf` encodes
+UUID-keyed identity for five external drives on two docks, one of which reports a
+fake serial.
 
 **`converge` (+ `fleet-selfpull`) — 1,016 lines, test 1.6× impl, zero commits in
 30 days.** It pulls the repo, decides whether the change touches a driver,
@@ -176,12 +201,36 @@ repeated.
 scripts solve one problem: `orca-profile-sync.sh` (439) pushes config *into*
 Orca's per-account profiles, `orca-profile-harvest.sh` (377) copies them *out* as
 backup, `orca-profile-link.sh` (308) relocates a profile to `$HOME` and symlinks
-it back. `AGENTS.md` already calls link *"the stronger alternative"* to
-harvesting — because once a profile is a symlink into `$HOME`, both the push and
-the backup are structurally unnecessary. All three were last touched
-2026-08-01, together; 1,124 impl + 685 test lines, plus 579 archive doc lines and
-95 in `project.md`. Adopting link per-account retires the other two. Cheapest
-real win in the repo after the deletes.
+it back. All three were last touched 2026-08-01, together; 1,124 impl + 685 test
+lines, plus 579 archive doc lines and 95 in `project.md`. The row's own
+`last commit 2026-09-07 / 5 commits in 30 days` belongs to
+`provision/orca-serve.sh` (11 commits, live), not to these three, which have 1–2
+commits each and have been frozen for 38 days.
+
+**Retracted 2026-09-09 — the repo already adjudicated this and the answer was
+no.** The first draft argued that "once a profile is a symlink into `$HOME`, both
+the push and the backup are structurally unnecessary", reading `AGENTS.md`'s
+*"the stronger alternative"* as *the superseding one*. `review/2026-08-03-path-ledger.md`
+rows 134–136 examined all three per-path five weeks earlier, marked each **keep**,
+and gave the mechanism reasons — which the code confirms:
+
+- **`sync` is the only one that pushes config IN** (curated skills/commands
+  symlinked, `settings.json` merged rather than linked). Relocating a profile does
+  not populate it; `orca-profile-link.sh` itself prints
+  *"nothing to do; populate it with: bash agents/orca-profile-sync.sh"*.
+- **`harvest` is an archive, not a copy**: a one-way rsync with **no `--delete`**,
+  so it deliberately keeps files the live profile has deleted, and it detects an
+  already-relocated profile and no-ops rather than rsyncing a directory into
+  itself. A symlink gives you one live copy; that is not the same artifact.
+- **`bootstrap.sh` runs all three, in order** — `link --relink` first so a
+  re-auth-broken link is healed *before* `sync` writes into it, then `harvest`
+  last. They are mutually aware, not accreted.
+
+So the 1,310 is not a consolidation win. The live question is upstream of the
+scripts and only the user can answer it: **is a multi-account Orca still a need?**
+`AGENTS.md` records g15 rejoining the fleet on 2026-08-27 precisely so *"a
+personal Claude account needs no Orca profile juggling"* — which, if that is now
+how it works everywhere, retires all three rather than merging two of them.
 
 **`worktree` + `orca-setup` + `ship-dispatch`.** Three separate answers to "get a
 change onto every box / into an isolated tree", all cold (worktree and kb-refresh
@@ -229,6 +278,18 @@ not feature reduction.
 4. The `tailscale` row's implementation is spread across four subsystems with no
    owner file, which is why it accumulates the second-highest archive prose
    (988 lines) in the repo.
+5. **This is the repo's second inventory, and the first one moved almost
+   nothing.** `review/2026-08-03-path-ledger.md` (120 KB, 240 paths, one verdict
+   each, produced 2026-08-03) tallies *delete 6, needs-decision 11, merge 2,
+   rewrite 86, keep 135*. Checked against the tree today: **18 of those 19
+   actionable paths still exist** — only `statix.toml` was actioned, five weeks
+   ago. The eleven `needs-decision` rows are all parked on the same sentence,
+   some form of *"that is the user's call, not mine"*: `.gemini/settings.json`
+   (no box installs the Gemini CLI), `test_distill.py` (pytest is not in the
+   fleet toolchain), `agents/plugin/commands/.gitkeep` (a documented extension
+   point never populated), and five stale plans/specs. The bottleneck this repo
+   has is not measurement — it already had a finer-grained inventory than this
+   one. It is that nothing decides.
 
 ## Scope boundary
 
@@ -244,17 +305,30 @@ of backup work to the wrong repo."
 |---|---:|---:|---:|---|
 | delete — `g15-staging`, provably dead | 484 | 450 | **934** | ✅ done 09-09 |
 | ~~delete — `prose-hedge`~~ | — | — | — | kept + documented |
-| consolidate — Orca triplicate | 816 | 494 | **1,310** | measured |
+| consolidate — Orca triplicate | 816 | 494 | **1,310** | **contested — a prior review says no** |
 | replace — `converge` → `ansible-pull` | 397 | 619 | **1,016** | strong candidate |
-| replace — `statusboard` → netdata | 3,856 | 1,822 | **6,694** | unprobed (see above) |
+| retire *or* replace — `statusboard` | 3,856 | 1,822 | **5,678** | contested (see above) |
 | **reachable without touching `tiers.sh`** | 5,553 | 3,385 | **8,938** | |
 
-8,938 of 27,444 lines — a third of the executable repo — is reachable by three
-independent moves, none of which touches the tier bodies where the hardware
-knowledge lives. Only 2,244 of that is measured-and-decided (934 of it now
-done); the statusboard 6,694 is the bulk and the least certain. The highest-risk item (`tiers.sh` → Ansible) is therefore not
-needed to make the repo materially smaller, and should be decided separately.
+8,938 of 27,444 lines — a third of the executable repo — is nominally reachable
+without touching the tier bodies where the hardware knowledge lives. **But after
+the 2026-09-09 corrections above, only 934 of it is done and only 1,016 is still
+a clean candidate.** The 1,310 was retracted (a prior review examined it and said
+keep) and the 5,678 is a decision the user owns, not a measurement. That is the
+honest state, and the drop from a 8,938 headline to 1,950 actionable lines is the
+finding, not a setback: two of the three "wins" dissolved on contact with the
+tree and the repo's own earlier review.
 
-Remembered surface is a different axis and moves differently: the wins there are
-the four findings above, retiring the `wsl` row's 330 live prose lines down to the
-one distro that still exists, and marking the 94 plans done.
+Which leaves the real conclusion. The lines are not the constraint —
+`review/2026-08-03-path-ledger.md` proved five weeks ago that this repo can
+inventory itself down to 240 paths and still move only one of them. **Every
+remaining item is blocked on a decision, and the decisions are all the same
+shape:** is the multi-account Orca still a need; is the panel on latitude worth
+its 43 commits; does `.gemini/settings.json` have a user. The highest-risk item
+(`tiers.sh` → Ansible) is not needed to make the repo materially smaller and
+should be decided separately.
+
+Remembered surface is a different axis and moves differently, and it is where the
+uncontested wins are: the five findings above, retiring the `wsl` row's 330 live
+prose lines down to the one distro that still exists, and marking the 94 plans
+done.
