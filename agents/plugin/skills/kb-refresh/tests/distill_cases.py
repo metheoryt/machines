@@ -1,3 +1,14 @@
+"""Behavioural cases for kb-refresh's distill.py — pytest-free on purpose.
+
+These were `test_distill.py` and needed pytest, which is not in the fleet
+toolchain, so the gate skipped them and AGENTS.md carried a standing exemption
+for the one file outside it. The only thing they actually wanted from pytest was
+the `tmp_path` fixture. The runner at the bottom of this file supplies that from
+`tempfile`, so the cases run under plain `python3` — see distill.test.sh, which
+is what `just test` picks up. Keep the `tmp_path` parameter name: the runner keys
+on it to decide whether a case needs a scratch dir.
+"""
+
 import json, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import distill
@@ -241,3 +252,40 @@ def test_run_preserves_cwd_on_noop_second_run(tmp_path):
 
     st = json.loads(state.read_text())
     assert st["sessions"]["S1"]["cwd"] == real_cwd
+
+# ── runner ────────────────────────────────────────────────────────────────────
+# Definition order, not alphabetical: a reader comparing this output to the file
+# should not have to re-sort it. Each case that takes `tmp_path` gets a fresh
+# temp dir; cwd is restored AFTER the case returns, never before, because
+# test_run_preserves_cwd_on_noop_second_run asserts on cwd itself.
+if __name__ == "__main__":
+    import inspect, os, shutil, tempfile, traceback
+
+    cases = [
+        (n, f)
+        for n, f in vars(sys.modules[__name__]).items()
+        if n.startswith("test_") and inspect.isfunction(f)
+    ]
+    cases.sort(key=lambda nf: inspect.getsourcelines(nf[1])[1])
+
+    failed = 0
+    for name, fn in cases:
+        wants_tmp = "tmp_path" in inspect.signature(fn).parameters
+        tmp = tempfile.mkdtemp(prefix="distill-case-") if wants_tmp else None
+        cwd = os.getcwd()
+        try:
+            fn(pathlib.Path(tmp)) if wants_tmp else fn()
+            print("ok   - %s" % name)
+        except Exception:
+            failed += 1
+            print("FAIL - %s" % name)
+            traceback.print_exc()
+        finally:
+            os.chdir(cwd)
+            if tmp:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+    if failed:
+        print("SOME FAILED (%d of %d)" % (failed, len(cases)))
+        sys.exit(1)
+    print("ALL PASS")

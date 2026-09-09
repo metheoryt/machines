@@ -206,9 +206,14 @@ cost was false confidence rather than a hidden regression. That is the argument
 for the assertion, not against it: ten passing was luck, and luck is what a gate
 exists to replace.
 
-One file is still outside the gate by decision: `test_distill.py` needs pytest,
-which is not in the fleet toolchain. Hence `justfile.test.sh`'s stray-name
-assertion covers `.sh` only.
+**Nothing is outside the gate any more.** `test_distill.py` was, for needing
+pytest which the fleet toolchain lacks — 11 assertions on `distill.py`, the
+distiller `fleet-gather.sh` pushes to every box over ssh, never run by anything.
+It is now `tests/distill_cases.py` plus a `distill.test.sh` wrapper: the only
+pytest feature it used was the `tmp_path` fixture, and the file supplies that
+from `tempfile` itself. `justfile.test.sh`'s stray-name assertion still covers
+`.sh` only, but now because that is the whole population, not because one file
+is excused.
 
 Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in

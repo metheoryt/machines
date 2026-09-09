@@ -48,7 +48,7 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 | `settings.json` | `~/.claude/settings.json` | personal profile config (committed) |
 | `settings.<postfix>.json` | `~/.claude-<postfix>/settings.json` | one secondary profile per file (registry). `settings.pure.json` → `~/.claude-pure` (work; committed, no secret). The Sentry secret is NOT here — it lives in each work repo's project-scope `.claude/settings.local.json` (gitignored), which Claude reads natively. A config-dir-root `settings.local.json` is NOT read. |
 | `subagents/` | `agents/<entry>` | linked entry-by-entry, so machine-local agents coexist |
-| `plugin/` | `skills/cyphy` | whole-directory symlink — the "cyphy" skills-directory plugin (`skills/`, `agents/` [was `subagents/`], `hooks/hooks.json`, `commands/`), discovered by Claude Code as `cyphy@skills-dir`: live, in place, no copy-to-cache, no install/update step |
+| `plugin/` | `skills/cyphy` | whole-directory symlink — the "cyphy" skills-directory plugin (`skills/`, `agents/` [was `subagents/`], `hooks/hooks.json`), discovered by Claude Code as `cyphy@skills-dir`: live, in place, no copy-to-cache, no install/update step |
 
 `plugin/` is linked as **one whole directory** (`~/.claude/skills/cyphy`, and
 `~/.claude-<postfix>/skills/cyphy` in each secondary profile) — Claude Code discovers its
@@ -342,8 +342,11 @@ hand:
 
 **No manual sync between the two mechanisms.** Both `bootstrap.sh`
 (`link_entries_into`) and `modules/home/claude.nix` (`linkEntries` via
-`readDir`) auto-discover everything under `hooks/`, `skills/`, `subagents/`,
-`commands/` (source dirs — they land in the tool-dictated `~/.claude/agents/`).
+`readDir`) auto-discover everything under `hooks/`, `skills/` and `subagents/`
+(a source dir — it lands in the tool-dictated `~/.claude/agents/`). A
+`commands/` dir was documented here and carried a `.gitkeep` for six weeks
+without ever holding a file; it was deleted 2026-09-09. Adding one back is
+creating the dir and dropping a file in — nothing to wire.
 Drop a new file in one of those dirs and commit it — nothing else to wire up.
 (nix reads git-*tracked* files, so commit the new entry for `switch` to see it;
 `bootstrap.sh` reads the working tree and links it right away.)

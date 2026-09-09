@@ -120,9 +120,9 @@ fi
 # One naming convention, so the glob above can be exhaustive. A test script named
 # test_*.sh is invisible to a *.test.sh glob no matter how wide the directory
 # list gets — widening the glob and leaving the name is a half-fix that reads as
-# a whole one. (test_distill.py is deliberately exempt: it needs pytest, which is
-# not in the fleet toolchain. That is a judgement call recorded in the review,
-# not an oversight — hence the .sh restriction here.)
+# a whole one. (.sh is the whole population since 2026-09-09: the one python
+# suite that used to sit outside the gate for needing pytest now runs from
+# distill.test.sh, so there is no exemption left to remember.)
 strays="$(cd "$REPO" && git ls-files '*test_*.sh' 2>/dev/null)"
 if [ -z "$strays" ]; then
   pass "no test_*.sh strays — every shell suite is named *.test.sh"
