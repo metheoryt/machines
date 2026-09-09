@@ -87,8 +87,15 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
     script gates that on WSL since `63472aa`; the box was in exactly that state
     for a day.
 
-The repo also carries Windows install/reinstall + backup scripts
+The repo also carries the Windows reinstall bootstrap and runbook
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
+**It carries no backup or restore script** — `backup.ps1` and `restore.ps1` were
+both deleted 2026-07-31 (`1080828`), so Phase 1 (preserve) and the automatic half
+of Phase 4 (restore repos, `.ssh` + perms, Downloads, the vault) are manual.
+`install.ps1` is the `irm … | iex` one-liner: git, clone, then hand off to
+`provision/windows.ps1`. It pointed at the deleted `restore.ps1` until
+2026-09-09 and threw unconditionally; `provision/tests/windows-bootstrap.test.sh`
+now asserts every path it hands off to is tracked.
 
 **`machines` / `vps` boundary:** `machines` owns the *machines* — provisioning
 and data backup across Debian, Windows and macOS, **including the restic
