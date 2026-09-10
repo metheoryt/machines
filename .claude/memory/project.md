@@ -3172,3 +3172,57 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   (`### Deployed at the router, not per box`). `hub` is NOT behind that router and
   keeps its own per-box install — and it needs its own block list anyway (`torproject.org` stays 000 there
   with `-r1+s` that works on the LAN).
+
+## RustDesk on g15: unattended Wayland works, but only in a preview build (2026-09-10)
+
+- **The capability is real and it is upstream's own**, not a community hack:
+  RustDesk announced true unattended Wayland access — multi-monitor, and claiming
+  login-screen access after reboot — on 2026-08-14, for **x86_64 Debian/Ubuntu
+  only**, which is exactly g15. It is **NOT in stable 1.4.9**; it ships as a
+  separate preview build. Fedora/Arch are "planned next", stable "eventually".
+- **The DRM/KMS capture backend (discussion #15417) is a PROPOSAL, not a
+  release.** Two third-party writeups conflict about how this works — one
+  describes swapping GDM for an X11 LightDM greeter, which is a different
+  approach entirely. Trust `rustdesk.com/blog/unattended-remote-access-wayland`
+  over the blog posts; both third-party accounts were partly wrong.
+- **Installed here: `rustdesk-unattended-wayland` 1.5.0**, `apt install` of the
+  .deb from the `nightly` tag. Registered against our own `cyphy.kz` hbbs —
+  `[keys_confirmed] cyphy = true`, new id **`1722388240`** (peer map lives in
+  `docs/2026-08-01-nixos-harvest.md` §2).
+- **This is deliberately NOT a `tier_rustdesk`, and the reason is the tag.** The
+  asset URL is stable but its BYTES are replaced in place: the 1.5.0 asset was
+  rebuilt 2026-09-10 08:05, the 1.4.9 one on 2026-09-01. Combine a mutable
+  `releases/download/nightly/...` URL with the `tier_gortex` precedent of
+  untarring the pin unconditionally, and any provision run for any reason
+  silently swaps the box's remote-access daemon — the Orca `latest` cache-key
+  trap with a system service attached. Pinning the GitHub API's per-asset
+  `digest` instead only trades silent drift for break-on-every-upstream-rebuild.
+  **Revisit when it lands in a stable release, not before.**
+- **The mechanism, which is what shapes the remaining risk:** the packaged unit
+  is `User=root`, but root captures nothing itself — it re-launches
+  `rustdesk --server` **as `me`** with the live session's `WAYLAND_DISPLAY`,
+  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` injected (visible in
+  `journalctl -u rustdesk`). So unattended capture works by borrowing a
+  logged-in Wayland session. **Whether that also holds at the GDM greeter, where
+  no `me` session exists, is UNPROVEN on this box** — the only test that settles
+  it is a reboot plus a connect with nobody logged in. `/dev/uinput` needed no
+  udev rule precisely because the service is root.
+- **Both configs must be seeded, and `systemctl is-active` proves nothing.** The
+  service reads `/root/.config/rustdesk/RustDesk2.toml`, the tray reads the
+  user's; seeding one leaves the other on the public `rs-ny.rustdesk.com`. The
+  actual proof the options took effect is that RustDesk **rewrites its own
+  top-level `rendezvous_server` to `cyphy.kz:21116`** on restart. Seeding is
+  `hosts/g15/ubuntu/rustdesk-seed.sh` — a merge, never a clobber, because
+  RustDesk owns those files at runtime.
+- **The server's public key had not rotated** in the year since the NixOS tag —
+  verified against the live `hbbs` container's `data/id_ed25519.pub` on hub.
+  Both `rustdesk-hbbs-1` and `rustdesk-hbbr-1` are up; 21115/21116/21117 answer
+  from the LAN. Check the live container rather than trusting the tag next time.
+- **The rejected alternative, so it is not re-derived:** `gnome-remote-desktop`
+  50.2 is ALREADY installed on g15, ships a `gnome-remote-desktop-headless.service`
+  and `grdctl` sets credentials non-interactively — Wayland-native unattended RDP
+  with no rendezvous server at all, and g15 is direct P2P at 3 ms. Rejected only
+  because RustDesk is one tool across Windows/macOS/Linux/Android. It stays the
+  fallback if the preview build regresses.
+- **Still open:** the unattended password is not set yet (nothing to authenticate
+  against until it is), and the reboot/login-screen test has not been run.

@@ -48,10 +48,12 @@ and cannot be given read-only symlinks) is gone with the flake; **the data is
 worth keeping.**
 
 Self-hosted rendezvous **and** relay server: `cyphy.kz` for both, with the
-server's key alongside. That key is documented in the module itself as the
-server's *public* key and therefore safe to commit — it is **not** reproduced
-here on purpose, so this file stays free of anything key-shaped. Read it from the
-tag when re-seeding: `git show nixos-final:modules/home/rustdesk-config.nix`.
+server's key alongside. **Both now live in `hosts/g15/ubuntu/rustdesk-seed.sh`**
+(2026-09-10), which reimplements the seed-only merge for a posix box — so
+re-seeding is no longer a matter of reading the tag. That key is the server's
+*public* key, and it was verified unchanged against the live `hbbs` container's
+`data/id_ed25519.pub` on hub the same day, so the tag's value had not rotated in
+the intervening year.
 
 The peer ID ↔ machine map, which is the part that is genuinely annoying to
 reconstruct (RustDesk IDs are assigned, not chosen):
@@ -59,17 +61,22 @@ reconstruct (RustDesk IDs are assigned, not chosen):
 | RustDesk ID | Machine | User | Platform |
 |---|---|---|---|
 | `399975738` | `me-g614jv` (desktop) | `methe` | Windows |
-| `482036139` | `g513ie` (server) | `methe` | Windows |
+| `1722388240` | `g513ie` (g15) | `me` | Ubuntu 26.04 |
 | `173199886` | `win-kiokq9idol4` | — | Windows |
 
-Plus two LAN-IP-keyed duplicates that only resolve on this network:
-`192.168.8.145` → desktop, `192.168.8.170` → server. Peer *passwords* were
-never committed — they are per-install encrypted secrets, so RustDesk prompts on
-first connect. `win-kiokq9idol4` is unidentified; it predates the current
-naming convention and may be a machine that no longer exists.
+Plus one LAN-IP-keyed duplicate that only resolves on this network:
+`192.168.8.145` → desktop. Peer *passwords* were never committed — they are
+per-install encrypted secrets, so RustDesk prompts on first connect.
+`win-kiokq9idol4` is unidentified; it predates the current naming convention and
+may be a machine that no longer exists.
 
-Note `482036139` and `192.168.8.170` point at `server`, which P2 is
-decommissioning — prune both when it goes.
+**`482036139` and `192.168.8.170` are pruned** (2026-09-10). Both named `g513ie`
+under Windows as user `methe` — an install that ceased to exist when the box was
+reinstalled as Ubuntu on 2026-09-07. The `1722388240` row is their replacement,
+and it is a NEW id rather than a recovered one: pointing a client at a different
+rendezvous server mints a fresh server-assigned id, so the old number was never
+going to come back. `192.168.8.170` is still g15's LAN address — RustDesk
+records it as `local-ip-addr` — but it is not a peer key any more.
 
 ## 3. The battery limit: the Nix module was BUGGY, `tiers.sh` fixed it
 
