@@ -24,20 +24,31 @@ global + per-host). One bullet per fact under a topical heading.
   rotation question; the lookup failure is the durable part, not the example.)
   See `docs/fleet-roadmap.md` P5.
 - **`just test` IS the gate, and it runs the bash suite** (since 2026-08-01). It
-  exits nonzero on failure but does NOT glob the whole repo: it names four
-  directories, so the 10 suites under `agents/plugin/**/tests/` are run by
-  nothing (they pass by hand). Don't record the suite count here — it moved three
-  times on 2026-08-03 and `just test` prints the real one.
+  exits nonzero on failure. **Corrected 2026-09-10:** this bullet said the gate
+  "names four directories, so the 10 suites under `agents/plugin/**/tests/` are
+  run by nothing". That was fixed in `49497bd` — the private `_test-suites`
+  recipe is now a recursive `find` for `*.test.sh` and is the ONE definition both
+  `just test` and `justfile.test.sh` consume, so nothing is outside the gate any
+  more. Ask `just _test-suites`, never a glob of your own. Don't record the suite
+  count here — it moved three times on 2026-08-03 and `just test` prints the real
+  one (52 on 2026-09-10, against the 54 AGENTS.md still names).
   **It is GREEN as of 2026-08-03; keep it that way.** A red suite gives no signal,
   and that is not theoretical: `provision-wsl.test.sh` sat red for weeks while
   correctly reporting a real bug in shipped code, and nobody read it because the
   failure count had become a baseline.
 - **Three portability traps that made tests red on `air` but not on Linux.** All
   three cost real debugging time on 2026-08-01; expect them in any new test.
-  - **An unbraced expansion against a multibyte character is FATAL** —
-    `"$var…"` under bash 5.x in a UTF-8 locale resolves a variable named `var…`,
-    so `set -u` aborts. `LC_ALL=C` masks it and `bash -n` never sees it. Always
-    `"${var}…"`. Guarded by `provision/tests/expansion-multibyte.test.sh`.
+  - **Brace an expansion that abuts a multibyte character** — always
+    `"${var}…"`, never `"$var…"`. **This bullet's MECHANISM was disproven
+    2026-09-10:** it claimed the unbraced form is *fatal* under `set -u` in a
+    UTF-8 locale, because bash would resolve a variable named `var…`. Measured on
+    bash 5.3.9 / 5.2.37 / 5.2.15 under `C`, `C.utf8` and `en_US.utf8`, as
+    `bash -c` and as a script file: it is not, anywhere — bash's identifier scan
+    is ASCII-only in every build, so no locale could ever have made it so. The
+    brace rule is kept as style plus defence-in-depth (it costs two characters
+    and the original failure's real cause is still unknown), NOT as a reproduced
+    bash bug. Guarded by `provision/tests/expansion-multibyte.test.sh`, whose own
+    premise check reports the absence correctly. See AGENTS.md, *Tests*.
   - **BSD `wc -l` pads its count with leading spaces** (`"       1"`), so
     `[ "$(… | wc -l)" = 1 ]` fails on macOS and passes on Linux. Use `-eq`, or
     `| tr -d '[:space:]'`. **`grep -c` does NOT pad** on either platform — that
