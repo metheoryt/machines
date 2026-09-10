@@ -309,6 +309,25 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   and on the VPS, so both are no-ops), and it **reloads** logind rather than
   restarting it: `CanReload=yes` on both fleet systemds, and a restart is the one
   that can take a live graphical session with it.
+- **`tier_oom_guard`** / **`tier_sysrq`** — the two halves of the 2026-09-09
+  lockout, and **workstation-profile only**. A 23 GB scratchpad script froze g15
+  twice in fifteen minutes; the first time the box came back only on the power
+  button. The mechanism is the part worth carrying: the kernel OOM killer never
+  fired, because grinding an 8 GB **disk** swapfile keeps global reclaim
+  reporting progress — **more swap buys a longer freeze, not more headroom**. So
+  `MemorySwapMax` is the load-bearing key of the drop-in `tier_oom_guard` writes
+  at `/etc/systemd/system/user-.slice.d/`, not the two memory ceilings beside it
+  (60% / 75% of `MemTotal`, floor 8 GiB, both computed at provision time).
+  `systemd-oomd` is not an alternative: it was monitoring `user@1000.service` at
+  50% pressure / 20 s throughout and never acted, and it kills whole cgroups.
+  The `user-.slice` template **cannot reach `system.slice`**, which is what makes
+  the ceiling safe to install unattended — immich and postgres are structurally
+  out of range. `tier_sysrq` sets `kernel.sysrq=1` so `Alt+SysRq+F` and `REISUB`
+  work at all; g15's value was 176, i.e. every bit except signalling.
+  **Both omit `server`, each for its own reason** — the ceiling because
+  latitude's user-slice peak has never been measured and a guessed `MemoryMax`
+  on the services host is an incident, the hatch because an escape hatch needs a
+  human at that keyboard. Measure latitude before "fixing" the asymmetry.
 - **`tier_gortex`** — installs the release named in `provision/gortex.version`
   into `~/.local/bin`, resolving the asset per platform (linux_amd64,
   darwin_arm64, darwin_amd64). It untars the pinned release **unconditionally,

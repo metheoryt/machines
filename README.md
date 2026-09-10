@@ -145,6 +145,20 @@ The same two boxes also **ignore the lid switch** — `tier_lid_ignore` writes
 neither an ssh session nor a timer. It caps nothing else: `systemctl suspend`
 still suspends on purpose, because only the lid stops meaning "sleep".
 
+### A runaway process must not cost the power button
+
+`tier_oom_guard` + `tier_sysrq`, **workstation profile only**, after g15 froze
+twice on 2026-09-09 to a 23 GB scratchpad script. The guard caps `user-.slice`
+(60% / 75% of `MemTotal`, `MemorySwapMax=2G`) so the cgroup OOM killer takes the
+one runaway task instead of the box grinding its disk swapfile into a livelock
+the kernel never resolves — **more swap buys a longer freeze, not more
+headroom**, which is why the swap key is the load-bearing one. It cannot reach
+`system.slice`, so containers and services are out of range. `tier_sysrq` sets
+`kernel.sysrq=1`, so `Alt+SysRq+F` kills the biggest task and `R E I S U B`
+reboots cleanly — g15's value was 176, missing exactly the signalling bit those
+need. `server` omits both on purpose: latitude's user-slice peak is unmeasured,
+and nobody sits at its keyboard.
+
 
 ```bash
 charge-upto 80         # ceiling, applied now and persisted

@@ -53,6 +53,12 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --porcelain -- \
 If `~/machines` is not a clean checkout on `main`, still run — but say so in the
 report and do not commit; leave the queue as an uncommitted change.
 
+The 10-minute `dotfiles-sync` timer can merge `origin/main` into a store while
+this run is reading it. That is harmless to the Step 8 check — a merge commits,
+so the work-tree is clean on both sides of it — but a section read early in the
+run may be one tick stale. Quote line numbers as a starting point, never as an
+address; `/dream-apply` re-verifies before it writes.
+
 ## Step 1 — Scan and measure
 
 ```bash
@@ -248,7 +254,20 @@ git -C ~/machines add docs/dream
 git -C ~/machines commit -m "dream: <N> items, <date>"
 ```
 
-The `machines` repo only, and only `docs/dream`. No `git push`, no promote.
+The `machines` repo only, and only `docs/dream`. Never `/dotfiles-promote`,
+never a dotfiles commit — this skill has no business writing to `$HOME`.
+
+Then push, but **only if this run's commits are the only thing unpushed**:
+
+```bash
+git -C ~/machines log --oneline origin/main..HEAD
+```
+
+Every line must start with `dream:`. If anything else is there, an unattended
+push would carry someone's half-finished work to `origin` — skip the push, say
+so in the report, and leave it for an attended session. Otherwise
+`git -C ~/machines push origin HEAD:main`. Unpushed is not "safe": a queue that
+only exists on one disk is the thing this repo exists to prevent.
 
 ## Never
 

@@ -729,6 +729,175 @@ LID
   return 0
 }
 
+# ── WORKSTATION: a runaway process must not cost the power button ─────────────
+# Incident 2026-09-09, and the numbers are the argument. A scratchpad script in
+# one of g15's Claude sessions reached 23.4 GB anon RSS (kernel: total-vm
+# 30275688kB) twice in fifteen minutes. Run 1 ground through this box's 8 GB
+# DISK swapfile for five minutes: global reclaim kept "making progress", so the
+# kernel OOM killer never fired at all, the machine locked solid and came back
+# only on the power button. Run 2, on a freshly booted box with less residency,
+# filled swap fast, hit no-progress in two minutes and was OOM-killed cleanly.
+# Same script, two outcomes — so the lesson is the counterintuitive one: MORE
+# SWAP BUYS A LONGER FREEZE, NOT MORE HEADROOM. MemorySwapMax is the key in this
+# tier that does the work; the two memory keys alone would have written a
+# five-minute lockup with extra steps.
+#
+# systemd-oomd is not the answer and was not asleep: `oomctl` on 2026-09-09
+# showed it monitoring user@1000.service at 50% pressure / 20s, and it did not
+# act during five minutes of livelock. It also kills a whole cgroup, so its
+# victim here would have been the entire IDE window rather than the one runaway
+# child. Do not remove this tier in favour of tuning it.
+#
+# The ceiling goes on user-.slice, the per-UID template, for two reasons:
+#   • it CANNOT reach system.slice, so docker, immich and postgres are
+#     structurally out of range. That is what makes the ceiling something to own
+#     rather than something to be careful with.
+#   • it covers every route a human starts work by — a desktop app (app.slice),
+#     an ssh login, a `systemd-run --user` scope (session.slice) alike. The
+#     hand-applied fix on incident night capped app.slice only and would have
+#     missed the very same script run over ssh.
+# The kill inside the cgroup takes the largest task in it, which at 23 GB
+# against gnome-shell's 400 MB is not a coin toss.
+#
+# WORKSTATION ONLY, and the axis is NOT safety — it is that this is the profile
+# whose user-slice ceiling has been MEASURED (g15: 4.2 GB steady against 30 GB
+# total). What latitude peaks at with a human SSHed in beside the backup timers
+# and resticprofile is unknown, and a guessed MemoryMax on the services host is
+# a 3am incident rather than a mitigation. Adding `server` is one entry in
+# linux.sh and one flipped assertion in tiers.test.sh — do that after measuring
+# that box, never to tidy up the asymmetry.
+OOM_GUARD_DIR=/etc/systemd/system/user-.slice.d
+OOM_GUARD_FILE="$OOM_GUARD_DIR/50-fleet-oom-guard.conf"
+# Percentages of MemTotal, not absolute figures: this tier reaches a 30 GB
+# desktop and an 8 GB WSL distro from the same list. High throttles the slice and
+# forces reclaim inside it; Max is where the cgroup OOM killer fires.
+OOM_GUARD_HIGH_PCT=60
+OOM_GUARD_MAX_PCT=75
+OOM_GUARD_SWAP_MAX=2G
+# Below this the cap stops being a guard and becomes a second bug: 75% of 4 GB is
+# a ceiling normal work reaches on its own.
+OOM_GUARD_MIN_RAM_MIB=8192
+tier_oom_guard() {
+  local total_kib total_mib high_mib max_mib stale eff uid
+  total_kib="$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null)"
+  case "${total_kib:-}" in
+    '' | *[!0-9]*)
+      warn "cannot read MemTotal from /proc/meminfo — skipping the memory ceiling"
+      return 0 ;;
+  esac
+  total_mib=$((total_kib / 1024))
+  if [ "$total_mib" -lt "$OOM_GUARD_MIN_RAM_MIB" ]; then
+    info "only ${total_mib}MiB of RAM — skipping the memory ceiling (it would fire during normal work)"
+    return 0
+  fi
+  high_mib=$((total_mib * OOM_GUARD_HIGH_PCT / 100))
+  max_mib=$((total_mib * OOM_GUARD_MAX_PCT / 100))
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the memory ceiling"
+    return 0
+  fi
+  info "Installing the user-slice memory ceiling (${high_mib}M / ${max_mib}M of ${total_mib}MiB)…"
+
+  $SUDO mkdir -p "$OOM_GUARD_DIR"
+  $SUDO tee "$OOM_GUARD_FILE" >/dev/null <<CONF
+# Written by tier_oom_guard in machines/provision/lib/tiers.sh — edit the tier
+# and re-provision rather than editing this copy.
+#
+# A per-UID ceiling, so one runaway process is killed instead of the whole box
+# livelocking. Sized from MemTotal at provision time: ${OOM_GUARD_HIGH_PCT}% throttles the
+# slice and forces reclaim inside it, ${OOM_GUARD_MAX_PCT}% is where the cgroup OOM killer takes
+# the largest task in it.
+#
+# MemorySwapMax is the load-bearing key. Grinding a disk swapfile is what turns
+# an out-of-memory condition into a five-minute lockup that the kernel OOM killer
+# never resolves, because reclaim keeps reporting progress. Capping swap per
+# slice is what makes the kill prompt.
+#
+# This reaches user-<UID>.slice, never system.slice: containers and system
+# services are deliberately out of range.
+[Slice]
+MemoryHigh=${high_mib}M
+MemoryMax=${max_mib}M
+MemorySwapMax=$OOM_GUARD_SWAP_MAX
+CONF
+
+  # A user-scope drop-in is the drift this tier has to name, because it is
+  # invisible from here in both directions: the USER manager applies its own
+  # limits to app.slice or session.slice, and a `systemctl show user-<UID>.slice`
+  # readback mentions none of it. Same shape as the hand-written 99-server.conf
+  # tier_lid_ignore warns about, and the incident-night fix was exactly this.
+  stale="$(find "$HOME/.config/systemd/user" -maxdepth 2 -name '*.conf' \
+    -path '*.slice.d/*' 2>/dev/null | tr '\n' ' ')"
+  if [ -n "$stale" ]; then
+    warn "a user-scope slice drop-in also caps memory: ${stale% } — retire it, this tier owns the ceiling"
+  fi
+
+  if ! $SUDO systemctl daemon-reload >/dev/null 2>&1; then
+    warn "memory ceiling written but systemd would not reload — it takes effect at the next boot"
+    return 0
+  fi
+  # Read back the LIVE slice, not the file: a drop-in on the template does not
+  # reach an already-running user-<UID>.slice until that reload, so the file
+  # proves nothing about what is in force now.
+  uid="$(id -u)"
+  eff="$(systemctl show "user-$uid.slice" -p MemoryMax --value 2>/dev/null)"
+  ok "memory ceiling applied — user-$uid.slice MemoryMax=${eff:-? (could not read back)}, swap $OOM_GUARD_SWAP_MAX"
+  return 0
+}
+
+# ── WORKSTATION: an escape hatch that is not the power button ─────────────────
+# The other half of the same incident, and the half that was missing AT THE
+# KEYBOARD. kernel.sysrq was 176 on g15 — 128 (reboot) + 32 (remount-ro) + 16
+# (sync), with bit 64, "signalling", NOT set. So Alt+SysRq+F, which OOM-kills the
+# largest task, did nothing, and neither did the E and I of a REISUB. On a
+# livelocked box with no working hatch the power button is the only exit, which
+# is how that night ended.
+#
+# 1 means every function, and that is deliberate rather than lazy: the value is a
+# bitmask, and a hand-picked subset is precisely how the one bit that mattered
+# came to be missing.
+#
+# WORKSTATION ONLY for a reason of its own, not by inheritance from oom_guard: a
+# hatch needs a human at THAT keyboard. latitude's display is one nobody sits at
+# and hub is a VPS with no keyboard at all, so on both the sysctl would be inert
+# decoration. A WSL distro self-skips below for the same reason — it has no
+# console of its own to press the combination on.
+tier_sysrq() {
+  local f=/etc/sysctl.d/60-fleet-sysrq.conf eff
+  # Named for its first caller; the probe itself is generic.
+  if _docker_is_wsl; then
+    info "WSL distro — skipping the SysRq hatch (no console to press it on)"
+    return 0
+  fi
+  if [ "$PRIV" -eq 0 ]; then
+    warn "no root available non-interactively — skipping the SysRq hatch"
+    return 0
+  fi
+  info "Installing the SysRq escape hatch…"
+
+  $SUDO mkdir -p /etc/sysctl.d
+  $SUDO tee "$f" >/dev/null <<'SYSRQ'
+# Written by tier_sysrq in machines/provision/lib/tiers.sh — edit the tier and
+# re-provision rather than editing this copy.
+#
+# Every SysRq function. On a livelocked box Alt+SysRq+F kills the largest task
+# (bit 64, "signalling" — the bit this fleet was missing until 2026-09-09) and
+# R E I S U B reboots cleanly instead of cutting power mid-write. The key is
+# Fn+PrtSc on both ASUS laptops.
+kernel.sysrq = 1
+SYSRQ
+
+  # -p applies it now; the file is what survives a reboot. A box that cannot
+  # apply it live still gets the hatch at the next boot, so warn, never fail.
+  if $SUDO sysctl -q -p "$f" >/dev/null 2>&1; then
+    eff="$(cat /proc/sys/kernel/sysrq 2>/dev/null)"
+    ok "SysRq hatch applied — kernel.sysrq=${eff:-? (could not read back)} (Alt+SysRq+F kills the biggest task)"
+  else
+    warn "SysRq hatch written but sysctl would not apply it — it takes effect at the next boot"
+  fi
+  return 0
+}
+
 # ── SERVER: let the status board read the CPU's energy counter ─────────────────
 # The board's `power` row is the machine's actual consumption, and RAPL's psys domain
 # is the only place on this hardware that number exists. The battery reports zero

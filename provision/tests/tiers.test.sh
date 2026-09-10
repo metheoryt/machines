@@ -40,7 +40,7 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_lid_ignore tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_lid_ignore tier_oom_guard tier_sysrq tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
 
 # hub is lean: no dev apt layer, no gortex.
@@ -263,6 +263,64 @@ has "$lbody" 'reload systemd-logind' "tier_lid_ignore applies the policy without
 has "$lbody" '/proc/acpi/button/lid' "tier_lid_ignore gates on the lid device itself"
 has "$lbody" 'PRIV'  "tier_lid_ignore honours the no-root warn-and-skip contract"
 
+# ── oom_guard / sysrq: a runaway process must not cost the power button ──────
+# Incident 2026-09-09: a 23.4 GB scratchpad script froze g15 twice in fifteen
+# minutes, once terminally. Both tiers are workstation-only, and each for its OWN
+# reason — copying one justification onto the other is how a list like this drifts.
+# oom_guard: the ceiling is sized to a MEASURED user-slice baseline, and only g15
+# has one. sysrq: an escape hatch needs a human at that keyboard.
+has   "$ws"  '^tier_oom_guard$' "workstation caps the user slice"
+hasnt "$srv" '^tier_oom_guard$' "server omits it — latitude's user-slice peak is unmeasured"
+hasnt "$hub" '^tier_oom_guard$' "hub omits it — 960MB VPS, nothing interactive to cap"
+hasnt "$mac" '^tier_oom_guard$' "macOS omits it — no cgroups, a cap there is different code"
+has   "$ws"  '^tier_sysrq$'     "workstation installs the SysRq hatch"
+hasnt "$srv" '^tier_sysrq$'     "server omits it — nobody sits at that keyboard"
+hasnt "$hub" '^tier_sysrq$'     "hub omits it — a VPS has no keyboard at all"
+hasnt "$mac" '^tier_sysrq$'     "macOS omits it — no SysRq"
+
+obody="$(awk '/^tier_oom_guard\(\)/,/^}/' "$TIERS")"
+# THE key, not one of three. Two memory keys without it write a five-minute
+# lockup with extra steps: grinding a disk swapfile is what keeps global reclaim
+# reporting progress, so the kernel OOM killer never fires. This is the assertion
+# a later edit is most likely to drop as redundant.
+has "$obody" 'MemorySwapMax' "tier_oom_guard caps swap — the key that makes the kill prompt"
+has "$obody" 'MemoryMax='    "tier_oom_guard sets the ceiling the cgroup OOM killer fires at"
+has "$obody" 'MemoryHigh='   "tier_oom_guard throttles before it kills"
+# The ceiling must land on the per-UID template, which cannot reach system.slice —
+# that containment is the whole reason this is safe to install unattended. Code
+# only: the tier's comment names system.slice to explain what it excludes.
+# The path lives in OOM_GUARD_DIR, ABOVE the function, so this one assertion needs
+# the section span rather than the body — the same split rapl_read uses.
+ospan="$(awk '/^# ── WORKSTATION: a runaway process must not cost the power button/,/^}/' "$TIERS")"
+has   "$ospan" 'user-\.slice\.d' "tier_oom_guard caps user-.slice (the per-UID template)"
+hasnt "$(code "$obody")" 'system\.slice' \
+  "tier_oom_guard never writes a system.slice limit — containers stay out of range"
+# A user-scope drop-in would be invisible to a `systemctl show user-<UID>.slice`
+# readback, which is exactly the drift the tier warns about instead of creating.
+hasnt "$(code "$obody")" 'config/systemd/user/[a-z]*\.slice' \
+  "tier_oom_guard writes no user-scope limit of its own"
+has "$obody" 'MemTotal'             "tier_oom_guard sizes the cap from this box's RAM"
+has "$obody" 'OOM_GUARD_MIN_RAM_MIB' "tier_oom_guard has a floor below which it declines"
+has "$obody" 'PRIV'                  "tier_oom_guard honours the no-root warn-and-skip contract"
+has "$obody" 'daemon-reload'         "tier_oom_guard makes the drop-in take effect"
+# Read back the LIVE slice, never the file just written: the template drop-in does
+# not reach an already-running user-<UID>.slice until the reload.
+has "$obody" 'systemctl show "user-\$uid\.slice"' \
+  "tier_oom_guard reads back the effective limit, not the file it wrote"
+
+sbody="$(awk '/^tier_sysrq\(\)/,/^}/' "$TIERS")"
+has "$sbody" 'kernel\.sysrq = 1' "tier_sysrq enables every SysRq function"
+# Bit 64 (signalling) is the one that was missing, and a partial bitmask is how it
+# went missing — so a value other than 1 is the regression worth pinning.
+hasnt "$(code "$sbody")" 'kernel\.sysrq = [02-9]' "tier_sysrq writes no partial bitmask"
+# /etc/sysctl.d, so it survives a reboot. A live-only write to /proc would look
+# identical in a readback and be gone by the time it was needed.
+has   "$sbody" '/etc/sysctl\.d' "tier_sysrq persists the hatch across a reboot"
+hasnt "$(code "$sbody")" '> */proc/sys/kernel/sysrq' \
+  "tier_sysrq never writes /proc directly (that value dies at the next boot)"
+has "$sbody" '_docker_is_wsl' "tier_sysrq skips a WSL distro (no console of its own)"
+has "$sbody" 'PRIV'           "tier_sysrq honours the no-root warn-and-skip contract"
+
 # rapl_read is server-only, and it is the one tier here that widens a permission the
 # kernel deliberately tightened — so the guards on HOW MUCH it widens are the point
 # of these assertions, not decoration.
@@ -456,7 +514,16 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # drop-in, and macOS has no logind: the equivalent there is `pmset`/`caffeinate`,
 # i.e. different code rather than this tier in a second list. `air` gets no lid
 # policy on purpose anyway, being the laptop that is carried.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit|lid_ignore)$' | tr '\n' ' '; }
+#
+# tier_oom_guard and tier_sysrq are the eighth and ninth, added 2026-09-09, and
+# they are the first exceptions that are neither packaging nor hardware: they are
+# EVIDENCE. oom_guard's ceiling is a percentage of a user-slice baseline that has
+# been measured on exactly one box, and sysrq needs a human at the keyboard it is
+# enabled on. macOS has neither mechanism — no cgroup slices, no SysRq — so a cap
+# or a hatch on `air` would be different code (`launchd` limits, a hard reset)
+# rather than these tiers in a second list. Both are also absent from `server`,
+# which is a separate decision documented in linux.sh: measure latitude first.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit|lid_ignore|oom_guard|sysrq)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

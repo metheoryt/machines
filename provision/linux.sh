@@ -102,7 +102,15 @@ case "$PROFILE" in
     # (/proc/acpi/button/lid is absent in a WSL distro), and it writes lid policy
     # only — it does NOT mask the sleep targets, so `systemctl suspend` still
     # works on a box someone sits at. See the tier for why that split matters.
-    TIERS=(apt_min apt_dev docker battery_limit lid_ignore agents_config git_base gortex
+    # oom_guard and sysrq are the two halves of the 2026-09-09 lockout, split
+    # because they gate on different things. oom_guard caps user-.slice, so it
+    # wants a MEASURED user-slice ceiling — g15 has one (4.2 GB steady against
+    # 30 GB), latitude does not, which is the only reason `server` omits it. It
+    # cannot reach system.slice, so it is structurally incapable of touching
+    # docker/immich/postgres. sysrq wants a human at THAT keyboard: latitude's
+    # display is one nobody sits at and hub has no keyboard, so there the sysctl
+    # would be inert decoration. Both are no-ops without root and self-skip.
+    TIERS=(apt_min apt_dev docker battery_limit lid_ignore oom_guard sysrq agents_config git_base gortex
            "agent_clis claude" shell_init autofetch
            ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
