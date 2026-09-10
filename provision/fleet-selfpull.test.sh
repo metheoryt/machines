@@ -9,6 +9,16 @@ pass() { echo "PASS $1"; }
 die()  { echo "FAIL $1"; fail=1; }
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+
+# Isolate the streak state from the FIRST call, not from the streak cases only.
+# Measured 2026-09-11: ~/.local/state/fleet-selfpull on this box held dozens of
+# `dirty-_tmp_tmp.*_live` files dating back three weeks — every `selfpull_one`
+# above the streak block had been writing into the LIVE state dir, shared with
+# the fleet-selfpull user timer that fires every ten minutes. Leaked garbage for
+# certain, and shared mutable state between a suite and a running timer besides.
+# The streak block below re-points this at a directory of its own; that is fine,
+# both are under $tmp.
+export FLEET_SELFPULL_STATE="$tmp/state-early"
 mkrepo() { # <name> <origin-url>  -> prints repo path, main branch, upstream set
   local d="$tmp/$1"; git init -q "$d"
   git -C "$d" checkout -q -b main
@@ -209,6 +219,18 @@ git -C "$other" branch --set-upstream-to=origin/main main >/dev/null 2>&1
 echo dirt > "$other/g"
 st="$(selfpull_one "$other" 2>/dev/null)"
 eqt "a different repo starts its own streak at 1" "$st" "SKIP dirty"
+
+# Nothing this suite did may have reached the live state dir. Asserted against
+# the mangled names of THIS run's throwaway repos rather than against a file
+# count: the real timer writes there too, and a count would flake on its tick.
+live_state="${XDG_STATE_HOME:-$HOME/.local/state}/fleet-selfpull"
+leaked=""
+for d in "$live" "$other"; do
+  f="$live_state/dirty-${d//[^A-Za-z0-9._-]/_}"   # same mangle as _streak_file
+  [ -e "$f" ] && leaked="$leaked $f"
+done
+[ -z "$leaked" ] && pass "no streak state leaked outside the tmpdir" \
+  || die "streak state leaked into the live dir:$leaked"
 
 unset FLEET_SELFPULL_STATE FLEET_SELFPULL_DIRTY_LIMIT
 
