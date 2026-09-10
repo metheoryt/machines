@@ -36,6 +36,17 @@ agents/plugin/skills/dream/dream.sh paths'` from `~/machines` returned the
 output and exited 0. If that ever changes, the nightly run fails as a **silent
 skip**, so re-measure it rather than assuming.
 
+## Run from the MAIN `~/machines` checkout, never an Orca workspace
+
+Every path here is absolute, so cwd changes nothing about what is read or
+written — which is exactly why a worktree is the wrong place to run it. An Orca
+workspace is a git worktree on its own branch, and it carries its **own**
+`.claude/memory/project.md`: a second copy of the largest store in the corpus
+(277 KB, 48% of it). The session's own memory hook would load the worktree's
+copy while the run analyses the live one, and the queue's line numbers would
+point at neither. Two versions of one store in one session is the confusion
+this skill exists to remove.
+
 ## Step 0 — Preflight
 
 ```bash
