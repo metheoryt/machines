@@ -25,10 +25,26 @@
 #
 # -H IS MANDATORY. Without it the immich library expands past what fits.
 #
-# --delete is OFF. A photo deleted in the immich UI must not propagate to the backup,
-# and the mirror holds dest-only trees the source does not have: staging/ (the only
-# second copy of the GoPro video) and var-backups/. If you ever add --delete, also add
-# --filter="protect /staging/" --filter="protect /var-backups/" and a --backup-dir.
+# --delete is OFF. A photo deleted in the immich UI must not propagate to the
+# backup, and the mirror holds dest-only trees the source does not have.
+#
+# TWO OF THOSE TREES ARE GONE AS OF 2026-09-10, and both were single-copy data
+# parked on a backup disk, which is not what a backup disk is for:
+#   staging/      40 G of GoPro video, "the only second copy" - except no first
+#                 copy could be found anywhere in the fleet. Uploaded into
+#                 immich instead (album "Настя Стас GoPro", 162 assets), so it
+#                 is now ordinary library content with a mirror of its own:
+#                 sha1 verified on both disks, 41 905 063 663 bytes each side.
+#   g15-staging/  186 G snapshot of qaz-law's postgres from the g15 migration.
+#                 The live DB has been running on g15 since; owner confirmed it
+#                 is reconstructible and asked for the copy to go.
+# What is left dest-only is var-backups/ (immich's own DB dumps, whose source is
+# /var/backups on the root filesystem) and Media/ (leftover from the servarr
+# move, 514 M, its own separate decision).
+#
+# If you ever add --delete, add --filter="protect /var-backups/" and a
+# --backup-dir. And check what else has appeared here first: a dest-only tree on
+# this disk is invisible to every gate in the repo.
 #
 # NOTE: the mirror still holds its own copy of the old Media/ tree from before the
 # move. Deleting it there is a separate decision - --delete is off, so this script
