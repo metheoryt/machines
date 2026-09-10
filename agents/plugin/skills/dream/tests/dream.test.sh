@@ -87,7 +87,7 @@ printf '# Title\n\nintro\n\n## Alpha\n- one\n\n## Beta\n- two\n- three\n' > "$tm
 cmp -s "$store" "$tmp/expect.md" && pass "no memory store was modified" || die "no memory store was modified"
 
 # Every file dream.sh created lives under DREAM_ROOT.
-stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$DREAM_ROOT/*" ! -name 'store.md' ! -name 'flat.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
+stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$DREAM_ROOT/*" ! -name 'store.md' ! -name 'flat.md' ! -name 'verified.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
 [ -z "$stray" ] && pass "dream.sh wrote only under DREAM_ROOT" || die "dream.sh wrote only under DREAM_ROOT: $stray"
 
 # --- instructions: same shape, symlinks resolved and deduped ------------------
@@ -108,6 +108,21 @@ if [ -n "$ins" ]; then
 else
   pass "instructions found none (SKIP shape assertions)"
 fi
+
+# --- verify: applied decisions are re-checked, not trusted -------------------
+vf="$tmp/verified.md"; printf 'alpha\nthe phrase that landed\n' > "$vf"
+D decide vvvv0001 applied "landed" "$vf" "the phrase that landed" >/dev/null
+D decide vvvv0002 applied "landed" "$vf" "a phrase that was removed since" >/dev/null
+D decide vvvv0003 applied "landed" "$tmp/gone.md" "anything" >/dev/null
+D decide vvvv0004 rejected "no" >/dev/null
+v="$(D verify)"
+echo "$v" | grep -q "^ok	vvvv0001" && pass "verify: present text reads ok" || die "verify: present text reads ok"
+echo "$v" | grep -q "^drifted	vvvv0002" && pass "verify: vanished text reads drifted" || die "verify: vanished text reads drifted"
+echo "$v" | grep -q "^missing	vvvv0003" && pass "verify: absent file reads missing" || die "verify: absent file reads missing"
+echo "$v" | grep -q "vvvv0004" && die "verify skips rejected rows" || pass "verify skips rejected rows"
+# a 4-column legacy row must not crash or lie
+printf 'vvvv0005\tapplied\t2026-01-01\told row\n' >> "$DREAM_ROOT/ledger.tsv"
+D verify | grep -q "^unverifiable	vvvv0005" && pass "verify: a legacy row is unverifiable, not ok" || die "verify: legacy row"
 
 # --- branches: other boxes' memory, read from the bare repo ------------------
 br="$(D branches 2>/dev/null)"

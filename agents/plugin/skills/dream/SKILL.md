@@ -130,7 +130,10 @@ cat ~/machines/docs/dream/queue.md      2>/dev/null   # still-open items
 cat ~/machines/docs/dream/ledger.tsv    2>/dev/null   # applied + rejected
 ```
 
-Every candidate is checked with `dream.sh status <id>` before it is filed. An
+Every candidate is checked with `dream.sh status <id>` before it is filed.
+Also read the ledger for **categories**, not just ids: an action rejected three
+or more times with no acceptance is one this queue should stop proposing —
+deprioritise it and say so in the report rather than filing a fourth. An
 item already open, applied **or rejected** is dropped silently. Without the
 rejected state a declined proposal returns every night, which is exactly how a
 queue stops being read.
@@ -246,6 +249,23 @@ queue item, so applying half of it cannot lose the fact.
   is an attended action.
 - **Untracked store** — anything `scan` reports as `untracked` has no home and
   dies with the machine.
+- **Did last week's decisions actually stay?**
+  ```bash
+  bash "$D" verify        # ok | drifted | missing | unverifiable, per applied id
+  ```
+  Borrowed from `/improve`'s prior-run cross-check, and it earns its place here:
+  *accepted* is not *still there*. A `drifted` row means an approved
+  consolidation was undone — by a later session, a sync merge, or a human — and
+  it is a finding, not an error. File it and cite the original id. `missing`
+  means the target file is gone entirely.
+- **A rule that keeps getting restated is a rule nobody follows.** If the same
+  instruction appears in three stores, or a `## ` section exists only to repeat
+  a rule stated elsewhere, the restating is the symptom: prose instructions run
+  at roughly 80% compliance, and the fix is **mechanical**, not another
+  paragraph. File `action: hook` naming the rule and the event that could
+  enforce it (`PreToolUse`, `PostToolUse`, `SessionStart`). Live example: the
+  gortex `remember` instruction loads in every session and the store held zero
+  entries — three restatements, no hook, no writes.
 - **A store nobody reads.** If a store has not changed in months and nothing
   references it, say so; it is a candidate for folding into another.
 
@@ -271,8 +291,8 @@ the item comes back forever.
 | `action` | one word from the taxonomy below | `dedupe` |
 
 Actions: `dedupe` · `demote` · `promote` · `generalise` · `compress` ·
-`delete` · `contradiction` · `harvest` · `untracked` · `skill`. Do not invent
-an eleventh —
+`delete` · `contradiction` · `harvest` · `untracked` · `skill` · `hook`. Do
+not invent a twelfth —
 a finding that fits none of these is a `contradiction` for a human to name.
 
 For a **cross-store** item the target/anchor pair is the side being **removed**
@@ -397,6 +417,33 @@ only exists on one disk is the thing this repo exists to prevent.
 - Run `/dotfiles-promote`, or any `git push`.
 - Rewrite or reorder an existing queue item — a human may have annotated it.
 - File an item without evidence a reader can check without re-running the pass.
+
+## Where this ends and `/improve` begins
+
+`/improve` (`~/.claude/commands/improve.md`) is a **retrospective on
+conversations**: what happened in recent sessions, whether prior recommendations
+landed, which config file should change as a result. `/dream` is a pass over the
+**corpus itself** — offline, fleet-wide, with no session in context.
+
+They must not both propose the same edit, so the boundary is the input:
+
+| | reads | sees |
+|---|---|---|
+| `/improve` | session transcripts + this conversation | friction, corrections, enforcement gaps |
+| `/dream` | the stores and instruction files as text, on every branch | redundancy, contradiction, bloat, misscoping |
+
+Do **not** invoke `/improve` from a nightly run: it opens with an
+`AskUserQuestion` for scope, so unattended it blocks or guesses; and a nightly
+`/dream` has no conversation to retrospect on, which is Phase 3 of it.
+
+`/improve config audit` is the one mode that genuinely overlaps (CLAUDE.md bloat
+and memory consolidation, project-scoped, no fleet view). Say so in the report
+when a run files `CLAUDE.md` items, so the same file does not get two competing
+proposals from two skills on the same day.
+
+Three of its mechanisms are borrowed here rather than called: the prior-run
+cross-check (`verify`, Step 5), the rule→hook escalation (`action: hook`), and
+suppressing categories the ledger shows being rejected repeatedly.
 
 ## Running it nightly
 

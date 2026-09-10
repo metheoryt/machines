@@ -110,6 +110,18 @@ bash "$D" decide <id> applied  "<one line: what landed where>"
 bash "$D" decide <id> rejected "<one line: why not>"
 ```
 
+**Pass the file and a phrase on every `applied`** — those two columns are what
+lets `dream.sh verify` re-check the decision later:
+
+```bash
+bash "$D" decide <id> applied "<what landed where>" \
+  /home/me/.claude/memory/global.md "a distinctive phrase from what you wrote"
+```
+
+Without them the row is permanently `unverifiable`: recorded as accepted, never
+provable as still there. Pick a phrase from the text you actually wrote, not
+from the item's prose.
+
 `decide` appends to the ledger and cuts the item out of `queue.md`.
 
 Commit **each repo separately** — a dotfiles-tracked store and a repo-tracked

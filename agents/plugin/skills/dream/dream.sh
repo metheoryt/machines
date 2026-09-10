@@ -38,9 +38,12 @@ usage: dream.sh <command> [args]
                              8-hex stable item id (target+anchor+action)
   status <id>                new | open | decided<TAB>applied|rejected
   append <id> <item-file>    append an item to the queue unless already open/decided
-  decide <id> <state> <reason>
+  decide <id> <state> <reason> [file] [phrase]
                              record applied|rejected in the ledger and cut the
-                             item out of the queue (used by /dream-apply)
+                             item out of the queue (used by /dream-apply).
+                             file+phrase let `verify` re-check it later.
+  verify                     for every applied decision: ok | drifted | missing
+                             | unverifiable — did the change actually stay?
 
 Env: DREAM_ROOT (default $HOME/machines/docs/dream)
 USAGE
@@ -146,6 +149,24 @@ cmd_id() {
   printf '%s\037%s\037%s' "$1" "$2" "$3" | _sha | cut -c1-8
 }
 
+# ok | drifted | missing | unverifiable, one row per applied decision.
+cmd_verify() {
+  [ -f "$LEDGER" ] || return 0
+  local id state file phrase
+  while IFS=$'\t' read -r id state _ _ file phrase; do
+    [ "$state" = applied ] || continue
+    if [ -z "$file" ] || [ -z "$phrase" ]; then
+      printf 'unverifiable\t%s\t-\n' "$id"
+    elif [ ! -f "$file" ]; then
+      printf 'missing\t%s\t%s\n' "$id" "$file"
+    elif grep -qF -- "$phrase" "$file"; then
+      printf 'ok\t%s\t%s\n' "$id" "$file"
+    else
+      printf 'drifted\t%s\t%s\n' "$id" "$file"
+    fi
+  done < "$LEDGER"
+}
+
 cmd_status() {
   local id="$1" state
   if [ -f "$LEDGER" ]; then
@@ -180,11 +201,15 @@ HDR
   printf 'appended\t%s\n' "$id"
 }
 
+# The ledger's last two columns are what makes an applied decision auditable
+# later: the file it landed in and a phrase that must still be found there.
+# /improve's prior-run cross-check is the idea — "accepted" is not the same as
+# "still there", and this repo keeps finding the gap between them.
 cmd_decide() {
-  local id="$1" state="$2" reason="${3:-}"
+  local id="$1" state="$2" reason="${3:-}" file="${4:-}" phrase="${5:-}"
   case "$state" in applied|rejected) ;; *) echo "dream: state must be applied|rejected" >&2; exit 2 ;; esac
   mkdir -p "$DREAM_ROOT"
-  printf '%s\t%s\t%s\t%s\n' "$id" "$state" "$(date +%F)" "$reason" >> "$LEDGER"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$state" "$(date +%F)" "$reason" "$file" "$phrase" >> "$LEDGER"
   if [ -f "$QUEUE" ] && grep -q "^## $id " "$QUEUE"; then
     awk -v i="$id" '
       $0 ~ "^## " i " " { cut = 1; next }
@@ -203,6 +228,7 @@ case "${1:-}" in
   index)  shift; cmd_index "$@" ;;
   id)     shift; cmd_id "$@" ;;
   status) shift; cmd_status "$@" ;;
+  verify) shift; cmd_verify "$@" ;;
   append) shift; cmd_append "$@" ;;
   decide) shift; cmd_decide "$@" ;;
   ""|-h|--help|help) usage ;;
