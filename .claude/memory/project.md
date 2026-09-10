@@ -2831,7 +2831,9 @@ server. What a future session would otherwise re-derive:
   is SIGINT = postgres fast shutdown, and `me` is in `docker` so stop/start
   needs no privilege. Reading it needs root (`999:0` mode 700). The blocker is
   that `/mnt/spare320` has 164 G free against a ~130 G leg, i.e. under 12% left
-  with no room for prune. **The 186 G staging leg is still the only second copy.**
+  with no room for prune. **CLOSED 2026-09-10: he decided the DB needs no backup
+  at all — it is rebuildable, and the corpus it is built from (`~/my/qaz-code/laws`)
+  is already a source here. The 186 G staging leg was deleted the same day.**
 - **`schedule-permission: user_logged_on`, not `user`.** resticprofile's `user`
   means a ROOT-OWNED unit that merely runs as the user, so installing it needs
   sudo — and g15 has NO NOPASSWD sudo (`sudo -n` fails; latitude's works). The
@@ -3038,12 +3040,14 @@ not a step anyone missed.
   - **Assert the identity (count + bytes) BEFORE the destructive command**, not
     after: because the full tree had already been pinned, finishing a
     half-deleted state needed no re-derivation and no second judgement call.
-- **The DB leg's drive is DEFERRED until the new 8 TB HDD passes acceptance**
-  (his call, 2026-09-08). Space stopped being the blocker the moment the music
-  pile went — 170 G free against a ~120–130 G leg — so what is left is genuinely
-  the drive choice, and a disk that may still go back to DNS is not a backup
-  target. **The 186 G `pgdata` staging leg stays and must not be deleted**: it
-  is the only second copy of that database, on `/dev/sdd2`, the flaky dock.
+- **The DB leg is CLOSED, 2026-09-10 — not deferred.** ~~DEFERRED until the new
+  8 TB HDD passes acceptance (his call, 2026-09-08); the 186 G `pgdata` staging
+  leg stays and must not be deleted.~~ He decided the database needs no backup:
+  it is rebuildable, and `~/my/qaz-code/laws` (7.6 G, the corpus it is built
+  from) is already a restic source on g15. So the whole argument was about 186 G
+  of derived index. The staging copy was deleted 2026-09-10 after re-confirming
+  the live DB up on g15, and the g15 NOPASSWD-sudo blocker went void with it.
+  Space had already stopped being the blocker when the music pile went.
 - **`restic ls <snapshot> <path>` is not recursive.** It reported 1 file / 3 dirs
   for that 14878-file tree — indistinguishable at a glance from a backup that
   stored almost nothing. `--recursive` is mandatory whenever a path filter is
@@ -3656,3 +3660,56 @@ sudo на g15. Копии на `/mnt/spare320` не тронуты — снос�
   42 ГБ, прогресс стоит на 0%), потом заливает.
 - Запускать долгие задачи на latitude надо `docker run -d` / detached: проверку
   на 42 ГБ, шедшую через ssh, убил OOM на локальной машине.
+
+## 280 строк защиты от зависания лежали незакоммиченными на g15 (2026-09-11)
+
+Спросил «я у g15, го» про NOPASSWD. NOPASSWD оказался не нужен, а нашлось другое.
+
+- **Работа, сделанная НА боксе, на боксе и осталась.** `~/machines` на g15 был
+  грязным с 9 сентября: 280 строк — `tier_oom_guard` + `tier_sysrq`, AGENTS.md,
+  README.md, `linux.sh`, `tiers.test.sh`. В репозиторий не попало ничего.
+  Проверять надо не только «зелёный ли гейт», а **чистое ли дерево на каждом
+  боксе фронта** — грязное дерево к тому же останавливает `fleet-selfpull`, так
+  что g15 два дня не подтягивал ничего. HEAD там был `c7d3f6f`, предок
+  собственного `origin/main`.
+- **Перенос: `git apply --3way` из `git diff` по ssh.** Легло чисто на текущий
+  main, включая AGENTS.md, который в этой же сессии правился в соседнем месте.
+  Патч сначала в scratchpad, `--3way` чтобы конфликт был маркерами, а не тихой
+  промашкой, и `git stash` на g15 (а не `checkout --`) пока не доказана
+  избыточность — единственная копия работы была именно в том diff.
+- **Из двух тиров применён был только один, и не тот, что казалось.**
+  `tier_sysrq` жив с той ночи, а `tier_oom_guard` — нет: `user-.slice.d` не
+  существовало, лимиты `infinity`. Защита при этом БЫЛА, но пользовательским
+  файлом `~/.config/systemd/user/app.slice.d/50-memory-guard.conf`, то есть
+  только для того, что запускает рабочий стол. То же самое по ssh не покрывалось.
+  После прогона `bash provision/linux.sh` на его клавиатуре: user-1000.slice
+  MemoryHigh=18.2 G / MemoryMax=22.7 G / MemorySwapMax=2 G, вживую.
+- **Написать файл — не значит владеть значением.** `/etc/sysctl.d` применяется
+  в лексическом порядке, побеждает последний. Ручной файл той ночи назывался
+  `60-sysrq.conf` и сортируется ПОСЛЕ тировского `60-fleet-sysrq.conf`, то есть
+  переопределяет его. Безвредно, только пока значения совпадают. `tier_sysrq`
+  теперь предупреждает о любом конкурирующем файле (и ничего не удаляет —
+  прецедент `99-server.conf`), 4 мутации из 4 отловлены.
+- **NOPASSWD на g15 снят с списка, а не сделан.** Он был там ради ноги бэкапа
+  qaz-law/PGDATA, а её владелец отменил 2026-09-10: база пересобираема, а корпус
+  `~/my/qaz-code/laws` (7.6 G), из которого она строится, уже лежит в restic
+  g15. Спорили, выходит, про 186 G производного индекса. Плюс
+  `provision/tests/tiers.test.sh` прямо утверждает, что профиль `workstation`
+  NOPASSWD не выдаёт никогда.
+- **Четыре живых места в репо приказывали не удалять то, что удалено вчера** —
+  `backup/g15/profiles.yaml`, `hosts/g15/ubuntu/README.md`,
+  `docs/fleet-roadmap.md` (дважды) и этот файл (дважды). Инструкция будущей
+  сессии, ставшая ложной, опаснее устаревшего факта: она запрещает действие,
+  которое уже совершено. Помечены закрытыми с датой, не вычищены.
+- **Побочно: `fleet-selfpull.test.sh` три недели гадил в живое состояние.**
+  `FLEET_SELFPULL_STATE` он подменял только начиная с блока про streak, а все
+  вызовы `selfpull_one` выше писали в `~/.local/state/fleet-selfpull` — тот
+  самый каталог, куда каждые 10 минут пишет реальный таймер. Накопилось 62
+  файла `dirty-_tmp_tmp.*_live` на этом боксе и 34 на g15 (на latitude 0 —
+  гейт там просто никто не гонял). Подмена перенесена в самое начало, и есть
+  утверждение, что после прогона в живом каталоге нет файлов под наши tmp-репы
+  (по счёту файлов проверять нельзя — тик таймера сделает его флаки). Мусор
+  удалён на всех трёх. Один прогон гейта из трёх в этой сессии дал одиночный
+  красный именно на этом сьюте и не воспроизвёлся; причину я не поймал —
+  общее изменяемое состояние с работающим таймером это объясняло бы, но
+  доказательства нет, и «environmental» это не диагноз.
