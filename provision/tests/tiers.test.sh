@@ -320,6 +320,17 @@ hasnt "$(code "$sbody")" '> */proc/sys/kernel/sysrq' \
   "tier_sysrq never writes /proc directly (that value dies at the next boot)"
 has "$sbody" '_docker_is_wsl' "tier_sysrq skips a WSL distro (no console of its own)"
 has "$sbody" 'PRIV'           "tier_sysrq honours the no-root warn-and-skip contract"
+# Found live 2026-09-11: g15 still carried the incident-night hand fix at
+# /etc/sysctl.d/60-sysrq.conf, which sorts AFTER 60-fleet-sysrq.conf and therefore
+# WINS. So writing the file is not owning the value — the tier has to say when
+# something else is set to override it.
+has "$sbody" 'grep -rlE' "tier_sysrq looks for a competing sysctl file"
+has "$sbody" 'grep -Fxv "\$f"' \
+  "tier_sysrq excludes its own file from that scan (or it warns about itself forever)"
+has "$sbody" 'retire it' "tier_sysrq reports the competing file rather than ignoring it"
+# Warn, never delete: the 99-server.conf precedent. A tier that removes config a
+# human wrote is a tier nobody can run at a keyboard without reading it first.
+hasnt "$(code "$sbody")" '\brm\b' "tier_sysrq deletes no hand-written config"
 
 # rapl_read is server-only, and it is the one tier here that widens a permission the
 # kernel deliberately tightened — so the guards on HOW MUCH it widens are the point

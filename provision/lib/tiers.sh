@@ -863,7 +863,7 @@ CONF
 # decoration. A WSL distro self-skips below for the same reason — it has no
 # console of its own to press the combination on.
 tier_sysrq() {
-  local f=/etc/sysctl.d/60-fleet-sysrq.conf eff
+  local f=/etc/sysctl.d/60-fleet-sysrq.conf eff stale
   # Named for its first caller; the probe itself is generic.
   if _docker_is_wsl; then
     info "WSL distro — skipping the SysRq hatch (no console to press it on)"
@@ -894,6 +894,20 @@ SYSRQ
     ok "SysRq hatch applied — kernel.sysrq=${eff:-? (could not read back)} (Alt+SysRq+F kills the biggest task)"
   else
     warn "SysRq hatch written but sysctl would not apply it — it takes effect at the next boot"
+  fi
+
+  # A hand-written sysctl file is drift this tier cannot silently win against, and
+  # the DIRECTION is the trap: /etc/sysctl.d is applied in lexical order and the
+  # last setting wins, so `60-sysrq.conf` — the name the incident-night fix on g15
+  # actually got, found still in place 2026-09-11 — overrides the file written
+  # here. Nothing breaks while the two agree; the day the tier's value changes,
+  # the hand file quietly keeps the old one. Same shape as the 99-server.conf
+  # tier_lid_ignore warns about, and warn is the right verb either way: this tier
+  # does not delete config a human put there.
+  stale="$(grep -rlE '^[[:space:]]*kernel\.sysrq' /etc/sysctl.d /etc/sysctl.conf 2>/dev/null \
+    | grep -Fxv "$f" | tr '\n' ' ')"
+  if [ -n "$stale" ]; then
+    warn "another sysctl file also sets the hatch: ${stale% } — retire it, this tier owns the value"
   fi
   return 0
 }

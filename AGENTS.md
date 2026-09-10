@@ -227,14 +227,14 @@ Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in
 this same file. `just test` prints the count it actually ran; that is the number.
 
-**The suite is GREEN as of 2026-09-10, 54 suites, 0 failures** — and the number
-arriving back where it started is an accident, not a reassurance. This line
-claimed "54 suites" for the 2026-09-08 run, a `find` two days later counted 52,
-and two suites have been added since. Either two left in between or the first 54
-was wrong, and there is no way to tell now, which is the whole argument three
-paragraphs up for not writing counts into prose. Keep it that way:
-it is the only validation the repo has since the Nix gate went, and a red suite
-gives no signal at all.
+**The suite is GREEN as of 2026-09-11, 55 suites, 0 failures** — and this line
+has now recorded 54, 52, 54 and 55 in nine days while at most two suites were
+ever added or removed, so most of that movement is miscounting, not the repo
+changing. There is no way to reconcile it after the fact, which is the whole
+argument three paragraphs up for not writing counts into prose. Keep the
+paragraph anyway: green-or-red is the only validation the repo has since the Nix
+gate went, and a red suite gives no signal at all. Trust the number `just test`
+prints in front of you over this one.
 
 **"Known environmental failure" is not a category — it is an unread bug report.**
 Two suites carried that label for a month (`expansion-multibyte.test.sh` and
@@ -320,6 +320,14 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   (60% / 75% of `MemTotal`, floor 8 GiB, both computed at provision time).
   `systemd-oomd` is not an alternative: it was monitoring `user@1000.service` at
   50% pressure / 20 s throughout and never acted, and it kills whole cgroups.
+  **Writing the file is not owning the value**: `/etc/sysctl.d` is applied in
+  lexical order, last setting wins, and the incident-night hand fix on g15 was
+  named `60-sysrq.conf` — which sorts AFTER the tier's `60-fleet-sysrq.conf` and
+  therefore overrides it. Found still in place 2026-09-11, harmless only because
+  the two values agree. `tier_sysrq` now warns about any competing file (and
+  deletes none — the 99-server.conf precedent); `tier_oom_guard` does the same
+  for a user-scope `*.slice.d` drop-in, which a `systemctl show
+  user-<UID>.slice` readback cannot see at all.
   The `user-.slice` template **cannot reach `system.slice`**, which is what makes
   the ceiling safe to install unattended — immich and postgres are structurally
   out of range. `tier_sysrq` sets `kernel.sysrq=1` so `Alt+SysRq+F` and `REISUB`
