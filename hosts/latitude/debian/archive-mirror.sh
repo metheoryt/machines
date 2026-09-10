@@ -115,10 +115,23 @@ fi
 # --- verify-only -----------------------------------------------------------
 if [ "$MODE" = verify ]; then
   say "=== counts ==="
-  sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l); df_=$(find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
-  sd=$(sudo find "$SRC" -type d 2>/dev/null | wc -l); dd=$(find "$DST" -type d -not -name '.rsync-partial' 2>/dev/null | wc -l)
-  echo "  files: src=$sf dst=$df_    dirs: src=$sd dst=$dd    bytes: src=$src_bytes dst=$dst_bytes"
-  [ "$sf" = "$df_" ] && [ "$src_bytes" = "$dst_bytes" ] && say "MATCH" || say "MISMATCH - re-run with -go"
+  # SUDO ON BOTH SIDES. It read the source with sudo and the destination without,
+  # which is the same asymmetry that made a hub self-check report healthy restic
+  # repos as MISSING: a bare `find` under a directory it cannot traverse
+  # undercounts silently and prints MISMATCH on a good copy. A hand-run -verify
+  # is the only caller that hits this - the unit runs as root - which is exactly
+  # why it survived.
+  sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l)
+  df_=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
+  sd=$(sudo find "$SRC" -type d 2>/dev/null | wc -l)
+  dd=$(sudo find "$DST" -type d -not -name '.rsync-partial' 2>/dev/null | wc -l)
+  # File bytes, not du: see the gate at the bottom of this script for why the
+  # directory allocation of the two trees is expected to differ.
+  sfb=$(sudo find "$SRC" -type f -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  dfb=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  echo "  files: src=$sf dst=$df_    dirs: src=$sd dst=$dd"
+  echo "  file bytes: src=$sfb dst=$dfb    (du -sb: src=$src_bytes dst=$dst_bytes, dirs included)"
+  [ "$sf" = "$df_" ] && [ "$sfb" = "$dfb" ] && say "MATCH" || say "MISMATCH - re-run with -go"
   say "=== content sample (25 random files, md5) ==="
   bad=0
   while IFS= read -r rel; do
@@ -170,14 +183,47 @@ fi
 
 # --- post-copy verification ------------------------------------------------
 say "=== verifying ==="
-sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l)
-df_=$(find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
-sb=$(sudo du -sb "$SRC" | cut -f1); db=$(sudo du -sb "$DST" | cut -f1)
-echo "  files: src=$sf dst=$df_"
-echo "  bytes: src=$sb dst=$db"
-leftover=$(find "$DST" -type d -name .rsync-partial 2>/dev/null | wc -l)
+# THE GATE IS FILES, NOT `du`. It used to require exact `du -sb` equality
+# between the two trees, and that is not a property a good copy has: du sums
+# directory st_size too, and a directory that has grown and had entries deleted
+# does not allocate like a freshly created copy of it. Measured mid-run on
+# 2026-09-10: 2156 source dirs summed to 9,011,200 bytes while the fresh copies
+# averaged ~20 bytes each SMALLER. So the old gate would have printed
+# ARCHIVE MIRROR INCOMPLETE after two and a half hours of a perfectly good copy,
+# and the obvious response - re-run it - would have found nothing to fix and
+# said INCOMPLETE again. It was inherited from the exfat target, where it was
+# wrong for a different reason.
+#
+# What is compared instead: the number of regular files, and the sum of their
+# sizes. Directories are excluded from both. `du` is still PRINTED, because the
+# difference between the two numbers is exactly the thing this comment is about
+# and a reader deserves to see it rather than be told.
+#
+# NO LINK-GROUP AXIS, on a checked premise: this tree has 0 files with nlink>1
+# (measured 2026-09-10, and the 2026-08-01 survey said the same). -aHAX carries
+# -H so the property is preserved if that ever changes, and the assertion below
+# fails loudly if it does - which is the point at which this gate needs the
+# grouping axis that migrate-servarr-wd8.sh has.
+fcount(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
+fbytes(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}'; }
+flinked(){ sudo find "$1" -type f -links +1 -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
+
+sf=$(fcount "$SRC");  df_=$(fcount "$DST")
+sb=$(fbytes "$SRC");  db=$(fbytes "$DST")
+sl=$(flinked "$SRC"); dl=$(flinked "$DST")
+sdu=$(sudo du -sb "$SRC" | cut -f1); ddu=$(sudo du -sb "$DST" | cut -f1)
+printf '  files       src=%-14s dst=%-14s %s\n' "$sf" "$df_" "$([ "$sf" = "$df_" ] && echo ok || echo MISMATCH)"
+printf '  file bytes  src=%-14s dst=%-14s %s\n' "$sb" "$db" "$([ "$sb" = "$db" ] && echo ok || echo MISMATCH)"
+printf '  hardlinked  src=%-14s dst=%-14s %s\n' "$sl" "$dl" "$([ "$sl" = "$dl" ] && echo ok || echo MISMATCH)"
+printf '  du -sb      src=%-14s dst=%-14s (informational - directory allocation differs)\n' "$sdu" "$ddu"
+leftover=$(sudo find "$DST" -type d -name .rsync-partial 2>/dev/null | wc -l)
 [ "$leftover" = 0 ] || echo "  WARNING $leftover .rsync-partial dirs remain - the run was incomplete"
-if [ "$sf" = "$df_" ] && [ "$sb" = "$db" ] && [ "$leftover" = 0 ]; then
+if [ "$sl" != 0 ]; then
+  say "NOTE the source now has $sl hardlinked files where it had none."
+  say "     Counts and byte sums cannot see link GROUPING - add that axis before"
+  say "     trusting this gate again (see migrate-servarr-wd8.sh phase_verify)."
+fi
+if [ "$sf" = "$df_" ] && [ "$sb" = "$db" ] && [ "$sl" = "$dl" ] && [ "$leftover" = 0 ]; then
   say "ARCHIVE MIRROR OK - $SRC now has a second copy at $DST"
 else
   say "ARCHIVE MIRROR INCOMPLETE - re-run; it resumes from .rsync-partial"

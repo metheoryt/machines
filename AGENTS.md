@@ -227,7 +227,11 @@ Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in
 this same file. `just test` prints the count it actually ran; that is the number.
 
-**The suite is GREEN as of 2026-09-08, 54 suites, 0 failures.** Keep it that way:
+**The suite is GREEN as of 2026-09-10, 53 suites, 0 failures** — and note that
+this line said "54 suites" for the 2026-09-08 run while a `find` on 2026-09-10
+counted 52 before one was added. Either two suites left in between or the number
+was wrong when written, and there is no way to tell now, which is the whole
+argument three paragraphs up for not writing counts into prose. Keep it that way:
 it is the only validation the repo has since the Nix gate went, and a red suite
 gives no signal at all.
 
