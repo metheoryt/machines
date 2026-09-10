@@ -79,6 +79,21 @@ starts "$(verdict_new 2 51 0)" USED                         "51 power cycles is 
 starts "$(verdict_new 3 2 4000000000 512)" USED             "2 TiB written outvotes a low hour count"
 starts "$(verdict_new 0 0 0)" UNKNOWN                       "all-zero counters read UNKNOWN, never NEW — the bridge may be eating attributes"
 
+# ── badlist_count: the empty file is the case that broke ─────────────────────
+# A clean run leaves a ZERO-BYTE badlist, which is the common case, so the
+# counter has to be right there before anywhere else. Live 2026-09-09 it
+# returned "0\n0" and the verdict's own -gt test errored out.
+: > "$TMP/badlist-empty"
+printf '12345\n67890\n' > "$TMP/badlist-two"
+eq "$(badlist_count "$TMP/badlist-empty")"        0 "badlist_count of an empty file is one 0, not two"
+eq "$(badlist_count "$TMP/badlist-two")"          2 "badlist_count counts entries"
+eq "$(badlist_count "$TMP/nope-does-not-exist")"  0 "badlist_count of a missing file is 0"
+# The whole point: usable as an integer with NO stderr. Asserting only the
+# truth value would pass either way — a `[` that errors out is false too, which
+# is exactly how the live bug hid behind a PASS.
+eq "$( { [ "$(badlist_count "$TMP/badlist-empty")" -gt 0 ]; } 2>&1 )" "" \
+   "comparing an empty-badlist count emits no shell error"
+
 # ── verdict_surface: platter faults vs bus faults are different verdicts ─────
 starts "$(verdict_surface 0 0 0 0 0 0)" PASS   "clean run passes"
 starts "$(verdict_surface 1 0 0 0 0 0)" FAIL   "one bad block fails"
@@ -107,12 +122,15 @@ has "$(unsafe_reasons "$SAFE" RD2RRPWH WD-RD2RRPWI "" "" "" "")" "serial mismatc
 serial_matches "" ABC123 && bad "an empty expectation must never match" || pass "an empty expectation never matches"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 gpt "" "" "")" "partition table" "an existing partition table is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 "" "")" "ext4 signature" "an existing filesystem is refused"
-has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 /mnt/servarr "")" "mounted at /mnt/servarr" "a mounted device is refused"
+has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 /mnt/immich-2024-backup "")" "mounted at /mnt/immich-2024-backup" "a mounted device is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" "" "" UUID=fd0b0662)" "appears in /etc/fstab" "an fstab-listed device is refused"
-# All of them at once: the servarr disk. Every reason must be reported, because
-# the operator reading this needs to know it was not one near-miss.
-n=$(unsafe_reasons /dev/sdb "" JD100ACC2V5ZVK gpt ext4 /mnt/servarr UUID=fd0b0662 | grep -c .)
-[ "$n" -ge 5 ] && pass "the live servarr disk trips at least 5 interlocks ($n)" || bad "servarr disk tripped only $n interlocks"
+# All of them at once: the HGST. Same drive and same UUID as before — it was
+# /mnt/servarr until 2026-09-10 and is /mnt/immich-2024-backup now, which is
+# exactly why the fixture spells out a live mount rather than a placeholder.
+# Every reason must be reported, because the operator reading this needs to know
+# it was not one near-miss.
+n=$(unsafe_reasons /dev/sdb "" JD100ACC2V5ZVK gpt ext4 /mnt/immich-2024-backup UUID=fd0b0662 | grep -c .)
+[ "$n" -ge 5 ] && pass "the live HGST trips at least 5 interlocks ($n)" || bad "HGST tripped only $n interlocks"
 
 # ── source-text assertions: what the phases may and may not do ──────────────
 src="$(cat "$SCRIPT")"

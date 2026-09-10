@@ -54,19 +54,22 @@
 #       container and `dnsmasq` on this host — check it numerically), so reading
 #       it needs root, i.e. `schedule-permission: system` and a sudo'd
 #       `resticprofile schedule`. g15 has no NOPASSWD sudo.
-#     * Space is the blocker. The REST server's data path is
-#       /mnt/spare320/restic-rest on a 293 G drive with 164 G free, already
-#       carrying latitude's own repo (12 G) and desktop-wsl's (29 G). A ~130 G
-#       DB leg would leave that drive under 12% free with no room for prune to
-#       work in. Declaring the profile anyway would produce a config that fails
-#       every night, which is the mistake ../latitude/profiles.yaml already
-#       documents for the photo libraries.
+#     * Space WAS the blocker, and stopped being one on 2026-09-10. The REST
+#       server's data path was /mnt/spare320/restic-rest on a 293 G drive with
+#       164 G free, already carrying latitude's own repo (12 G) and
+#       desktop-wsl's (29 G); a ~130 G DB leg would have left it under 12% free
+#       with no room for prune to work in. The hub now lives on /mnt/wd8, 7.3 T
+#       with 6.5 T free, so the space argument no longer holds and only the
+#       sudo/NOPASSWD one does. Adding the leg is live work, not a deferred
+#       wish — see docs/fleet-roadmap.md.
 #
-#   So the DB leg waits on ONE decision: which drive holds it. /mnt/immich
-#   (internal nvme0n1p1, 655 G free — not one of the flaky docks) is the obvious
-#   home, but RESTIC_DATA_PATH lives in the `vps` repo's
-#   homeserver/restic-server stack, because the server is a service and services
-#   live there. Until then the 186 G staging leg at
+#   That decision is made: the hub moved to /mnt/wd8 on 2026-09-10 and there is
+#   nothing left to choose. It waited on "which drive holds it", with /mnt/immich
+#   (internal nvme0n1p1, 655 G free) the obvious candidate; the 8 TB is better on
+#   the axis that was actually binding — room for a ~130 G leg plus prune — and
+#   RESTIC_DATA_PATH already points there. What remains is g15's missing NOPASSWD
+#   sudo, which is a scope problem, not a storage one. Until the leg exists the
+#   186 G staging copy at
 #   latitude:/mnt/immich-mirror/g15-staging/pgdata is the ONLY second copy and
 #   must not be deleted.
 #
@@ -135,7 +138,7 @@ g15:
   # creates a repository is by asking. This one never asks.
   #
   # The hazard is the same one that cost desktop-wsl its history-restart risk:
-  # /mnt/spare320 on latitude is mounted `nofail`, so when that USB drive is
+  # /mnt/wd8 on latitude is mounted `nofail`, so when that USB drive is
   # absent docker bind-mounts an empty directory and the REST server serves it
   # happily. An initialising client would create a fresh zero-history repo
   # against it and report success. That drive was genuinely gone for four and a

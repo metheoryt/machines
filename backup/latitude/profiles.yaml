@@ -28,10 +28,22 @@
 # /mnt/servarr and friends during the migration, taking the repos with them —
 # there is no history to continue, so this starts from zero.
 #
-# REPO PLACEMENT: /mnt/spare320 (sdg, usb2/2-1) is a different physical drive
-# from every source here — the dumps are on nvme1n1, the rest on nvme0n1 — and it
-# is on a different USB bus from the archive-mirror target, so a scheduled backup
-# does not contend with a mirror run. It is NOT one of the two flaky dock bays.
+# REPO PLACEMENT: /mnt/wd8, the WD Blue 8 TB, since 2026-09-10. It is a different
+# physical drive from every source here — the dumps are on nvme1n1, the rest on
+# nvme0n1 — so a scheduled backup still contends with nothing it is backing up.
+#
+# It replaces /mnt/spare320 (ST320LT020, 36k power-on hours, 293 G), and the
+# reason is not the old drive failing: it is that 124 G of repository were the
+# only thing keeping a 293 G disk in a dock bay the fleet has run out of. The
+# 8 TB was screened on arrival — 16 TB written and verified, 0 bad blocks, 0 CRC
+# — and is the healthiest disk on this box by a wide margin.
+#
+# WHAT THIS PLACEMENT DOES NOT BUY. /mnt/wd8 also holds ServarrMedia, so the
+# repositories no longer have a drive to themselves. That costs nothing that
+# matters: media is reacquirable and is not backed up, and the sources of every
+# snapshot here live on a different device. What the shared drive does mean is
+# that ONE disk now carries both, so the off-site copy (design spec phase 3) is
+# the thing that limits the blast radius — not the choice of bay.
 #
 # PASSWORD: one byte-source, reached through one symlink, and the hop is
 # deliberate -- do not "simplify" it away.
@@ -62,7 +74,7 @@ latitude:
   # the wsl guard. See base.yaml. Set true here to keep this scheduled job's
   # behaviour exactly as it was.
   #
-  # WORTH KNOWING: this repository is on /mnt/spare320 too, the same `nofail`
+  # WORTH KNOWING: this repository is on /mnt/wd8 too, the same `nofail`
   # drive as the repo the REST server serves, so it carries the same hazard --
   # if that drive is absent at 04:30 this profile will create a fresh
   # zero-history repo on the root filesystem and report success. It is left true
@@ -75,8 +87,8 @@ latitude:
 
   # MOUNT ASSERTION -- the same guard the g614jv-maintenance profile below
   # carries, pointed at THIS profile's own repository. Note the path: this is
-  # /mnt/spare320/restic/latitude, a different repository from the
-  # /mnt/spare320/restic-rest/g614jv one the REST server serves, with different
+  # /mnt/wd8/restic/latitude, a different repository from the
+  # /mnt/wd8/restic-rest/g614jv one the REST server serves, with different
   # retention (30/12/24/10 here, 14/8/12/5 there). They share only the drive.
   #
   # This profile is the one place left in the fleet where a missing drive can
@@ -86,9 +98,9 @@ latitude:
   # assertion can. Testing the repo's own `config` object covers both failure
   # modes at once -- drive absent, or drive present but repo gone.
   run-before:
-    - test -f /mnt/spare320/restic/latitude/config
+    - test -f /mnt/wd8/restic/latitude/config
 
-  repository: "/mnt/spare320/restic/latitude"
+  repository: "/mnt/wd8/restic/latitude"
   password-file: "/home/me/machines/backup/latitude/pass.txt"
   # base-job sets RESTIC_PASSWORD_FILE to a relative "pass.txt"; the flag above
   # would win, but leaving a wrong env var set is how someone later "fixes" the
@@ -203,17 +215,19 @@ latitude:
 g614jv-maintenance:
   inherit: base-job
   # Filesystem path, NOT rest:. That is the whole point.
-  repository: "/mnt/spare320/restic-rest/g614jv"
+  repository: "/mnt/wd8/restic-rest/g614jv"
   password-file: "/home/me/.config/restic/g614jv.pass.txt"
   env:
     RESTIC_PASSWORD_FILE: "/home/me/.config/restic/g614jv.pass.txt"
 
-  # MOUNT ASSERTION. /mnt/spare320 is mounted `nofail`, so when the drive is
+  # MOUNT ASSERTION. /mnt/wd8 is mounted `nofail`, so when the drive is
   # absent the mountpoint is simply an empty directory on the root filesystem
   # and every path below still "exists" as far as the shell is concerned. On
-  # 2026-08-04 that was not hypothetical: a blackout dropped the dock and this
-  # drive was gone for four and a half hours while the container happily served
-  # the empty directory underneath it.
+  # 2026-08-04 that was not hypothetical: a blackout dropped the dock and the
+  # drive this repository then lived on (spare320) was gone for four and a half
+  # hours while the container happily served the empty directory underneath it.
+  # Moving to a healthier disk changed nothing about that hazard — mains, not
+  # the drive, is what drops a dock, and the 8 TB sits in one too.
   #
   # Testing the repo's own `config` object covers both failure modes in one
   # check -- if the drive is missing the file is absent, and if the drive is
@@ -223,7 +237,7 @@ g614jv-maintenance:
   # missing drive would surface as a confusing restic error rather than a
   # clear one; with it, the job fails on a line that names the cause.
   run-before:
-    - test -f /mnt/spare320/restic-rest/g614jv/config
+    - test -f /mnt/wd8/restic-rest/g614jv/config
 
   # A `forget` SECTION, not a scheduled `retention` one: resticprofile 0.33.1
   # deprecates a schedule on `retention` and tells you to move it here. This
@@ -319,17 +333,17 @@ g513ie-maintenance:
   inherit: base-job
   # Filesystem path, NOT rest:. That is the whole point — the server is what
   # forbids the deletes this profile exists to perform.
-  repository: "/mnt/spare320/restic-rest/g513ie"
+  repository: "/mnt/wd8/restic-rest/g513ie"
   password-file: "/home/me/.config/restic/g513ie.pass.txt"
   env:
     RESTIC_PASSWORD_FILE: "/home/me/.config/restic/g513ie.pass.txt"
 
   # MOUNT ASSERTION, for the reason spelled out on the two profiles above:
-  # /mnt/spare320 is `nofail`, so when the drive is absent the mountpoint is an
+  # /mnt/wd8 is `nofail`, so when the drive is absent the mountpoint is an
   # ordinary empty directory and every path under it still "exists". Testing the
   # repo's own `config` object covers drive-absent and repo-absent in one check.
   run-before:
-    - test -f /mnt/spare320/restic-rest/g513ie/config
+    - test -f /mnt/wd8/restic-rest/g513ie/config
 
   forget:
     # base-job's 7/8/12/10 would be wrong here in one direction that matters:

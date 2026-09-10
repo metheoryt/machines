@@ -6,35 +6,50 @@
 #
 # WHY THIS EXISTS. Until 2026-08-01 /mnt/immich-2024/admin held EXACTLY ONE COPY
 # of the 1970-2024 photo archive - 663 GiB, 20456 files, 2156 dirs. /mnt/immich
-# has mirror-refresh.sh looking after it; this tree had nothing at all. The drive
-# originally earmarked for the job is still named in the commented-out
-# '/mnt/immich-2024-backup' line in /etc/fstab (HGST HTS541010A9E680) - it was
-# consumed as /mnt/servarr during the migration, and the old restic repos on the
-# Windows G:/H: drives went in the same reshuffle. Hence the target here is the
-# only drive left with room: the Kingston XS2000 at /mnt/xs.
+# has mirror-refresh.sh looking after it; this tree had nothing at all.
 #
-# TARGET IS exfat, AND THAT IS FINE - checked, not assumed (2026-08-01):
-#   no hardlinks in the tree (nlink>1 count is 0), so losing -H costs nothing
-#   uniform me:me ownership, so losing -o/-g costs one chown on restore
-#   0 filenames with " * : < > ? | \ or a trailing space/dot (exfat rejects those)
-#   longest path component 95 chars, well under exfat's 255
-#   4 files over 4 GiB, largest 11.6 GB - exfat's ceiling is far above that;
-#     the 4 GiB limit people remember is FAT32's, not exfat's
-# Re-run those checks before pointing this at a different tree. Do NOT add -a:
-# it implies -pgo, and every run would then fail to set perms exfat cannot store.
+# THE TARGET IS THE DRIVE THIS JOB WAS ALWAYS MEANT TO HAVE, arrived at the long
+# way round. The HGST HTS541010A9E680 was earmarked as /mnt/immich-2024-backup
+# from the start, got consumed as /mnt/servarr during the 2026-07 migration, and
+# came back on 2026-09-10 when ServarrMedia moved to the WD 8 TB and its copy
+# here was proven redundant. In between, the target was the Kingston XS2000 at
+# /mnt/xs - a removable stick that then left the box, taking the archive's only
+# second copy with it and leaving this tree single-copy again for a week.
 #
-# 37 GiB of slack (663 into 700) is thin in general but fine here: 1970-2024 is a
-# CLOSED set. New photos land on /mnt/immich, not here. If this tree ever starts
-# growing again, the slack assumption dies with it.
+# THE 8 TB IS NOT THE TARGET, AND THE REASON IS THE DOCK, NOT THE ROOM. /mnt/wd8
+# has 6.4 T free and looked like the obvious destination. It sits in the SAME
+# Ugreen dock as the source: usb4/4-2 bay 1 is immich-2024, bay 2 is wd8, one
+# 5 Gbit link shared between them. A 663 GiB sustained read and write down one
+# link, on the dock that logged 24 resets in a day under load, is the worst pair
+# available. The HGST is on usb4/4-1 - a different root port, its own 5 Gbit
+# link. Same controller, but the controller is 10 Gbit and never the constraint.
+# Measure the topology before choosing a bay: `udevadm info -q path -n sdX`.
 #
-# THE SOURCE DOCK IS THE FLAKY ONE, not the target. sdc (immich-2024) and sdd
-# (immich-mirror) are the two bays of the dock on usb4/4-2, which logged 24
-# 'usb 4-2: reset' events in the 24h before this script was written - clustered
-# under load, which is exactly what a 663 GiB sustained read is. The target
-# (usb2/2-2) is a separate controller, so there is no bandwidth contention, but
-# expect the source to drop mid-run. Hence: --partial-dir, and a retry loop that
-# re-mounts before trying again (nofail only applies at boot; after a bus drop a
-# mount needs an explicit `mount`).
+# TARGET IS ext4 NOW, WHICH RETIRES A WHOLE PARAGRAPH OF CONCESSIONS. The XS2000
+# was exfat, so this script ran with -rlt --no-perms --no-owner --no-group and a
+# --modify-window=1, and a restore from it would have needed a chown. ext4 on
+# both ends means plain -aHAX: perms, owners, hardlinks and xattrs all survive,
+# and the copy is a restore rather than a payload needing repair. The exfat
+# survey that used to live here (no hardlinks, uniform me:me, no illegal
+# filenames, 4 files over 4 GiB against a ceiling far above FAT32's remembered
+# limit) is now only of historical interest - but re-run something like it if
+# this is ever pointed at a non-POSIX filesystem again.
+#
+# ROOM IS NO LONGER THIN. The XS2000 gave 37 GiB of slack on 663-into-700, which
+# was defensible only because 1970-2024 is a CLOSED set - new photos land on
+# /mnt/immich, not here. The HGST offers 921 G against 663, so the slack
+# assumption is no longer load-bearing. The closed-set fact still is: if this
+# tree ever starts growing, revisit both.
+#
+# THE SOURCE DOCK IS THE FLAKY ONE, not the target, and that has not changed
+# with the move. immich-2024 shares usb4/4-2 with wd8; that dock logged 24
+# 'usb 4-2: reset' events in the 24h before this script was written, clustered
+# under load - which is exactly what a 663 GiB sustained read is. Expect the
+# source to drop mid-run. Hence: --partial-dir, and a retry loop that re-mounts
+# before trying again (nofail only applies at boot; after a bus drop a mount
+# needs an explicit `mount`). Do not identify a drive by /dev/sdX in any of
+# this: every letter reshuffles across a reboot here and one enclosure reports a
+# fake serial, so the guards below are by UUID.
 #
 # --partial-dir, NOT --append-verify. A source-side drop leaves a truncated file
 # at the destination; --partial-dir parks it under .rsync-partial/ so it is never
@@ -42,22 +57,20 @@
 # --append-verify assumes the destination is a strict prefix of the source, which
 # a torn write does not guarantee.
 #
-# GUARDS ARE BY UUID. Every /dev/sdX letter reshuffles across a reboot here (five
-# bus-powered USB drives plus a card reader race to enumerate) and one enclosure
-# reports a fake serial, so a letter or a serial is not an identity.
-#
 # --delete is OFF, same reasoning as mirror-refresh.sh: a deletion in the immich
 # UI must not propagate to the only other copy.
 #
-# Do not run this at the same time as mirror-refresh.sh - both read from drives in
-# the same dock, and contention is what provokes the resets.
+# IT NO LONGER CLASHES WITH mirror-refresh.sh. That warning was real when both
+# jobs touched drives in one dock; after 2026-09-10 they share nothing at all -
+# mirror-refresh reads the internal nvme and writes usb3/3-2.4, this reads
+# usb4/4-2 and writes usb4/4-1. Re-check that before adding a third job.
 set -uo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
 SRC=/mnt/immich-2024/admin
-DST=/mnt/xs/immich-2024-archive
-SRC_MNT=/mnt/immich-2024;  SRC_UUID=63c1de22-0607-40bc-aa35-168bf78927fb
-DST_MNT=/mnt/xs;           DST_UUID=FBED-BCAA
+DST=/mnt/immich-2024-backup/immich-2024-archive
+SRC_MNT=/mnt/immich-2024;        SRC_UUID=63c1de22-0607-40bc-aa35-168bf78927fb
+DST_MNT=/mnt/immich-2024-backup; DST_UUID=fd0b0662-d574-40f5-930d-de8dc0fc5082
 MAX_ATTEMPTS=12
 say(){ echo "[$(date +%F_%H:%M:%S)] $*"; }
 
@@ -102,10 +115,24 @@ fi
 # --- verify-only -----------------------------------------------------------
 if [ "$MODE" = verify ]; then
   say "=== counts ==="
-  sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l); df_=$(find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
-  sd=$(sudo find "$SRC" -type d 2>/dev/null | wc -l); dd=$(find "$DST" -type d -not -name '.rsync-partial' 2>/dev/null | wc -l)
-  echo "  files: src=$sf dst=$df_    dirs: src=$sd dst=$dd    bytes: src=$src_bytes dst=$dst_bytes"
-  [ "$sf" = "$df_" ] && [ "$src_bytes" = "$dst_bytes" ] && say "MATCH" || say "MISMATCH - re-run with -go"
+  # SUDO ON BOTH SIDES. It read the source with sudo and the destination without,
+  # which is the same asymmetry that made a hub self-check report healthy restic
+  # repos as MISSING: a bare `find` under a directory it cannot traverse
+  # undercounts silently and prints MISMATCH on a good copy. A hand-run -verify
+  # is the only caller that hits this - the unit runs as root - which is exactly
+  # why it survived.
+  sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l)
+  df_=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
+  sd=$(sudo find "$SRC" -type d 2>/dev/null | wc -l)
+  dd=$(sudo find "$DST" -type d -not -name '.rsync-partial' 2>/dev/null | wc -l)
+  # Both are printed because they are expected to be EQUAL: du -sb does not count
+  # directory st_size (measured, GNU coreutils 9.7). If they ever diverge, that
+  # is the interesting thing on the line, not the file sum alone.
+  sfb=$(sudo find "$SRC" -type f -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  dfb=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  echo "  files: src=$sf dst=$df_    dirs: src=$sd dst=$dd"
+  echo "  file bytes: src=$sfb dst=$dfb    (du -sb: src=$src_bytes dst=$dst_bytes)"
+  [ "$sf" = "$df_" ] && [ "$sfb" = "$dfb" ] && say "MATCH" || say "MISMATCH - re-run with -go"
   say "=== content sample (25 random files, md5) ==="
   bad=0
   while IFS= read -r rel; do
@@ -120,7 +147,7 @@ fi
 
 # --- copy ------------------------------------------------------------------
 DRY=-n; [ "$MODE" = go ] && DRY=""
-FLAGS=(-rlt --no-perms --no-owner --no-group --modify-window=1
+FLAGS=(-aHAX
        --partial --partial-dir=.rsync-partial
        --human-readable --info=stats2
        --exclude=/lost+found/ --exclude=.rsync-partial/)
@@ -157,14 +184,59 @@ fi
 
 # --- post-copy verification ------------------------------------------------
 say "=== verifying ==="
-sf=$(sudo find "$SRC" -type f 2>/dev/null | wc -l)
-df_=$(find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
-sb=$(sudo du -sb "$SRC" | cut -f1); db=$(sudo du -sb "$DST" | cut -f1)
-echo "  files: src=$sf dst=$df_"
-echo "  bytes: src=$sb dst=$db"
-leftover=$(find "$DST" -type d -name .rsync-partial 2>/dev/null | wc -l)
+# THE GATE IS FILES, NOT `du` -- AND THE REASON IT WAS CHANGED WAS WRONG.
+#
+# The claim made on 2026-09-10, in the commit that made this change: exact
+# `du -sb` equality is not a property a good copy has, because du sums directory
+# st_size and a grown directory does not allocate like a fresh copy of it. Both
+# halves are false, and both were measurable in a minute:
+#
+#   * `du -sb` does not count directory st_size at all. Measured on GNU
+#     coreutils 9.7 (latitude) and uutils 0.8.0: a tree of one 1000-byte file in
+#     two nested dirs whose own st_size sums to 180 reports `du -sb` = 1000.
+#   * The finished copy's directories were byte-identical to the source's
+#     anyway: 9,011,200 over 2156 dirs on both sides.
+#
+# The "evidence" was a mid-run comparison of 1634 partially-populated
+# destination dirs against 2156 complete source ones, which is not a comparison
+# at all -- a directory still receiving entries has not reached its final size.
+# So the old gate would have PASSED, and this rewrite prevented nothing. The
+# repo already says it: if you are about to state a mechanism in a commit
+# message, that is the moment to measure it.
+#
+# The gate is left in the files-only form because it is no worse and says what
+# it measures, but the two things in this block that ARE load-bearing came in
+# alongside it and stand on their own:
+#
+#   * the hardlink axis. This tree has 0 files with nlink>1 (2026-09-10, and the
+#     2026-08-01 survey said the same), so counts and byte sums are sufficient
+#     -- but that is a PREMISE, and it is now asserted rather than assumed. The
+#     day it stops holding, this gate needs the link-GROUPING axis that
+#     migrate-servarr-wd8.sh has, because a count of hardlinked files cannot see
+#     which files are linked to which.
+#   * `du` is still printed next to the file sum, so a reader can see the
+#     relationship rather than be told about it. That is what would have caught
+#     the wrong claim above.
+fcount(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
+fbytes(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}'; }
+flinked(){ sudo find "$1" -type f -links +1 -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
+
+sf=$(fcount "$SRC");  df_=$(fcount "$DST")
+sb=$(fbytes "$SRC");  db=$(fbytes "$DST")
+sl=$(flinked "$SRC"); dl=$(flinked "$DST")
+sdu=$(sudo du -sb "$SRC" | cut -f1); ddu=$(sudo du -sb "$DST" | cut -f1)
+printf '  files       src=%-14s dst=%-14s %s\n' "$sf" "$df_" "$([ "$sf" = "$df_" ] && echo ok || echo MISMATCH)"
+printf '  file bytes  src=%-14s dst=%-14s %s\n' "$sb" "$db" "$([ "$sb" = "$db" ] && echo ok || echo MISMATCH)"
+printf '  hardlinked  src=%-14s dst=%-14s %s\n' "$sl" "$dl" "$([ "$sl" = "$dl" ] && echo ok || echo MISMATCH)"
+printf '  du -sb      src=%-14s dst=%-14s (informational - directory allocation differs)\n' "$sdu" "$ddu"
+leftover=$(sudo find "$DST" -type d -name .rsync-partial 2>/dev/null | wc -l)
 [ "$leftover" = 0 ] || echo "  WARNING $leftover .rsync-partial dirs remain - the run was incomplete"
-if [ "$sf" = "$df_" ] && [ "$sb" = "$db" ] && [ "$leftover" = 0 ]; then
+if [ "$sl" != 0 ]; then
+  say "NOTE the source now has $sl hardlinked files where it had none."
+  say "     Counts and byte sums cannot see link GROUPING - add that axis before"
+  say "     trusting this gate again (see migrate-servarr-wd8.sh phase_verify)."
+fi
+if [ "$sf" = "$df_" ] && [ "$sb" = "$db" ] && [ "$sl" = "$dl" ] && [ "$leftover" = 0 ]; then
   say "ARCHIVE MIRROR OK - $SRC now has a second copy at $DST"
 else
   say "ARCHIVE MIRROR INCOMPLETE - re-run; it resumes from .rsync-partial"

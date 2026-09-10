@@ -37,7 +37,7 @@
 # ALL of these hold: the target is a /dev/disk/by-id/ata-* path, the caller
 # passed --serial and it matches what the device reports, the device carries no
 # partition table and no filesystem signature, nothing of it is mounted, and it
-# appears nowhere in /etc/fstab. Pointed at /mnt/servarr's disk it exits 2.
+# appears nowhere in /etc/fstab. Pointed at any mounted fleet disk it exits 2.
 #
 # Docks: both Ugreen CM198 bays are JMicron JMS561U bridges on the usb-storage
 # (BOT) driver. Measured 2026-09-08, on both docks: `-d sat` passes -i, -A AND
@@ -113,6 +113,18 @@ verdict_new(){
     echo "NEW poh=${poh}h cycles=${cycles} written=${written_tib}TiB"
   fi
 }
+
+# Lines in the badblocks output file = bad sectors found.
+#
+# `grep -c .` is the obvious spelling and it is a trap: on an EMPTY file it
+# prints 0 *and exits 1*, so a `|| echo 0` fallback appends a second zero and
+# the caller ends up comparing the string "0\n0" with -gt. Measured live on the
+# WD80EAAZ acceptance run 2026-09-09: `[: 0\n0: integer expression expected`,
+# printed right above a PASS. The verdict survived by luck — the erroring test
+# is simply false, so a real bad block would still have failed — but a gate that
+# reports the good case with a shell error is a gate nobody trusts. awk counts
+# lines without an exit-status opinion; a missing file is 0.
+badlist_count(){ awk 'END{print NR+0}' "$1" 2>/dev/null || echo 0; }
 
 # PASS / FAIL / BUS from the surface pass. Numbers, not prose:
 #   any bad block, or 5/197/198 above zero        -> FAIL, the platter
@@ -344,7 +356,7 @@ phase_verdict(){
   [ -f "$ev/smart-after.txt" ] || { say "no smart-after.txt in $ev — run the surface phase first"; exit 1; }
 
   local bad realloc pending offline crc_before crc_after started faults
-  bad=$(grep -c . "$ev/badblocks.badlist" 2>/dev/null || echo 0)
+  bad=$(badlist_count "$ev/badblocks.badlist")
   realloc=$(smart_attr "$ev/smart-after.txt" 5)
   pending=$(smart_attr "$ev/smart-after.txt" 197)
   offline=$(smart_attr "$ev/smart-after.txt" 198)
@@ -352,7 +364,12 @@ phase_verdict(){
   crc_after=$(smart_attr "$ev/smart-after.txt" 199)
   started=$(cat "$ev/surface-started" 2>/dev/null || echo "-2 days")
   faults=$(usb_faults_since "$started")
-  usb_faults_since "$started" > "$ev/usb-faults" 2>/dev/null || true
+  # The surface phase runs as root under systemd-run, so this file is root-owned
+  # while the verdict is run by hand as the user. Braces around the redirect:
+  # the "Permission denied" comes from the SHELL setting up the redirection, not
+  # from the command, so a trailing 2>/dev/null on the command alone does not
+  # catch it (it did not, live, 2026-09-09).
+  { printf '%s\n' "$faults" > "$ev/usb-faults"; } 2>/dev/null || true
 
   echo
   echo "===================== SURFACE GATE — trust it with data ================="

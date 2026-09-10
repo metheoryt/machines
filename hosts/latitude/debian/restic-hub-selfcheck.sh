@@ -29,7 +29,7 @@ set -uo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
 # ROOT IS REQUIRED, AND THE FAILURE MODE IF IT IS NOT IS WHY THIS GUARD EXISTS.
-# /mnt/spare320/restic-rest/g614jv is drwx------ root:root (the container writes
+# /mnt/wd8/restic-rest/g614jv is drwx------ root:root (the container writes
 # it as root). Run as any other user, `[ -e "$DATA/$REPO/config" ]` fails with
 # EACCES and check 2 prints "MISSING"; the snapshot scan in check 8 finds nothing
 # and prints "none found". Two FAILs, on a hub that is perfectly healthy, and
@@ -50,8 +50,8 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 2
 fi
 
-DRIVE_UUID="3a78fd88-deb0-4c1a-a576-14abd0631d57"
-DATA="/mnt/spare320/restic-rest"
+DRIVE_UUID="726efd1f-7eb1-45d7-a09e-1e9467c6319f"
+DATA="/mnt/wd8/restic-rest"
 REPO="g614jv"
 PORT=8001
 CONTAINER="restic-server"
@@ -67,9 +67,9 @@ check() {  # check <description> <expected> <actual>
 }
 
 # 1. The drive, by UUID. Every letter reshuffles across a reboot on this box, and
-#    /mnt/spare320 is mounted `nofail` -- so an absent drive boots fine and
+#    /mnt/wd8 is mounted `nofail` -- so an absent drive boots fine and
 #    docker bind-mounts an EMPTY directory over it.
-got_uuid="$(findmnt -no UUID /mnt/spare320 2>/dev/null)"
+got_uuid="$(findmnt -no UUID /mnt/wd8 2>/dev/null)"
 check "drive mounted by UUID" "$DRIVE_UUID" "${got_uuid:-absent}"
 
 # 2. The repo's config object. With the drive absent a client would find no repo
@@ -83,7 +83,7 @@ check "drive mounted by UUID" "$DRIVE_UUID" "${got_uuid:-absent}"
 check "repo config present" "present" "$s"
 
 # 3. THE empty-bind-mount guard: is the container looking at the same file the
-#    host is? On 2026-08-27 restic-server started while /mnt/spare320 was
+#    host is? On 2026-08-27 restic-server started while /mnt/wd8 was
 #    unmounted, so ${RESTIC_DATA_PATH}:/data bound the empty directory BENEATH
 #    the mountpoint. It wrote a 0-byte .htpasswd there and kept serving it after
 #    the drive came back: every client got 401 for two days while every
