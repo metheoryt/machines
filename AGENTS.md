@@ -548,8 +548,29 @@ are not re-derivable from the code.
       the container visibly instead of emptying it invisibly. A mount still covers
       an immutable dir (measured), and `lsattr` at the mountpoint path shows no
       `i` while mounted — you are reading the mounted fs, not the frozen inode.
-      Never `chattr -i` one by hand; `install-docker-ordering.sh -off` is the
-      symmetric revert.
+      Never `chattr -i` one by hand. `-off` is the symmetric revert of the whole
+      installation — but it is the WRONG tool for retiring one mountpoint, and
+      that trap is now closed. It also strips the DNS pin from `daemon.json` and
+      restarts dockerd, bouncing immich and postgres to unfreeze a directory.
+      **Retiring a mount is: delete it from `MOUNTS`, run the script.** Since
+      2026-09-10 `add` unfreezes any frozen `/mnt/*` dir that is not in the
+      array, so removal and addition are the same one action. Before that,
+      deleting a name left its mountpoint immutable forever with nothing in the
+      repo saying so — the array and the disk could disagree indefinitely.
+    - **A stale fstab line used to switch this whole guard off**, and the fix is
+      worth knowing because it changes what a red run means. `fstab_apply`
+      refused its candidate whenever `findmnt --verify` reported anything at all,
+      anywhere in `/etc/fstab` — and an unplugged removable drive reports as
+      `[E] unreachable on boot required source`. So one dead entry disabled the
+      ordering guard for every other mount; the `/mnt/xs` line had to be
+      commented out for exactly that reason. The gate now compares candidate
+      against current and refuses only findings its own edit introduced. It still
+      refuses outright on `rc >= 2`: util-linux 2.41's `findmnt --verify`
+      SEGFAULTS (139) on an fstab entry with fewer than three fields, and a
+      crashed checker emits no findings to compare — "unknown" is not "fine".
+      `provision/tests/docker-ordering.test.sh` covers the decisions (28 cases);
+      the root-only halves — `chattr`, the bind mount of `/`, `systemctl` — are
+      not and cannot be there.
 - **Verify a scheduled job by firing its schedule, not by running the script.**
   `mirror-refresh.sh -go` passed by hand for weeks while every timer run reported
   `Failed` — its last command was falsy under `-go`. `systemctl start <unit>` then
