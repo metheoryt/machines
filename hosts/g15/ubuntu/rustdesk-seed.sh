@@ -11,10 +11,12 @@
 # `key_pair`, `password`, `salt`.
 #
 # TWO configs, because the packaged unit is `User=root` and the root service
-# re-launches `rustdesk --server` as `me` with the live session's
-# WAYLAND_DISPLAY/XDG_RUNTIME_DIR/DBUS address injected. The service reads
-# root's copy; the tray reads the user's. Seeding only one leaves the other
-# talking to the public server.
+# captures nothing itself: it `sudo -u <user> -- env …`s a `rustdesk --server`
+# into each graphical session on the seat, with that session's
+# WAYLAND_DISPLAY/XDG_RUNTIME_DIR/DBUS address injected — including the
+# `gdm-greeter` session, which is how login-screen access works (verified by
+# reboot 2026-09-10). The service reads root's copy; the tray reads the user's.
+# Seeding only one leaves the other talking to the public server.
 #
 # `key` here is the SERVER's PUBLIC key — safe to commit, and verified against
 # the live `hbbs` container's `data/id_ed25519.pub` on hub 2026-09-10. Peer

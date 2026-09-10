@@ -3184,7 +3184,7 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   keeps its own per-box install — and it needs its own block list anyway (`torproject.org` stays 000 there
   with `-r1+s` that works on the LAN).
 
-## RustDesk on g15: unattended Wayland works, but only in a preview build (2026-09-10)
+## RustDesk on g15: unattended Wayland works, greeter included — but only in a preview build (2026-09-10)
 
 - **The capability is real and it is upstream's own**, not a community hack:
   RustDesk announced true unattended Wayland access — multi-monitor, and claiming
@@ -3209,15 +3209,27 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   trap with a system service attached. Pinning the GitHub API's per-asset
   `digest` instead only trades silent drift for break-on-every-upstream-rebuild.
   **Revisit when it lands in a stable release, not before.**
-- **The mechanism, which is what shapes the remaining risk:** the packaged unit
-  is `User=root`, but root captures nothing itself — it re-launches
-  `rustdesk --server` **as `me`** with the live session's `WAYLAND_DISPLAY`,
-  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` injected (visible in
-  `journalctl -u rustdesk`). So unattended capture works by borrowing a
-  logged-in Wayland session. **Whether that also holds at the GDM greeter, where
-  no `me` session exists, is UNPROVEN on this box** — the only test that settles
-  it is a reboot plus a connect with nobody logged in. `/dev/uinput` needed no
-  udev rule precisely because the service is root.
+- **The mechanism — and the login-screen half is PROVEN on this box as of
+  2026-09-10, by reboot.** The packaged unit is `User=root`, but root captures
+  nothing itself: it `sudo -u <user> -- env …`s a `rustdesk --server` into each
+  graphical session on the seat, injecting that session's `WAYLAND_DISPLAY`,
+  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`. At boot the journal shows
+  **three** spawns within seven seconds of the unit starting — one as `me` with
+  only `DISPLAY=:1025` + `~/.Xauthority` and no Wayland socket, one as
+  **`gdm-greeter` (uid 60578)** carrying the greeter's own `wayland-0` and
+  `/run/user/60578` — and then, 28 s later when the user logged in, one as `me`
+  on `:0` / `wayland-0`. Afterwards only the last survives (`ps` shows a single
+  `--server`).
+- **So it does not need a logged-in user; it needs a graphical session on the
+  seat, and the GDM greeter is one.** That is the whole trick, and it is what
+  makes the earlier worry wrong — the concern was that "no `me` session exists at
+  the greeter", but RustDesk does not require a `me` session, it follows whatever
+  session owns the seat and swaps as that changes. The corollary is the real
+  limit to remember: a box with **no display manager running** offers nothing to
+  attach to, so this is not a route to a headless server's console.
+- **Identity and server survive the reboot** — id still `1722388240`,
+  `[keys_confirmed] cyphy = true`, `rendezvous_server = 'cyphy.kz:21116'`.
+  `/dev/uinput` needed no udev rule precisely because the service is root.
 - **Both configs must be seeded, and `systemctl is-active` proves nothing.** The
   service reads `/root/.config/rustdesk/RustDesk2.toml`, the tray reads the
   user's; seeding one leaves the other on the public `rs-ny.rustdesk.com`. The
@@ -3245,4 +3257,11 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   `1722388240`** through our own hbbs, which needs no config change; enabling
   direct IP means the tray toggle plus the same key in root's copy, and sudo here
   has no NOPASSWD.
-- **Still open:** the reboot/login-screen test has not been run.
+- **Nothing is open on the client any more** (2026-09-10): installed, seeded at
+  our own hbbs, password set, and unattended access verified across a reboot
+  including from the login screen — a meaningful pass rather than a trivial one,
+  because **GDM auto-login is OFF here** (every `AutomaticLogin*` key in
+  `/etc/gdm3/custom.conf` is still commented out), so no pre-existing `me`
+  session was sitting there for the root service to borrow. What remains is not about this box — it is
+  whether the preview build ever reaches a stable release, which is the only
+  thing that unblocks a `tier_rustdesk`.
