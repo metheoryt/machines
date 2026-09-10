@@ -152,28 +152,43 @@ phase_prepare(){
     return 0
   fi
 
-  # Refuse to reformat a disk that already carries a filesystem with anything on
-  # it. An empty partition table from a previous prepare run is fine to reuse.
-  if lsblk -no FSTYPE "$dev" | grep -q .; then
-    die "$dev already has a filesystem. Refusing to mkfs. Inspect it by hand:
-       sudo lsblk -f $dev"
-  fi
-
-  say "writing GPT + one partition on $dev"
-  printf 'label: gpt\n,,L\n' | sudo sfdisk "$dev" >/dev/null || die "sfdisk failed"
-  sudo udevadm settle
   part="${dev}1"
-  [ -b "$part" ] || die "expected $part to appear after partitioning"
 
-  # -m 1, not -m 0. The default 5% reserve would be 365 G here, which is worth
-  # reclaiming, but 0% is not the way: the reserve is also what keeps ext4 from
-  # fragmenting badly as the filesystem fills, and this disk holds an actively
-  # growing torrent target. 1% is 73 G against 5.7 T that stays free anyway.
-  say "mkfs.ext4 on $part (label $LABEL, 1% reserve)"
-  sudo mkfs.ext4 -q -m 1 -L "$LABEL" "$part" || die "mkfs failed"
+  # A filesystem already here is either OURS from a half-finished prepare run,
+  # or someone else's data. Those need opposite answers, so "has a filesystem"
+  # is the wrong question — the first version of this guard asked it and made
+  # prepare un-rerunnable the moment anything downstream failed. The label is
+  # the discriminator: mkfs below is the only thing that writes it.
+  if lsblk -no FSTYPE "$dev" | grep -q .; then
+    if [ "$(lsblk -no FSTYPE "$part" 2>/dev/null)" = ext4 ] \
+       && [ "$(lsblk -no LABEL "$part" 2>/dev/null)" = "$LABEL" ] \
+       && [ "$(lsblk -no NAME "$dev" | tail -n +2 | wc -l)" = 1 ]; then
+      say "$part is already our '$LABEL' filesystem — reusing it, not reformatting"
+    else
+      die "$dev carries a filesystem that is not ours. Refusing to mkfs:
+$(lsblk -f "$dev" | sed 's/^/       /')"
+    fi
+  else
+    say "writing GPT + one partition on $dev"
+    printf 'label: gpt\n,,L\n' | sudo sfdisk "$dev" >/dev/null || die "sfdisk failed"
+    sudo udevadm settle
+    [ -b "$part" ] || die "expected $part to appear after partitioning"
+
+    # -m 1, not -m 0. The default 5% reserve would be 365 G here, which is worth
+    # reclaiming, but 0% is not the way: the reserve is also what keeps ext4 from
+    # fragmenting badly as the filesystem fills, and this disk holds an actively
+    # growing torrent target. 1% is 73 G against 5.7 T that stays free anyway.
+    say "mkfs.ext4 on $part (label $LABEL, 1% reserve)"
+    sudo mkfs.ext4 -q -m 1 -L "$LABEL" "$part" || die "mkfs failed"
+  fi
 
   uuid=$(sudo blkid -s UUID -o value "$part") || die "cannot read UUID of $part"
   say "UUID=$uuid"
+
+  # BEFORE the fstab line, not after. `findmnt --verify` calls a target that is
+  # not a directory an ERROR, so writing the line first fails the very gate that
+  # is meant to protect the line — which is what happened on the first run.
+  sudo mkdir -p "$DST_MNT"
 
   if grep -q "[[:space:]]$DST_MNT[[:space:]]" /etc/fstab; then
     say "fstab already has a $DST_MNT line — leaving it alone"
@@ -181,10 +196,22 @@ phase_prepare(){
     sudo cp -a /etc/fstab "/etc/fstab.bak.$(date +%Y%m%d%H%M%S)"
     printf 'UUID=%-36s  %-18s  ext4  defaults,noatime,nofail,x-systemd.device-timeout=60  0 2\n' \
       "$uuid" "$DST_MNT" | sudo tee -a /etc/fstab >/dev/null
-    findmnt --verify --tab-file /etc/fstab >/dev/null 2>&1 \
-      || die "the fstab I just wrote fails 'findmnt --verify' — restore the .bak"
     say "fstab: added $DST_MNT"
   fi
+
+  # Verify OUR line, not the whole file. A whole-file gate makes this script's
+  # success depend on unrelated fstab hygiene, and it duly failed on a stale
+  # /mnt/xs entry left behind when that drive was unplugged — an error that has
+  # nothing to do with the disk being installed. Other targets' problems are
+  # reported, never fatal here.
+  local verify others
+  verify=$(findmnt --verify 2>&1)
+  if printf '%s\n' "$verify" | awk -v t="$DST_MNT" '$0==t{f=1;next} /^[^[:space:]]/{f=0} f' | grep -q '\[E\]'; then
+    printf '%s\n' "$verify" | awk -v t="$DST_MNT" '$0==t{f=1;print;next} /^[^[:space:]]/{f=0} f' | sed 's/^/     /'
+    die "the $DST_MNT fstab line is bad — fix it or restore the newest /etc/fstab.bak.*"
+  fi
+  others=$(printf '%s\n' "$verify" | grep -c '\[E\]')
+  [ "${others:-0}" -gt 0 ] && say "note: $others unrelated fstab error(s) elsewhere — see 'findmnt --verify'"
   # x-systemd.before=docker.service is deliberately NOT written here.
   # install-docker-ordering.sh owns that option for every mount Docker binds; it
   # adds it, verifies the Before= edge really exists, and freezes the mountpoint
