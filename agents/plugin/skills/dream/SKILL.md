@@ -160,6 +160,54 @@ What pass 1 looks for, inside one store:
   version verbatim.
 - **misscoped** → `demote`/`promote` — a fact under a heading, or in a store, it does not belong to.
 
+## Step 3b — Pass 1b: across the FLEET (read-only, from this box)
+
+```bash
+bash "$D" branches      # branch, tip date, path, bytes — every other box
+```
+
+The dotfiles bare repo holds every machine's branch, so **every box's memory is
+readable from right here** — no network, no ssh, nothing touched on those boxes.
+Consolidation is fleet-wide by reading, and it costs one command.
+
+What only this pass can see:
+
+- **A fact repeated in three boxes' `host-memory.md` is a `global.md` fact.**
+  This is the generalisation nobody else is positioned to make: each box only
+  ever sees its own host memory, so a truth about the fleet gets written five
+  times and read as five local quirks. Action `promote`.
+- **Unpromoted drift on a shared file.** `core.md`, `global.md`, `personality/*`
+  are supposed to be byte-identical everywhere. A branch whose copy is *larger*
+  than `main`'s holds memory written there that has reached **no other box** —
+  measured 2026-09-11, `origin/g15` carried a `global.md` 1183 B bigger than
+  main's. A branch *smaller* than main's is just lagging its next sync tick;
+  that is not a finding. Compare against `origin/main`, not against each other.
+- **A retired box's branch can be the last copy of a fact.** `origin/server`
+  (2026-07-28) still holds a 4109 B `pure/backend-api/.claude/memory/project.md`
+  that exists on no live branch; `origin/g15-wsl` is likewise dead. This is
+  `values.md`'s *a file can be the last copy of a FACT* at fleet scale — extract
+  and carry, never archive wholesale and never delete blind.
+- **Two branches for one physical machine.** `desktop` (Windows-native) and
+  `desktop-wsl` are the same box; so were `g15` and `g15-wsl`. Their
+  `host-memory.md` files overlap by construction.
+
+### The write boundary — this is where fleet-wide stops
+
+Reading another branch is free. **Writing one is forbidden here**, and not for
+neatness: that box's 10-minute sync timer is committing to the same branch, and
+the file is loaded live in its sessions. A push from here strands its next push
+as a conflict.
+
+So an item about another box is **filed with the box named** and applied there:
+
+```markdown
+- **apply on:** g15   ← not this box; /dream-apply here must refuse it
+```
+
+The two things `/dream-apply` on *this* box may touch are unchanged: paths on
+this box, and shared files via `/dotfiles-promote`. Fixing unpromoted drift on
+`g15` means running the promote **on g15**.
+
 ## Step 4 — Pass 2: across stores
 
 Pass 1 agents cannot see each other, so cross-store duplication — the actual

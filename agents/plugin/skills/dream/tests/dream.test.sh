@@ -109,6 +109,19 @@ else
   pass "instructions found none (SKIP shape assertions)"
 fi
 
+# --- branches: other boxes' memory, read from the bare repo ------------------
+br="$(D branches 2>/dev/null)"
+if [ -n "$br" ]; then
+  echo "$br" | awk -F'\t' 'NF != 4 { exit 1 }' \
+    && pass "branches emits 4 TSV columns" || die "branches emits 4 TSV columns"
+  echo "$br" | cut -f1 | grep -qx 'origin/main' \
+    && die "branches excludes origin/main" || pass "branches excludes origin/main"
+  echo "$br" | awk -F'\t' '$4 !~ /^[0-9]+$/ { exit 1 }' \
+    && pass "branches reports a byte size" || die "branches reports a byte size"
+else
+  pass "branches found none (SKIP: no dotfiles branches here)"
+fi
+
 # --- scan is read-only and shaped as documented ------------------------------
 # Run it for real (it reads live stores) and assert the shape, not the content.
 scan="$(D scan)"

@@ -29,6 +29,12 @@ For each item show: action, target, why, the byte delta, and — for a rewrite �
 **the replacement text in full**. One item at a time for anything `shared` or
 any `delete`; batching those is how a deletion gets waved through.
 
+**An item carrying `apply on: <box>` is refused here** unless `<box>` is this
+machine. Another box's dotfiles branch is being written by its own sync timer
+and loaded live in its sessions; a push from here strands its next push as a
+conflict. List those items separately at the end as "carry to <box>" — they stay
+open, and they are not rejections.
+
 The user approves an item, edits it, or rejects it. **A rejection is a real
 outcome that must be recorded** — `dream.sh decide <id> rejected "<reason>"` —
 or `/dream` proposes it again tomorrow night.

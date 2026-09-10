@@ -31,6 +31,8 @@ usage: dream.sh <command> [args]
   paths                      print queue/ledger/runs locations
   scan                       TSV of every memory store: path, bytes, scope, sections
   instructions               TSV of every auto-loaded CLAUDE.md/AGENTS.md, same columns
+  branches                   TSV of OTHER boxes' memory, read from dotfiles branches:
+                             branch, tip date, path, bytes (read-only, never written)
   index <file>               TSV of a store's ## sections: line, bytes, heading
   id <target> <anchor> <action>
                              8-hex stable item id (target+anchor+action)
@@ -112,6 +114,26 @@ cmd_instructions() {
   done
 }
 
+# Every other box's memory is READABLE from right here: the dotfiles bare repo
+# holds all branches, so `cat-file` reaches latitude's, air's, g15's, hub's and
+# both desktop sides' host-memory without touching the network or those boxes.
+# It is NOT writable from here — see SKILL.md. Retired boxes still have branches
+# (origin/server, origin/g15-wsl), and a retired branch can be the last copy of
+# a fact, which is exactly why this lists them instead of filtering them out.
+# Columns: branch, tip date, path, bytes.
+cmd_branches() {
+  local b date
+  for b in $(git --git-dir="$HOME/.dotfiles" for-each-ref \
+               --format='%(refname:short)' refs/remotes/origin \
+             | grep -vx 'origin\|origin/main' | sort); do
+    date="$(git --git-dir="$HOME/.dotfiles" log -1 --format=%cs "$b" 2>/dev/null || echo '?')"
+    git --git-dir="$HOME/.dotfiles" ls-tree -r -l "$b" 2>/dev/null \
+      | awk -v b="$b" -v d="$date" '
+          $5 ~ /(^|\/)\.claude\/(host-memory\.md|memory\/.*\.md)$/ ||
+          $5 ~ /(^|\/)CLAUDE\.md$/ { printf "%s\t%s\t%s\t%s\n", b, d, $5, $4 }'
+  done
+}
+
 cmd_index() {
   awk '
     /^## / { if (h != "") printf "%d\t%d\t%s\n", ln, bytes, h; h = substr($0, 4); ln = NR; bytes = 0 }
@@ -177,6 +199,7 @@ case "${1:-}" in
   paths)  shift; cmd_paths "$@" ;;
   scan)   shift; cmd_scan "$@" ;;
   instructions) shift; cmd_instructions "$@" ;;
+  branches) shift; cmd_branches "$@" ;;
   index)  shift; cmd_index "$@" ;;
   id)     shift; cmd_id "$@" ;;
   status) shift; cmd_status "$@" ;;
