@@ -3235,5 +3235,14 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
   with no rendezvous server at all, and g15 is direct P2P at 3 ms. Rejected only
   because RustDesk is one tool across Windows/macOS/Linux/Android. It stays the
   fallback if the preview build regresses.
-- **Still open:** the unattended password is not set yet (nothing to authenticate
-  against until it is), and the reboot/login-screen test has not been run.
+- **Unattended password: SET 2026-09-10.** Done in the tray, not by a script —
+  it lives in `RustDesk.toml` as an encrypted per-install secret, which is why
+  `rustdesk-seed.sh` deliberately never touches that file.
+- **Direct IP access is OFF, and that is the default, not a regression.** Neither
+  config carries `direct-server`, so nothing listens on 21118 and a connect to
+  `100.64.0.10` reaches nothing — the failure looks like a tailnet problem and is
+  not one (`ss -tlnp` shows no RustDesk listener at all). Connect by **ID
+  `1722388240`** through our own hbbs, which needs no config change; enabling
+  direct IP means the tray toggle plus the same key in root's copy, and sudo here
+  has no NOPASSWD.
+- **Still open:** the reboot/login-screen test has not been run.
