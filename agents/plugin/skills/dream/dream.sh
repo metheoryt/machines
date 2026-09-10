@@ -30,6 +30,7 @@ usage: dream.sh <command> [args]
 
   paths                      print queue/ledger/runs locations
   scan                       TSV of every memory store: path, bytes, scope, sections
+  instructions               TSV of every auto-loaded CLAUDE.md/AGENTS.md, same columns
   index <file>               TSV of a store's ## sections: line, bytes, heading
   id <target> <anchor> <action>
                              8-hex stable item id (target+anchor+action)
@@ -83,7 +84,31 @@ cmd_scan() {
     [ -f "$f" ] || continue
     printf '%s\t%s\t%s\t%s\n' \
       "$f" "$(wc -c <"$f" | tr -d ' ')" "$(_scope "$f")" \
-      "$(grep -c '^## ' "$f" 2>/dev/null || echo 0)"
+      "$(awk '/^## /{n++} END{print n+0}' "$f")"
+  done
+}
+
+# Auto-loaded instruction files. Not memory stores — RULES, and a rule is
+# deleted on different evidence than a fact. Separate subcommand rather than a
+# column on `scan` so nothing can treat the two as one population.
+# CLAUDE.md is a symlink to AGENTS.md in some repos: resolve and dedupe, or the
+# same file is reported (and proposed against) twice.
+cmd_instructions() {
+  local f real
+  local -a seen=()
+  for f in \
+    "$HOME/.claude/CLAUDE.md" \
+    "$HOME/CLAUDE.md" \
+    "$HOME"/*/CLAUDE.md "$HOME"/*/AGENTS.md \
+    "$HOME"/*/*/CLAUDE.md "$HOME"/*/*/AGENTS.md
+  do
+    [ -f "$f" ] || continue
+    real="$(readlink -f "$f")"
+    case " ${seen[*]-} " in *" $real "*) continue ;; esac
+    seen+=("$real")
+    printf '%s\t%s\t%s\t%s\n' \
+      "$real" "$(wc -c <"$real" | tr -d ' ')" "$(_scope "$real")" \
+      "$(awk '/^## /{n++} END{print n+0}' "$real")"
   done
 }
 
@@ -151,6 +176,7 @@ cmd_decide() {
 case "${1:-}" in
   paths)  shift; cmd_paths "$@" ;;
   scan)   shift; cmd_scan "$@" ;;
+  instructions) shift; cmd_instructions "$@" ;;
   index)  shift; cmd_index "$@" ;;
   id)     shift; cmd_id "$@" ;;
   status) shift; cmd_status "$@" ;;

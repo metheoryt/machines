@@ -40,6 +40,12 @@ echo "$idx" | grep -q '^5	' && pass "index reports the heading line" || die "ind
 # "## Beta\n- two\n- three\n" = 8 + 6 + 8 = 22 bytes
 echo "$idx" | grep -q '^8	22	Beta$' && pass "index counts section bytes" || die "index counts section bytes: $idx"
 
+# A store with NO '## ' headings must still emit exactly 4 columns. `grep -c`
+# prints 0 AND exits 1 on no match, so a `|| echo 0` fallback emitted a second
+# line and split the row in two.
+flat="$tmp/flat.md"; printf '# Title\n\njust prose, no sections\n' > "$flat"
+[ "$(D index "$flat" | wc -l)" -eq 0 ] && pass "index of a section-less file is empty" || die "index of a section-less file is empty"
+
 # --- status / append / suppression -------------------------------------------
 id="$(D id "$store" '## Alpha' delete)"
 [ "$(D status "$id" | cut -f1)" = new ] && pass "unknown id is new" || die "unknown id is new"
@@ -81,8 +87,27 @@ printf '# Title\n\nintro\n\n## Alpha\n- one\n\n## Beta\n- two\n- three\n' > "$tm
 cmp -s "$store" "$tmp/expect.md" && pass "no memory store was modified" || die "no memory store was modified"
 
 # Every file dream.sh created lives under DREAM_ROOT.
-stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$DREAM_ROOT/*" ! -name 'store.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
+stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$DREAM_ROOT/*" ! -name 'store.md' ! -name 'flat.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
 [ -z "$stray" ] && pass "dream.sh wrote only under DREAM_ROOT" || die "dream.sh wrote only under DREAM_ROOT: $stray"
+
+# --- instructions: same shape, symlinks resolved and deduped ------------------
+ins="$(D instructions)"
+if [ -n "$ins" ]; then
+  echo "$ins" | awk -F'\t' 'NF != 4 { exit 1 }' \
+    && pass "instructions emits 4 TSV columns" || die "instructions emits 4 TSV columns: $ins"
+  [ "$(echo "$ins" | cut -f1 | sort | uniq -d | wc -l)" -eq 0 ] \
+    && pass "instructions dedupes CLAUDE.md->AGENTS.md symlinks" || die "instructions dedupes symlinks"
+  # The path is column 1, not the end of the line — anchor on the field.
+  if [ -L "$HOME/machines/CLAUDE.md" ]; then
+    echo "$ins" | cut -f1 | grep -qx "$HOME/machines/AGENTS.md" \
+      && ! echo "$ins" | cut -f1 | grep -qx "$HOME/machines/CLAUDE.md" \
+      && pass "instructions reports the resolved real path" || die "instructions reports the resolved real path"
+  else
+    pass "instructions resolved-path check (SKIP: no symlink here)"
+  fi
+else
+  pass "instructions found none (SKIP shape assertions)"
+fi
 
 # --- scan is read-only and shaped as documented ------------------------------
 # Run it for real (it reads live stores) and assert the shape, not the content.

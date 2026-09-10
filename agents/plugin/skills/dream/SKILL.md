@@ -77,7 +77,11 @@ bash "$D" scan                                  # path, bytes, scope, ## count
 bash "$D" index <store>                         # line, section bytes, heading
 ```
 
-`scan` discovers stores by **glob**, so one added later shows up on its own.
+```bash
+bash "$D" instructions                          # auto-loaded CLAUDE.md/AGENTS.md
+```
+
+Both discover by **glob**, so a store or a repo added later shows up on its own.
 The `scope` column is what makes a proposal safe to read:
 
 | scope | meaning | what a change there costs |
@@ -91,6 +95,33 @@ The `scope` column is what makes a proposal safe to read:
 10 stores and `machines/.claude/memory/project.md` alone is 277 KB — 48% of it.
 Two stores hold 70%. Budget the run's reading accordingly; re-derive the split
 from `scan` each night rather than trusting this sentence.
+
+### Two populations, different rules
+
+`instructions` is a **separate** subcommand, not a column on `scan`, so the two
+can never be treated as one pile. Instruction files are auto-loaded into every
+session that opens under their path — `~/.claude/CLAUDE.md` and `~/CLAUDE.md`
+in *every* session, a repo's `CLAUDE.md`/`AGENTS.md` in that repo's — so their
+size is a standing context tax, and that is what puts them in scope here. As of
+2026-09-11: ~116 KB over 9 files, `machines/AGENTS.md` alone 46 KB.
+
+They hold **rules, not facts**, and a rule is deleted on different evidence:
+
+- A fact is deleted when something supersedes it. A rule is deleted only when
+  it is **verifiably no longer true of the system it describes**, or when it
+  never was — the repo has burned itself on both (`machines/AGENTS.md` records
+  a bash claim that measurement disproved, and a suite count repeated for weeks
+  that reached 30 of 40 suites).
+- `contradiction` is the highest-value action here. `machines/AGENTS.md` says
+  it out loud: *if you catch this file asserting two incompatible things, the
+  contradiction is the bug — do not pick the half that suits the task.* File
+  the pair; a human picks.
+- **Do not propose compressing a rule into a shorter rule.** The length is
+  usually the incident that produced it, and that incident is the reason anyone
+  obeys it. `compress` applies to narrative *around* a rule, never to the rule.
+- Doc-vs-code drift is **not** this skill's job — that is kb-refresh Track B.
+  Here the axis is redundancy, contradiction and bloat *within and between* the
+  loaded texts.
 
 ## Step 2 — Load the suppression baseline FIRST
 
@@ -187,7 +218,7 @@ the item comes back forever.
 
 | input | where it comes from | example |
 |---|---|---|
-| `target` | `scan` column 1 — the **absolute** path, no `~` | `/home/me/.claude/memory/global.md` |
+| `target` | `scan`/`instructions` column 1 — the **absolute** path, no `~`. For a `CLAUDE.md` that is a symlink this is the resolved real path (`machines/AGENTS.md`, not `machines/CLAUDE.md`) | `/home/me/.claude/memory/global.md` |
 | `anchor` | `index` column 3 — the heading text, no `##`, no backticks | `Pure logging — Grafana/Loki vs Kibana (updated 2026-08-26)` |
 | `action` | one word from the taxonomy below | `dedupe` |
 
