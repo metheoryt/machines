@@ -14,7 +14,7 @@
 # backup@profile-latitude, check@profile-latitude,
 # forget@profile-g614jv-maintenance, check@profile-g614jv-maintenance.
 #
-# Prerequisite: /mnt/spare320 mounted and both repositories present. The
+# Prerequisite: /mnt/wd8 mounted and both repositories present. The
 # profiles' own `run-before` assertions enforce that at RUN time; nothing
 # enforces it at SCHEDULE time, and nothing needs to -- scheduling writes units,
 # it does not touch a repo.

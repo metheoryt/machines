@@ -126,8 +126,9 @@ OPT='x-systemd.before=docker.service'
 #   done | cut -d: -f1 | grep ^/mnt/ | cut -d/ -f1-3 | sort -u
 #
 # It says: immich_server binds 19 year-dirs under /mnt/immich-2024, restic-server
-# binds /mnt/spare320/restic-rest, the servarr stack binds /mnt/servarr, and
-# immich binds /mnt/immich.
+# binds /mnt/wd8/restic-rest, the servarr stack binds /mnt/wd8/ServarrMedia, and
+# immich binds /mnt/immich. Both of the last two moved onto /mnt/wd8 on
+# 2026-09-10 — media first, then the repositories.
 #
 # THIS LIST WAS WRONG UNTIL 2026-09-08, AND THAT IS WHY THE BUG RECURRED. It read
 # `(/mnt/immich /mnt/servarr)` under a comment asserting that "immich-2024 /
@@ -157,6 +158,14 @@ OPT='x-systemd.before=docker.service'
 # afterwards would mean guarding every start except the one that has never been
 # tested. It is inert until the disk exists: fstab_patch skips a mountpoint with
 # no fstab line, and guard3 skips a path with no directory.
+#
+# /mnt/servarr and /mnt/spare320 are the mirror image of that exception: since
+# 2026-09-10 no container binds either, and by the live-binds rule both should
+# be gone. They stay for the burn-in window, because each still holds the ONLY
+# other copy of what moved to /mnt/wd8 — the media tree and the two restic
+# repositories. Freezing a mountpoint nothing binds costs nothing and keeps a
+# stray bind from quietly writing to the fallback copy. They leave this list
+# when the disks leave the box, not before.
 MOUNTS=(/mnt/immich /mnt/servarr /mnt/immich-2024 /mnt/spare320 /mnt/wd8)
 DNS_JSON='{"dns": ["100.100.100.100", "1.1.1.1"]}'
 

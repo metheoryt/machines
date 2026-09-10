@@ -2,7 +2,7 @@
 Description=Verify the restic REST backup hub
 Documentation=file:/home/me/machines/hosts/latitude/debian/restic-hub-selfcheck.sh
 # No ConditionPathIsMountPoint here, unlike the mirror units. An absent
-# /mnt/spare320 is precisely what this checks for -- skipping the run because the
+# /mnt/wd8 is precisely what this checks for -- skipping the run because the
 # drive is gone would silence the alarm it exists to raise.
 
 [Service]

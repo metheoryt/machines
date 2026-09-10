@@ -11,11 +11,12 @@ global:
   # line: profile `true` DOES override global `false`, but profile `false` does
   # NOT override global `true`. There is no `--no-init` flag to escape with.
   #
-  # That asymmetry silently defeated the wsl profile's guard. /mnt/spare320 is
-  # mounted `nofail`, so when it is absent docker bind-mounts an empty directory;
-  # `restic init` then SUCCEEDS against it and the client writes a fresh
-  # zero-history repository while reporting success. On 2026-08-04 that drive was
-  # genuinely unmounted for four and a half hours.
+  # That asymmetry silently defeated the wsl profile's guard. The hub drive is
+  # mounted `nofail` (/mnt/wd8 now, /mnt/spare320 when this was written), so when
+  # it is absent docker bind-mounts an empty directory; `restic init` then
+  # SUCCEEDS against it and the client writes a fresh zero-history repository
+  # while reporting success. On 2026-08-04 that drive was genuinely unmounted
+  # for four and a half hours.
   #
   # So initialization is opt-IN, declared on each profile that must be able to
   # create its own repository. A newly added profile inherits NO init, which is
