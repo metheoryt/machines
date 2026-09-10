@@ -130,7 +130,11 @@ check_repos(){
   for entry in "${REPOS[@]}"; do
     IFS=: read -r name rel pass <<<"$entry"
     repo="$root/$rel"
-    if [ ! -f "$repo/config" ]; then
+    # `sudo test`, not `test`: the two hub repositories are drwx------ root:root
+    # (the container writes as root), so an unprivileged -f is false on a
+    # repository that is perfectly present. Reporting that as MISSING is how a
+    # healthy repo gets "fixed".
+    if ! sudo test -f "$repo/config"; then
       printf '    %-10s %s\n' "$name" "MISSING — no $repo/config"; rc=1; continue
     fi
     if sudo env RESTIC_PASSWORD_FILE="$pass" "$bin" -r "$repo" check --no-lock >/tmp/.rc.$$ 2>&1; then
