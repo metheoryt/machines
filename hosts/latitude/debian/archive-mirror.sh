@@ -183,27 +183,39 @@ fi
 
 # --- post-copy verification ------------------------------------------------
 say "=== verifying ==="
-# THE GATE IS FILES, NOT `du`. It used to require exact `du -sb` equality
-# between the two trees, and that is not a property a good copy has: du sums
-# directory st_size too, and a directory that has grown and had entries deleted
-# does not allocate like a freshly created copy of it. Measured mid-run on
-# 2026-09-10: 2156 source dirs summed to 9,011,200 bytes while the fresh copies
-# averaged ~20 bytes each SMALLER. So the old gate would have printed
-# ARCHIVE MIRROR INCOMPLETE after two and a half hours of a perfectly good copy,
-# and the obvious response - re-run it - would have found nothing to fix and
-# said INCOMPLETE again. It was inherited from the exfat target, where it was
-# wrong for a different reason.
+# THE GATE IS FILES, NOT `du` -- AND THE REASON IT WAS CHANGED WAS WRONG.
 #
-# What is compared instead: the number of regular files, and the sum of their
-# sizes. Directories are excluded from both. `du` is still PRINTED, because the
-# difference between the two numbers is exactly the thing this comment is about
-# and a reader deserves to see it rather than be told.
+# The claim made on 2026-09-10, in the commit that made this change: exact
+# `du -sb` equality is not a property a good copy has, because du sums directory
+# st_size and a grown directory does not allocate like a fresh copy of it. Both
+# halves are false, and both were measurable in a minute:
 #
-# NO LINK-GROUP AXIS, on a checked premise: this tree has 0 files with nlink>1
-# (measured 2026-09-10, and the 2026-08-01 survey said the same). -aHAX carries
-# -H so the property is preserved if that ever changes, and the assertion below
-# fails loudly if it does - which is the point at which this gate needs the
-# grouping axis that migrate-servarr-wd8.sh has.
+#   * `du -sb` does not count directory st_size at all. Measured on GNU
+#     coreutils 9.7 (latitude) and uutils 0.8.0: a tree of one 1000-byte file in
+#     two nested dirs whose own st_size sums to 180 reports `du -sb` = 1000.
+#   * The finished copy's directories were byte-identical to the source's
+#     anyway: 9,011,200 over 2156 dirs on both sides.
+#
+# The "evidence" was a mid-run comparison of 1634 partially-populated
+# destination dirs against 2156 complete source ones, which is not a comparison
+# at all -- a directory still receiving entries has not reached its final size.
+# So the old gate would have PASSED, and this rewrite prevented nothing. The
+# repo already says it: if you are about to state a mechanism in a commit
+# message, that is the moment to measure it.
+#
+# The gate is left in the files-only form because it is no worse and says what
+# it measures, but the two things in this block that ARE load-bearing came in
+# alongside it and stand on their own:
+#
+#   * the hardlink axis. This tree has 0 files with nlink>1 (2026-09-10, and the
+#     2026-08-01 survey said the same), so counts and byte sums are sufficient
+#     -- but that is a PREMISE, and it is now asserted rather than assumed. The
+#     day it stops holding, this gate needs the link-GROUPING axis that
+#     migrate-servarr-wd8.sh has, because a count of hardlinked files cannot see
+#     which files are linked to which.
+#   * `du` is still printed next to the file sum, so a reader can see the
+#     relationship rather than be told about it. That is what would have caught
+#     the wrong claim above.
 fcount(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
 fbytes(){ sudo find "$1" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}'; }
 flinked(){ sudo find "$1" -type f -links +1 -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l; }
