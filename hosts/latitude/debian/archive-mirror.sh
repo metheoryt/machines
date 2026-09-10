@@ -125,12 +125,13 @@ if [ "$MODE" = verify ]; then
   df_=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' 2>/dev/null | wc -l)
   sd=$(sudo find "$SRC" -type d 2>/dev/null | wc -l)
   dd=$(sudo find "$DST" -type d -not -name '.rsync-partial' 2>/dev/null | wc -l)
-  # File bytes, not du: see the gate at the bottom of this script for why the
-  # directory allocation of the two trees is expected to differ.
+  # Both are printed because they are expected to be EQUAL: du -sb does not count
+  # directory st_size (measured, GNU coreutils 9.7). If they ever diverge, that
+  # is the interesting thing on the line, not the file sum alone.
   sfb=$(sudo find "$SRC" -type f -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
   dfb=$(sudo find "$DST" -type f -not -path '*/.rsync-partial/*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END{print s+0}')
   echo "  files: src=$sf dst=$df_    dirs: src=$sd dst=$dd"
-  echo "  file bytes: src=$sfb dst=$dfb    (du -sb: src=$src_bytes dst=$dst_bytes, dirs included)"
+  echo "  file bytes: src=$sfb dst=$dfb    (du -sb: src=$src_bytes dst=$dst_bytes)"
   [ "$sf" = "$df_" ] && [ "$sfb" = "$dfb" ] && say "MATCH" || say "MISMATCH - re-run with -go"
   say "=== content sample (25 random files, md5) ==="
   bad=0
