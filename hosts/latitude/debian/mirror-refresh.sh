@@ -9,13 +9,15 @@
 #                               unrestorable. The real DB backup is var-backups/immich-db.
 #
 # The Media/{movies,torrents,tv,xxx} excludes are GONE (2026-08-01) because the
-# tree itself is gone: the servarr payload moved to /mnt/servarr/ServarrMedia
-# (sdb2) and the orphaned /mnt/immich/Media copy was deleted after verifying the
+# tree itself is gone: the servarr payload moved off /mnt/immich (to the HGST in
+# 2026-08, and on to /mnt/wd8/ServarrMedia on 2026-09-10 — do not chase the sd
+# letter, that is what the label is for) and the orphaned /mnt/immich/Media copy
+# was deleted after verifying the
 # survivor matched on file count, apparent bytes, hardlink count and a content
 # sample. Nothing here excludes it any more because there is nothing to exclude.
 # That payload is still deliberately UNBACKED-UP - it is seeded, re-acquirable
 # torrent data, and this script only ever mirrors /mnt/immich. Do not "fix" that
-# by adding /mnt/servarr to the source list.
+# by adding /mnt/wd8 to the source list.
 #
 # ServarrConfig IS mirrored on purpose - jellyfin + *arr configs are not
 # re-derivable. (It used to live at Media/config; it is /mnt/immich/ServarrConfig

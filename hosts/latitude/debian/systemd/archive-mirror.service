@@ -1,8 +1,21 @@
 [Unit]
-Description=Mirror the 1970-2024 immich archive to /mnt/xs
+Description=Mirror the 1970-2024 immich archive to /mnt/immich-2024-backup
 Documentation=file:/home/me/machines/hosts/latitude/debian/archive-mirror.sh
-ConditionPathIsMountPoint=/mnt/immich-2024
-ConditionPathIsMountPoint=/mnt/xs
+# NO ConditionPathIsMountPoint, ON EITHER END, AND THAT IS THE POINT. This unit
+# carried one for the source and one for the target until 2026-09-10. A failed
+# Condition does not fail a unit - it SKIPS it, and systemd records
+# Result=success. So "the backup target is not mounted" arrived as a green timer,
+# which is the same silent-success class as the Docker bind race and the
+# 2026-08-23 nofail incident. It is not hypothetical here: on 2026-09-10
+# /mnt/immich-mirror sat unmounted with the disk healthy and present while
+# mirror-refresh.timer reported success, and nothing surfaced it for hours.
+#
+# The Conditions were also the WEAKER of the two checks that already existed.
+# archive-mirror.sh verifies both ends by filesystem UUID, tries an explicit
+# remount, and exits 1 with FATAL if the mount is absent or is the wrong
+# filesystem - which a mountpoint test cannot tell you. Dropping them costs no
+# coverage and turns a vanished disk into a failed unit that `just health` and
+# `systemctl --failed` both show.
 
 [Service]
 Type=oneshot

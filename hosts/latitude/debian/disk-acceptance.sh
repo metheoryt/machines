@@ -37,7 +37,7 @@
 # ALL of these hold: the target is a /dev/disk/by-id/ata-* path, the caller
 # passed --serial and it matches what the device reports, the device carries no
 # partition table and no filesystem signature, nothing of it is mounted, and it
-# appears nowhere in /etc/fstab. Pointed at /mnt/servarr's disk it exits 2.
+# appears nowhere in /etc/fstab. Pointed at any mounted fleet disk it exits 2.
 #
 # Docks: both Ugreen CM198 bays are JMicron JMS561U bridges on the usb-storage
 # (BOT) driver. Measured 2026-09-08, on both docks: `-d sat` passes -i, -A AND

@@ -159,14 +159,28 @@ OPT='x-systemd.before=docker.service'
 # tested. It is inert until the disk exists: fstab_patch skips a mountpoint with
 # no fstab line, and guard3 skips a path with no directory.
 #
-# /mnt/servarr and /mnt/spare320 are the mirror image of that exception: since
-# 2026-09-10 no container binds either, and by the live-binds rule both should
-# be gone. They stay for the burn-in window, because each still holds the ONLY
-# other copy of what moved to /mnt/wd8 — the media tree and the two restic
-# repositories. Freezing a mountpoint nothing binds costs nothing and keeps a
-# stray bind from quietly writing to the fallback copy. They leave this list
-# when the disks leave the box, not before.
-MOUNTS=(/mnt/immich /mnt/servarr /mnt/immich-2024 /mnt/spare320 /mnt/wd8)
+# /mnt/spare320 is the mirror image of that exception: since 2026-09-10 no
+# container binds it, and by the live-binds rule it should be gone. It stays for
+# the burn-in window, because it still holds the ONLY other copy of the two
+# restic repositories that moved to /mnt/wd8. Freezing a mountpoint nothing binds
+# costs nothing and keeps a stray bind from quietly writing to the fallback copy.
+# It leaves this list when the disk leaves the box, not before.
+#
+# /mnt/servarr LEFT this list on 2026-09-10, and that departure is what guard3's
+# retirement scan exists for. Its media copy was proven redundant — files,
+# inodes, real and apparent bytes and hardlink GROUPS all matched /mnt/wd8, and
+# qBittorrent had already rechecked every torrent against the new disk — so the
+# HGST was emptied and remounted as /mnt/immich-2024-backup, the second copy of
+# the closed 1970-2024 archive, which no container binds either.
+#
+# Deleting a name from this array used to be a silent one-way door: guard3_apply
+# only ever froze what was LISTED, so a retired mountpoint kept its `chattr +i`
+# forever with nothing in the repo saying so, and the only documented revert
+# (`-off`) also strips the DNS pin and restarts dockerd — bouncing immich and
+# postgres to unfreeze one directory. `add` now unfreezes any frozen /mnt/* dir
+# that is NOT in this list, so retiring a mountpoint is the same single action as
+# adding one: edit the array, run the script.
+MOUNTS=(/mnt/immich /mnt/immich-2024 /mnt/spare320 /mnt/wd8)
 DNS_JSON='{"dns": ["100.100.100.100", "1.1.1.1"]}'
 
 MODE=show
@@ -377,6 +391,21 @@ guard3_apply() {
     say "guard3: cleared ghost tree under $m"
   done
 
+  # RETIREMENT -- the direction this guard was missing. A path deleted from
+  # MOUNTS keeps its immutable bit unless something takes it off, and nothing
+  # did, so "removed from the array" and "still frozen on disk" could disagree
+  # indefinitely. Scoped to /mnt/* one level deep: the guard set never holds
+  # anything else, and a blind fleet-wide `chattr -i` is not this script's to
+  # own. $ROOTVIEW itself lands in this glob and is skipped by is_frozen.
+  for under in "$ROOTVIEW"/mnt/*; do
+    [ -d "$under" ] || continue
+    m=${under#"$ROOTVIEW"}
+    case " ${MOUNTS[*]} " in *" $m "*) continue ;; esac
+    is_frozen "$under" || continue
+    if [ "$MODE" = show ]; then say "would RETIRE (chattr -i) $m - no longer in MOUNTS"; continue; fi
+    sudo chattr -i "$under" && say "guard3: retired $m - unfrozen, no longer in MOUNTS"
+  done
+
   for m in "${MOUNTS[@]}"; do
     under="$ROOTVIEW$m"
     if [ ! -d "$under" ]; then say "guard3: $m has no underlying dir (?)"; continue; fi
@@ -390,7 +419,7 @@ guard3_apply() {
 
 # Prove the guard, do not trust the bit. An immutable flag that does not actually
 # stop Docker's mkdir is worth nothing, and the bind sources are up to three
-# levels below the frozen dir (jellyfin binds /mnt/servarr/ServarrMedia/movies),
+# levels below the frozen dir (jellyfin binds /mnt/wd8/ServarrMedia/movies),
 # so "the top-level dir is enough" is an assumption that has to be measured.
 guard3_verify() {
   local m under probe rc
@@ -444,7 +473,7 @@ fi
 say "--- state ---"
 [ "$ACTION" = add ] && guard3_verify
 # --fstab, not the live table: x-systemd.* are generator directives, not kernel
-# mount options, so `findmnt /mnt/servarr` shows only "rw,noatime" and looks like
+# mount options, so `findmnt /mnt/wd8` shows only "rw,noatime" and looks like
 # the edit did not land. The Before= check above is the real verification.
 for m in "${MOUNTS[@]}"; do findmnt --fstab -o TARGET,OPTIONS "$m" 2>/dev/null; done
 say "container DNS check:"

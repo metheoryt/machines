@@ -122,12 +122,15 @@ has "$(unsafe_reasons "$SAFE" RD2RRPWH WD-RD2RRPWI "" "" "" "")" "serial mismatc
 serial_matches "" ABC123 && bad "an empty expectation must never match" || pass "an empty expectation never matches"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 gpt "" "" "")" "partition table" "an existing partition table is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 "" "")" "ext4 signature" "an existing filesystem is refused"
-has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 /mnt/servarr "")" "mounted at /mnt/servarr" "a mounted device is refused"
+has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" ext4 /mnt/immich-2024-backup "")" "mounted at /mnt/immich-2024-backup" "a mounted device is refused"
 has "$(unsafe_reasons "$SAFE" ABC123 ABC123 "" "" "" UUID=fd0b0662)" "appears in /etc/fstab" "an fstab-listed device is refused"
-# All of them at once: the servarr disk. Every reason must be reported, because
-# the operator reading this needs to know it was not one near-miss.
-n=$(unsafe_reasons /dev/sdb "" JD100ACC2V5ZVK gpt ext4 /mnt/servarr UUID=fd0b0662 | grep -c .)
-[ "$n" -ge 5 ] && pass "the live servarr disk trips at least 5 interlocks ($n)" || bad "servarr disk tripped only $n interlocks"
+# All of them at once: the HGST. Same drive and same UUID as before — it was
+# /mnt/servarr until 2026-09-10 and is /mnt/immich-2024-backup now, which is
+# exactly why the fixture spells out a live mount rather than a placeholder.
+# Every reason must be reported, because the operator reading this needs to know
+# it was not one near-miss.
+n=$(unsafe_reasons /dev/sdb "" JD100ACC2V5ZVK gpt ext4 /mnt/immich-2024-backup UUID=fd0b0662 | grep -c .)
+[ "$n" -ge 5 ] && pass "the live HGST trips at least 5 interlocks ($n)" || bad "HGST tripped only $n interlocks"
 
 # ── source-text assertions: what the phases may and may not do ──────────────
 src="$(cat "$SCRIPT")"

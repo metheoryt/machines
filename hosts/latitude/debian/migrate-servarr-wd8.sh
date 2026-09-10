@@ -434,6 +434,34 @@ phase_cutover(){
 }
 
 phase_rollback(){
+  # ROLLBACK BECAME A CLOSED DOOR ON 2026-09-10, and it has to SAY so rather than
+  # run. The HGST behind $SRC was emptied that day (the copy was proven redundant
+  # — files, inodes, real and apparent bytes and hardlink groups all matched, and
+  # qBittorrent had rechecked every torrent against the new disk) and the drive
+  # was remounted as /mnt/immich-2024-backup. So $SRC is not merely stale, it is
+  # not a mountpoint at all.
+  #
+  # Running the old body against that would be this repo's signature failure, not
+  # a no-op: DATA_ROOT points at a path on the ROOT filesystem, docker CREATES a
+  # missing bind source, and the *arr stack comes up on an empty library that it
+  # believes is real. Radarr and Sonarr then reconcile against nothing and
+  # qBittorrent fails every recheck — a rollback that reports success while
+  # destroying the thing it was meant to restore.
+  #
+  # The check is "is there content", not "is the flag set": a marker file would
+  # have to be maintained by whoever deleted the source, and the whole class of
+  # bug here is state nobody remembered to update.
+  local files=0
+  [ -d "$SRC" ] && files=$(sudo find "$SRC" -mindepth 1 -type f -print -quit 2>/dev/null | wc -l)
+  if [ "$files" -eq 0 ]; then
+    say "ROLLBACK REFUSED — $SRC holds no files."
+    say "  The source copy was deleted on 2026-09-10 and that drive is now"
+    say "  /mnt/immich-2024-backup. There is nothing to roll back TO, and running"
+    say "  anyway would hand the stack an empty auto-created directory on /."
+    say "  If the 8 TB has failed, restore from the restic repo or re-download;"
+    say "  do not point DATA_ROOT at a path with no data behind it."
+    exit 1
+  fi
   say "pointing DATA_ROOT back at $SRC"
   sudo sed -i "s|^DATA_ROOT=.*|DATA_ROOT=$SRC|" "$ENV_FILE"
   grep -q "^DATA_ROOT=$SRC\$" "$ENV_FILE" || die "rollback edit did not take"
