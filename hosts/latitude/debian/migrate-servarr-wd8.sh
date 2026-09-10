@@ -120,10 +120,19 @@ resolve_disk(){
 # --- phases ------------------------------------------------------------------
 
 phase_plan(){
-  local dev
+  local dev parts
   dev=$(resolve_disk) || exit 1
   say "target disk : $dev  ($EXPECT_MODEL $EXPECT_SERIAL, $WWN)"
-  say "partitions  : $(lsblk -no NAME,SIZE,FSTYPE "$dev" | tail -n +2 | tr '\n' ' ' | sed 's/  */ /g')"
+  # Spelled out rather than printed raw: an empty listing IS the answer here
+  # (no partition table, safe to mkfs), but a blank line at the one decision
+  # point before mkfs reads as a check that failed to run.
+  parts=$(lsblk -no NAME,SIZE,FSTYPE "$dev" | tail -n +2 | sed 's/^/     /')
+  if [ -z "$parts" ]; then
+    say "partitions  : none — disk is empty, prepare will partition it"
+  else
+    say "partitions  : EXISTING — prepare will REFUSE unless they are unformatted"
+    printf '%s\n' "$parts"
+  fi
   say "source      : $SRC"
   sudo du -sb --si "$SRC" 2>/dev/null | sed 's/^/     real     /'
   sudo du -sb --si --count-links "$SRC" 2>/dev/null | sed 's/^/     apparent /'
