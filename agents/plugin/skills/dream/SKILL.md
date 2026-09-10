@@ -51,6 +51,13 @@ this skill exists to remove.
 
 ```bash
 D=~/machines/agents/plugin/skills/dream/dream.sh
+
+# Pull FIRST. The queue is shared across every box that runs /dream, and
+# suppression is the only thing standing between a second box and a duplicate
+# of every item the first one filed tonight. A stale checkout silently defeats
+# it: `status` reports `new` for an item that is already open on origin.
+git -C ~/machines pull --ff-only || echo 'PULL FAILED — say so in the report and do not push at Step 8'
+
 bash "$D" paths
 
 # Baseline for the Step 8 invariant check. A store already dirty now is not a
@@ -454,3 +461,26 @@ cd ~/machines && claude -p '/dream'
 On `desktop`, via an Orca Automation, so the sessions can be watched. It is
 read-only plus one commit to one repo, so a failed run costs nothing and the
 next night starts from the same queue.
+
+## Running it on more than one box
+
+The queue is shared — one `docs/dream/queue.md` in `machines`, on `main`. Item
+ids are content-derived from an **absolute** path, so `/home/me/.claude/memory/
+global.md` produces the same id on every box and a second run's duplicate is
+suppressed as `open`. That only works if the box pulled first (Step 0).
+
+What a second box adds is **the stores no other box can see**. The fleet-wide
+branch pass (Step 3b) reads every machine's `~/.claude` memory out of the
+dotfiles bare repo, so the shared and host-local stores need no second run. But
+a **per-project** store lives inside its own checkout, not in dotfiles — so a
+repo that exists on exactly one machine is invisible everywhere else, forever.
+On `g15` that is `~/my/*/.claude/memory/project.md`: measured 2026-09-11, six
+stores, ~138 KB, the largest 53 KB. `fleet.json` gives g15 `repo_groups: ["my"]`
+and no other box checks those repos out.
+
+So: **one run per box that holds a repo group nobody else does.** Not one per
+box.
+
+Stagger the schedules by at least half an hour and let the earlier run push
+first — two runs pushing a queue in the same minute is a needless conflict, and
+the loser's items are simply lost for the night rather than merged.
