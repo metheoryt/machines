@@ -40,7 +40,14 @@
 #
 #   /data/qaz-code/pgdata — 186 G, qaz-law's postgres (the DEFAULT `postgres`
 #   database: act_version 104 G + act_version_chunk 80 G, pgvector 0.8.4). It is
-#   NOT here, and the reason is storage, not method:
+#   NOT here, and as of 2026-09-10 that is CLOSED rather than deferred — his
+#   call, in his own words: the database is rebuildable, so it does not need a
+#   backup. What this block spent three revisions failing to notice is that the
+#   INPUT it is built from, `~/my/qaz-code/laws` (7.6 G of scraped corpus,
+#   gitignored), is ALREADY one of this profile's sources. So the fleet protects
+#   the expensive half and declines to store 186 G of derived index. The
+#   measurements below are kept because they are still true and someone will
+#   re-open this:
 #
 #     * Method is settled. A dump is the wrong branch — `pg_dump -Fc` of 184 G
 #       costs hours and local space, and compressed custom-format output dedupes
@@ -53,7 +60,11 @@
 #     * Scope does. PGDATA is `999:0` mode 700 (uid 999 is `postgres` in the
 #       container and `dnsmasq` on this host — check it numerically), so reading
 #       it needs root, i.e. `schedule-permission: system` and a sudo'd
-#       `resticprofile schedule`. g15 has no NOPASSWD sudo.
+#       `resticprofile schedule`. g15 has no NOPASSWD sudo — and that was the
+#       last open blocker, so it went void with the leg itself. Do not re-raise
+#       NOPASSWD on g15 as a backup prerequisite; nothing needs it now, and
+#       `provision/tests/tiers.test.sh` asserts the workstation profile never
+#       grants it.
 #     * Space WAS the blocker, and stopped being one on 2026-09-10. The REST
 #       server's data path was /mnt/spare320/restic-rest on a 293 G drive with
 #       164 G free, already carrying latitude's own repo (12 G) and
@@ -63,15 +74,16 @@
 #       sudo/NOPASSWD one does. Adding the leg is live work, not a deferred
 #       wish — see docs/fleet-roadmap.md.
 #
-#   That decision is made: the hub moved to /mnt/wd8 on 2026-09-10 and there is
-#   nothing left to choose. It waited on "which drive holds it", with /mnt/immich
-#   (internal nvme0n1p1, 655 G free) the obvious candidate; the 8 TB is better on
-#   the axis that was actually binding — room for a ~130 G leg plus prune — and
-#   RESTIC_DATA_PATH already points there. What remains is g15's missing NOPASSWD
-#   sudo, which is a scope problem, not a storage one. Until the leg exists the
-#   186 G staging copy at
-#   latitude:/mnt/immich-mirror/g15-staging/pgdata is the ONLY second copy and
-#   must not be deleted.
+#   The drive question is also settled and now moot: the hub moved to /mnt/wd8
+#   on 2026-09-10 (7.3 T, 6.5 T free), which is where a leg would have gone.
+#
+#   THE STAGING COPY IS GONE. latitude:/mnt/immich-mirror/g15-staging/pgdata
+#   (186 G) was deleted 2026-09-10 after re-confirming the live DB up on g15
+#   (126 G, container running). Earlier revisions of this file said it "must not
+#   be deleted" and was "the ONLY second copy" — both were true when written and
+#   are false now. It was single-copy data parked on a backup disk, which is not
+#   what a backup disk is for, and it was invisible to every gate in this repo
+#   because the mirror runs without --delete and the source had no such path.
 #
 #   Also out: ~/.config (4.3 G, almost all Orca runtime state), ~/snap,
 #   ~/Applications (extracted AppImages, re-downloadable), and everything the

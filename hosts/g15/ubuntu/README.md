@@ -35,20 +35,23 @@ Facts worth having before touching the database:
   Check numerically (`stat -c %u`), never by name. postgres validates the mode
   at startup, so it cannot be handed to `me` without also running the container
   as uid 1000, which then needs the socket dir moved.
-- **This database is still the one thing on g15 that is NOT in restic.** g15
-  got the `backup-client` role on 2026-09-08 and `backup/g15/profiles.yaml`
-  covers `~/my` and `~/Music`, but PGDATA is deliberately excluded and the
-  reason is storage, not method — the profile header carries the full argument.
-  Two consequences here:
-  - The 186 GB staging leg at
-    `latitude:/mnt/immich-mirror/g15-staging/pgdata` is the ONLY second copy
-    and must not be deleted.
-  - The method is already proven on this exact data (phase 1 staged it with
-    the DB shut down; postgres 18.4 came up with a clean recovery), and the
+- **This database is NOT in restic, and since 2026-09-10 that is a decision,
+  not a gap.** Owner's call: it is rebuildable, so it needs no backup. The
+  input it is built from — `~/my/qaz-code/laws`, 7.6 GB of scraped corpus — IS
+  in `backup/g15/profiles.yaml`, so the expensive half is protected and the
+  186 GB derived index is not stored. `backup/g15/profiles.yaml` carries the
+  full argument and the measurements.
+  - **The 186 GB staging copy at
+    `latitude:/mnt/immich-mirror/g15-staging/pgdata` was DELETED 2026-09-10**,
+    after re-confirming the live DB up on g15 (126 GB, container running).
+    This file said it was "the ONLY second copy" and "must not be deleted"
+    until 2026-09-11 — true when written, false now.
+  - The method stays recorded because it is what a rebuild-from-scratch would
+    otherwise have to re-derive: proven on this exact data (phase 1 staged it
+    with the DB shut down; postgres 18.4 came up with a clean recovery), the
     container's STOPSIGNAL is `SIGINT`, i.e. postgres fast shutdown — a clean
-    one. `me` is in the `docker` group, so the stop/start needs no privilege;
-    reading PGDATA does, because of the mode above. What is missing is a drive
-    with ~130 GB to spare. Roadmap, end of P6.
+    one, and `me` is in the `docker` group, so stop/start needs no privilege.
+    Reading PGDATA does, because of the mode above.
 
 ## Orca desktop install — the traps, not a script
 

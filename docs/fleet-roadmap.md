@@ -947,11 +947,21 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   flaky docks) is the obvious home, but `RESTIC_DATA_PATH`
   lives in the `vps` repo's `homeserver/restic-server` stack — the server is a
   service, and services live there — and moving it means relocating the 29 G
-  g614jv repo too. Until then the 186 G staging leg at
-  `/mnt/immich-mirror/g15-staging/pgdata` is the **only** second copy of that
-  database and must not be deleted.
+  g614jv repo too.
 
-  **Update 2026-09-08 — the drive decision is DEFERRED pending the new 8 TB HDD.**
+  **CLOSED 2026-09-10 — the leg is not wanted at all.** Owner's call: the
+  database is rebuildable, so it needs no backup. The corpus it is built from
+  (`~/my/qaz-code/laws`, 7.6 G) is already a source in `backup/g15/profiles.yaml`,
+  so what was being argued over was 186 G of derived index. The 186 G staging
+  copy at `/mnt/immich-mirror/g15-staging/pgdata` was **deleted** the same day,
+  after re-confirming the live DB up on g15. Everything below this line in this
+  item is the history of a decision that no longer needs making — including the
+  two paragraphs saying the copy must not be deleted, which were true when
+  written. The g15 NOPASSWD-sudo blocker went void with it.
+
+  **Update 2026-09-08 — SUPERSEDED by the closure above; kept as history. Its
+  "must not be deleted" no longer holds.** The drive decision was DEFERRED
+  pending the new 8 TB HDD:
   It is in acceptance testing (identity gate passed, surface test to start by
   2026-09-18 — see project memory's *Приёмка нового диска*), and a disk that may
   yet go back to DNS is not something to build a backup target on. Until it is
