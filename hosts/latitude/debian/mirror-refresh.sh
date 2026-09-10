@@ -67,8 +67,17 @@ for pair in "$S:$S_UUID" "$D:$D_UUID"; do
     sudo mount "$m" 2>/dev/null || true
     got=$(findmnt -no UUID "$m" 2>/dev/null || true)
   fi
+  # findmnt lists EVERY mount at a target, so a stacked mountpoint comes back as
+  # several UUIDs and never equals $u - it fails closed, which is right: a
+  # backup destination with something mounted over it is not a state to write
+  # into. Reachable here for real, not just in a test: after a bus drop the
+  # remount can land on top of a mount the kernel has not torn down. Say so,
+  # and flatten the value so the message stays one line.
+  case $got in
+    *"$u"*) [ "$got" = "$u" ] || { echo "FATAL $m has STACKED mounts (top layer is not the disk): $(echo $got)"; exit "$E_MOUNT"; } ;;
+  esac
   [ "$got" = "$u" ] || {
-    echo "FATAL $m is not the expected filesystem (want UUID=$u, got '${got:-nothing mounted}')"
+    echo "FATAL $m is not the expected filesystem (want UUID=$u, got '$(echo ${got:-nothing mounted})')"
     exit "$E_MOUNT"; }
 done
 echo "mounts verified by UUID"
