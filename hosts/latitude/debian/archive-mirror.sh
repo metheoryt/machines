@@ -86,9 +86,26 @@ esac
 check_mount(){  # $1 mountpoint  $2 expected uuid
   [ "$(findmnt -no UUID "$1" 2>/dev/null)" = "$2" ]
 }
-remount(){      # $1 mountpoint  $2 expected uuid
+# ONLY THE DESTINATION MAY BE UMOUNTED, AND THAT ASYMMETRY IS THE POINT.
+# Clearing a stale mount the kernel kept after a bus drop needs umount before
+# mount. That is safe on /mnt/immich-2024-backup - measured 2026-09-10, zero
+# containers bind anything under it - and NOT safe on the source:
+# immich_server holds 19 bind mounts into /mnt/immich-2024, one per year (1970
+# and 2007-2024). A plain umount of a bound tree usually fails EBUSY rather
+# than succeeding, but "usually fails" is not a guard, and the rule in
+# mirror-refresh.sh and AGENTS.md is absolute: never umount a live docker bind
+# to repair an identity mismatch. So a MISSING source is mounted plainly, and a
+# source that is the WRONG filesystem is fatal with hands off.
+#
+# COUNT THOSE BINDS WITH `.Mounts`, NOT `.HostConfig.Binds`. immich's compose
+# uses the long `volumes:` syntax, which docker records only under .Mounts -
+# `docker inspect -f '{{json .HostConfig.Binds}}' immich_server` returns `null`
+# while .Mounts holds 22 binds (measured 2026-09-10). The recipe written down
+# in install-docker-ordering.sh had that wrong, which means it could not have
+# found the very mount whose absence caused the 2026-09-03 incident.
+remount(){      # $1 mountpoint  $2 expected uuid  $3 yes|no - may umount first
   say "  $1 missing or wrong device - remounting"
-  sudo umount "$1" 2>/dev/null
+  [ "$3" = yes ] && sudo umount "$1" 2>/dev/null
   sudo mount "$1" 2>/dev/null
   check_mount "$1" "$2"
 }
@@ -97,10 +114,12 @@ remount(){      # $1 mountpoint  $2 expected uuid
 # missing or is the wrong one; every other status is rsync's. mirror-refresh
 # shares that lock and the same two numbers - change them together.
 E_MOUNT=78
-for pair in "$SRC_MNT:$SRC_UUID" "$DST_MNT:$DST_UUID"; do
-  m=${pair%:*}; u=${pair#*:}
-  check_mount "$m" "$u" || remount "$m" "$u" || { say "FATAL $m is not the expected filesystem (want UUID=$u, got '$(echo $(findmnt -no UUID "$m" 2>/dev/null))')"; exit "$E_MOUNT"; }
-done
+mount_fatal(){  # $1 mountpoint  $2 expected uuid
+  say "FATAL $1 is not the expected filesystem (want UUID=$2, got '$(echo $(findmnt -no UUID "$1" 2>/dev/null))')"
+  exit "$E_MOUNT"
+}
+check_mount "$SRC_MNT" "$SRC_UUID" || remount "$SRC_MNT" "$SRC_UUID" no  || mount_fatal "$SRC_MNT" "$SRC_UUID"
+check_mount "$DST_MNT" "$DST_UUID" || remount "$DST_MNT" "$DST_UUID" yes || mount_fatal "$DST_MNT" "$DST_UUID"
 [ -d "$SRC" ] || { say "FATAL source $SRC does not exist"; exit 1; }
 say "mounts verified by UUID"
 

@@ -113,13 +113,33 @@ for u in $UNITS; do
     || bad  "$u.sh pins both ends by a well-formed UUID literal (found $n, want >= 2)"
 done
 
-# mirror-refresh remounts a missing mount but must never umount: docker binds
-# /mnt/immich, and unmounting a live bind to repair an identity mismatch is a
-# worse failure than refusing to run. archive-mirror's drives carry no binds,
-# so it is allowed its umount+mount cycle.
+# ── 4. a mountpoint a container binds into is never umounted ────────────────
+# Both scripts remount a dropped mount themselves (nofail is boot-only), but
+# umount-then-mount is only for a mountpoint nothing binds. Measured on
+# latitude 2026-09-10: immich_server holds 19 binds under /mnt/immich-2024 and
+# the servarr stack + postgres hold binds under /mnt/immich, while
+# /mnt/immich-2024-backup and /mnt/immich-mirror carry none. So mirror-refresh
+# (source /mnt/immich) may not umount at all, and archive-mirror may umount its
+# destination only. An earlier version of this comment claimed archive-mirror's
+# drives carried no binds — false for its source, and worth leaving on the
+# record: the premise, not the code, is what was wrong.
+#
+# Count binds with `.Mounts`. immich's compose uses the long `volumes:` syntax,
+# so `docker inspect -f '{{json .HostConfig.Binds}}' immich_server` returns
+# `null` while .Mounts holds 22 — the recipe AGENTS.md and
+# install-docker-ordering.sh used to give would have missed every one of them.
 mr="$(cat "$D/mirror-refresh.sh")"
 has   "$mr" 'sudo mount'  "mirror-refresh.sh remounts a dropped mount itself (nofail only applies at boot)"
 hasnt "$mr" 'sudo umount' "mirror-refresh.sh never umounts — docker binds /mnt/immich"
+
+am="$(cat "$D/archive-mirror.sh")"
+has "$am" 'remount "$SRC_MNT" "$SRC_UUID" no'  "archive-mirror.sh must NOT umount its source — immich_server binds 19 year-dirs under it"
+has "$am" 'remount "$DST_MNT" "$DST_UUID" yes' "archive-mirror.sh may umount its destination — nothing binds it"
+
+# The .Mounts-vs-.HostConfig.Binds trap has to stay written down where the
+# MOUNTS array is derived, or the next derivation silently drops immich again.
+ido="$(cat "$D/install-docker-ordering.sh")"
+has "$ido" '.Mounts' "install-docker-ordering.sh derives MOUNTS via .Mounts (.HostConfig.Binds is null for immich_server)"
 
 echo
 [ "$fail" = 0 ] && echo "ALL PASS" || echo "SOME FAILED"

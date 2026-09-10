@@ -546,8 +546,16 @@ are not re-derivable from the code.
       `MOUNTS`.** The second incident happened because the array excluded
       immich-2024 on the belief that it "belongs to the rsync timers" — true of
       its other job, false about who binds it, and never re-checked. Derive the
-      list from live binds (`docker inspect -f '{{range .HostConfig.Binds}}…'`),
-      never from what a disk is *for*.
+      list from live binds, never from what a disk is *for* — and derive it from
+      **`.Mounts`, not `.HostConfig.Binds`**. This file said `.HostConfig.Binds`
+      until 2026-09-10, and that recipe cannot find the mount it was written
+      about: immich's compose uses the long `volumes:` syntax, so
+      `docker inspect -f '{{json .HostConfig.Binds}}' immich_server` returns
+      **`null`** while `.Mounts` holds 22 bind entries, 19 of them year-dirs
+      under `/mnt/immich-2024`. A remedy that reproduces its own incident is
+      worse than no remedy. The working form is
+      `docker inspect -f '{{range .Mounts}}{{.Type}} {{.Source}}{{println}}{{end}}'`,
+      filtered to `bind`.
     - **The mountpoint dirs underneath the mounts are `chattr +i`.** That is
       deliberate: it turns Docker's auto-mkdir into EPERM so a missing disk stops
       the container visibly instead of emptying it invisibly. A mount still covers
@@ -587,8 +595,13 @@ are not re-derivable from the code.
   proves *something* is mounted, and `/mnt/immich-mirror` is not in `MOUNTS`, so
   nothing else stands between an absent destination and half a terabyte written
   onto `/`. **A missing mount is remounted once (`nofail` is boot-only); a wrong
-  one is never touched** — `mirror-refresh.sh` must not `umount`, because docker
-  binds `/mnt/immich`.
+  one is never touched, and a mountpoint a container binds into is never
+  `umount`ed** — clearing a stale mount that way is for copy destinations only.
+  Measured 2026-09-10: `/mnt/immich` and `/mnt/immich-2024` both carry live
+  binds, `/mnt/immich-mirror` and `/mnt/immich-2024-backup` carry none. So
+  `mirror-refresh.sh` never `umount`s at all and `archive-mirror.sh` does so
+  only for its destination. `umount` on a bound tree usually fails `EBUSY`, but
+  "usually fails" is not a guard.
 - **Two failures must not share one exit status.** `flock -n` returns **1** on a
   lock conflict and both mirror scripts used 1 for "the mount is wrong", so a
   routine collision and a vanished backup disk were the same `ExecMainStatus`.

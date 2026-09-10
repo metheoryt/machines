@@ -119,15 +119,28 @@ FSTAB=/etc/fstab
 DAEMON_JSON=/etc/docker/daemon.json
 OPT='x-systemd.before=docker.service'
 # Only the mounts Docker actually binds -- DERIVED FROM THE LIVE BINDS, not from
-# memory. The command that produces this list, run on latitude 2026-09-08:
+# memory. The command that produces this list, corrected on latitude 2026-09-10:
 #
 #   for c in $(docker ps -a --format '{{.Names}}'); do
-#     docker inspect -f '{{range .HostConfig.Binds}}{{println .}}{{end}}' "$c"
-#   done | cut -d: -f1 | grep ^/mnt/ | cut -d/ -f1-3 | sort -u
+#     docker inspect -f '{{range .Mounts}}{{.Type}} {{.Source}}{{println}}{{end}}' "$c"
+#   done | awk '$1=="bind"{print $2}' | grep ^/mnt/ | cut -d/ -f1-3 | sort -u
 #
-# It says: immich_server binds 19 year-dirs under /mnt/immich-2024, restic-server
-# binds /mnt/wd8/restic-rest, the servarr stack binds /mnt/wd8/ServarrMedia, and
-# immich binds /mnt/immich. Both of the last two moved onto /mnt/wd8 on
+# IT MUST READ .Mounts, NOT .HostConfig.Binds, AND THE DIFFERENCE IS THE WHOLE
+# BUG THIS ARRAY EXISTS FOR. immich's compose declares its volumes in the long
+# syntax, which docker records ONLY under .Mounts:
+# `docker inspect -f '{{json .HostConfig.Binds}}' immich_server` returns `null`
+# while .Mounts holds 22 bind entries (measured 2026-09-10). The recipe written
+# here until then used .HostConfig.Binds, so run as written it returned NOTHING
+# for immich_server -- it could not have found the 19 year-dirs under
+# /mnt/immich-2024 whose absence from this array caused the 2026-09-03 incident
+# in the first place. The list below was right; the instructions for rebuilding
+# it were not, which is the more dangerous of the two.
+#
+# It says: immich_server binds 19 year-dirs under /mnt/immich-2024 plus
+# /mnt/immich/ImmichMedia, restic-server binds /mnt/wd8/restic-rest, the servarr
+# stack binds /mnt/wd8/ServarrMedia and its config under /mnt/immich, and
+# immich_postgres binds /mnt/immich/ImmichMedia/postgres. Nothing binds
+# /mnt/immich-mirror or /mnt/immich-2024-backup -- both are copy destinations. Both of the last two moved onto /mnt/wd8 on
 # 2026-09-10 — media first, then the repositories.
 #
 # THIS LIST WAS WRONG UNTIL 2026-09-08, AND THAT IS WHY THE BUG RECURRED. It read
