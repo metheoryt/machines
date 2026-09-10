@@ -149,7 +149,15 @@ OPT='x-systemd.before=docker.service'
 # immich-mirror and xs stay out on a CHECKED premise: no container binds either
 # (mirror is rsync-only, written by mirror-refresh.sh; xs is archive-mirror.sh's
 # removable target and is marked `transient` in the statusboard disk map).
-MOUNTS=(/mnt/immich /mnt/servarr /mnt/immich-2024 /mnt/spare320)
+# /mnt/wd8 is listed BEFORE any container binds it, and that is deliberate —
+# the one exception to "derive this list from live binds". migrate-servarr-wd8.sh
+# refuses to cut over until this entry exists and `-go` has run, because the
+# window it protects is the very first `compose up` against the new disk: that
+# is precisely when the mountpoint is unfrozen, unordered, and empty. Adding it
+# afterwards would mean guarding every start except the one that has never been
+# tested. It is inert until the disk exists: fstab_patch skips a mountpoint with
+# no fstab line, and guard3 skips a path with no directory.
+MOUNTS=(/mnt/immich /mnt/servarr /mnt/immich-2024 /mnt/spare320 /mnt/wd8)
 DNS_JSON='{"dns": ["100.100.100.100", "1.1.1.1"]}'
 
 MODE=show
