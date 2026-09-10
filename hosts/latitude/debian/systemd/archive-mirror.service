@@ -21,7 +21,11 @@ Documentation=file:/home/me/machines/hosts/latitude/debian/archive-mirror.sh
 Type=oneshot
 User=root
 # Same lock as mirror-refresh.service - see the comment there.
-ExecStart=/usr/bin/flock -n /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/archive-mirror.sh -go
+# -E 75: flock's default conflict status is 1, which the script also uses for
+# real failures - a lock collision and a broken run were indistinguishable in
+# ExecMainStatus. Same convention as mirror-refresh.service, which shares this
+# lock: 75 = lock held, 78 = a mount is not the expected filesystem.
+ExecStart=/usr/bin/flock -n -E 75 /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/archive-mirror.sh -go
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

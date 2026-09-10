@@ -37,7 +37,41 @@ set -uo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 S=/mnt/immich; D=/mnt/immich-mirror
 DRY=-n; [ "${1:-}" = "-go" ] && DRY=""
-for m in "$S" "$D"; do findmnt -no SOURCE "$m" >/dev/null || { echo "FATAL $m not mounted"; exit 1; }; done
+# MOUNT IDENTITY IS CHECKED BY UUID, AND THIS IS THE ONLY GUARD THERE IS.
+# /mnt/immich-mirror is deliberately NOT in install-docker-ordering.sh's MOUNTS
+# - nothing in docker binds it, and that array is derived from live binds - so
+# its mountpoint dir is not chattr +i and nothing turns a missing destination
+# into EPERM. Without this check an unmounted mirror means half a terabyte
+# written onto the root filesystem. The test used to be `findmnt -no SOURCE`,
+# which only proves SOMETHING is mounted there; on a box where every sd letter
+# reshuffles and one enclosure reports a fake serial, "right mountpoint, wrong
+# disk" is reachable, so the check is by UUID like archive-mirror.sh's.
+#
+# A MISSING MOUNT IS REMOUNTED ONCE; A WRONG ONE IS NEVER TOUCHED. nofail only
+# applies at boot, so after a bus drop the mount needs an explicit `mount` -
+# not doing that is what cost 90 minutes of unnoticed mirror downtime on
+# 2026-09-10. But unlike archive-mirror.sh this does NOT umount first: docker
+# binds $S, and unmounting a live bind to "repair" an identity mismatch is a
+# worse failure than refusing to run. Wrong UUID means FATAL, hands off.
+S_UUID=d0dd3972-d279-4b57-8ab4-35d17f37b955   # nvme0n1p1 - INTERNAL, not a dock
+D_UUID=a7d7b61e-94b1-4673-af71-81152061199f   # the mirror disk, NS1066 enclosure
+# 78 = "a mount is not what it should be", distinct from rsync's own codes and
+# from the unit's flock conflict code (75), so ExecMainStatus alone says which
+# of the three happened. Changing either means changing the other; see the unit.
+E_MOUNT=78
+for pair in "$S:$S_UUID" "$D:$D_UUID"; do
+  m=${pair%:*}; u=${pair#*:}
+  got=$(findmnt -no UUID "$m" 2>/dev/null || true)
+  if [ -z "$got" ]; then
+    echo "WARN $m not mounted - remounting once"
+    sudo mount "$m" 2>/dev/null || true
+    got=$(findmnt -no UUID "$m" 2>/dev/null || true)
+  fi
+  [ "$got" = "$u" ] || {
+    echo "FATAL $m is not the expected filesystem (want UUID=$u, got '${got:-nothing mounted}')"
+    exit "$E_MOUNT"; }
+done
+echo "mounts verified by UUID"
 EX=(--exclude=/ImmichMedia/postgres/ --exclude=/lost+found/)
 # EXIT STATUS IS LOAD-BEARING NOW - this runs under a systemd timer.
 #

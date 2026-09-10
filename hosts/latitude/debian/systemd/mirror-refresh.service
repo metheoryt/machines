@@ -1,21 +1,38 @@
 [Unit]
 Description=Mirror /mnt/immich to /mnt/immich-mirror
 Documentation=file:/home/me/machines/hosts/latitude/debian/mirror-refresh.sh
-# Skip cleanly rather than failing when a dock is unplugged or a bus drop left a
-# mount behind. nofail in fstab only applies at boot, so an absent mount here is
-# normal, not an error worth alerting on.
-ConditionPathIsMountPoint=/mnt/immich
-ConditionPathIsMountPoint=/mnt/immich-mirror
+# NO ConditionPathIsMountPoint HERE, AND THAT IS THE FIX, NOT AN OVERSIGHT.
+# This unit carried one per mountpoint, to "skip cleanly rather than fail when a
+# dock is unplugged". A failed Condition* does not fail a unit - it SKIPS it,
+# and systemd records Result=success. So when /mnt/immich-mirror dropped off the
+# bus at 16:30 on 2026-09-10, this timer went on reporting success while nothing
+# was being mirrored, and the gap was found 90 minutes later by looking, not by
+# any alert. A backup DESTINATION is the one thing that must never be gated on a
+# Condition: "the target is gone" is the alert, not a reason to stay quiet.
+#
+# Its stated reason was also factually wrong. /mnt/immich is /dev/nvme0n1p1, a
+# second INTERNAL NVMe - not a dock, never unplugged - so an absent source was
+# not a routine event either. Both mounts are checked by UUID inside the script
+# now: a missing one is remounted once, and anything still wrong exits 78.
 
 [Service]
 Type=oneshot
 # System scope, not user: -aHAX preserves ownership, and the immich DB dumps are
 # written root:root 644 - a non-root copy job can read but not reproduce them.
 User=root
-# flock, shared with archive-mirror.service: both read drives in the same dock
-# (usb4/4-2), and simultaneous reads are what provokes the bus resets. -n so a
-# collision skips this run instead of queueing another reader behind it.
-ExecStart=/usr/bin/flock -n /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/mirror-refresh.sh -go
+# flock, shared with archive-mirror.service. The dock-contention reason it was
+# added for is gone since 2026-09-10 - these two jobs now share no drive and no
+# bus (this reads nvme0n1p1 and writes usb3/3-2.4; the archive reads usb4/4-2
+# and writes usb4/4-1) - but the lock is kept as a cheap serialiser against a
+# third job landing in the same dock later. -n so a collision skips this run
+# instead of queueing another reader behind it.
+#
+# -E 75 IS LOAD-BEARING. flock's default conflict status is 1, and so was the
+# script's "mount is wrong" exit - a lock collision (routine) and a vanished
+# backup destination (an incident) were indistinguishable in ExecMainStatus.
+# 75 = lock held, 78 = mount wrong, anything else is rsync's. Changing one of
+# those numbers means changing the other; the script names them too.
+ExecStart=/usr/bin/flock -n -E 75 /var/lock/latitude-mirror.lock /home/me/machines/hosts/latitude/debian/mirror-refresh.sh -go
 # Be gentle on the bridge. The resets cluster under sustained load.
 Nice=10
 IOSchedulingClass=best-effort

@@ -227,11 +227,12 @@ Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in
 this same file. `just test` prints the count it actually ran; that is the number.
 
-**The suite is GREEN as of 2026-09-10, 53 suites, 0 failures** — and note that
-this line said "54 suites" for the 2026-09-08 run while a `find` on 2026-09-10
-counted 52 before one was added. Either two suites left in between or the number
-was wrong when written, and there is no way to tell now, which is the whole
-argument three paragraphs up for not writing counts into prose. Keep it that way:
+**The suite is GREEN as of 2026-09-10, 54 suites, 0 failures** — and the number
+arriving back where it started is an accident, not a reassurance. This line
+claimed "54 suites" for the 2026-09-08 run, a `find` two days later counted 52,
+and two suites have been added since. Either two left in between or the first 54
+was wrong, and there is no way to tell now, which is the whole argument three
+paragraphs up for not writing counts into prose. Keep it that way:
 it is the only validation the repo has since the Nix gate went, and a red suite
 gives no signal at all.
 
@@ -575,6 +576,27 @@ are not re-derivable from the code.
       `provision/tests/docker-ordering.test.sh` covers the decisions (28 cases);
       the root-only halves — `chattr`, the bind mount of `/`, `systemctl` — are
       not and cannot be there.
+- **A failed `Condition*` is `Result=success`, so never gate a backup
+  DESTINATION on one.** systemd *skips* a unit whose condition fails rather than
+  failing it, and the timer then reports success forever. `mirror-refresh.service`
+  carried `ConditionPathIsMountPoint=/mnt/immich-mirror` to "skip cleanly when a
+  dock is unplugged"; on 2026-09-10 that disk dropped off the bus at 16:30 and
+  the job reported success for 90 minutes while nothing was mirrored, found by
+  looking rather than by any alert. Both mirror units are Condition-free now and
+  check their mounts **by UUID inside the script** — `findmnt -no SOURCE` only
+  proves *something* is mounted, and `/mnt/immich-mirror` is not in `MOUNTS`, so
+  nothing else stands between an absent destination and half a terabyte written
+  onto `/`. **A missing mount is remounted once (`nofail` is boot-only); a wrong
+  one is never touched** — `mirror-refresh.sh` must not `umount`, because docker
+  binds `/mnt/immich`.
+- **Two failures must not share one exit status.** `flock -n` returns **1** on a
+  lock conflict and both mirror scripts used 1 for "the mount is wrong", so a
+  routine collision and a vanished backup disk were the same `ExecMainStatus`.
+  The convention on the shared `/var/lock/latitude-mirror.lock` is now
+  **75 = lock held** (`flock -E 75`), **78 = mount is not the expected
+  filesystem**, everything else rsync's — change one number and you change the
+  other. `provision/tests/latitude-timer-units.test.sh` pins both this and the
+  Condition rule (mutation-tested, 7/7).
 - **Verify a scheduled job by firing its schedule, not by running the script.**
   `mirror-refresh.sh -go` passed by hand for weeks while every timer run reported
   `Failed` — its last command was falsy under `-go`. `systemctl start <unit>` then

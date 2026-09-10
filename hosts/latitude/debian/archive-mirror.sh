@@ -92,9 +92,14 @@ remount(){      # $1 mountpoint  $2 expected uuid
   sudo mount "$1" 2>/dev/null
   check_mount "$1" "$2"
 }
+# 78 = "a mount is not what it should be", not a bare 1. The unit runs this
+# under `flock -n -E 75`, so 75 means the lock was held and 78 means a disk is
+# missing or is the wrong one; every other status is rsync's. mirror-refresh
+# shares that lock and the same two numbers - change them together.
+E_MOUNT=78
 for pair in "$SRC_MNT:$SRC_UUID" "$DST_MNT:$DST_UUID"; do
   m=${pair%:*}; u=${pair#*:}
-  check_mount "$m" "$u" || remount "$m" "$u" || { say "FATAL $m is not the expected filesystem (want UUID=$u, got '$(findmnt -no UUID "$m" 2>/dev/null)')"; exit 1; }
+  check_mount "$m" "$u" || remount "$m" "$u" || { say "FATAL $m is not the expected filesystem (want UUID=$u, got '$(findmnt -no UUID "$m" 2>/dev/null)')"; exit "$E_MOUNT"; }
 done
 [ -d "$SRC" ] || { say "FATAL source $SRC does not exist"; exit 1; }
 say "mounts verified by UUID"
