@@ -234,6 +234,63 @@ sys.stderr.write(' '.join(changed))
 PY
 }
 
+# The [E] lines of a `findmnt --verify` run, each tagged with the entry it belongs
+# to, as a set two runs can be compared with. Warnings are deliberately excluded:
+# non-root runs emit "cannot detect on-disk filesystem type (Permission denied)"
+# for every device, which says nothing about the file. The summary line ("0 parse
+# errors, 4 errors, 0 warnings") starts at column 0 like an entry does and would
+# be picked up as one, which is harmless -- it is last, so no [E] follows it.
+fstab_errors() {  # $1 = captured findmnt --verify output
+  printf '%s\n' "$1" | awk '
+    /^[^ \t]/  { entry=$0; next }
+    /\[E\]/   { sub(/^[ \t]+/,""); print entry " :: " $0 }
+  ' | LC_ALL=C sort
+}
+
+# fstab_gate <candidate-file> <current-file>
+# 0 = safe to install, 1 = refuse. Split out of fstab_apply so it can be tested
+# without a script that ends in `sudo install` over /etc/fstab.
+#
+# IT ASKS ABOUT THE EDIT, NOT ABOUT PERFECTION, and that is the whole change.
+# The old gate refused whenever `findmnt --verify` reported anything at all,
+# anywhere in /etc/fstab. Those findings are usually about entries this script
+# never touches -- an unplugged removable drive reads as "unreachable on boot
+# required source" -- so ONE stale line disabled the fleet's most important
+# bind-race guard for every OTHER mount. Not hypothetical: the /mnt/xs entry had
+# to be commented out of /etc/fstab in September for exactly this reason, and the
+# comment there says so. The only question a rewrite can answer is whether IT
+# introduced a finding that was not already present.
+#
+# rc >= 2 IS STILL AN UNCONDITIONAL REFUSAL, and that is not belt-and-braces.
+# Measured on util-linux 2.41 (2026-09-10): `findmnt --verify` SEGFAULTS, rc 139,
+# on any fstab holding an entry with fewer than three fields -- it prints "parse
+# error at line N -- ignored" and then dies. A crashed process emits no error
+# lines, so a diff-based gate alone would see "no new errors" and install the
+# very file that killed it. rc 0 is clean, rc 1 has findings to compare; above
+# that the checker itself failed, and "unknown" is not "fine".
+fstab_gate() {
+  local cand="$1" cur="$2" rc_new out_new out_cur added
+  out_new=$(findmnt --verify --tab-file "$cand" 2>&1); rc_new=$?
+  if [ "$rc_new" -ge 2 ]; then
+    say "FATAL 'findmnt --verify' itself failed on the candidate (rc=$rc_new) - not installing"
+    say "      rc 139 is the util-linux 2.41 segfault on an entry with <3 fields."
+    printf '%s\n' "$out_new" | sed 's/^/    /'
+    return 1
+  fi
+  out_cur=$(findmnt --verify --tab-file "$cur" 2>&1) || true
+  added=$(comm -13 <(fstab_errors "$out_cur") <(fstab_errors "$out_new"))
+  if [ -n "$added" ]; then
+    say "FATAL the candidate fstab introduces errors the current one does not have:"
+    printf '%s\n' "$added" | sed 's/^/    /'
+    return 1
+  fi
+  if [ -n "$(fstab_errors "$out_cur")" ]; then
+    say "note: /etc/fstab already has findmnt errors, unchanged by this edit:"
+    fstab_errors "$out_cur" | sed 's/^/    /'
+  fi
+  return 0
+}
+
 fstab_apply() {
   local action="$1" tmp changed
   tmp=$(mktemp)
@@ -247,12 +304,7 @@ fstab_apply() {
     diff -u "$FSTAB" "$tmp" | sed 's/^/    /'
     rm -f "$tmp"; return 0
   fi
-  # Verify the CANDIDATE before it becomes /etc/fstab, not after.
-  if ! findmnt --verify --tab-file "$tmp" >/dev/null 2>&1; then
-    say "FATAL candidate fstab failed 'findmnt --verify' - not installing"
-    findmnt --verify --tab-file "$tmp" 2>&1 | sed 's/^/    /'
-    rm -f "$tmp"; return 1
-  fi
+  fstab_gate "$tmp" "$FSTAB" || { rm -f "$tmp"; return 1; }
   sudo cp -a "$FSTAB" "$FSTAB.bak.$(date +%Y%m%d%H%M%S)"
   sudo install -m644 "$tmp" "$FSTAB" && say "fstab: ${action}ed '$OPT' on:$changed"
   rm -f "$tmp"
@@ -439,47 +491,56 @@ guard3_verify() {
 }
 
 # --- run ---------------------------------------------------------------------
-ACTION=add; [ "$MODE" = off ] && ACTION=remove
+# Wrapped in main() so the test suite can source this file, get the functions and
+# run NOTHING. Sourcing the old shape executed a full dry run: it read /etc/fstab,
+# shelled out to findmnt, and bind-mounted / at $ROOTVIEW. disk-acceptance.sh uses
+# the same pattern, but relies on `main` refusing without args -- that is not safe
+# here, where the no-arg default is a dry run that does real work.
+main() {
+  ACTION=add; [ "$MODE" = off ] && ACTION=remove
 
-fstab_apply "$ACTION" || exit 1
-if [ "$MODE" != show ]; then
-  sudo systemctl daemon-reload
-  # Prove the ordering edge actually exists rather than trusting the option
-  # spelling. systemd silently ignores an x-systemd.* it does not understand.
-  for m in "${MOUNTS[@]}"; do
-    unit=$(systemd-escape -p --suffix=mount "$m")
-    if [ "$ACTION" = add ]; then
-      systemctl show "$unit" -p Before --value | tr ' ' '\n' | grep -qx docker.service \
-        && say "verified: $unit Before=docker.service" \
-        || say "WARNING: $unit has no Before=docker.service - check systemd version supports x-systemd.before="
-    fi
+  fstab_apply "$ACTION" || exit 1
+  if [ "$MODE" != show ]; then
+    sudo systemctl daemon-reload
+    # Prove the ordering edge actually exists rather than trusting the option
+    # spelling. systemd silently ignores an x-systemd.* it does not understand.
+    for m in "${MOUNTS[@]}"; do
+      unit=$(systemd-escape -p --suffix=mount "$m")
+      if [ "$ACTION" = add ]; then
+        systemctl show "$unit" -p Before --value | tr ' ' '\n' | grep -qx docker.service \
+          && say "verified: $unit Before=docker.service" \
+          || say "WARNING: $unit has no Before=docker.service - check systemd version supports x-systemd.before="
+      fi
+    done
+  fi
+
+  daemon_json_apply "$ACTION" || exit 1
+  guard3_apply "$ACTION" || exit 1
+
+  if [ "$MODE" = show ]; then
+    say "(dry run - pass -go to apply)"
+    exit 0
+  fi
+
+  if [ "$RESTART_NEEDED" -eq 1 ]; then
+    say "restarting dockerd to pick up the dns pin (immich + postgres bounce)"
+    sudo systemctl restart docker
+    sleep 10
+  fi
+
+  say "--- state ---"
+  [ "$ACTION" = add ] && guard3_verify
+  # --fstab, not the live table: x-systemd.* are generator directives, not kernel
+  # mount options, so `findmnt /mnt/wd8` shows only "rw,noatime" and looks like
+  # the edit did not land. The Before= check above is the real verification.
+  for m in "${MOUNTS[@]}"; do findmnt --fstab -o TARGET,OPTIONS "$m" 2>/dev/null; done
+  say "container DNS check:"
+  for c in jellyseerr jellyfin immich_server; do
+    printf '  %-16s ' "$c"
+    docker exec "$c" getent hosts image.tmdb.org >/dev/null 2>&1 && echo OK || echo FAIL
   done
-fi
+  say "container media check:"
+  docker exec jellyfin sh -c 'printf "  /data/tv=%s /data/movies=%s\n" "$(ls /data/tv|wc -l)" "$(ls /data/movies|wc -l)"' 2>/dev/null
+}
 
-daemon_json_apply "$ACTION" || exit 1
-guard3_apply "$ACTION" || exit 1
-
-if [ "$MODE" = show ]; then
-  say "(dry run - pass -go to apply)"
-  exit 0
-fi
-
-if [ "$RESTART_NEEDED" -eq 1 ]; then
-  say "restarting dockerd to pick up the dns pin (immich + postgres bounce)"
-  sudo systemctl restart docker
-  sleep 10
-fi
-
-say "--- state ---"
-[ "$ACTION" = add ] && guard3_verify
-# --fstab, not the live table: x-systemd.* are generator directives, not kernel
-# mount options, so `findmnt /mnt/wd8` shows only "rw,noatime" and looks like
-# the edit did not land. The Before= check above is the real verification.
-for m in "${MOUNTS[@]}"; do findmnt --fstab -o TARGET,OPTIONS "$m" 2>/dev/null; done
-say "container DNS check:"
-for c in jellyseerr jellyfin immich_server; do
-  printf '  %-16s ' "$c"
-  docker exec "$c" getent hosts image.tmdb.org >/dev/null 2>&1 && echo OK || echo FAIL
-done
-say "container media check:"
-docker exec jellyfin sh -c 'printf "  /data/tv=%s /data/movies=%s\n" "$(ls /data/tv|wc -l)" "$(ls /data/movies|wc -l)"' 2>/dev/null
+[ "${BASH_SOURCE[0]}" = "$0" ] && main "$@"
