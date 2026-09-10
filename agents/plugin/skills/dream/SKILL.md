@@ -271,7 +271,8 @@ the item comes back forever.
 | `action` | one word from the taxonomy below | `dedupe` |
 
 Actions: `dedupe` · `demote` · `promote` · `generalise` · `compress` ·
-`delete` · `contradiction` · `harvest` · `untracked`. Do not invent a tenth —
+`delete` · `contradiction` · `harvest` · `untracked` · `skill`. Do not invent
+an eleventh —
 a finding that fits none of these is a `contradiction` for a human to name.
 
 For a **cross-store** item the target/anchor pair is the side being **removed**
@@ -304,6 +305,36 @@ Rules for an item:
   it, the action is `demote`/`generalise`, never `delete`.
 - One item, one decision. If applying half of it would lose something, it is
   one item, not two.
+
+## Step 6b — What was awkward tonight (the skill files against ITSELF)
+
+A run ends by proposing changes to **these two skills**, as ordinary queue items
+with `action: skill` and target `/home/me/machines/agents/plugin/skills/dream/SKILL.md`
+(or `dream-apply/SKILL.md`).
+
+**It does NOT edit them.** This is the one exception it would be most tempting
+to make and the worst one available:
+
+- It inverts the invariant at the worst possible target. A bad edit to
+  `global.md` loses one fact. A bad edit to this file changes every future
+  run's judgement — **including its judgement about further self-edits** — and
+  each night's step looks reasonable while the trajectory nobody reviewed does
+  not.
+- There is no gate that could catch it. The queue works because a human reads
+  the proposal; a self-edit is applied by the same session that wrote it, so it
+  has no reader by construction.
+- Prose has no failing signal. `dream.sh` is tested and a bad change goes red;
+  nothing goes red when a paragraph quietly stops being true.
+
+The evidence bar for a `skill` item is **higher** than for a memory item, not
+lower: it must name the run that hit the problem (`runs/YYYY-MM-DD.md`) and what
+that run did wrong or could not do. A proposal from a feeling rather than an
+observed failure is not filed.
+
+Good `skill` items look like: a store the scan missed · a heading format that
+produced a duplicate id · a subagent batch that ran out of context · a step
+whose output the next step could not use · a rule here that the run could not
+follow and worked around.
 
 ## Step 7 — Run report
 

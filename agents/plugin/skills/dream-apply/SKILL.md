@@ -51,6 +51,24 @@ then delete the source.** Never the other way round. If the item names a
 "carry first" fact, that carry is what makes the delete safe — do it and read
 it back before touching the source.
 
+## Step 2b — A `skill` item is applied with `writing-skills`
+
+An item targeting `dream/SKILL.md` or `dream-apply/SKILL.md` is a change to how
+every future run behaves, so it gets the heaviest treatment, not the lightest:
+
+- Invoke `superpowers:writing-skills` to make the edit — that is the tool for
+  editing a skill, and it verifies before deployment.
+- Re-run `bash agents/plugin/skills/dream/tests/dream.test.sh`, and the full
+  gate if `dream.sh` changed at all.
+- Read the item's cited `runs/YYYY-MM-DD.md` before approving. A `skill` item
+  must name the run that hit the problem; if it does not, reject it — that is
+  the difference between a fix and a drift.
+
+`claude-md-improver` is **not** the tool for the `CLAUDE.md`/`AGENTS.md` items
+in this queue. It grades against a generic template and would call a 46 KB
+`AGENTS.md` too long without knowing its length is incident history — the exact
+"compress a rule" mistake `/dream` is written to avoid.
+
 ## Step 3 — Apply
 
 Edit with the shell (`sed -n` to read, a heredoc or `python3` to rewrite).
