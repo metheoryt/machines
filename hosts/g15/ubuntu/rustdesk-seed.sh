@@ -27,7 +27,7 @@
 # that is still blocked (see docs/2026-08-01-nixos-harvest.md §2).
 #
 # Run as root. Testing: RD_SERVICE_CONF / RD_GUI_CONF override the paths and
-# RD_NO_RESTART=1 skips the chown + systemctl restart.
+# RD_NO_RESTART=1 skips the systemctl restart.
 set -euo pipefail
 
 RENDEZVOUS='cyphy.kz'
@@ -38,7 +38,10 @@ SERVICE_CONF="${RD_SERVICE_CONF:-/root/.config/rustdesk/RustDesk2.toml}"
 GUI_CONF="${RD_GUI_CONF:-/home/me/.config/rustdesk/RustDesk2.toml}"
 
 merge() {
-  local f="$1"
+  local f="$1" owner=""
+  # python writes as root, so preserve whoever owned the file (the tray's copy
+  # is the desktop user's). Derived per file — never a hardcoded username.
+  [ -e "$f" ] && owner="$(stat -c '%u:%g' "$f")"
   [ -e "$f" ] && cp -a "$f" "$f.bak.$(date +%Y%m%d-%H%M%S)"
   RD_F="$f" RD_R="$RENDEZVOUS" RD_L="$RELAY" RD_K="$KEY" python3 - <<'PY'
 import os, pathlib
@@ -74,6 +77,8 @@ f.parent.mkdir(parents=True, exist_ok=True)
 f.write_text("\n".join(out) + "\n")
 print(f"  wrote {f}")
 PY
+  [ -n "$owner" ] && chown "$owner" "$f"
+  return 0
 }
 
 echo "seeding service config (root-owned, read by rustdesk --service):"
@@ -82,7 +87,6 @@ echo "seeding GUI config:"
 merge "$GUI_CONF"
 
 if [ "${RD_NO_RESTART:-}" != "1" ]; then
-  chown -R me:me "$(dirname "$GUI_CONF")"
   systemctl restart rustdesk.service
   sleep 3
   echo "rustdesk.service: $(systemctl is-active rustdesk.service)"
