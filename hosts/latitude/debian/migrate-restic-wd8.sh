@@ -32,13 +32,25 @@
 # repositories at the new path before anything is repointed. The rsync dry-run
 # stays because it is seconds and catches a truncated copy faster.
 #
-# TRAP — THE CONFIG IS THE REPO CHECKOUT. resticprofile runs with
-# WorkingDirectory=/home/me/machines/backup/latitude and reads profiles.yaml
-# straight out of the git work-tree. So repointing the repositories is a COMMIT,
-# and `cutover` pulls it. Push the config change BEFORE running cutover and do
-# not pull it early: a profiles.yaml naming /mnt/wd8 while the data is still on
-# spare320 gives `initialize: true` an empty directory to make a fresh
-# zero-history repo in, and it will report success.
+# TRAP — THE CONFIG IS THE REPO CHECKOUT, AND YOU DO NOT CONTROL WHEN IT LANDS.
+# resticprofile runs with WorkingDirectory=/home/me/machines/backup/latitude and
+# reads profiles.yaml straight out of the git work-tree, so repointing the
+# repositories is a COMMIT. This script was written believing the commit could be
+# held back until `cutover` pulled it. IT CANNOT: `fleet-selfpull.service` is a
+# user timer that fast-forwards every fleet repo on its own. On 2026-09-10 it
+# pulled the repointing commit at 16:44:52, twenty-five minutes before the bulk
+# copy finished — a profiles.yaml naming /mnt/wd8 over a half-copied tree.
+#
+# Nothing broke, and not because of the design: no writer was scheduled before
+# 04:30. The one guard that would have held is the profiles' `run-before`
+# assertion, and it is only half a guard — it tests that the repo's `config`
+# object exists, not that the repo is COMPLETE, so a `forget --prune` firing in
+# that window would have run against a partial copy.
+#
+# So the writers are stopped by `sync`, at the start, and started again by
+# `cutover` or `rollback`. They are daily jobs and the whole migration is under
+# an hour; holding them for its duration costs nothing and closes the window
+# instead of timing it. Do not move that back into cutover.
 #
 # TRAP — THE DOCKS LOSE POWER. Same hazard the servarr move carried: fstab is
 # `nofail` with no automount, so a dropped mount stays down and `systemctl
@@ -181,6 +193,11 @@ phase_sync(){
     say "$UNIT is already running — use 'status'"; return 0
   fi
   sudo systemctl reset-failed "$UNIT" 2>/dev/null || true
+  # Stopped HERE, not in cutover — see the config trap in the header. The window
+  # being closed is "profiles.yaml already repointed, data not there yet", and
+  # fleet-selfpull decides when that starts, not this script.
+  say "stopping every scheduled writer for the duration of the migration"
+  sudo systemctl stop "${TIMERS[@]}"
   say "starting detached copy as $UNIT (log: $LOG_DIR/rsync.log)"
   sudo systemd-run --unit="$UNIT" --collect --description="restic repos -> wd8" \
     "$(readlink -f "$0")" _worker
@@ -223,6 +240,13 @@ phase_status(){
   src_b=$(sudo du -sb "$SRC_REST" "$SRC_LOCAL" 2>/dev/null | awk '{s+=$1} END{print s+0}')
   dst_b=$(sudo du -sb "$DST_REST" "$DST_LOCAL" 2>/dev/null | awk '{s+=$1} END{print s+0}')
   [ "$src_b" -gt 0 ] && say "copied  $(( dst_b * 100 / src_b ))%  ($(numfmt --to=iec "$dst_b") of $(numfmt --to=iec "$src_b"))"
+  # A migration abandoned between `sync` and `cutover` leaves every backup job
+  # switched off, and nothing else in the fleet would say so — `systemctl
+  # --failed` is clean for a timer that is merely stopped. Report it here.
+  local down
+  down=$(systemctl is-active "${TIMERS[@]}" 2>/dev/null | grep -c inactive)
+  [ "$down" = 0 ] && say "timers  all ${#TIMERS[@]} running" \
+                  || say "timers  $down of ${#TIMERS[@]} STOPPED — cutover or rollback starts them again"
   tail -3 "$LOG_DIR/rsync.log" 2>/dev/null | sed 's/^/     /'
 }
 
@@ -251,7 +275,9 @@ phase_cutover(){
   need_mounts "$SRC_MNT" || die "$SRC_MNT is not mounted"
   need_dst
 
-  say "stopping every scheduled writer"
+  # `sync` already stopped these; repeat it so `cutover` is safe on its own for
+  # a run that skipped the bulk pass.
+  say "confirming every scheduled writer is stopped"
   sudo systemctl stop "${TIMERS[@]}"
   say "stopping the REST hub"
   ( cd "$COMPOSE_DIR" && docker compose down ) || die "compose down failed"
