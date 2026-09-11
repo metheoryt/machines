@@ -3503,11 +3503,14 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   <!-- src: airdrome adae7fe | 2026-07-29 -->
 - **A repo's basename is NOT a safe `--match` fragment once repos nest.** The
   skill's Step 0 says it is; measured on g15 2026-09-12 it is not. The depth-2
-  glob finds 67 repos on this box, and two of them are both called `codes`
-  (`~/kazakhstan-law/codes` and `~/split-test/codes`), so one `--match codes`
-  harvests both into whichever repo asked. Worse, `~/kazakhstan-law` is itself a
-  repo AND the parent of 27 nested per-region ones, so `--match kazakhstan-law`
-  is a substring of all 27 children's slugs and pulls every one of them in.
+  glob finds dozens of repos here and the number is not worth writing down — a
+  scheduled clone dropped a whole second `~/kazakhstan-law-0912/` tree in *while
+  this very harvest was running*, so the set moved under the run's own feet. Two
+  of those repos are both called `codes` (`~/kazakhstan-law/codes` and
+  `~/split-test/codes`), so one `--match codes` harvests both into whichever
+  repo asked. Worse, `~/kazakhstan-law` is itself a repo AND the parent of two
+  dozen nested per-region ones, so `--match kazakhstan-law` is a substring of
+  every child's slug and pulls all of them in.
   Qualify a nested repo with its parent directory (`kazakhstan-law-codes`,
   `split-test-codes`) and keep the bare basename only for a repo that is unique
   at depth 1. The failure is silent in both directions — over-matching looks
@@ -3517,7 +3520,8 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   <!-- src: machines 73a5334 | 2026-09-12 -->
 - **One batched gather covering every repo at once works, and a box this size
   needs it.** The skill files N-fan-outs-for-N-repos as a known unoptimised
-  cost; at 67 repos that is 67 ssh fan-outs per nightly run. Passing every
+  cost; on a box with repos in the dozens that is dozens of ssh fan-outs per
+  nightly run. Passing every
   repo's `--match` to a single `fleet-gather.sh` invocation against one union
   state file does the whole box in one pass, and the digests partition by repo
   afterwards from their own `# cwd:` header. Nothing in `distill.py` had to
