@@ -474,42 +474,6 @@ unimplemented, when it got an executor 2026-09-01. Only `base` and `ssh-server` 
   cover those sessions.
 - **first seen:** 2026-09-11
 
-## 63744b6f · compress · /home/me/.claude/memory/global.md
-
-- **action:** compress · **scope:** shared → fleet-wide
-- **why:** `machines/.claude/memory/project.md`:709-724 holds the same `.lan` fact more
-  completely **and** records the fix (`d7427db`: both renderers now emit `HostName`),
-  which the global copy does not know — its "Real fix is `ssh_wsl_render_config`
-  writing the FQDN" already shipped. **Not a full dedupe**: project.md only loads
-  inside the `machines` repo, and `ssh latitude` failing bites from any repo, so the
-  FQDN habit plus the error-based triage stay global.
-- **evidence:** global.md:171-182 · `machines/.claude/memory/project.md`:709-724
-- **bytes:** 957 → 622
-- **replacement:**
-  - **A THIRD failure mode, and the most common one: the `.lan` search domain
-    wins.** `/etc/resolv.conf` carries `search lan gg.ez` in that order, so a
-    bare `Host` stanza with no `HostName` resolves `<name>.lan` (the router's
-    zone) and dies with **`no route to host`** from anywhere off that LAN.
-    **Use the FQDN: `ssh latitude.gg.ez`.** Fixed at the renderer in `d7427db`
-    (every member block now emits `HostName`), but the FQDN habit still holds
-    on any box that has not re-provisioned since. Mechanism, measurements and
-    the `SKIP unreachable` consequence: `machines/.claude/memory/project.md`.
-- **first seen:** 2026-09-11
-
-## 2ae4f3c7 · dedupe · /home/me/.claude/memory/global.md
-
-- **action:** dedupe · **scope:** shared → fleet-wide
-- **survives:** `global.md`:69-78 (the same store, the earlier and strictly more complete copy)
-- **why:** L87-91 and L69-78 record the identical failure — `gh pr edit --body-file` on
-  thepureapp/backend-api, Projects-classic GraphQL error, silent no-write, the
-  `gh api -X PATCH` workaround, re-read after editing. L69-78 is strictly more
-  complete: it adds that `--add-label` fails the same way and gives the REST label
-  workaround. The later copy is pure redundancy.
-- **evidence:** global.md:87-91 [duplicate] · global.md:69-78 [survivor]
-- **bytes:** 431 → 0
-- **replacement:** (none — deletion of L87-91; leave L69-78 untouched)
-- **first seen:** 2026-09-11
-
 ## 8e41cba2 · demote · /home/me/.claude/memory/global.md
 
 - **action:** demote
@@ -709,114 +673,6 @@ unimplemented, when it got an executor 2026-09-01. Only `base` and `ssh-server` 
 - **replacement:** (none — deletion after the carry)
 - **first seen:** 2026-09-11
 
-## a63108e2 · contradiction · /home/me/.claude/memory/global.md
-
-- **action:** contradiction · **scope:** shared → fleet-wide
-- **why:** four claims in one bullet are dead or false — `just switch`/`nixos-rebuild`
-  no longer exist (NixOS tree deleted 2026-08-01; the justfile mentions them only in
-  comments), the `ssh.nix` cross-reference is gone, passwordless sudo is **not**
-  fleet-wide, and the Orca `no_new_privs` half is both duplicated at global.md:815-819
-  and live-disproved.
-- **evidence:** global.md:764-776 · AGENTS.md *The NixOS tree is gone* + "on a box with
-  no NOPASSWD sudo (g15)" · probed 2026-09-11 on g15/Orca 1.4.197: `sudo -n true` →
-  "interactive authentication is required" (not the `no_new_privs` message);
-  `machines/justfile` has no `switch:` recipe
-- **bytes:** 1036 → 285
-- **replacement:**
-- **Passwordless sudo is per-box, not a fleet property.** Some machines grant
-  NOPASSWD so a rebuild/provision can be applied and verified in-session; g15
-  does not (`sudo -n true` → "interactive authentication is required",
-  2026-09-11). Probe it rather than assuming; on a box without it, hand the
-  privileged step to the user at that keyboard.
-- **first seen:** 2026-09-11
-
-## a7c6071a · contradiction · /home/me/.claude/memory/global.md
-
-- **action:** contradiction · **scope:** shared → fleet-wide
-- **why:** "Orca's per-terminal user namespace sets `no_new_privs` on every child" does
-  **not** hold on Orca 1.4.197/Linux. Measured inside an Orca pane: `NoNewPrivs: 0` and
-  `uid_map` = `0 0 4294967295` (real host, no remap). The uid_map detection recipe in
-  the next bullet is **kept** — it correctly predicted this pane was un-namespaced.
-- **evidence:** global.md:815-819 · probed 2026-09-11, g15 / Orca 1.4.197, inside an Orca pane
-- **bytes:** 381 → 336
-- **replacement:**
-  - **Privilege escalation inside Orca is version-dependent — measure, don't
-    assume.** Some builds put the pane in a user namespace with `no_new_privs`,
-    and `sudo` then fails regardless of sudoers (`sudo -n true` → "no new
-    privileges flag"). Orca 1.4.197 on Linux does NOT: `NoNewPrivs: 0`, no uid
-    remap (2026-09-11). Distinguish with the uid_map check below.
-- **first seen:** 2026-09-11
-
-## ead9806c · contradiction · /home/me/.claude/memory/global.md
-
-- **action:** contradiction · **scope:** shared → fleet-wide
-- **why:** the "Linux (XDG)" attribution is wrong on this box. None of
-  `~/.config/gortex`, `~/.local/share/gortex`, `~/.cache/gortex` exist, while
-  `~/.gortex/{config.yaml,store/,cache/,memories/,sidecar.sqlite}` does — the layout the
-  bullet labels macOS-only. `~/.claude/CLAUDE.md` also cites `~/.gortex/config.yaml`.
-  The bullet's *instruction* (check before concluding "never run") stays; only the
-  attribution is corrected. `air` was not probed.
-- **evidence:** global.md:989-992 · probed 2026-09-11 g15/Ubuntu: `ls -d ~/.gortex` OK, all three XDG paths absent · `~/.claude/CLAUDE.md`:33
-- **bytes:** 305 → 330
-- **replacement:**
-- **The state dir is not reliably per-OS — check both layouts before concluding
-  "never run".** Consolidated: `~/.gortex/{config.yaml,store/,cache/,memories/,
-  sidecar.sqlite}` (observed on Linux 2026-09-11 as well as macOS). XDG-split:
-  `~/.config/gortex/config.yaml`, `~/.local/share/gortex/` (store/,
-  sidecar.sqlite, memories/), `~/.cache/gortex/` (daemon.log, pid).
-- **first seen:** 2026-09-11
-
-## dda53e2b · compress · /home/me/.claude/memory/global.md
-
-- **action:** compress · **scope:** shared → fleet-wide
-- **why:** two adjacent bullets flatly contradict each other — one asserts `lsp-pyright`
-  is "the real resolver", the next says that is false for the build measured. The
-  13-line rebuttal is version-lineage prose about v0.56.0, which his own register rules
-  class as noise. The durable fact is the probe recipe plus which provider actually resolved.
-- **evidence:** global.md:956-971
-- **bytes:** 1207 → 542
-- **replacement:**
-- **Judge Python resolution coverage from `find_usages` output, not from
-  `graph_stats.semantic`** — that block under-reports (the native `python-types`
-  line can show ~0 edges while coverage is complete). **Which provider actually
-  resolves is build-dependent**: on a build shipping only native providers,
-  `python-types` IS the resolver (measured 100%, 1535/1535 symbols, edges
-  `ast_resolved`) and installing pyright adds no gortex tier at all — it buys a
-  standalone type-checker whose demanded annotations still feed the native
-  provider, plus gap diagnostics. Check `semantic.providers` for an `lsp-*` entry
-  and grep the daemon log for a langserver spawn before assuming lsp-pyright is live.
-- **first seen:** 2026-09-11
-
-## 3093b89c · dedupe · /home/me/.claude/memory/global.md
-
-- **action:** dedupe · **scope:** shared → fleet-wide
-- **survives:** the second of the two bullets (it supersedes the first's cost premise with a measurement)
-- **why:** two bullets state **opposing** rules about indexing a worktree, and the store
-  already carries a machine-readable `<!-- conflicts-with: -->` marker admitting it. The
-  second supplies the real axis (ephemeral vs long-lived) and a measurement (1.0 s /
-  816 nodes) against the first's "warmup + hundreds of MB" cost claim.
-- **evidence:** global.md:1011-1032
-- **bytes:** 1829 → 1090
-- **note:** this drops the `<!-- conflicts-with: -->` and `<!-- src: qaz-code 4c25471 -->`
-  provenance lines. The same slice warns that one-line HTML comments break the memory
-  loader's `sed` range, so the `src:` ref is preserved **inline** in the replacement instead.
-- **replacement:**
-- **Worktree indexing: the axis is ephemeral vs long-lived, not worktree vs
-  base.** A spawned agent's throwaway worktree should ride the base index —
-  review/read agents work off it plus `git diff <base>..HEAD` (the base graph
-  already answers "who calls this / what breaks"), and edit agents see their own
-  uncommitted edits via **overlay-push to the base workspace**
-  (`overlay_register` + `overlay_push` — a per-MCP-session editor-buffer view, no
-  second index). Overlays model in-flight *unsaved* edits; they are NOT a way to
-  index an arbitrary branch's on-disk state. But a **persistent** worktree that is
-  itself a session's cwd has no base index covering it — graph tools stay dark and
-  the Read/Grep deny-hooks go inconsistent with reality. There
-  `gortex track <worktree-path> --wait` is right, and the cost objection is
-  scale-dependent: a ~4k-line Python Orca worktree indexed in **1.0s / 816 nodes**,
-  not "warmup + hundreds of MB" (measured qaz-code 4c25471, 2026-07-26). Measure
-  before refusing on cost.
-- **first seen:** 2026-09-11
-
 ## 8dd3022d · demote · /home/me/.claude/memory/global.md
 
 - **action:** demote · **scope:** shared → host (desktop)
@@ -850,17 +706,6 @@ empty on air and absent on g15. The `~/.claude-personal` config dir and the
   box, not this file.
 - **first seen:** 2026-09-11
 
-## f7feaff8 · generalise · /home/me/.claude/memory/global.md
-
-- **action:** generalise · **scope:** shared → fleet-wide
-- **why:** Home-Manager is Nix; the NixOS tree was deleted 2026-08-01 and the fleet has
-  no Nix host, so `checkLinkTargets` and "re-switch" can never fire again. But the
-  corollary is a **live `bootstrap.sh` fact independent of Nix** — AGENTS.md confirms
-  bootstrap still deploys profile symlinks and warns about deploying into a directory
-  this repo does not own. A `delete` would lose it; re-head and strip the Nix framing.
-- **evidence:** global.md:515-524 · AGENTS.md *The NixOS tree is gone* (`f3d63b2`)
-- **bytes:** 570 → 349
-- **replacement:**
 ## Profile bootstrap gotchas
 
 - **Never run a profile bootstrap from inside a git worktree.** It can repoint
@@ -870,17 +715,6 @@ empty on air and absent on g15. The `~/.claude-personal` config dir and the
   checkout.
 - **first seen:** 2026-09-11
 
-## 758e584a · generalise · /home/me/.claude/memory/global.md
-
-- **action:** generalise · **scope:** shared → fleet-wide
-- **why:** the heading is dead — NixOS tree deleted 2026-08-01 in `f3d63b2`, no Nix host
-  remains — but **neither bullet is actually about Nix**: libgit2 ignoring the
-  `GIT_CONFIG_*` env trio bites any root-over-user-repo build, and the `.path`-unit /
-  `ORIG_HEAD` vs `.git/logs/HEAD` inotify trap is pure systemd+git. A `delete` here
-  would lose two live facts.
-- **evidence:** global.md:1234-1251 · AGENTS.md *The NixOS tree is gone*
-- **bytes:** 1143 → 1279
-- **replacement:**
 ## Root-vs-user git, and watching a repo for pulls (learned 2026-07-21)
 
 - **A root process building over a `me`-owned git repo fails with libgit2 error 7
@@ -899,40 +733,6 @@ empty on air and absent on g15. The `~/.claude-personal` config dir and the
   `.git/logs/HEAD` instead — appended in place (stable inode) on every HEAD
   advance, ff included; refs-only `git fetch` and read-only git calls don't
   append to it, so no spurious/self fires.
-- **first seen:** 2026-09-11
-
-## 62114b43 · demote · /home/me/.claude/memory/global.md
-
-- **action:** demote · **scope:** shared → shared ($HOME/CLAUDE.md, the canonical bare-repo doc)
-- **why:** the section's last two bullets are **not generic git/bash** — both are
-  dotfiles-bare-repo mechanics (`:(top)` pathspec resolution against CWD, and `rm -rf`
-  under `$HOME` silently deleting a tracked `<repo>/.claude/memory/project.md`).
-  `$HOME/CLAUDE.md` loads in every session under `$HOME` anyway and carries neither
-  (`grep -n ':(top)\|pathspec\|rm -rf' ~/CLAUDE.md` → nothing).
-- **evidence:** global.md:1200-1227 · `~/CLAUDE.md`:84 is the only `add -u` mention
-- **bytes:** 2082 → 0 in global.md; +~2.1 KB in `~/CLAUDE.md`
-- **carry first:** verbatim `sed -n '1200,1227p' ~/.claude/memory/global.md` (unmodified
-  store) appended to `/home/me/CLAUDE.md` under a new `## Two ways the bare repo bites
-  silently` heading **placed after `## The sync timer`** — the second bullet's failure
-  chain (lone ` D` → `add -u` stages it → machine-branch drift → `/dotfiles-promote`
-  offers to propagate the delete) only makes sense next to that section. Keep the
-  `<!-- src: airdrome adae7fe | 2026-07-29 -->` provenance comment.
-- **replacement:** (none — deletion after the carry)
-- **first seen:** 2026-09-11
-
-## 45bacf24 · generalise · /home/me/.claude/memory/global.md
-
-- **action:** generalise · **scope:** shared → fleet-wide (within the same store)
-- **why:** its last bullet (`sudo` inside WSL needs a tty and fails from the agent shell;
-  `wsl.exe -d <distro> -u root -e …` is the way to get root) has nothing to do with
-  docker logs or disks. It is a generic WSL scripting footgun that a future session will
-  only find if it happens to be reading a docker-disk incident.
-- **evidence:** global.md:1579-1580 (153 B) under the docker-disk heading · target section global.md:1082-1121 `## Windows & WSL scripting footguns`, which already ends on WSL distro/root/`wsl --shutdown` mechanics (1112-1121)
-- **bytes:** 153 → 0 here; +153 under the WSL section (net 0, placement only)
-- **replacement:** (none — the bullet moves verbatim. Append as the last bullet of
-  `## Windows & WSL scripting footguns`:)
-- `sudo` inside WSL needs a tty and fails from the agent shell; `wsl.exe -d <distro> -u root -e ...` is the way to get root, and it needs no password.
-  (then delete lines 1579-1580 from the docker section)
 - **first seen:** 2026-09-11
 
 ## f1d3be7d · dedupe · /home/me/my/embedthat/CLAUDE.md
