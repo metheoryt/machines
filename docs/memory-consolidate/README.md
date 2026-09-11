@@ -1,24 +1,25 @@
 # memory-consolidate — the memory corpus, tidied
 
-`/memory-consolidate` is the reorganising pass over the accumulated Claude
-memory stores. It reads every store on this box **and every other box's branch**
-out of the dotfiles bare repo, so it runs **once for the fleet**, not once per
-machine. It was `/dream` until 2026-09-11.
+This directory is the output of **Phase B of `/memory-harvest`** — the
+whole-corpus consolidation pass, whose brief is
+`agents/plugin/skills/memory-harvest/consolidate-phase.md`. It was the `/dream`
+skill until 2026-09-11 and `/memory-consolidate` for a day after that.
 
-**Two skills, one queue, and only one of them writes.**
+It runs **once for the fleet, on one box** — the one `fleet.json` marks
+`"memory_publisher": true` (latitude). That box reads every machine's dotfiles
+branch out of the bare repo, so no ssh and nothing touched remotely; a second
+box running it would file a duplicate of every item, which is why the gate is a
+manifest key rather than a copy of the phase.
 
-| | what it does | when |
-|---|---|---|
-| `/memory-consolidate` | reads every memory store, files proposed decisions here | unattended, nightly (Orca Automation on `desktop`) |
-| `/memory-consolidate-apply` | reviews the queue with a human and applies what they approve | attended, whenever it suits |
-
-`/memory-consolidate` writes **only** into this directory. It never edits a memory store —
-an unattended session that edits memory can delete the last copy of a fact and
-nobody finds out until they need it.
+**Phase B never edits a memory store.** It files decisions here, with the
+replacement text ready. `/memory-review` is the attended session that applies
+them — the same session that works the per-repo shared-memory proposals Phase A
+files, because both write the same stores and both end in one
+`/dotfiles-promote`.
 
 ## Files
 
-- `queue.md` — open decisions. **Append-only from a run's side**: `/memory-consolidate`
+- `queue.md` — open decisions. **Append-only from a run's side**: `/memory-harvest`
   never rewrites or reorders an existing item, so notes added by hand survive.
   An item leaves this file only through `consolidate.sh decide`.
 - `ledger.tsv` — `id · applied|rejected · date · reason`, append-only. This is
@@ -29,10 +30,10 @@ nobody finds out until they need it.
 ## Working the queue by hand
 
 ```bash
-D=~/machines/agents/plugin/skills/memory-consolidate/consolidate.sh
+D=~/machines/agents/plugin/skills/lib/consolidate.sh
 bash "$D" scan                     # every store: path, bytes, scope, sections
 bash "$D" status <id>              # new | open | decided
 bash "$D" decide <id> rejected "why not"
 ```
 
-Skills: `agents/plugin/skills/memory-consolidate/` and `agents/plugin/skills/memory-consolidate-apply/`.
+Skills: `agents/plugin/skills/memory-harvest/` and `agents/plugin/skills/memory-review/`.

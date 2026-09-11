@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavior tests for consolidate.sh — the mechanics behind /memory-consolidate. Everything here
+# Behavior tests for consolidate.sh — the mechanics behind /memory-harvest. Everything here
 # runs against a throwaway CONSOLIDATE_ROOT and a throwaway store; no real memory
 # store is read or written.
 set -u
@@ -12,13 +12,13 @@ trap 'rm -rf "$tmp"' EXIT
 pass() { echo "PASS $1"; }
 die()  { echo "FAIL $1"; fail=1; }
 
-export CONSOLIDATE_ROOT="$tmp/memory-consolidate"
+export CONSOLIDATE_ROOT="$tmp/memory-harvest"
 D() { bash "$SCRIPT" "$@"; }
 
 # --- paths -------------------------------------------------------------------
 out="$(D paths)"
 case "$out" in
-  *"$tmp/memory-consolidate/queue.md"*) pass "paths honours CONSOLIDATE_ROOT" ;;
+  *"$tmp/memory-harvest/queue.md"*) pass "paths honours CONSOLIDATE_ROOT" ;;
   *) die "paths honours CONSOLIDATE_ROOT: $out" ;;
 esac
 

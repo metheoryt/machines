@@ -462,7 +462,7 @@ namespace) is reached directly at `<nickname>.gg.ez`; every other distro is
 `dispatch:parent`, reached as `wsl.exe -d <distro>` through its Windows
 parent — not through a `fleet.json` entry either way. The shared dispatch primitive
 `agents/plugin/skills/lib/fleet-dispatch.sh` (`fd_probe`/`fd_run`/
-`fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and repo-harvest's
+`fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and memory-harvest's
 `fleet-gather.sh`; it also handles the Windows-native members by dispatching
 through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
 `fleet.json` — which means **`desktop` and only `desktop`**. `g15` was a Windows
@@ -520,7 +520,7 @@ desktop-wsl still does not restore it.
 
 **And it was declared `dispatch:direct` until 2026-08-31, which is how those five
 weeks stayed quiet.** `fd_probe` keys on that field, so every fleet-wide run
-(`/ship`, repo-harvest) resolved the name, got refused, and printed
+(`/ship`, memory-harvest) resolved the name, got refused, and printed
 `SKIP unreachable` while the run itself stayed green — a successful `tailscale
 ping` proves nothing about reachability here. It is `dispatch:parent` now,
 reached as `wsl.exe -d desktop-wsl` through `desktop`. Two consequences of

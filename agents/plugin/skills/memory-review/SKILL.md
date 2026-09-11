@@ -1,23 +1,61 @@
 ---
-name: memory-consolidate-apply
-description: Use when the user wants to work through the /memory-consolidate decision queue — reviewing proposed memory consolidations and applying the approved ones. This is the only half of the pair that writes to a memory store. Always interactive; never run unattended.
+name: memory-review
+description: Use when the user wants to work through everything /memory-harvest has filed — the shared-memory proposals from each repo AND the whole-corpus consolidation queue — reviewing each and applying what they approve. This is the only skill that writes to a shared memory store. Always interactive; never run unattended.
 ---
 
-# memory-consolidate-apply — work the queue
+# memory-review — land what the harvest proposed
 
-`/memory-consolidate` proposes; this applies. It is the gate, so it is **always attended**.
-Never wire it to an Automation, never run it inside a `claude -p` batch.
+`/memory-harvest` writes repo-local facts by itself and **proposes** everything
+that would touch a shared memory store. This applies those proposals. It is the
+gate, so it is **always attended**: never wire it to an Automation, never run it
+inside a `claude -p` batch.
 
-## Step 0 — Load
+**Two inboxes, one session**, because both write the same stores and both end in
+the same `/dotfiles-promote` — splitting them means two sessions racing on
+`global.md`:
+
+1. **Shared-memory proposals** — Phase A's Lane 2 rows, one file per repo.
+2. **The consolidation queue** — Phase B's items: dedupe, demote, promote,
+   contradiction, delete across the whole corpus.
+
+## Step 0 — Load both
 
 ```bash
-D=~/machines/agents/plugin/skills/memory-consolidate/consolidate.sh
+D=~/machines/agents/plugin/skills/lib/consolidate.sh
+
+# inbox 1 — per-repo proposals (same depth-2 glob the harvest discovers with)
+ls -1 "$HOME"/*/.claude/harvest/shared-proposal-*.md \
+      "$HOME"/*/*/.claude/harvest/shared-proposal-*.md 2>/dev/null
+
+# inbox 2 — the consolidation queue
 cat ~/machines/docs/memory-consolidate/queue.md
 cat ~/machines/docs/memory-consolidate/ledger.tsv 2>/dev/null
+
 git -C ~/machines status --porcelain
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --porcelain --untracked-files=no
 ```
 
-If the queue is empty, say so and stop — do not go looking for work to do.
+If both are empty, say so and stop — do not go looking for work to do. A **dirty
+tracked store** means someone is mid-edit or the 10-minute sync timer is about to
+commit: defer rather than mixing your write into theirs.
+
+### Proposals first, queue second
+
+A proposal adds a fact; a queue item merges or deletes one. Land the additions
+before deciding what is redundant, or you dedupe against a store that is about
+to change. Two refusals apply to a proposal row and are **not** rejections:
+
+- **A row targeting another box's `host-memory.md`.** Per-host files are
+  branch-scoped, so that box's copy is readable here but not writable, and its
+  own sync timer is committing to that branch live. List these as "carry to
+  `<box>`"; they stay open.
+- **A row whose source is a work repo but whose content is personal-fleet.**
+  Read what it actually says before it lands in a store that reaches every box.
+  That is the whole reason Lane 2 is gated.
+
+Keep `core.md` under ~2 KB whatever lands. It is injected verbatim into every
+session, and Claude Code truncates a hook's stdout past ~3.5 KB — an overfull
+`core.md` is how the entire memory index silently stops loading.
 
 ## Step 1 — Present, in scope order
 
@@ -37,7 +75,7 @@ open, and they are not rejections.
 
 The user approves an item, edits it, or rejects it. **A rejection is a real
 outcome that must be recorded** — `consolidate.sh decide <id> rejected "<reason>"` —
-or `/memory-consolidate` proposes it again tomorrow night.
+or `/memory-harvest` proposes it again tomorrow night.
 
 ## Step 2 — Re-verify before writing
 
@@ -68,12 +106,12 @@ fuller copy, especially when an earlier item in the same session moved it.
 
 ## Step 2b — A `skill` item is applied with `writing-skills`
 
-An item targeting `memory-consolidate/SKILL.md` or `memory-consolidate-apply/SKILL.md` is a change to how
+An item targeting `memory-harvest/consolidate-phase.md` or `memory-review/SKILL.md` is a change to how
 every future run behaves, so it gets the heaviest treatment, not the lightest:
 
 - Invoke `superpowers:writing-skills` to make the edit — that is the tool for
   editing a skill, and it verifies before deployment.
-- Re-run `bash agents/plugin/skills/memory-consolidate/tests/consolidate.test.sh`, and the full
+- Re-run `bash agents/plugin/skills/lib/tests/consolidate.test.sh`, and the full
   gate if `consolidate.sh` changed at all.
 - Read the item's cited `runs/YYYY-MM-DD.md` before approving. A `skill` item
   must name the run that hit the problem; if it does not, reject it — that is
@@ -82,7 +120,7 @@ every future run behaves, so it gets the heaviest treatment, not the lightest:
 `claude-md-improver` is **not** the tool for the `CLAUDE.md`/`AGENTS.md` items
 in this queue. It grades against a generic template and would call a 46 KB
 `AGENTS.md` too long without knowing its length is incident history — the exact
-"compress a rule" mistake `/memory-consolidate` is written to avoid.
+"compress a rule" mistake `/memory-harvest` is written to avoid.
 
 ## Step 3 — Apply
 
@@ -139,6 +177,19 @@ from the item's prose.
 
 `decide` appends to the ledger and cuts the item out of `queue.md`.
 
+A **proposal file** has no ledger, so move it out of the open set by hand once
+every row in it is decided, recording each outcome and — for a rejection — the
+reason:
+
+```bash
+mkdir -p "$repo/.claude/harvest/decided"
+mv "$repo/.claude/harvest/shared-proposal-<date>.md" "$repo/.claude/harvest/decided/"
+```
+
+**A rejection must be written down.** Track A will not re-propose it (the
+transcript watermark is read-once), but Track B re-derives drift from the git
+history every run, so an unrecorded rejection comes back tomorrow night.
+
 Commit **each repo separately** — a dotfiles-tracked store and a repo-tracked
 store are different repositories and never share a commit:
 
@@ -149,7 +200,8 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME commit -m "memory: ..."
 
 # repo side (a project.md, plus the queue + ledger themselves)
 git -C ~/machines add docs/memory-consolidate .claude/memory/project.md
-git -C ~/machines commit -m "memory-consolidate-apply: ..."
+git -C "$repo" add .claude/harvest   # the decided proposals, per repo
+git -C ~/machines commit -m "memory-review: ..."
 ```
 
 ## Step 6 — Promote what is shared

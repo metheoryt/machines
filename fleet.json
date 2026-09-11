@@ -3,6 +3,7 @@
     "latitude": {
       "platform": "debian",
       "profile": "server",
+      "memory_publisher": true,
       "tailnet": { "ip": "100.64.0.8" },
       "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-hub", "backup-client"],
       "detect": { "hostname": "latitude5520" }

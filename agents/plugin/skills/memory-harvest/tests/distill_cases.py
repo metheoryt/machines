@@ -1,4 +1,4 @@
-"""Behavioural cases for repo-harvest's distill.py — pytest-free on purpose.
+"""Behavioural cases for memory-harvest's distill.py — pytest-free on purpose.
 
 These were `test_distill.py` and needed pytest, which is not in the fleet
 toolchain, so the gate skipped them and AGENTS.md carried a standing exemption

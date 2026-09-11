@@ -1,6 +1,6 @@
 # memory-consolidate — open decisions
 
-Written by `/memory-consolidate`, applied by `/memory-consolidate-apply`. **Append-only from the run's
+Written by `/memory-harvest`, applied by `/memory-review`. **Append-only from the run's
 side**: a run never rewrites or reorders an existing item, so notes added by
 hand survive. An item leaves this file only through `consolidate.sh decide`.
 
@@ -19,7 +19,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
   `ls ~/.claude/projects/*/*.jsonl | wc -l` → 30 · unharvested intersection → 30 ·
   last store-touching commit `644ddac` (2026-09-11)
 - **bytes:** n/a (harvest adds, it does not remove)
-- **replacement:** (none — the action is an **attended** `/repo-harvest` run on g15)
+- **replacement:** (none — the action is an **attended** `/memory-harvest` run on g15)
 - **do NOT automate:** `fleet-gather.sh` advances its watermark at gather time,
   before its own review gate, so an unattended gather whose candidates nobody
   applies marks these 30 sessions harvested and strands them permanently.

@@ -1,13 +1,23 @@
 ---
-name: repo-harvest
-description: Use to harvest tacit facts into the knowledge bases of the repos on this box — from scattered Claude transcripts across the fleet, and from each repo's own git history vs its docs. Writes repo-local facts append-only and only PROPOSES changes to shared fleet memory. Safe to run unattended on a schedule; the companion /repo-harvest-apply applies the shared-memory proposals.
+name: memory-harvest
+description: Use for the unattended memory pass on this box — one automation per machine, identical text everywhere. Harvests every repo on the box from fleet-wide Claude transcripts and from each repo's git history vs its docs, writes the repo-local facts append-only, and PROPOSES everything aimed at shared fleet memory. On the one box declared memory_publisher it also runs the whole-corpus consolidation. The attended /memory-review applies what it proposes.
 ---
 
-# repo-harvest — bring new facts into the repos on this box
+# memory-harvest — the unattended memory pass for this box
 
-Called `/kb-refresh` until 2026-09-11. The rename came with two real changes:
-it runs over **every repo on this box**, not one, and it **writes repo-local
-facts by itself** instead of stopping at a human gate.
+One automation per machine, the same prompt on each. Called `/kb-refresh` until
+2026-09-11, and `/repo-harvest` for one day after that.
+
+**Two phases.** Phase A harvests every repo on this box (Steps 0-8 below).
+Phase B consolidates the whole memory corpus and runs **only on the box
+`fleet.json` marks `"memory_publisher": true`** — latitude, the always-on box
+that is already this fleet's single writer for the gortex pin. Its brief is
+`consolidate-phase.md` beside this file.
+
+**Run every phase, and every repo, in a subagent.** `machines/.claude/memory/project.md`
+alone is 283 KB; reading two stores whole would end the orchestrator's context
+before the second repo. The orchestrator dispatches, collects one summary per
+subagent, and writes nothing but the report.
 
 ## What this does
 
@@ -26,7 +36,7 @@ That split is the whole design, and the reason is blast radius, not caution. A
 wrong Lane 1 line is a one-line fix in a repo you already touched. A wrong
 Lane 2 line reaches `main` and every box in the fleet — and from a *work* repo
 it carries work content into a personal shared store. So Lane 2 waits for
-`/repo-harvest-apply`, which is attended.
+`/memory-review`, which is attended.
 
 **Lane 1 is append-only for the same reason the gate was dropped.** An
 unattended run that rewrites or deletes a bullet can destroy the last copy of a
@@ -37,14 +47,14 @@ appends, and marks a contradiction instead of resolving it:
 <!-- conflicts-with: "<the quoted stale text>" -->
 ```
 
-That marker is a work item for `/memory-consolidate`, which owns deletion,
+That marker is a work item for `/memory-harvest`, which owns deletion,
 merging and generalisation across the whole corpus. Do not pre-curate for it —
 a fact withheld is a fact it can never generalise from.
 
 ## Invariants (never violate)
 - Transcripts under `~/.claude/projects/**` are READ-ONLY, append-only.
 - Read-once: never re-distill a line already recorded in the watermark.
-- **Never write a Lane 2 target.** Propose it; `/repo-harvest-apply` writes.
+- **Never write a Lane 2 target.** Propose it; `/memory-review` writes.
 - Never delete or rewrite an existing bullet anywhere. Append, and mark the
   conflict.
 - Digests are scratch and never live inside a repo.
@@ -54,12 +64,13 @@ a fact withheld is a fact it can never generalise from.
 `cat`, `sed -n '<a>,<b>p'`, `awk`, `wc -c`. The gortex `PreToolUse` hook runs in
 **deny** posture and blocks the file tools on indexed source; an unattended
 `claude -p` has nobody to negotiate with when it fires. Same clause
-`/memory-consolidate` carries, for the same reason.
+`/memory-harvest` carries, for the same reason.
 
 ## Step 0 — Pick the repos
 
-Default is **every repo on this box**. Discover by glob, never from a list —
-a repo cloned next month must show up on its own:
+**Every repo on this box, discovered by glob, never from a list.** A repo
+cloned next month must show up on its own — a hand-listed set is how this repo
+once ran 30 of its 40 test suites while printing that all 28 had passed:
 
 ```bash
 for d in "$HOME"/*/ "$HOME"/*/*/; do
@@ -68,16 +79,32 @@ for d in "$HOME"/*/ "$HOME"/*/*/; do
 done
 ```
 
-`[ -d .git ]` is doing two jobs. A git **worktree** — which is what an Orca
-workspace is — has a `.git` *file*, so it is skipped, and that is deliberate:
-a workspace carries its own `.claude/memory/project.md`, a second copy of the
-store this harvest is about. Harvest the main checkout; the workspace's
-transcripts are picked up anyway (see slugs below).
+`[ -d .git ]` does two jobs. A git **worktree** — which is what an Orca
+workspace is — has a `.git` *file*, so it is skipped, deliberately: a workspace
+carries its own `.claude/memory/project.md`, a second copy of the store this
+harvest is about. Harvest the main checkout; the workspace's transcripts come in
+anyway through the slug (below).
 
-Then run Steps 1-6 **once per repo**, and report per repo. If the user named a
-repo, or the cwd repo is clearly the target, do that one only.
+Two narrower rules were considered and rejected, because both fail by
+**under**-covering, silently:
 
-For each repo:
+- **`repo_groups` from `fleet.json`.** It is the right idea — the manifest
+  already declares per-box scope and `provision/repos.sh` maps group to
+  directory — but only `g15` actually carries the key today. Everywhere else it
+  is absent, so it declares nothing. Use it to *report* (a repo outside every
+  declared group is worth a line), not to select.
+- **"whatever has a `project.md` in dotfiles".** That is the set of repos which
+  already have a knowledge base, so a freshly cloned repo could never get its
+  first one — and Step 6 creating a missing `project.md` would never fire.
+  `bash agents/plugin/skills/lib/consolidate.sh scan` is that list; use it to
+  say which harvested repos already have a store.
+
+Over-covering is cheap: a repo with no new transcripts and no drift yields
+nothing and costs one empty pass.
+
+Then dispatch **one subagent per repo**, each running Steps 1-7 for its repo and
+returning a summary. For each repo:
+
 - `repo=<path>`; provenance base = `git -C "$repo" rev-parse HEAD`.
 - Slug matches: **the repo's basename is enough**. Transcript directories are
   the cwd path with `/` replaced by `-`, and an Orca workspace lives at
@@ -86,9 +113,8 @@ For each repo:
   workspaces already deleted, whose transcripts outlive them (measured
   2026-09-11: `-home-me-orca-workspaces-qaz-code-kazhackstan-2026` was still
   present with no workspace directory left). A basename is a substring match,
-  so **list the slug directories that matched and name them in the report** —
-  that is how a cross-match with an unrelated repo becomes visible instead of
-  silent.
+  so **name the slug directories that matched in the report** — that is how a
+  cross-match with an unrelated repo becomes visible instead of silent.
 - State file: `"$repo/.claude/kb-harvest-state.json"` (create with an empty
   `{}` on first run — `distill.py` initializes its own `sessions` key).
   Digests out dir: a scratchpad path, never inside the repo.
@@ -99,16 +125,16 @@ For each repo:
      "$repo/.claude/harvest/state-before.json" 2>/dev/null || true
   ```
 
-**Known cost, not yet optimised:** the loop runs one full fleet gather per
-repo, so N repos means N ssh fan-outs. One pass with every repo's `--match` at
-once would do, because each digest header already carries `# cwd:` and that is
-enough to partition the digests by repo afterwards. Do that if the nightly gets
-too slow; it is a change to this skill only, not to `distill.py`.
+**Known cost, not yet optimised:** one full fleet gather per repo, so N repos
+means N ssh fan-outs. One pass carrying every repo's `--match` would do, because
+each digest header already records `# cwd:` and that is enough to partition the
+digests by repo afterwards. Do that if the nightly gets too slow; it is a change
+to this skill only, not to `distill.py`.
 
 ## Step 1 — Gather + distill (mechanical, read-once)
 - Run:
   ```
-  bash agents/plugin/skills/repo-harvest/fleet-gather.sh \
+  bash agents/plugin/skills/memory-harvest/fleet-gather.sh \
     --out <scratch>/kb-digests --state "$repo/.claude/kb-harvest-state.json" \
     --match <slug1> [--match <slug2> ...]
   ```
@@ -229,7 +255,7 @@ machine's is readable from here but not writable:
 - Append the Lane 1 rows to their targets, under the right existing heading,
   matching that file's voice and bullet style. Do not restructure headings, do
   not rewrite neighbouring bullets.
-- Tag each appended bullet with its provenance so `/memory-consolidate` can
+- Tag each appended bullet with its provenance so `/memory-harvest` can
   weigh and trace it:
   `<!-- src: <repo> <short-sha> | <YYYY-MM-DD> -->`
 - If `$repo/.claude/memory/project.md` does not exist and a row targets it,
@@ -284,7 +310,7 @@ Per repo: `sessions_seen` / `sessions_with_new` / `digests_written`, the slug
 directories matched, Lane 1 rows written and to which files, Lane 2 rows
 proposed and where the proposal was written, the commit sha, and any
 `conflicts-with` markers left behind. Then the box total, and **the pending
-`/repo-harvest-apply` runs by name** — that line is the only thing between a
+`/memory-review` runs by name** — that line is the only thing between a
 proposed fact and one nobody ever applies.
 
 ## Tier reference
@@ -296,3 +322,24 @@ proposed fact and one nobody ever applies.
 | Per-repo — project memory | **1** | `<target-repo>/.claude/memory/project.md` | Repo workflow/architecture facts too specific (or too fresh) for the root doc: how this repo's build/test/deploy actually works day to day, non-obvious repo conventions, in-flight state. Offer to create it if the repo doesn't have one yet. |
 | Per-repo — root doc | **1** | `<target-repo>/CLAUDE.md` | Stable architecture/vision: the things that change rarely — module boundaries, host roles, the shape of the system — not day-to-day workflow churn. |
 | Per-repo — deep dives | **1** | `<target-repo>/docs/*.md` | Facts too large for a single bullet: a whole subsystem's design, a multi-step process worth its own page (e.g. this repo's `agents/docs/claude-code-subagents.md`, `agents/docs/git-workflow.md`). Link to these from `project.md`/`CLAUDE.md` rather than inlining them. |
+
+## Phase B — consolidate (publisher box only)
+
+```bash
+python3 -c "import json;print(json.load(open('fleet.json'))['machines'].get('<this box>',{}).get('memory_publisher',False))"
+```
+
+False → skip it, and say so in one line. True → dispatch **one subagent** with
+`consolidate-phase.md` beside this file as its brief. It reads every machine's
+dotfiles branch out of the bare repo and files one queue; a second box running
+it duplicates every item, which is why the gate is a manifest key and not a
+copy of the phase. If the publisher should move, **move the key** — never add a
+second one.
+
+## Pushing, when N boxes commit nightly
+
+Pull `--ff-only` before Phase A and do not push on a failed pull. Every box
+harvests into its own checkout of the same repos, so pushes collide by design:
+rebase onto the remote head and push again, **never force**, and if it still
+fails leave the commit local and say so loudly in the report. A stranded local
+commit is recoverable; a forced push over another box's harvest is not.

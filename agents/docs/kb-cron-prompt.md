@@ -1,10 +1,10 @@
-> **SUPERSEDED 2026-09-11 by the `repo-harvest` skill.** Kept for its
+> **SUPERSEDED 2026-09-11 by the `memory-harvest` skill.** Kept for its
 > reasoning, not as instructions — do not paste this prompt into an Automation.
 >
 > This was the first design for an unattended per-repo harvest, and its central
 > argument won: an unattended run must **write append-only** rather than stop at
 > a human gate, because a gate nobody can pass means the harvest never lands and
-> the read-once watermark burns anyway. `/repo-harvest` keeps that, and changes
+> the read-once watermark burns anyway. `/memory-harvest` keeps that, and changes
 > two things — it loops over every repo on the box instead of one, and it splits
 > the targets into two lanes, writing only the repo-local ones and proposing
 > everything that reaches shared fleet memory. What is stale below: the Orca-era

@@ -1,9 +1,15 @@
----
-name: memory-consolidate
-description: Use when the user wants the accumulated memory stores consolidated — organised, generalised, deduplicated, pruned — or when running the nightly memory-consolidation pass. Reads every memory store read-only and files a reviewable decision queue; it NEVER edits a memory store itself. The companion /memory-consolidate-apply is what writes.
----
+# Phase B — consolidate the whole memory corpus
 
-# memory-consolidate — reorganise memory without touching it
+**Reference file for `memory-harvest`, not a skill.** Phase B runs only on the
+box `fleet.json` marks `"memory_publisher": true` (latitude), and only in a
+**subagent**, so the corpus never enters the orchestrator's context. Everything
+below is that subagent's brief.
+
+It was the `/dream` skill, then `/memory-harvest`; it is a phase now because
+the box already has the checkout, the pull and the report open. What did NOT
+change is that it runs **once for the fleet**: it reads every machine's dotfiles
+branch from right here, and a second box running it files a duplicate of every
+item — which is why the publisher gate exists rather than a per-box copy.
 
 The pass that tidies the memory corpus, fleet-wide. It was called `/dream` until
 2026-09-11, by analogy with memory being reorganised during sleep; the name was
@@ -12,9 +18,9 @@ run it once or once per box. It is once, for everything. It runs unattended (Orc
 nightly, on `desktop`) and its whole output is a queue of proposed decisions a
 human works through whenever it suits them.
 
-## The invariant that defines this skill
+## The invariant that defines this phase
 
-**A `/memory-consolidate` run writes ONLY under `docs/memory-consolidate/`.** It never edits a memory
+**Phase B writes ONLY under `docs/memory-consolidate/`.** It never edits a memory
 store, never edits a `CLAUDE.md`, never touches `kb-harvest-state.json`, never
 commits outside the `machines` repo. If a run believes a store must change, it
 says so in the queue with the replacement text ready to paste — and stops.
@@ -34,7 +40,7 @@ not a style preference — it is what makes the nightly run complete at all.
 
 `consolidate.sh` is itself indexed source, and the deny hook nudges on shell *writes*
 to it. Invoking it does pass: measured 2026-09-11, `claude -p 'run bash
-agents/plugin/skills/memory-consolidate/consolidate.sh paths'` from `~/machines` returned the
+agents/plugin/skills/lib/consolidate.sh paths'` from `~/machines` returned the
 output and exited 0. If that ever changes, the nightly run fails as a **silent
 skip**, so re-measure it rather than assuming.
 
@@ -52,9 +58,9 @@ this skill exists to remove.
 ## Step 0 — Preflight
 
 ```bash
-D=~/machines/agents/plugin/skills/memory-consolidate/consolidate.sh
+D=~/machines/agents/plugin/skills/lib/consolidate.sh
 
-# Pull FIRST. The queue is shared across every box that runs /memory-consolidate, and
+# Pull FIRST. The queue is shared across every box that runs /memory-harvest, and
 # suppression is the only thing standing between a second box and a duplicate
 # of every item the first one filed tonight. A stale checkout silently defeats
 # it: `status` reports `new` for an item that is already open on origin.
@@ -77,7 +83,7 @@ The 10-minute `dotfiles-sync` timer can merge `origin/main` into a store while
 this run is reading it. That is harmless to the Step 8 check — a merge commits,
 so the work-tree is clean on both sides of it — but a section read early in the
 run may be one tick stale. Quote line numbers as a starting point, never as an
-address; `/memory-consolidate-apply` re-verifies before it writes.
+address; `/memory-review` re-verifies before it writes.
 
 ## Step 1 — Scan and measure
 
@@ -147,7 +153,7 @@ item already open, applied **or rejected** is dropped silently. Without the
 rejected state a declined proposal returns every night, which is exactly how a
 queue stops being read.
 
-**The discriminating check for this whole design:** run `/memory-consolidate` twice in a row.
+**The discriminating check for this whole design:** run `/memory-harvest` twice in a row.
 The second run must file **zero** new items. If it re-proposes, the identity
 derivation is wrong and everything downstream is noise — fix that before
 trusting any output.
@@ -230,10 +236,10 @@ as a conflict.
 So an item about another box is **filed with the box named** and applied there:
 
 ```markdown
-- **apply on:** g15   ← not this box; /memory-consolidate-apply here must refuse it
+- **apply on:** g15   ← not this box; /memory-review here must refuse it
 ```
 
-The two things `/memory-consolidate-apply` on *this* box may touch are unchanged: paths on
+The two things `/memory-review` on *this* box may touch are unchanged: paths on
 this box, and shared files via `/dotfiles-promote`. Fixing unpromoted drift on
 `g15` means running the promote **on g15**.
 
@@ -402,7 +408,7 @@ Rules for an item:
 ## Step 6b — What was awkward tonight (the skill files against ITSELF)
 
 A run ends by proposing changes to **these two skills**, as ordinary queue items
-with `action: skill` and target `/home/me/machines/agents/plugin/skills/memory-consolidate/SKILL.md`
+with `action: skill` and target `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
 (or `memory-consolidate-apply/SKILL.md`).
 
 **It does NOT edit them.** This is the one exception it would be most tempting
@@ -486,7 +492,7 @@ only exists on one disk is the thing this repo exists to prevent.
 ## Never
 
 - Edit any memory store, any `CLAUDE.md`, or `kb-harvest-state.json`.
-- Run `repo-harvest`, `fleet-gather.sh` or `distill.py`.
+- Run `memory-harvest`, `fleet-gather.sh` or `distill.py`.
 - Run `/dotfiles-promote`, or any `git push`.
 - Rewrite or reorder an existing queue item — a human may have annotated it.
 - File an item without evidence a reader can check without re-running the pass.
@@ -495,7 +501,7 @@ only exists on one disk is the thing this repo exists to prevent.
 
 `/improve` (`~/.claude/commands/improve.md`) is a **retrospective on
 conversations**: what happened in recent sessions, whether prior recommendations
-landed, which config file should change as a result. `/memory-consolidate` is a pass over the
+landed, which config file should change as a result. `/memory-harvest` is a pass over the
 **corpus itself** — offline, fleet-wide, with no session in context.
 
 They must not both propose the same edit, so the boundary is the input:
@@ -503,11 +509,11 @@ They must not both propose the same edit, so the boundary is the input:
 | | reads | sees |
 |---|---|---|
 | `/improve` | session transcripts + this conversation | friction, corrections, enforcement gaps |
-| `/memory-consolidate` | the stores and instruction files as text, on every branch | redundancy, contradiction, bloat, misscoping |
+| `/memory-harvest` | the stores and instruction files as text, on every branch | redundancy, contradiction, bloat, misscoping |
 
 Do **not** invoke `/improve` from a nightly run: it opens with an
 `AskUserQuestion` for scope, so unattended it blocks or guesses; and a nightly
-`/memory-consolidate` has no conversation to retrospect on, which is Phase 3 of it.
+`/memory-harvest` has no conversation to retrospect on, which is Phase 3 of it.
 
 `/improve config audit` is the one mode that genuinely overlaps (CLAUDE.md bloat
 and memory consolidation, project-scoped, no fleet view). Say so in the report
@@ -521,7 +527,7 @@ suppressing categories the ledger shows being rejected repeatedly.
 ## Running it nightly
 
 ```bash
-cd ~/machines && claude -p '/memory-consolidate'
+cd ~/machines && claude -p '/memory-harvest'
 ```
 
 On `desktop`, via an Orca Automation, so the sessions can be watched. It is

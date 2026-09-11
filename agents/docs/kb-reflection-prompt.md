@@ -4,7 +4,7 @@
 >
 > The scope boundary below still holds — this job owns shared fleet memory and
 > does not touch per-repo docs. What changed: it proposes into a queue with a
-> ledger instead of editing directly, and `/memory-consolidate-apply` is the
+> ledger instead of editing directly, and `/memory-review` is the
 > only half that writes.
 
 # Fleet memory reflection prompt

@@ -24,17 +24,20 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 > `~/.claude/skills/{gortex-align,update-balance,worktree-agent}/`,
 > `~/.claude/statusline-command.sh`, `~/.claude/balance-refresh.py`. This repo
 > keeps what has **no** `$HOME` path: `bootstrap.sh`, the tests, and the
-> fleet-coupled plugin (`ship`, `repo-harvest`, `lib`, `orca-setup`, `orca-repair` —
-> all tested, all reading `fleet.json`), plus the memory pair
-> (`memory-consolidate`, `memory-consolidate-apply`) and `repo-harvest-apply`.
+> fleet-coupled plugin (`ship`, `memory-harvest`, `memory-review`, `lib`,
+> `orca-setup`, `orca-repair` — all tested, all reading `fleet.json`).
 >
-> **Four skills, two pairs, and in each pair only one writes to a shared
-> store.** `repo-harvest` runs per box over every repo on it and files
-> shared-memory proposals; `repo-harvest-apply` lands them. `memory-consolidate`
-> runs **once for the fleet** — it reads every other box's dotfiles branch
-> from right here — and files a queue; `memory-consolidate-apply` works it.
-> Renamed from `kb-refresh` / `dream` on 2026-09-11, because the old names
-> said nothing about whether to run them once or once per box. Stubs at the
+> **Two memory skills, and only the attended one writes to a shared store.**
+> `memory-harvest` runs unattended, one automation per box, identical text
+> everywhere: it harvests every repo on that box, writes the repo-local facts
+> itself, and proposes anything aimed at shared fleet memory. On the one box
+> `fleet.json` marks `"memory_publisher": true` it also runs Phase B
+> (`memory-harvest/consolidate-phase.md`), the whole-corpus consolidation that
+> must happen **once for the fleet** — it reads every machine's dotfiles branch
+> from that one checkout, so a second box running it duplicates every item.
+> `memory-review` is the attended half: one session that works both the
+> shared-memory proposals and the consolidation queue, applies what you approve,
+> and promotes. Renamed from `kb-refresh` / `dream` on 2026-09-11; stubs at the
 > old names redirect and are deleted once every Automation is repointed.
 >
 > **One deployer per path.** Dotfiles owns everything inside `~/.claude` listed

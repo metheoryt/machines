@@ -174,7 +174,7 @@ try {
     }
 } finally { Pop-Location }
 
-# Python (real, non-Store) - repo-harvest's distill.py and agents/statusline-command.sh
+# Python (real, non-Store) - memory-harvest's distill.py and agents/statusline-command.sh
 # need a python that Git Bash can exec. The Microsoft Store python/python3/py aliases
 # under ...\WindowsApps are execve-hostile from Git Bash ("Permission denied") AND
 # can't be gated by `Have` (the stub satisfies Get-Command), so probe for a real
@@ -192,7 +192,7 @@ if ($pyReal) {
     winget install --id Python.Launcher   -e --source winget --accept-source-agreements --accept-package-agreements --silent
     Update-PathFromRegistry
 } else {
-    Warn "python missing and winget unavailable - install Python 3 from https://python.org, then re-run (repo-harvest distill needs it)."
+    Warn "python missing and winget unavailable - install Python 3 from https://python.org, then re-run (memory-harvest distill needs it)."
 }
 
 # jq - a PROVISIONING dependency on Windows, not a convenience. agents/
@@ -375,7 +375,7 @@ Warn "Reachable over the tailnet only while this box has joined the Headscale ta
 # 6g. CLIENT config - the fleet block in ~\.ssh\config (OUTBOUND). Everything
 #     above this point configures inbound SSH only, which is why these boxes had
 #     no fleet block at all and `ssh latitude` resolved to methe@latitude and was
-#     refused - taking fd_run, /ship's fleet-pull and repo-harvest's fleet-gather
+#     refused - taking fd_run, /ship's fleet-pull and memory-harvest's fleet-gather
 #     with it. Needs no elevation: it writes one file in the calling user's HOME.
 $fleetJsonPath = Join-Path $RepoDir 'fleet.json'
 $sshCfgModule  = Join-Path $RepoDir 'provision\lib\fleet-ssh-config.ps1'

@@ -1,4 +1,4 @@
-"""Mechanical jsonl-transcript distiller for the cyphy repo-harvest skill.
+"""Mechanical jsonl-transcript distiller for the cyphy memory-harvest skill.
 
 Stdlib only. Strips Claude Code session .jsonl into a compact per-session
 digest (human turns, assistant prose, Bash commands, edited file paths).

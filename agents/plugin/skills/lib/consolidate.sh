@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Mechanics for the /memory-consolidate skill: discover the memory stores, index them, and
+# Mechanics for the /memory-harvest skill: discover the memory stores, index them, and
 # enforce the decision queue's identity + suppression rules.
 #
 # The judgement lives in SKILL.md. Everything here is deterministic, so it can
 # be tested and so an unattended nightly run cannot re-derive it wrong.
 #
 # INVARIANT — the whole point of the skill: this script writes ONLY under
-# $CONSOLIDATE_ROOT. It never touches a memory store, a transcript, or repo-harvest's
+# $CONSOLIDATE_ROOT. It never touches a memory store, a transcript, or memory-harvest's
 # watermark. Read paths are read-only by construction (cat/awk/wc).
 set -euo pipefail
 
@@ -40,7 +40,7 @@ usage: consolidate.sh <command> [args]
   append <id> <item-file>    append an item to the queue unless already open/decided
   decide <id> <state> <reason> [file] [phrase]
                              record applied|rejected in the ledger and cut the
-                             item out of the queue (used by /memory-consolidate-apply).
+                             item out of the queue (used by /memory-review).
                              file+phrase let `verify` re-check it later.
   verify                     for every applied decision: ok | drifted | missing
                              | unverifiable — did the change actually stay?
@@ -191,7 +191,7 @@ cmd_append() {
     cat > "$QUEUE" <<'HDR'
 # dream — open decisions
 
-Written by `/memory-consolidate`, applied by `/memory-consolidate-apply`. **Append-only from the run's
+Written by `/memory-harvest`, applied by `/memory-review`. **Append-only from the run's
 side**: a run never rewrites or reorders an existing item, so notes added by
 hand survive. An item leaves this file only through `consolidate.sh decide`.
 HDR
