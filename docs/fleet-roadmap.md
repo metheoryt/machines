@@ -591,7 +591,11 @@ Nix ever returns. Leave them.
 
 ---
 
-## P4 — ✅ DONE 2026-08-01. `just test` is green: 28 suites, 0 failures.
+## P4 — ✅ DONE 2026-08-01. `just test` is green, and stayed green.
+
+<!-- No count here on purpose: this heading said "28 suites" for six weeks while the
+real number moved to 55 (measured 2026-09-11). `just test` prints the count it ran;
+that is the only number to trust. -->
 
 First time the repo has had a working gate since the Nix one was deleted. The three
 "pre-existing failures" turned out to be two different things, and telling them

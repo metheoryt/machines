@@ -269,7 +269,7 @@ commit message, that is the moment to measure it.**
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `update-gortex.sh` (bumps the pin). |
 | `hosts/` | Per-machine, per-platform ops scripts: `hosts/<name>/<platform>/`. |
 | `docs/` | `fleet-roadmap.md` is the live backlog; `superpowers/plans/` holds plans and specs. |
-| `backup/` | The fleet's restic profiles, one dir per **identity** — `backup/<identity>/` where identity is a `fleet.json` machine (`latitude`) or a `fleet.local.json` nickname (`desktop-wsl`), one flat namespace. Each dir ships `profiles.yaml` plus its own `install-tasks.sh` / `.ps1`, because scope is not derivable by the caller: latitude's profiles are `schedule-permission: system` and need sudo, a WSL client is user-scope and must NOT be root. Moved here from `vps` 2026-09-01. |
+| `backup/` | The fleet's restic profiles, one dir per **identity** — `backup/<identity>/` where identity is a `fleet.json` machine (`latitude`) or a `fleet.local.json` nickname (`desktop-wsl`), one flat namespace. Each dir ships `profiles.yaml` plus its own `install-tasks.sh` / `.ps1` — and inherits the shared `backup/base.yaml`, installed by `backup/restic-install.sh` / `.bat` — because scope is not derivable by the caller: latitude's profiles are `schedule-permission: system` and need sudo, a WSL client is user-scope and must NOT be root. Moved here from `vps` 2026-09-01. |
 | `install-media/` | Shared Win11 install media. |
 
 ### The provisioner is the whole story now
@@ -355,7 +355,8 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   not set it, and that failure direction installs a daemon). It probes
   `dists/<codename>/Release` before writing the apt source, because a source
   naming an unpublished suite breaks every later `apt-get update` on the box.
-  Pinned by `provision/tests/docker-tier.test.sh` (7 live branch cases).
+  Pinned by `provision/tests/docker-tier.test.sh` (8 live branch cases, A–H —
+  Case H, a failed key fetch, was added in `787882b`).
 - **`tier_gortex_autoupdate`** — the counterpart, and the only tier in the
   `server` profile that workstation lacks. It installs a weekly timer running
   `provision/gortex-autoupdate.sh`, which bumps `provision/gortex.version` to the
@@ -506,8 +507,11 @@ is a different symptom from the firewall's. Reaching it from another box over
 the LAN also needs an inbound Windows firewall rule (`New-NetFirewallRule
 -LocalPort 2222 -RemoteAddress 192.168.8.0/24`), because in mirrored mode the
 Windows firewall governs the distro's ports; over the tailnet no rule is needed.
-The override is host-local and untracked — reprovisioning desktop-wsl does not
-restore it.
+The override is **tracked since 2026-09-07** at
+`hosts/desktop/wsl/ssh-socket-override.conf` (`01cc091`) — copy it, do not
+rewrite it from scratch — but **nothing provisions it**: `wsl-fixes.sh` is the
+named owner and carries no `2222`/`ssh.socket` arm yet, so reprovisioning
+desktop-wsl still does not restore it.
 
 **And it was declared `dispatch:direct` until 2026-08-31, which is how those five
 weeks stayed quiet.** `fd_probe` keys on that field, so every fleet-wide run
@@ -540,7 +544,8 @@ are not re-derivable from the code.
   4 GiB) is what proved them unnecessary. Also records why the *source* dock was
   the flaky one through July–August, and why `--partial-dir` rather than
   `--append-verify`.
-- `install-timers.sh` + `systemd/` — installs both as system timers. It **copies**
+- `install-timers.sh` + `systemd/` — installs all **three** as system timers
+  (`mirror-refresh`, `archive-mirror`, `restic-hub-selfcheck`). It **copies**
   units into `/etc/systemd/system` rather than symlinking, so a `git pull` cannot
   change what root runs on a timer without review.
 - `install-docker-ordering.sh` — the three guards that keep containers from
@@ -548,10 +553,31 @@ are not re-derivable from the code.
   about latitude's mounts, docker, or a compose file that binds `/mnt`.** Its
   `MOUNTS` array is a live-derived fact, not a preference: see the bind-source
   race in *Key patterns* below.
+- `restic-hub-selfcheck.sh` — the third timer, and the only thing that catches the
+  restic REST hub serving an **empty bind**. It must run as root: the repo dirs
+  under `/mnt/spare320/restic-rest/` are `drwx------ root:root`, so an unprivileged
+  run reports healthy repos as MISSING; it exits **2** for non-root, distinct from
+  **1** for a real check failure, and `role_backup_hub` sudo-wraps it.
+- `disk-acceptance.sh` — the two-gate intake for a new drive (`identity`, on the
+  shop's return clock, strictly before `surface`/`badblocks -w`, on the warranty
+  clock). The order is the point: the 2026-07-30 fraud sold a 2015 HGST as a new
+  6 TB WD Purple, and a surface test alone passes such a drive.
+- `smart-long.sh`, `migrate-restic-wd8.sh`, `migrate-servarr-wd8.sh` — one-shot
+  and periodic helpers. The two migrators share a two-pass shape (bulk rsync live,
+  short delta under a stopped stack, `verify`, then `cutover` flips the compose
+  `.env`); container-side bind paths never change, so the *arr databases need no
+  edits on a host-disk move.
+
+**`hosts/g15/ubuntu/`** — the personal-projects host, reinstalled from Windows 11
+on 2026-09-07. Its `README.md` says why the directory is `ubuntu/` while the
+manifest says `debian` (the manifest token is a platform *class*). Also holds
+`compose.override.yml` + `install-compose-override.sh` for qaz-code, and
+`rustdesk-seed.sh`.
 
 `hosts/desktop/windows/` carries `install.ps1`, the reinstall runbook and
 `winget-packages.json` — **no backup or restore script** (see *Repository
-Overview*: both were deleted 2026-07-31).
+Overview*: both were deleted 2026-07-31). `hosts/desktop/wsl/` carries the
+`ssh.socket` 2222 drop-in and its README.
 (`hosts/server/` was deleted with the decommission — git history has it.)
 
 ### Key patterns

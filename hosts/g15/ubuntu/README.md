@@ -5,7 +5,8 @@ Per-machine ops for the personal-projects host, reinstalled from Windows 11 on
 
 **Why this directory is `ubuntu/` and the manifest says `debian`.** `platform`
 in `fleet.json` is a *class* token meaning "posix, not darwin, not WSL" — every
-posix role executor allowlists `nixos|wsl|debian|darwin` and its fallback arm
+posix role executor allowlists `wsl|debian|darwin` (it was
+`nixos|wsl|debian|darwin` until 2026-09-09) and its fallback arm
 prints "no posix executor" and returns **0**, so `ubuntu` there would have
 skipped `dotfiles` and `repos` while `--apply` reported success. The directory
 name follows the real OS, like `hosts/latitude/debian` and

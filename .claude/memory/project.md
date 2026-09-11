@@ -1,7 +1,7 @@
 # Project memory: machines
 
-<!-- KB refreshed against dd3d74b on 2026-07-24 (full fleet incl. g513ie);
-     hand-edited through 2026-08-01 — entries carry their own dates -->
+<!-- KB refreshed against b69d13b on 2026-09-11 (g15 + air + desktop + desktop-wsl;
+     latitude has no ~/.claude/projects at all). Entries carry their own dates. -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
@@ -3367,9 +3367,14 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   `tar cf - .` over the whole dir, so every run re-delivers previous runs' digests
   (carrying their remote mtimes — so the *stale* ones can sort **newer** than the
   genuinely fresh local ones, and nothing in the file marks which run delivered
-  it). The authoritative "new this run" list is the locally written
-  `manifest.tsv`, never `ls`/mtime of the out dir — otherwise you re-map facts
-  that are already committed.
+  it). **`manifest.tsv` is NOT the authoritative
+  list for a fleet run** — the remote pull is a `tar` that EXCLUDES it, so a
+  remote box's digests can never appear in it. Measured 2026-09-11: 14 rows
+  against 47 genuinely new digests, i.e. trusting it would have discarded 33 of
+  47. It is authoritative for the LOCAL box only. For remote digests the usable
+  discriminator is the per-run mtime of the freshly pulled files — but check it
+  against each host's reported `digests_written` (the numbers must sum), because
+  a stale remote digest can carry a newer mtime than a fresh local one.
 - **Self-exclusion is by OS hostname, which a WSL distro shares with its Windows
   parent.** Running kb-refresh inside WSL on `g614jv` prints `[desktop] is this
   box, skipping self` and never harvests the Windows-native
@@ -3530,3 +3535,185 @@ two-failure-mode tell — stay in `global.md` under *Fleet SSH reachability*.
     the TTY. Check whether it does before asking for one — on desktop-ubuntu26 every
     fleet key body was already present and only the `methe@methe-server` comment was
     stale (cosmetic, the box is `g513ie` now), so the sudo run was unnecessary.
+
+## kb-refresh 2026-09-11 — what the fleet transcripts held (Track A + B)
+
+### The harvest machinery itself
+
+- **Run `/dream` BEFORE `kb-refresh` on the same box.** Dream's queued items carry
+  verbatim replacement text keyed to a memory file's *pre-harvest* content;
+  kb-refresh appending to the same file invalidates those replacements. (The
+  `manifest.tsv` correction above is from the same run.)
+- **latitude has no `~/.claude/projects` directory at all**, so the services host
+  contributes zero transcripts to every kb-refresh — absence, not failure. Don't
+  chase it as a broken dispatch.
+- **Transcripts had a 30-day expiry until 2026-09-10.** `agents/settings.json` now
+  sets `cleanupPeriodDays: 90` (Claude Code's silent default is 30), added after
+  desktop-wsl was found holding 350 of 479 local transcripts unharvested and
+  everything between the 2026-07-24 refresh and the 30-day cutoff already deleted.
+  **That window is gone for good.** The value must live in the tracked baseline,
+  not a hand-edit of the deployed `~/.claude/settings.json`, or `agent-bootstrap`
+  overwrites it.
+- **`enabledPlugins` in `agents/settings.json` loads at USER scope on every repo on
+  every box**, not per-project — `sentry@` and `atlassian@` were removed 2026-09-08
+  because the Pure repos already carry their own MCP config for both.
+
+### Backups / restic
+
+- **`check-before` at profile level is silently inert in resticprofile 0.33.1** — it
+  parses and echoes back from `show`, and never runs. It must be nested under
+  `backup:`. Reading the YAML cannot tell working from inert; grep the run log for
+  the issued `restic check --read-data-subset` line.
+- **`roles/backup-hub.sh` schedules nothing and creates no repositories** —
+  verification only. `backup/latitude/profiles.yaml` holds BOTH the `latitude` and
+  `g614jv-maintenance` profiles and `backup-client`'s `schedule --all` installs
+  both from one place; a second scheduler in `backup-hub` would race to write the
+  same four unit files.
+- **`roles/backup-client.ps1`'s apply path has never run.** It exists and is
+  registered in `provision.ps1`'s `$RoleExecutors`, but no `backup/desktop/`
+  profile dir has ever been shipped to run it against (`backup/g15/` does exist).
+
+### Test-harness traps — three shapes of false green
+
+- **`roles.test.sh` used to `source` a hardcoded three-file list** of role
+  executors, which is a false-green *generator*: a forgotten role leaves its
+  `role_*` function undefined, the call emits "command not found" into `2>&1`,
+  that text does not match the expected skip pattern, and the `not_skipped` check
+  passes anyway. Now globs `roles/*.sh` plus a `defined()` helper.
+- **`tiers.test.sh`'s `hasnt()` feeds its pattern to `grep -E`**, so a bare `$` is
+  an end-of-line anchor rather than a literal and can make an assertion
+  permanently inert. Its `awk '/^tier_X()/,/^}/'` body extraction also truncates
+  early on any tier that defines a nested function (the nested `}` is at column 0);
+  only `tier_battery_limit` and `tier_lid_ignore` use the robust form that scans to
+  the next tier and trims back.
+- **Not every `*.test.sh` prints `ALL PASS` as its last line**, so a loop grepping
+  for that string undercounts failures. Check each suite's exit code — which is
+  what `just test` does.
+
+### Provisioning shape
+
+- **`provision/linux.sh` and `provision.sh --apply` are two separate entry
+  points**, and `provision.sh` never invokes the tier driver. On a fresh box
+  `linux.sh` must run first, or a role like `repos` (which needs `gh` from
+  `tier_apt_dev`) finds nothing.
+- **A `tier_*` function cannot be run outside a driver**: `info`/`warn`/`ok`/`have`
+  are defined in `linux.sh` and `macos.sh`, not a shared lib.
+- **No tier installs tailscale or `just`** — the fleet's own transport and its
+  documented command surface are both hand-installed on every Linux box. Roadmap P6.
+- **`ts_mint_key` defaulted `HEADSCALE_SSH` to `debian@cyphy.kz`**, which matches no
+  block in the generated `~/.ssh/config` (only `Host hub hub.gg.ez` exists), so
+  `--enroll` failed with "Host key verification failed" from every fleet box.
+  Fixed 2026-09-08 with a single `ts_headscale_target()` accessor defaulting to the
+  alias `hub`.
+- **`repos.sh`'s dry run is NOT inert** — it switches the active `gh` account and
+  restores it — so `repo-groups.test.sh` deliberately never runs `repos.sh` and
+  shims `bash` to assert the composed argv instead.
+- **`curl … | $SUDO tee "$file"` reports tee's exit status, not curl's**, and
+  `provision/linux.sh` runs without `pipefail`: a 404 or truncated download prints
+  "installed" and the script proceeds with a corrupt file. Fetch to a temp file,
+  check curl's own rc and non-emptiness, then `install` it.
+
+### Orca
+
+- **`orca serve` starts its own Xvfb on `:99` when `DISPLAY` is unset, and under
+  WSLg that can never work** — `/tmp/.X11-unix` is mounted read-only there, so Xvfb
+  cannot bind its socket and Electron crash-loops on "Missing X server or $DISPLAY"
+  instead of degrading. Hand it WSLg's already-live `:0`.
+- **Electron flushes a non-tty stdout only at process exit**, so a systemd unit's
+  `journalctl` output — the pairing URL included — stays empty until the process
+  dies. Run it under `script -qefc "<cmd>" /dev/null` to give it a pty while
+  preserving the exit status for `Restart=on-failure`.
+- **RustDesk's unattended-Wayland install on g15 is deliberately NOT a tier.** The
+  preview `.deb` is served from the mutable GitHub `nightly` tag whose asset bytes
+  are replaced in place (rebuilt 2026-09-01 and again 2026-09-10), so any
+  provisioning run would silently swap the box's remote-access daemon. Revisit when
+  the capability ships in a stable release.
+
+### Agent config
+
+- **`register-reinject.sh`** re-injects a ~475 B per-turn cue extracted from
+  `memory/core.md` between the `REGISTER-REINJECT:START/END` markers, capped at
+  900 B by its own suite. It replaced a `tone-reinject.sh` that
+  `personality/tone.md` had claimed existed since 2026-08-04 but which was never on
+  disk or wired anywhere.
+- **The `gortex:rules` span inside `~/.claude/CLAUDE.md` is regenerated per-box** by
+  `gortex install` (it embeds that box's own `$HOME` in an `@import`), while
+  `CLAUDE.md` itself is shared on dotfiles `main` — so a box without gortex gets a
+  dangling `@import`, and any fallback note must live OUTSIDE the markers or the
+  next `gortex install` overwrites it.
+- **Two Claude sessions can commit to the same checkout concurrently** without
+  either knowing — a diverged HEAD, and one commit's message surviving only in
+  `git reflog` after the other `--amend`s its content in. Check `ps` and
+  `git reflog` before assuming you are the only writer in a shared checkout.
+
+### Repo housekeeping
+
+- **`.gitignore`'s `*.sublime-*` line must stay** even though Sublime is off g15:
+  `hosts/desktop/windows/windows-reinstall-runbook.md` still winget-installs
+  `SublimeHQ.SublimeText.4`, and a stray project file on that box dirties the clone
+  and makes `fleet-selfpull` silently skip it.
+- **`review/2026-08-03-path-ledger.md` holds a keep/delete/merge verdict for 240
+  paths**, and five weeks later exactly 1 of its 19 actionable rows had been acted
+  on. This repo's cleanup bottleneck is unmade decisions, not missing measurement —
+  consult the ledger before commissioning a fresh audit.
+- **A design exists to retire `provision/statusboard/`** for node_exporter +
+  smartctl_exporter + cAdvisor + Prometheus + Grafana (containers in the sibling
+  `vps` repo) plus a chromium kiosk:
+  `docs/superpowers/specs/2026-09-09-statusboard-to-grafana-design.md` (`bf790bf`),
+  not implemented. Three statusboard facts have **no exporter equivalent** and must
+  stay a custom textfile collector: the Dell battery charge window, per-bay disk
+  naming from `disks.latitude5520.conf`, and "expected but unmounted" detection —
+  the check that catches a dropped USB dock.
+
+### Other boxes' host facts (parked here — their `host-memory.md` is branch-scoped)
+
+These were harvested on g15 and belong in `desktop` / `desktop-wsl` / `latitude`
+host memory, which is not writable from this box. Move them when a refresh next
+runs there; until then this is their only home.
+
+**desktop-wsl — the Docker Desktop family.** The cross-distro socket share
+`/mnt/wsl/docker-desktop/shared-sockets/host-services/` can silently lose its bind
+mount (docker/for-win#8032), hanging every `docker` call inside the distro while
+`docker.exe` from Windows still works; fix is `docker.exe desktop restart`. After a
+restart the per-distro integration agent can die writing the credstore
+(`wsl.exe -d <distro> -e sh -c "cat - > ~/.docker/config.json"`, `Wsl/Service/0x8007274c`
+at exactly 30 s), which stops `/var/run/docker.sock` ever being recreated —
+pre-fill `~/.docker/config.json` with `{"credsStore":"desktop.exe"}` so DD skips
+that write. **Never kill a hand-started `docker-desktop-user-distro proxy`**: it
+unlinks the socket path and orphans DD's own listener, tearing down the whole
+integration. **A torn-down integration never self-heals** while the toggle still
+reads enabled — check `%LOCALAPPDATA%\Docker\log\host\com.docker.backend.exe.log`
+for fresh `wsldistroproxy` lines, not `docker ps`. DD's backend log is timestamped
+**UTC** while the box is `+0500`, which once made one teardown look like two. And
+DD's "Skip WSL distro integration" button is persistent, not a dismissal — it
+writes `EnableIntegrationWithDefaultWslDistro: false` into `settings-store.json`.
+
+**desktop.** RDP with a bare Microsoft-account UPN fails NLA silently and looks
+exactly like a wrong password; the working forms are `MicrosoftAccount\<email>` or
+`g614jv\methe`. The client caches one credential per PC entry and reuses it even
+after retyping. `Orca.exe` holds a Windows `DISPLAY` power request (visible in
+`powercfg /requestsoverride`), keeping the screen on regardless of the power plan.
+The box has no S3, only Modern Standby, so the AC **"Sleep after"** timer — not the
+screen-off timer — is what pulls it under once the screen darkens; it must be Never
+for "screen off, agents keep running". Wake-on-LAN is wired-only (Realtek GbE,
+`S5WakeOnLan=1`); the AX211 Wi-Fi has no working WoWLAN, and as of 2026-08-31 the
+cable was on a different L2 segment (APIPA). `.wslconfig` raised `memory=` 16→40 GB
+(host 63.6 GiB) and that ceiling is **VM-wide** across every distro plus the DD
+backend, not per-distro. desktop carries TWO dotfiles instances —
+`/home/me/.dotfiles` (branch `desktop-wsl`) and `C:\Users\methe\.dotfiles` (branch
+`desktop`); a Windows-only file like `.wslconfig` belongs on the latter.
+
+**latitude.** Deleting a movie/series in *arr only removes the library-side
+hardlink — the qBittorrent copy stays and nothing reclaims the space, because *arr
+stops tracking a torrent once imported (only 3 of 46 live torrents were in Radarr's
+queue). To find what is actually freeable, check link count under `torrents/`
+(n=1 is an orphan) and use `st_blocks*512`, not `st_size`, for in-progress
+downloads. Enabling qBittorrent's ratio auto-delete is safe for the library
+(verified: 25 torrents removed with files, `df` unchanged, 0 missing files) but it
+puts a deadline on any stuck `importPending` item that used to sit safe forever.
+qBittorrent's WebUI returns `Forbidden` for API calls from localhost
+(`AuthSubnetWhitelist=100.64.0.0/24`) — call it via `--interface 100.64.0.8`. And
+**the dual-dock disconnects were confirmed by the owner on 2026-09-11 as real home
+power outages**, not the brief voltage dips previously assumed — which moves UPS
+selection from AVR-only toward runtime/autonomy plus USB NUT monitoring for a
+graceful shutdown.
