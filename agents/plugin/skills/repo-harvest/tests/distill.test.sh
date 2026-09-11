@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the kb-refresh distiller's behavioural cases under plain python3.
+# Runs the repo-harvest distiller's behavioural cases under plain python3.
 #
 # distill.py is not a local script: fleet-gather.sh `cat`s it over ssh to every
 # fleet box and runs it there, and its watermark/merge logic decides which

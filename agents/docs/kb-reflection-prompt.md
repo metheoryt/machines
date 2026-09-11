@@ -1,3 +1,12 @@
+> **SUPERSEDED 2026-09-11 by the `memory-consolidate` skill** (which was
+> `/dream` from its first commit `4077307` and never said what it replaced).
+> Kept for its reasoning, not as instructions.
+>
+> The scope boundary below still holds — this job owns shared fleet memory and
+> does not touch per-repo docs. What changed: it proposes into a queue with a
+> ledger instead of editing directly, and `/memory-consolidate-apply` is the
+> only half that writes.
+
 # Fleet memory reflection prompt
 
 Prompt for the weekly reflection cron job. Runs **once for the whole fleet**, on

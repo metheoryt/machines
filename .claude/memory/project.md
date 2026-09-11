@@ -280,7 +280,7 @@ global + per-host). One bullet per fact under a topical heading.
   (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `g513ie`↔`server`), so
   "is this host me?" can't be decided by comparing `hostname` to an alias
   string — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
-  `kb-refresh` self-exclusion does.
+  `repo-harvest` self-exclusion does.
 - **Hostname-normalization convention — spec approved 2026-07-19, DONE
   2026-07-20**
   (`docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md`).
@@ -301,8 +301,8 @@ global + per-host). One bullet per fact under a topical heading.
   with a stale-scoped rule would otherwise leave the old scope in place.
 - **Fleet dispatch is platform-aware, via
   `agents/plugin/skills/lib/fleet-dispatch.sh`** (`fd_probe`/`fd_run`/
-  `fd_wsl_hosts`, sourced by `/ship`'s `fleet-pull.sh` and kb-refresh's
-  `fleet-gather.sh`). `/ship` + kb-refresh reach every fleet host's
+  `fd_wsl_hosts`, sourced by `/ship`'s `fleet-pull.sh` and repo-harvest's
+  `fleet-gather.sh`). `/ship` + repo-harvest reach every fleet host's
   `$HOME/machines` clone: Windows-native members (`desktop`, `server`) via Git
   Bash dispatched through PowerShell's call operator (live-verified
   2026-07-22), and self-declared WSL hosts — never in `fleet.json` — via
@@ -724,7 +724,7 @@ global + per-host). One bullet per fact under a topical heading.
   stale address — so `ssh latitude` died with `No route to host` while
   `tailscale ping latitude` was direct in 3 ms and `ssh latitude.gg.ez` worked.
 - `fd_probe` renders that as `SKIP unreachable`, and the run stays green. Every
-  `/ship` and kb-refresh from g15 had been skipping latitude silently. **A SKIP
+  `/ship` and repo-harvest from g15 had been skipping latitude silently. **A SKIP
   row is a claim about the network; check it against `tailscale ping` before
   believing it** — same lesson as the five quiet weeks on desktop-wsl.
 - Fixed in `d7427db`: both renderers (`ssh_wsl_render_config`,
@@ -1363,7 +1363,7 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   interactive-probing trap. To measure btop's layout use a sized pty
   (`tmux new-session -d -x <cols> -y <rows>` then `capture-pane -p`), which ends
   when the session does.
-- `/cyphy:kb-refresh` (`agents/plugin/skills/kb-refresh/`) mines per-machine
+- `/cyphy:repo-harvest` (`agents/plugin/skills/repo-harvest/`) mines per-machine
   Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
   JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
@@ -1377,7 +1377,7 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
     and WSL projects roots, and stamps digests with the fleet `detect.hostname`.
     Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
   - Operational gotchas (invocation paths, digest pruning, self-exclusion, slug
-    reuse, the Lane 1/Lane 2 write targets): *## kb-refresh / fleet-gather.sh
+    reuse, the Lane 1/Lane 2 write targets): *## repo-harvest / fleet-gather.sh
     gotchas* below — demoted out of `global.md` 2026-09-11, where 10.2 KB about
     one script in this repo was loading on every box.
 - The Orca worktree dispatchers are `agents/worktree-setup.sh` (Setup hook) and
@@ -3353,7 +3353,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   состояние с работающим таймером это объясняло бы, но доказательства нет, и
   «environmental» это не диагноз.
 
-## kb-refresh / fleet-gather.sh gotchas (demoted from global.md 2026-09-11)
+## repo-harvest / fleet-gather.sh gotchas (demoted from global.md 2026-09-11)
 
 - **Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives
   `SKILL_DIR` with a plain `cd … && pwd` (logical, not `-P`), so when the skill is
@@ -3361,7 +3361,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   `~/.claude/fleet.json` — which does not exist. `fleet_hosts` then returns empty
   and the whole run degrades to **local-only with no warning**, indistinguishable
   from "no fleet configured". Use
-  `~/machines/agents/plugin/skills/kb-refresh/fleet-gather.sh` or
+  `~/machines/agents/plugin/skills/repo-harvest/fleet-gather.sh` or
   `FLEET_JSON=$HOME/machines/fleet.json`.
 - **The remote digest dir `~/.cache/kb-digests` is never pruned**, and the pull is
   `tar cf - .` over the whole dir, so every run re-delivers previous runs' digests
@@ -3376,7 +3376,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   against each host's reported `digests_written` (the numbers must sum), because
   a stale remote digest can carry a newer mtime than a fresh local one.
 - **Self-exclusion is by OS hostname, which a WSL distro shares with its Windows
-  parent.** Running kb-refresh inside WSL on `g614jv` prints `[desktop] is this
+  parent.** Running repo-harvest inside WSL on `g614jv` prints `[desktop] is this
   box, skipping self` and never harvests the Windows-native
   `/c/Users/<user>/.claude/projects` profile. Run it from the Windows side to
   cover those sessions.
@@ -3384,7 +3384,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   `~/.claude/skills/cyphy` symlink, because the kernel resolves `..` physically
   after following the symlink — a logical `pwd` only affects the string, not what
   the OS opens. Verified on `g614jv` (WSL): `SKILL_DIR` printed
-  `/home/me/.claude/skills/cyphy/skills/kb-refresh`, and
+  `/home/me/.claude/skills/cyphy/skills/repo-harvest`, and
   `$SKILL_DIR/../../../../fleet.json` opened `/home/me/machines/fleet.json`. So the
   local-only degradation is not universal — it presumably needs a path layer that
   normalizes `..` lexically (MSYS/Git Bash) or a copied rather than symlinked skill
@@ -3453,7 +3453,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   — where agents actually work — goes on loading the pre-refresh copy from `main`,
   and the gap widens by one commit per run with nothing flagging it. Seen on
   airdrome 2026-07-28: several consecutive `docs(kb): refresh` commits stacked on
-  `metheoryt/ubuntu26-airdrome-kb-refresh-daily` while `/home/me/my/airdrome`
+  `metheoryt/ubuntu26-airdrome-repo-harvest-daily` while `/home/me/my/airdrome`
   `main` still sat at `ff21a95`. The behaviour is the same in every repo — the
   cron prompt has no merge step at all — so a repo whose refresh commits *have*
   reached `main` (qaz-code's `c5ec625`) only got there because someone worked in
@@ -3471,7 +3471,7 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   paths: `~/.claude/memory/global.md` and
   `~/.claude/memory/personality/{tone,habits,values,practices}.md` on dotfiles
   `main` (shared, byte-identical everywhere), `~/.claude/host-memory.md` on each
-  machine's own branch. `agents/plugin/skills/kb-refresh/` survived the move, so
+  machine's own branch. `agents/plugin/skills/repo-harvest/` survived the move, so
   the `fleet-gather.sh` invocation path above is still correct. The harvest
   prompt, the reflection prompt and the skill's tier table all pointed at the
   dead paths for a day and were re-pointed on 2026-07-29 (`1340072`, `35a5244`).
@@ -3516,7 +3516,7 @@ two-failure-mode tell — stay in `global.md` under *Fleet SSH reachability*.
   `ssh -G air` resolved to the stock `identityfile ~/.ssh/id_rsa …` with no
   `id_fleet` and no `accept-new`; under `BatchMode=yes` that dies as a bare
   `Host key verification failed.` and `fd_probe` files it as plain "unreachable" —
-  meaning `fleet-selfpull`, `/ship`'s `fleet-pull.sh` and kb-refresh's
+  meaning `fleet-selfpull`, `/ship`'s `fleet-pull.sh` and repo-harvest's
   `fleet-gather.sh` had all been skipping `air` from that box. **Not a renderer bug:**
   `ssh_wsl_render_config` iterates every `.machines` entry unfiltered, so the block
   was simply written before `air` joined (it also predated the 2026-07-29
@@ -3536,16 +3536,16 @@ two-failure-mode tell — stay in `global.md` under *Fleet SSH reachability*.
     fleet key body was already present and only the `methe@methe-server` comment was
     stale (cosmetic, the box is `g513ie` now), so the sudo run was unnecessary.
 
-## kb-refresh 2026-09-11 — what the fleet transcripts held (Track A + B)
+## repo-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)
 
 ### The harvest machinery itself
 
-- **Run `/dream` BEFORE `kb-refresh` on the same box.** Dream's queued items carry
+- **Run `/memory-consolidate` BEFORE `repo-harvest` on the same box.** Dream's queued items carry
   verbatim replacement text keyed to a memory file's *pre-harvest* content;
-  kb-refresh appending to the same file invalidates those replacements. (The
+  repo-harvest appending to the same file invalidates those replacements. (The
   `manifest.tsv` correction above is from the same run.)
 - **latitude has no `~/.claude/projects` directory at all**, so the services host
-  contributes zero transcripts to every kb-refresh — absence, not failure. Don't
+  contributes zero transcripts to every repo-harvest — absence, not failure. Don't
   chase it as a broken dispatch.
 - **Transcripts had a 30-day expiry until 2026-09-10.** `agents/settings.json` now
   sets `cleanupPeriodDays: 90` (Claude Code's silent default is 30), added after
@@ -3718,7 +3718,7 @@ power outages**, not the brief voltage dips previously assumed — which moves U
 selection from AVR-only toward runtime/autonomy plus USB NUT monitoring for a
 graceful shutdown.
 
-## kb-refresh 2026-09-11, air addendum — 14 sessions, 2026-07-31..08-31
+## repo-harvest 2026-09-11, air addendum — 14 sessions, 2026-07-31..08-31
 
 Air was unreachable on the first pass and harvested on a second. Its window
 predates most of the above, so what survived dedup is mostly machinery nobody

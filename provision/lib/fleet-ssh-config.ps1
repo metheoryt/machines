@@ -5,7 +5,7 @@
 # SERVER side (sshd, administrators_authorized_keys, firewall), so the Windows
 # members had no ~/.ssh/config fleet block. `ssh latitude` there fell through to
 # the local username and failed with `methe@latitude: Permission denied`, which
-# took fd_run — and so /ship's fleet-pull and kb-refresh's fleet-gather — with it.
+# took fd_run — and so /ship's fleet-pull and repo-harvest's fleet-gather — with it.
 #
 # Why not reuse provision/ssh-wsl.sh's renderer: it is jq-based, and Git Bash on
 # these boxes has no jq (verified on server, 2026-07-29). PowerShell parses JSON

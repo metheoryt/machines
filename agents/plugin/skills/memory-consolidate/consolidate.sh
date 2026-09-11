@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Mechanics for the /dream skill: discover the memory stores, index them, and
+# Mechanics for the /memory-consolidate skill: discover the memory stores, index them, and
 # enforce the decision queue's identity + suppression rules.
 #
 # The judgement lives in SKILL.md. Everything here is deterministic, so it can
 # be tested and so an unattended nightly run cannot re-derive it wrong.
 #
 # INVARIANT — the whole point of the skill: this script writes ONLY under
-# $DREAM_ROOT. It never touches a memory store, a transcript, or kb-refresh's
+# $CONSOLIDATE_ROOT. It never touches a memory store, a transcript, or repo-harvest's
 # watermark. Read paths are read-only by construction (cat/awk/wc).
 set -euo pipefail
 
-DREAM_ROOT="${DREAM_ROOT:-$HOME/machines/docs/dream}"
-QUEUE="$DREAM_ROOT/queue.md"
-LEDGER="$DREAM_ROOT/ledger.tsv"
-RUNS="$DREAM_ROOT/runs"
+CONSOLIDATE_ROOT="${CONSOLIDATE_ROOT:-$HOME/machines/docs/memory-consolidate}"
+QUEUE="$CONSOLIDATE_ROOT/queue.md"
+LEDGER="$CONSOLIDATE_ROOT/ledger.tsv"
+RUNS="$CONSOLIDATE_ROOT/runs"
 
 _sha() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi
@@ -26,7 +26,7 @@ _dotfiles() { git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"; }
 
 usage() {
   cat <<'USAGE'
-usage: dream.sh <command> [args]
+usage: consolidate.sh <command> [args]
 
   paths                      print queue/ledger/runs locations
   scan                       TSV of every memory store: path, bytes, scope, sections
@@ -40,18 +40,18 @@ usage: dream.sh <command> [args]
   append <id> <item-file>    append an item to the queue unless already open/decided
   decide <id> <state> <reason> [file] [phrase]
                              record applied|rejected in the ledger and cut the
-                             item out of the queue (used by /dream-apply).
+                             item out of the queue (used by /memory-consolidate-apply).
                              file+phrase let `verify` re-check it later.
   verify                     for every applied decision: ok | drifted | missing
                              | unverifiable — did the change actually stay?
 
-Env: DREAM_ROOT (default $HOME/machines/docs/dream)
+Env: CONSOLIDATE_ROOT (default $HOME/machines/docs/memory-consolidate)
 USAGE
 }
 
 cmd_paths() {
   printf 'root\t%s\nqueue\t%s\nledger\t%s\nruns\t%s\n' \
-    "$DREAM_ROOT" "$QUEUE" "$LEDGER" "$RUNS"
+    "$CONSOLIDATE_ROOT" "$QUEUE" "$LEDGER" "$RUNS"
 }
 
 # shared = on dotfiles origin/main (a change there is fleet-wide)
@@ -186,14 +186,14 @@ cmd_append() {
   fi
   head -1 "$src" | grep -q "^## $id " || {
     echo "dream: item file must start with '## $id '" >&2; exit 2; }
-  mkdir -p "$DREAM_ROOT"
+  mkdir -p "$CONSOLIDATE_ROOT"
   if [ ! -f "$QUEUE" ]; then
     cat > "$QUEUE" <<'HDR'
 # dream — open decisions
 
-Written by `/dream`, applied by `/dream-apply`. **Append-only from the run's
+Written by `/memory-consolidate`, applied by `/memory-consolidate-apply`. **Append-only from the run's
 side**: a run never rewrites or reorders an existing item, so notes added by
-hand survive. An item leaves this file only through `dream.sh decide`.
+hand survive. An item leaves this file only through `consolidate.sh decide`.
 HDR
   fi
   printf '\n' >> "$QUEUE"
@@ -208,7 +208,7 @@ HDR
 cmd_decide() {
   local id="$1" state="$2" reason="${3:-}" file="${4:-}" phrase="${5:-}"
   case "$state" in applied|rejected) ;; *) echo "dream: state must be applied|rejected" >&2; exit 2 ;; esac
-  mkdir -p "$DREAM_ROOT"
+  mkdir -p "$CONSOLIDATE_ROOT"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$state" "$(date +%F)" "$reason" "$file" "$phrase" >> "$LEDGER"
   if [ -f "$QUEUE" ] && grep -q "^## $id " "$QUEUE"; then
     # Stop at the next ITEM header, not at any "## ". An item's replacement text

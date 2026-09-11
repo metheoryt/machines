@@ -80,7 +80,7 @@ ssh_wsl_sanitize() {
 # `latitude.lan` = 192.168.8.154 from the router — a stale address — and died with
 # `No route to host` while `tailscale ping latitude` answered direct in 3 ms and
 # `ssh latitude.gg.ez` connected fine. fd_probe reports that as `SKIP unreachable`,
-# so every /ship and kb-refresh run from that box had been silently skipping
+# so every /ship and repo-harvest run from that box had been silently skipping
 # latitude. The FQDN is what we mean; spell it out rather than hoping the search
 # domain wins the race.
 #
@@ -90,7 +90,7 @@ ssh_wsl_sanitize() {
 # `methe`. There a block with no User line made ssh fall back to the local name
 # and every connection to a default-user member failed with
 # `methe@latitude: Permission denied`, taking fd_run — and so /ship's fleet-pull
-# and kb-refresh's fleet-gather — down with it. Omitting a line to mean "the
+# and repo-harvest's fleet-gather — down with it. Omitting a line to mean "the
 # default" only works when every box shares that default; spelling it out costs
 # one line per block and cannot be wrong.
 # (modules/home/ssh.nix carried the same rule and is now moot: latitude was the

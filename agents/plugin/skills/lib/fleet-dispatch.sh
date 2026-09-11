@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fleet-dispatch.sh — platform-aware remote-bash dispatch for fleet tools.
-# Sourced by fleet-pull.sh (/ship) and fleet-gather.sh (kb-refresh). Sourcing has
+# Sourced by fleet-pull.sh (/ship) and fleet-gather.sh (repo-harvest). Sourcing has
 # no side effects. Test override: SSH (the ssh command; default "ssh").
 #
 # Why this exists: an `ssh <windows-member> bash …` lands in C:\Windows\System32\

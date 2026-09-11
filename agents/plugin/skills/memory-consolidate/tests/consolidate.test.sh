@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Behavior tests for dream.sh — the mechanics behind /dream. Everything here
-# runs against a throwaway DREAM_ROOT and a throwaway store; no real memory
+# Behavior tests for consolidate.sh — the mechanics behind /memory-consolidate. Everything here
+# runs against a throwaway CONSOLIDATE_ROOT and a throwaway store; no real memory
 # store is read or written.
 set -u
 HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$HERE/../dream.sh"
+SCRIPT="$HERE/../consolidate.sh"
 fail=0
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -12,14 +12,14 @@ trap 'rm -rf "$tmp"' EXIT
 pass() { echo "PASS $1"; }
 die()  { echo "FAIL $1"; fail=1; }
 
-export DREAM_ROOT="$tmp/dream"
+export CONSOLIDATE_ROOT="$tmp/memory-consolidate"
 D() { bash "$SCRIPT" "$@"; }
 
 # --- paths -------------------------------------------------------------------
 out="$(D paths)"
 case "$out" in
-  *"$tmp/dream/queue.md"*) pass "paths honours DREAM_ROOT" ;;
-  *) die "paths honours DREAM_ROOT: $out" ;;
+  *"$tmp/memory-consolidate/queue.md"*) pass "paths honours CONSOLIDATE_ROOT" ;;
+  *) die "paths honours CONSOLIDATE_ROOT: $out" ;;
 esac
 
 # --- id: stable, and sensitive to each of its three inputs -------------------
@@ -57,7 +57,7 @@ printf '## %s · delete · %s\n\n- **why:** test\n' "$id" "$store" > "$item"
 
 # THE discriminating check: a second run must file nothing.
 [ "$(D append "$id" "$item" | cut -f1)" = suppressed ] && pass "an open item is suppressed" || die "an open item is suppressed"
-[ "$(grep -c "^## $id " "$DREAM_ROOT/queue.md")" -eq 1 ] && pass "suppression leaves one copy" || die "suppression leaves one copy"
+[ "$(grep -c "^## $id " "$CONSOLIDATE_ROOT/queue.md")" -eq 1 ] && pass "suppression leaves one copy" || die "suppression leaves one copy"
 
 # append refuses an item file whose first line is not its own id
 bad="$tmp/bad.md"; printf '## deadbeef · delete · x\n' > "$bad"
@@ -70,8 +70,8 @@ printf '## %s · merge · %s\n\n- **why:** second\n' "$id2" "$store" > "$item2"
 D append "$id2" "$item2" >/dev/null
 
 D decide "$id" applied "landed" >/dev/null
-grep -q "^## $id " "$DREAM_ROOT/queue.md" && die "decide cuts the item out" || pass "decide cuts the item out"
-grep -q "^## $id2 " "$DREAM_ROOT/queue.md" && pass "decide leaves other items alone" || die "decide leaves other items alone"
+grep -q "^## $id " "$CONSOLIDATE_ROOT/queue.md" && die "decide cuts the item out" || pass "decide cuts the item out"
+grep -q "^## $id2 " "$CONSOLIDATE_ROOT/queue.md" && pass "decide leaves other items alone" || die "decide leaves other items alone"
 [ "$(D status "$id")" = "$(printf 'decided\tapplied')" ] && pass "an applied id reads decided" || die "an applied id reads decided: $(D status "$id")"
 # An item's replacement text is a memory-store section, so it routinely contains
 # "## " headings. `decide` must cut past them to the next ITEM header — a bare
@@ -84,12 +84,12 @@ item3="$tmp/item3.md"
 printf '## %s · compress · %s\n\n- **replacement:**\n## Embedded Store Heading\n- body line\n- **first seen:** 2026-01-01\n' "$id3" "$store" > "$item3"
 D append "$id3" "$item3" >/dev/null
 D decide "$id3" applied "landed" >/dev/null
-grep -q '^## Embedded Store Heading' "$DREAM_ROOT/queue.md" \
+grep -q '^## Embedded Store Heading' "$CONSOLIDATE_ROOT/queue.md" \
   && die "decide cuts past a ## heading inside the item" \
   || pass "decide cuts past a ## heading inside the item"
-grep -q 'first seen: 2026-01-01' "$DREAM_ROOT/queue.md" \
+grep -q 'first seen: 2026-01-01' "$CONSOLIDATE_ROOT/queue.md" \
   && die "decide leaves no orphan tail" || pass "decide leaves no orphan tail"
-grep -q "^## $id2 " "$DREAM_ROOT/queue.md" \
+grep -q "^## $id2 " "$CONSOLIDATE_ROOT/queue.md" \
   && pass "cutting past a ## heading still spares the next item" \
   || die "cutting past a ## heading still spares the next item"
 
@@ -98,18 +98,18 @@ grep -q "^## $id2 " "$DREAM_ROOT/queue.md" \
 
 D decide "$id2" rejected "not worth it" >/dev/null
 [ "$(D append "$id2" "$item2" | cut -f1)" = suppressed ] && pass "a REJECTED item never returns" || die "a rejected item never returns"
-grep -q 'not worth it' "$DREAM_ROOT/ledger.tsv" && pass "the ledger keeps the reason" || die "the ledger keeps the reason"
+grep -q 'not worth it' "$CONSOLIDATE_ROOT/ledger.tsv" && pass "the ledger keeps the reason" || die "the ledger keeps the reason"
 
 D decide "$id" bogus "x" >/dev/null 2>&1 && die "decide refuses an unknown state" || pass "decide refuses an unknown state"
 
-# --- the invariant: nothing is written outside DREAM_ROOT --------------------
+# --- the invariant: nothing is written outside CONSOLIDATE_ROOT --------------------
 # The store the whole run was pointed at must be byte-identical afterwards.
 printf '# Title\n\nintro\n\n## Alpha\n- one\n\n## Beta\n- two\n- three\n' > "$tmp/expect.md"
 cmp -s "$store" "$tmp/expect.md" && pass "no memory store was modified" || die "no memory store was modified"
 
-# Every file dream.sh created lives under DREAM_ROOT.
-stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$DREAM_ROOT/*" ! -name 'store.md' ! -name 'flat.md' ! -name 'verified.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
-[ -z "$stray" ] && pass "dream.sh wrote only under DREAM_ROOT" || die "dream.sh wrote only under DREAM_ROOT: $stray"
+# Every file consolidate.sh created lives under CONSOLIDATE_ROOT.
+stray="$(find "$tmp" -newer "$SCRIPT" -type f ! -path "$CONSOLIDATE_ROOT/*" ! -name 'store.md' ! -name 'flat.md' ! -name 'verified.md' ! -name 'item*.md' ! -name 'bad.md' ! -name 'expect.md' 2>/dev/null)"
+[ -z "$stray" ] && pass "consolidate.sh wrote only under CONSOLIDATE_ROOT" || die "consolidate.sh wrote only under CONSOLIDATE_ROOT: $stray"
 
 # --- instructions: same shape, symlinks resolved and deduped ------------------
 ins="$(D instructions)"
@@ -142,7 +142,7 @@ echo "$v" | grep -q "^drifted	vvvv0002" && pass "verify: vanished text reads dri
 echo "$v" | grep -q "^missing	vvvv0003" && pass "verify: absent file reads missing" || die "verify: absent file reads missing"
 echo "$v" | grep -q "vvvv0004" && die "verify skips rejected rows" || pass "verify skips rejected rows"
 # a 4-column legacy row must not crash or lie
-printf 'vvvv0005\tapplied\t2026-01-01\told row\n' >> "$DREAM_ROOT/ledger.tsv"
+printf 'vvvv0005\tapplied\t2026-01-01\told row\n' >> "$CONSOLIDATE_ROOT/ledger.tsv"
 D verify | grep -q "^unverifiable	vvvv0005" && pass "verify: a legacy row is unverifiable, not ok" || die "verify: legacy row"
 
 # --- branches: other boxes' memory, read from the bare repo ------------------

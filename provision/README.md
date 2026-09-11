@@ -439,7 +439,7 @@ radius if `C:\Users\<winuser>\.fleet` is ever read.
 
 Half-provision a WSL distro as a first-class, self-declaring fleet host in one
 shot. It never becomes a `fleet.json` entry (its OS hostname collides with its
-Windows parent, and it's disposable) — but `/ship` and kb-refresh discover and
+Windows parent, and it's disposable) — but `/ship` and repo-harvest discover and
 reach it automatically once it's declared:
 
     just provision-wsl <nickname>
@@ -467,14 +467,14 @@ distros share one network namespace). A `dispatch:parent` distro has no node
 of its own and is reached through its Windows parent instead.
 
 **Discovery is automatic, no `fleet.json` edit needed.** `/ship`
-(`fleet-pull.sh`) and kb-refresh (`fleet-gather.sh`) both source the shared
+(`fleet-pull.sh`) and repo-harvest (`fleet-gather.sh`) both source the shared
 `agents/plugin/skills/lib/fleet-dispatch.sh` helper, which — for every Windows
 `fleet.json` member — enumerates its WSL distros (`wsl -l -q`) and reads each
 one's `$HOME/machines/fleet.local.json`; any distro with `.self.fleet == true`
 is pulled: directly at `<nickname>.gg.ez` if `dispatch:direct`, or as
 `wsl.exe -d <distro>` through its Windows parent if `dispatch:parent`. A
 distro that ran `provision-wsl` is reachable on the very next `/ship` or
-kb-refresh run. (This WSL-discovery path is implemented but not yet exercised
+repo-harvest run. (This WSL-discovery path is implemented but not yet exercised
 end-to-end on a live box; the Windows-native dispatch path in
 `fleet-dispatch.sh` — reaching `desktop`/`server`'s own
 `C:\Users\<winuser>\machines` clone — has been.)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agents/plugin/skills/kb-refresh/tests/fleet-gather.test.sh
+# agents/plugin/skills/repo-harvest/tests/fleet-gather.test.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../fleet-gather.sh"
