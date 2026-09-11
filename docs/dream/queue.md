@@ -203,27 +203,6 @@ hand survive. An item leaves this file only through `dream.sh decide`.
 - **replacement:** (none — deletion after both carries)
 - **first seen:** 2026-09-11
 
-## 98c3201a · demote · /home/me/.claude/memory/global.md
-
-- **action:** demote · **scope:** shared → repo:card-processing
-- **apply on:** whichever box has the `card-processing` checkout — **not g15**.
-- **why:** this is **not** a backend-api row — it is about the `card-processing`
-  checkout, whose audit doc (`wsa-code-audit-2026-08-24.md`) already sits beside it, and
-  the section's own text draws the boundary ("Pure specifics stay in that repo… don't put
-  Pure billing internals in these memory files"). A biographical/one-repo section does not
-  need to be on every fleet box every session.
-- **evidence:** global.md:1468-1495 · its own boundary statement at global.md:1475-1479
-- **bytes:** 2177 → 0 in global
-- **carry first:** verbatim `sed -n '1468,1495p'` (unmodified store) written to
-  `<card-processing checkout>/.claude/memory/project.md` as `## What this project is, and
-  what the audit found (2026-08-24)`. **Two bullets must survive verbatim wherever it
-  lands** — they are what prevents a future wrong attribution:
-  `**AES-ECB for PAN-at-rest was the project head's decision, not his.**` and
-  `**Three of seven audit findings needed context that exists nowhere in the repo** … Ask
-  him before concluding on a decision that looks odd in this codebase.`
-- **replacement:** (none — deletion after the carry)
-- **first seen:** 2026-09-11
-
 ## 8dd3022d · demote · /home/me/.claude/memory/global.md
 
 - **action:** demote · **scope:** shared → host (desktop)
