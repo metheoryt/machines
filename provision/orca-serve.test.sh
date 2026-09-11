@@ -55,6 +55,28 @@ eq "$(want 0     "$tmp/pv-wsl")"    no  'autostart: 0 refuses it even on WSL'
 eq "$(want no    "$tmp/pv-wsl")"    no  'autostart: no is an alias of 0'
 eq "$(want maybe "$tmp/pv-wsl")"    err 'autostart: an unknown value is exit 2, not a default'
 
+# ── orca_install_mode: the shape follows the box, not the caller's habit ──────
+# desktop must NOT unpack the AppImage: electron-updater's install path is gated
+# on $APPIMAGE, which only the AppImage runtime sets, so an unpacked Orca checks
+# for updates forever and installs none (g15, 1.4.197 vs the fleet's 1.4.200).
+mode() { orca_install_mode "$1" "$2" || echo err; }
+
+eq "$(mode auto    "$tmp/pv-wsl")"    serve   'mode: auto + WSL → unpacked serve layout'
+eq "$(mode auto    "$tmp/pv-native")" desktop 'mode: auto + native → whole AppImage'
+eq "$(mode serve   "$tmp/pv-native")" serve   'mode: serve forced on a native box'
+eq "$(mode desktop "$tmp/pv-wsl")"    desktop 'mode: desktop forced inside WSL'
+eq "$(mode sideways "$tmp/pv-wsl")"   err     'mode: an unknown value is exit 2, not a default'
+
+# ── orca_appimage_name: the basename is the whole bug, in both directions ─────
+# desktop: electron-updater writes the release asset's own basename and unlinks
+# the file it replaced when the running one carries a version triplet — so a
+# version-named file self-updates once and deletes what the launcher execs.
+# serve: a name that never varies is a cache that never misses (2026-09-07).
+eq "$(orca_appimage_name desktop 1.4.200)" 'orca-linux.AppImage'  'name: desktop takes the asset basename'
+eq "$(orca_appimage_name desktop '')"      'orca-linux.AppImage'  'name: desktop name does not depend on the version'
+eq "$(orca_appimage_name serve   1.4.200)" 'orca-1.4.200.AppImage' 'name: serve keys the cache by the resolved tag'
+orca_appimage_name bogus 1.2.3 >/dev/null 2>&1 && fail 'name: an unknown mode must be exit 2' || :
+
 # ── The script must not write through a symlink ────────────────────────────────
 # How the launcher got clobbered by hand on 2026-09-07: `cat > path` follows a
 # symlink and truncates its TARGET. orca-serve.sh already guarded its own
@@ -72,5 +94,19 @@ grep -q 'orca_want_autostart "\$ORCA_SERVE_AUTOSTART"' "$here/orca-serve.sh" \
   || fail 'main no longer calls orca_want_autostart — the autostart gate is dead code'
 grep -q 'if \[ "\$WANT_UNIT" = 0 \]; then' "$here/orca-serve.sh" \
   || fail 'the WANT_UNIT branch around the unit install is gone'
+
+# The mode guards, same rule: defined-but-unconsulted is how a dead guard hides.
+grep -q 'MODE="\$(orca_install_mode "\$ORCA_INSTALL_MODE")"' "$here/orca-serve.sh" \
+  || fail 'main no longer calls orca_install_mode — the desktop/serve split is dead code'
+grep -q 'AI="\$ORCA_DIR/\$(orca_appimage_name "\$MODE" "\$VER")"' "$here/orca-serve.sh" \
+  || fail 'the AppImage path no longer comes from orca_appimage_name'
+grep -q 'Exec=\$AI %U' "$here/orca-serve.sh" \
+  || fail 'the .desktop entry no longer execs the AppImage itself — self-update breaks'
+grep -q 'rm -f "\$DESKTOP_FILE"' "$here/orca-serve.sh" \
+  || fail 'the rm -f before `cat > $DESKTOP_FILE` is gone — a stale symlink would be written through'
+# A forced serve unit must drag the layout with it: the unit execs the CLI
+# wrapper, which only the unpacked mode writes.
+grep -q 'if \[ "\$WANT_UNIT" = 1 \] && \[ "\$MODE" = desktop \]; then' "$here/orca-serve.sh" \
+  || fail 'ORCA_SERVE_AUTOSTART=1 no longer forces the serve layout — the unit would exec a missing wrapper'
 
 echo "PASS: orca-serve.test.sh"

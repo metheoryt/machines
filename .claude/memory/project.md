@@ -3867,3 +3867,45 @@ revisited since.
   starts and any container started before that snapshots the dead `127.0.0.53`
   stub. That was the root cause of the 2026-08-03 fleet-wide indexer DNS outage —
   alongside, and distinct from, the mount-ordering failure from the same reboot.
+
+## Orca on g15 never self-updates: an EXTRACTED AppImage cannot (2026-09-12)
+
+- **Symptom:** g15 sat on 1.4.197 while air/desktop were on 1.4.200, with no
+  update prompt. **Cause, from Orca's own log** (`~/.cache/orca-gui.log`):
+  `[autoUpdater] APPIMAGE env is not defined, current application is not an
+  AppImage`. The updater *checks* fine — the same log shows it resolving
+  `…/releases/download/v1.4.198` — it just can never apply. `/proc/<pid>/environ`
+  of the running process has no `APPIMAGE`, because `provision/orca-serve.sh`
+  installs by `--appimage-extract` and the launcher ran
+  `~/.local/opt/orca/squashfs-root/AppRun`. electron-updater's AppImage path is
+  gated on `$APPIMAGE`, which only the real AppImage runtime sets.
+- **This is the L2368 class on a new box with a different mechanism**: there a
+  cache key never missed, here the runtime cannot install at all. Both look like
+  "updates are fine" from outside.
+- **Fix applied on g15:** the 1.4.200 AppImage lives at
+  `~/.local/opt/orca/orca-linux.AppImage` and `~/.local/share/applications/orca-ide.desktop`
+  `Exec=` points straight at it (backup `.bak-1.4.197` beside it). **The basename
+  is load-bearing** — electron-updater writes the downloaded asset's own name
+  (`orca-linux.AppImage`) and unlinks the old file when the current basename
+  carries a version triplet and differs, so `orca-1.4.200.AppImage` would have
+  self-updated and deleted the file the launcher names.
+- FUSE is fine on Ubuntu 26.04 with **fuse3 only** (no libfuse2) — measured, the
+  AppImage self-mounts. The `.deb` is NOT the answer: electron-updater's
+  DebUpdater shells out to sudo and g15 has no NOPASSWD.
+- **Closed the same day:** `orca-serve.sh` now has two shapes —
+  `ORCA_INSTALL_MODE` (`auto` → `desktop` off WSL, `serve` on it), pinned by
+  `orca_install_mode` / `orca_appimage_name` and 7 mutation-tested assertions.
+  Desktop keeps the AppImage whole, writes the `.desktop` entry with
+  `Exec=<AppImage>`, installs no CLI wrapper (Orca writes its own shim at first
+  launch, and that one IS AppImage-aware — its generator reads `$APPIMAGE` /
+  `$APPDIR` because a mount path changes every launch) and needs no tailnet, so
+  the tailscale precondition moved under the serve branch. `ORCA_SERVE_AUTOSTART=1`
+  still drags the layout back to `serve`, since the unit execs the unpacked CLI.
+- Two things that only a live run finds: the version of a desktop install must be
+  read **out of the AppImage** (`--appimage-extract orca-ide.desktop`, 3 ms, no
+  FUSE) because the app rewrites that file when it self-updates and any sidecar
+  note would go stale the first time it worked; and the AppImage root's
+  `orca-ide.png` is a **symlink** into `usr/share/icons`, so extracting that name
+  alone yields a dangling link — extract the real path.
+- The Ubuntu "restart to finish updating" prompt is apt/unattended-upgrades and
+  has nothing to do with Orca; apt's `orca` 50.2 is the GNOME screen reader.

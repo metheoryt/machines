@@ -9,12 +9,18 @@
 # needs) is bundled inside. We extract it headlessly with --appimage-extract
 # (no FUSE, no root) and symlink the CLI onto PATH.
 #
+# It also installs Orca on a NATIVE Linux desktop (mode `desktop`), where the
+# shape is deliberately the opposite — see orca_install_mode below for why an
+# unpacked tree can never self-update.
+#
 # Idempotent; safe to re-run. Serve autostarts via a systemd *user* unit +
 # linger, mirroring provision/linux.sh's git-autofetch pattern.
 #
 # Usage (inside the distro, AFTER tailscale-wsl.sh):
 #   bash ~/machines/provision/orca-serve.sh
 #   ORCA_VERSION=1.2.3 bash ~/machines/provision/orca-serve.sh   # pin a version
+#   ORCA_INSTALL_MODE=desktop bash ~/machines/provision/orca-serve.sh
+#                                        # force the GUI shape (auto: not WSL)
 set -u
 
 info() { printf '\033[0;36m▸ %s\033[0m\n' "$*"; }
@@ -71,6 +77,50 @@ orca_want_autostart() {   # <auto|1|0> [path-to-proc-version]
   esac
 }
 
+# Which install SHAPE this box gets. The two are not variants of one install:
+#
+#   serve   — unpack the AppImage (--appimage-extract) and run the bundled CLI
+#             out of squashfs-root. No FUSE, no display, and a path that never
+#             moves, which is what a headless `orca serve` under systemd needs.
+#   desktop — keep the AppImage whole and launch THAT. Orca's in-app updater is
+#             electron-updater, whose AppImage install path is gated on
+#             $APPIMAGE — a variable only the real AppImage runtime sets. Launch
+#             an unpacked tree and every check ends in "[autoUpdater] APPIMAGE
+#             env is not defined, current application is not an AppImage": it
+#             still asks GitHub, it just can never install what it finds. g15 sat
+#             on 1.4.197 that way while the rest of the fleet ran 1.4.200, with
+#             no visible error anywhere (2026-09-12).
+#
+# Exit 2 means the caller passed a value this function does not understand.
+orca_install_mode() {   # <auto|desktop|serve> [path-to-proc-version]
+  case "$1" in
+    desktop) printf 'desktop\n' ;;
+    serve)   printf 'serve\n' ;;
+    auto)    if orca_is_wsl "${2:-/proc/version}"; then printf 'serve\n'; else printf 'desktop\n'; fi ;;
+    *)       return 2 ;;
+  esac
+}
+
+# What the AppImage on disk is CALLED — load-bearing, and for opposite reasons in
+# the two modes.
+#
+# desktop: the file must carry the release asset's own basename. When
+#   electron-updater installs an AppImage it writes the downloaded asset under
+#   ITS name and unlinks the file it replaced whenever the running basename
+#   carries a version triplet and differs. So orca-1.4.200.AppImage would
+#   self-update exactly once and delete the very path the .desktop entry execs —
+#   a launcher that breaks at the NEXT release, not at install time.
+# serve: nothing ever rewrites that file, and a name that never varies is the
+#   cache key that never missed — the 2026-09-07 bug where `orca-latest.AppImage`
+#   made nine days of upgrade runs green no-ops. Key it by the resolved tag.
+orca_appimage_name() {   # <desktop|serve> <version>
+  case "$1" in
+    desktop) printf 'orca-linux.AppImage\n' ;;
+    serve)   printf 'orca-%s.AppImage\n' "$2" ;;
+    *)       return 2 ;;
+  esac
+}
+
 # Allow sourcing just the functions (for tests) without running main.
 [ "${ORCA_SERVE_LIB_ONLY:-0}" = 1 ] && return 0 2>/dev/null
 
@@ -83,16 +133,51 @@ case "$(uname -m)" in x86_64|amd64) : ;; *) die "x86_64 only; this box is $(unam
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then have sudo || die "not root and sudo not found."; SUDO="sudo"; fi
 
-have tailscale || die "tailscale not found — run provision/tailscale-wsl.sh first."
-TSIP="$(tailscale ip -4 2>/dev/null | head -1)"
-[ -n "$TSIP" ] || die "no tailnet IPv4 — run provision/tailscale-wsl.sh first."
-ok "tailnet IP: $TSIP"
+ORCA_INSTALL_MODE="${ORCA_INSTALL_MODE:-auto}"
+MODE="$(orca_install_mode "$ORCA_INSTALL_MODE")" \
+  || die "ORCA_INSTALL_MODE must be auto, desktop or serve (got '$ORCA_INSTALL_MODE')"
+
+# Resolved HERE rather than next to the unit install, because a forced serve unit
+# also decides the install shape: the unit execs the CLI wrapper, which exists
+# only in the unpacked layout. ORCA_SERVE_AUTOSTART=1 on a native box is the
+# headless-Linux case orca_want_autostart documents — it must still get `serve`.
+ORCA_SERVE_AUTOSTART="${ORCA_SERVE_AUTOSTART:-auto}"
+orca_want_autostart "$ORCA_SERVE_AUTOSTART"
+case $? in
+  0) WANT_UNIT=1 ;;
+  1) WANT_UNIT=0 ;;
+  *) die "ORCA_SERVE_AUTOSTART must be auto, 1 or 0 (got '$ORCA_SERVE_AUTOSTART')" ;;
+esac
+if [ "$WANT_UNIT" = 1 ] && [ "$MODE" = desktop ]; then
+  MODE=serve
+  warn "ORCA_SERVE_AUTOSTART=$ORCA_SERVE_AUTOSTART forces the serve layout (the unit needs the unpacked CLI)"
+fi
+ok "install mode: $MODE"
+
+# Only the serve path needs the tailnet: it exists to be reached from ANOTHER
+# box. A desktop install is a local GUI and must not be refused on a box that
+# has no tailscale.
+TSIP=""
+if [ "$MODE" = serve ]; then
+  have tailscale || die "tailscale not found — run provision/tailscale-wsl.sh first."
+  TSIP="$(tailscale ip -4 2>/dev/null | head -1)"
+  [ -n "$TSIP" ] || die "no tailnet IPv4 — run provision/tailscale-wsl.sh first."
+  ok "tailnet IP: $TSIP"
+fi
 
 # ── Electron runtime deps (best-effort; names vary across releases) ───────────
 # _apt_try installs the FIRST existing package name from its args; warns if none.
 _apt_try() {
   local p
   for p in "$@"; do
+    # Ask dpkg before reaching for sudo. A desktop box already has every Electron
+    # dep, and on a box with no NOPASSWD sudo (g15) the install silently fails —
+    # so without this the run prints "none of [libnss3] installed" sixteen times
+    # about libraries that are all present.
+    if dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'ok installed'; then
+      ok "dep $p (present)"; return 0
+    fi
+    _apt_update_once
     if $SUDO apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1; then
       ok "dep $p"; return 0
     fi
@@ -101,7 +186,15 @@ _apt_try() {
 }
 info "Installing Electron runtime libs…"
 export DEBIAN_FRONTEND=noninteractive
-$SUDO apt-get update -qq || warn "apt-get update failed — dep install may be stale"
+# Refreshed lazily, on the first dep that actually needs installing: a box where
+# everything is already present (any desktop) would otherwise pay for an apt
+# refresh — and warn about it failing — to install nothing.
+APT_UPDATED=0
+_apt_update_once() {
+  [ "$APT_UPDATED" = 1 ] && return 0
+  APT_UPDATED=1
+  $SUDO apt-get update -qq || warn "apt-get update failed — dep install may be stale"
+}
 _apt_try libnss3
 _apt_try libgbm1
 _apt_try libgtk-3-0t64 libgtk-3-0
@@ -117,7 +210,17 @@ _apt_try libxdamage1
 _apt_try libxrandr2
 _apt_try libxfixes3
 _apt_try libpango-1.0-0
-_apt_try xvfb   # fallback virtual display for headless Electron
+# xvfb is the serve path's fallback display for headless Electron; a desktop box
+# has a real session and does not need it.
+[ "$MODE" = serve ] && _apt_try xvfb
+if [ "$MODE" = desktop ]; then
+  # An AppImage mounts ITSELF with FUSE at every launch, so the desktop mode has
+  # a dependency the serve mode does not. Ubuntu 26.04 ships fuse3 and no
+  # libfuse2, and Orca's runtime is happy with it (measured on g15 2026-09-12) —
+  # so only install when the box has neither, and warn rather than die: the
+  # AppImage still runs with --appimage-extract-and-run without any of them.
+  if have fusermount3 || have fusermount; then ok "FUSE present"; else _apt_try fuse3 libfuse2t64 libfuse2; fi
+fi
 
 # ── Download + extract the AppImage (headless, no FUSE) ───────────────────────
 # The cache is keyed by the RESOLVED tag, never by the string "latest". Until
@@ -138,6 +241,24 @@ _installed_ver() {
   sed -n 's/^X-AppImage-Version=v\{0,1\}//p' "$APPDIR/orca-ide.desktop" 2>/dev/null | head -1
 }
 
+# The desktop mode unpacks nothing, so there is no orca-ide.desktop to read —
+# and it must not keep its own note of the version either, because the APP
+# rewrites that AppImage when it self-updates and any sidecar would go stale the
+# first time it worked. Ask the file itself: `--appimage-extract <entry>` unpacks
+# a single entry (3 ms, no FUSE, no mount), cheap enough to do on every run.
+_appimage_ver() {   # <path-to-appimage>
+  [ -x "$1" ] || return 0
+  local t; t="$(mktemp -d)"
+  ( cd "$t" && "$1" --appimage-extract orca-ide.desktop >/dev/null 2>&1 )
+  sed -n 's/^X-AppImage-Version=v\{0,1\}//p' "$t/squashfs-root/orca-ide.desktop" 2>/dev/null | head -1
+  rm -rf "$t"
+}
+
+_current_ver() {
+  if [ "$MODE" = desktop ]; then _appimage_ver "$ORCA_DIR/$(orca_appimage_name desktop '')"
+  else _installed_ver; fi
+}
+
 REQ="${ORCA_VERSION:-latest}"
 if [ "$REQ" = latest ]; then
   VER="$(curl -fsSL https://api.github.com/repos/stablyai/orca/releases/latest 2>/dev/null \
@@ -145,7 +266,7 @@ if [ "$REQ" = latest ]; then
   if [ -z "$VER" ]; then
     # Rate-limited or offline. Stay on what is installed rather than guessing —
     # never re-download blind, and never leave the box without a runtime.
-    VER="$(_installed_ver)"
+    VER="$(_current_ver)"
     [ -n "$VER" ] || die "could not resolve the latest Orca release and none is installed."
     warn "GitHub release lookup failed — staying on the installed $VER"
   fi
@@ -153,14 +274,17 @@ else
   VER="${REQ#v}"
 fi
 URL="https://github.com/stablyai/orca/releases/download/v${VER}/orca-linux.AppImage"
-AI="$ORCA_DIR/orca-${VER}.AppImage"
-INSTALLED="$(_installed_ver)"
+AI="$ORCA_DIR/$(orca_appimage_name "$MODE" "$VER")"
+INSTALLED="$(_current_ver)"
 ok "Orca target $VER (installed: ${INSTALLED:-none})"
 
-if [ "$INSTALLED" = "$VER" ] && [ -x "$APPDIR/AppRun" ]; then
-  ok "Orca $VER already extracted — nothing to download or unpack"
+if [ "$INSTALLED" = "$VER" ] && { [ "$MODE" = desktop ] || [ -x "$APPDIR/AppRun" ]; }; then
+  ok "Orca $VER already installed — nothing to download"
 else
-  if [ -f "$AI" ]; then
+  if [ -f "$AI" ] && [ "$MODE" != desktop ]; then
+    # Safe only because the serve name carries the resolved tag. In desktop mode
+    # the name is constant by design, so "the file exists" says nothing about
+    # WHICH version it is — INSTALLED above already read that from the file.
     ok "AppImage present: $AI"
   else
     info "Downloading Orca AppImage ($VER)…"
@@ -170,6 +294,15 @@ else
     mv "$AI.part" "$AI"
   fi
   chmod +x "$AI"
+
+  if [ "$MODE" = desktop ]; then
+    # Nothing to unpack: the AppImage IS the install. A running Orca keeps the
+    # old inode mounted, so the swap is safe — it just does not take effect
+    # until the app is quit and relaunched.
+    pgrep -f 'orca-ide( |$)' >/dev/null 2>&1 \
+      && warn "Orca is running — quit and relaunch it to pick up $VER"
+    ok "AppImage in place: $AI"
+  else
 
   # The live orca-serve.service execs a binary INSIDE squashfs-root, so the tree
   # cannot be swapped under it — stop it first. Which manager owns the unit is
@@ -199,6 +332,72 @@ else
     if [ -n "$OLD" ]; then rm -rf "$APPDIR"; mv "$OLD" "$APPDIR"; warn "restored the previous Orca tree"; fi
     die "--appimage-extract failed."
   fi
+  fi   # end of the desktop/serve split inside the install block
+fi
+
+# ── Desktop: the launcher, and then we are done ───────────────────────────────
+# Exec must name the AppImage ITSELF, never an extracted AppRun — see
+# orca_install_mode: $APPIMAGE is what the in-app updater is gated on, and only
+# the AppImage runtime sets it. Orca rewrites this entry with the same shape when
+# it integrates itself at first launch, so writing it here only matters on a box
+# that has never opened Orca — which is every fresh one.
+if [ "$MODE" = desktop ]; then
+  APPS="$HOME/.local/share/applications"; mkdir -p "$APPS"
+  ICONDIR="$HOME/.local/share/icons/hicolor/512x512/apps"; mkdir -p "$ICONDIR"
+  # Extract the icon by its REAL path, not the AppImage root's `orca-ide.png` —
+  # that one is a symlink into usr/share/icons, so extracting it alone yields a
+  # dangling link and the copy fails with ENOENT (caught by the smoke run of
+  # this branch, 2026-09-12).
+  ICONSRC='usr/share/icons/hicolor/512x512/apps/orca-ide.png'
+  if [ ! -f "$ICONDIR/orca-ide.png" ]; then
+    ICONTMP="$(mktemp -d)"
+    if ( cd "$ICONTMP" && "$AI" --appimage-extract "$ICONSRC" >/dev/null 2>&1 ) \
+       && cp "$ICONTMP/squashfs-root/$ICONSRC" "$ICONDIR/orca-ide.png" 2>/dev/null; then
+      ok "icon → $ICONDIR/orca-ide.png"
+    else
+      warn "could not extract the app icon — the launcher entry will show a generic one"
+    fi
+    rm -rf "$ICONTMP"
+  fi
+
+  DESKTOP_FILE="$APPS/orca-ide.desktop"
+  rm -f "$DESKTOP_FILE"   # never write THROUGH a symlink (same rule as $CLI_PATH)
+  cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Name=Orca
+Exec=$AI %U
+Terminal=false
+Type=Application
+Icon=orca-ide
+StartupWMClass=orca
+X-AppImage-Version=$VER
+Comment=Next-gen IDE for parallel agentic development
+MimeType=text/markdown;x-scheme-handler/orca;
+Categories=Utility;
+EOF
+  update-desktop-database "$APPS" >/dev/null 2>&1 || true
+  ok "launcher → $DESKTOP_FILE"
+
+  # No CLI wrapper here on purpose. Ours points into squashfs-root, which this
+  # mode does not create; Orca writes its own shim at first launch
+  # (~/.config/orca/linux-orca-cli-shim/orca) and that one is AppImage-aware —
+  # its generator reads $APPIMAGE/$APPDIR precisely because a mount path changes
+  # every launch. It is named orca-ide there for the same reason orca_cli_name
+  # steps aside: /usr/bin/orca is GNOME's screen reader.
+  if [ -d "$APPDIR" ]; then
+    warn "an unpacked tree from a previous serve-mode install is still at $APPDIR"
+    warn "  it is what an existing CLI shim points at — rm -rf it only after the AppImage launch is proven"
+  fi
+
+  cat <<EOF
+
+Orca $VER installed as a self-updating AppImage.
+  • Launch it from the app menu, or:  $AI
+  • It updates itself from here on — the check is \$APPIMAGE-gated, which an
+    unpacked install can never satisfy.
+  • No headless serve on this box; the window itself is the runtime.
+EOF
+  exit 0
 fi
 
 # ── Expose the orca CLI on PATH ───────────────────────────────────────────────
@@ -294,17 +493,10 @@ ok "serve wrapper → ~/.local/bin/orca-serve-start"
 # GUI out). ORCA_SERVE_AUTOSTART=1 forces it anyway — for a headless Linux box
 # with no session to open a window in, which is a real case and the only reason
 # this is an override rather than a hard refusal.
-ORCA_SERVE_AUTOSTART="${ORCA_SERVE_AUTOSTART:-auto}"
-orca_want_autostart "$ORCA_SERVE_AUTOSTART"
-case $? in
-  0) WANT_UNIT=1 ;;
-  1) WANT_UNIT=0 ;;
-  *) die "ORCA_SERVE_AUTOSTART must be auto, 1 or 0 (got '$ORCA_SERVE_AUTOSTART')" ;;
-esac
-
+# WANT_UNIT was decided up with the install mode; see there.
 if [ "$WANT_UNIT" = 0 ]; then
   JOURNAL="(no autostart unit on this box — run: $CLI_NAME serve --port 6768)"
-  ok "not a WSL distro — skipping the orca-serve autostart unit"
+  ok "autostart not wanted here — skipping the orca-serve unit"
   warn "no desktop session on this box? force it: ORCA_SERVE_AUTOSTART=1 bash $0"
 else
 # Preferred: a user unit + linger (mirrors linux.sh's git-autofetch). But WSL's

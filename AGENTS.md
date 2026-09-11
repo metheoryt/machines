@@ -97,6 +97,16 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
     one-instance-per-userData lock and the desktop app cannot open at all. The
     script gates that on WSL since `63472aa`; the box was in exactly that state
     for a day.
+  - **The same script now installs the GUI too, and the two shapes are
+    opposites** (`ORCA_INSTALL_MODE`, auto: `desktop` off WSL). Serve unpacks the
+    AppImage and runs the CLI out of `squashfs-root`; a desktop box must launch
+    the **whole AppImage**, because Orca's in-app updater is gated on `$APPIMAGE`
+    and an unpacked install can never satisfy it — it checks GitHub forever and
+    installs nothing, with no error anywhere. g15 sat on 1.4.197 that way while
+    the fleet ran 1.4.200. The AppImage's basename is load-bearing on that path:
+    electron-updater writes the release asset's own name and unlinks the file it
+    replaced, so a version-named file self-updates once and deletes what the
+    `.desktop` entry execs.
 
 The repo also carries the Windows reinstall bootstrap and runbook
 (`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
