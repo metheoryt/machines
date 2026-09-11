@@ -257,36 +257,6 @@ empty on air and absent on g15. The `~/.claude-personal` config dir and the
   box, not this file.
 - **first seen:** 2026-09-11
 
-## f1d3be7d · dedupe · /home/me/my/embedthat/CLAUDE.md
-
-- **action:** dedupe · **scope:** repo:embedthat
-- **survives:** `/home/me/my/embedthat/AGENTS.md`
-- **why:** `diff` shows CLAUDE.md and AGENTS.md differ **only** in the title line and one
-  sentence — ~12.8 KB paid **twice** in every embedthat session, because the harness
-  loads both. Adopt the airdrome pointer-stub pattern, already proven in this repo group.
-- **evidence:** `diff CLAUDE.md AGENTS.md` → `1c1 # CLAUDE.md / # AGENTS.md` and `3c3` only; sizes 12863 / 12856
-- **also fix in the same pass:** AGENTS.md:3 is a botched find-and-replace reading
-  *"This file provides guidance to Codex (Codex.ai/code)"*. Once CLAUDE.md is a pointer,
-  that mislabeled line becomes the canonical greeting every Claude session reads.
-  Replace it with: `This file provides guidance to Claude Code (claude.ai/code) and other agents when working with code in this repository.`
-- **bytes:** 12863 → 135 (−12728 per session)
-- **replacement:**
-See [AGENTS.md](AGENTS.md) for all project guidance. This file is a pointer kept for tooling that looks for `CLAUDE.md` by convention.
-- **first seen:** 2026-09-11
-
-## 9d35c9b2 · dedupe · /home/me/my/skep/CLAUDE.md
-
-- **action:** dedupe · **scope:** repo:skep
-- **survives:** `/home/me/my/skep/AGENTS.md`
-- **why:** skep's CLAUDE.md and AGENTS.md are **byte-identical**, so the harness loads the
-  same 914 B twice in every skep session. Same airdrome pointer-stub fix as embedthat —
-  smaller, but zero-risk and the diff is exact.
-- **evidence:** `diff ~/my/skep/CLAUDE.md ~/my/skep/AGENTS.md` → no output, rc=0; both 914 B
-- **bytes:** 914 → 135
-- **replacement:**
-See [AGENTS.md](AGENTS.md) for all project guidance. This file is a pointer kept for tooling that looks for `CLAUDE.md` by convention.
-- **first seen:** 2026-09-11
-
 ## 61aee193 · demote · /home/me/.claude/CLAUDE.md
 
 - **action:** demote · **scope:** shared → repo (employer) + global.md
@@ -304,25 +274,6 @@ See [AGENTS.md](AGENTS.md) for all project guidance. This file is a pointer kept
 Consequence now live: the default `--hook-mode deny` posture means `PreToolUse`
 blocks `Read`/`Grep`/`Glob` on *indexed* source and redirects to the graph
 tools. Anything recorded
-- **first seen:** 2026-09-11
-
-## 89560bba · generalise · /home/me/CLAUDE.md
-
-- **action:** generalise · **scope:** shared → fleet-wide (loaded in EVERY session under `$HOME`)
-- **why:** the enumeration names `server`, a branch that does not exist — renamed to
-  `g15` on 2026-08-27, "the only logical name ever renamed". It is also **incomplete in
-  the other direction**: `desktop-wsl` and `g15-wsl` have branches while appearing in no
-  `fleet.json`, so "one branch per machine" does not describe the set. Swapping
-  `server`→`g15` only defers the same staleness to the next rename, so the fix points at
-  `dotfiles branch -a` and keeps the rule sentence.
-- **evidence:** `~/CLAUDE.md`:54-56 · `dotfiles branch -a` → `air desktop desktop-wsl g15 g15-wsl hub latitude main` (no `server`) · `machines/AGENTS.md` on the rename and on self-declared WSL hosts
-- **bytes:** 224 → 395
-- **replacement:**
-- **`main`** — content shared across every machine, byte-identical everywhere.
-- **One branch per identity**, named by its **logical fleet name**, not the OS
-  hostname. Ask `dotfiles branch -a` rather than any list written here: `server`
-  was renamed to `g15` on 2026-08-27, and the set is wider than `fleet.json` —
-  self-declared WSL hosts (`desktop-wsl`, `g15-wsl`) carry branches too.
 - **first seen:** 2026-09-11
 
 ## 489f253b · contradiction · /home/me/my/qaz-code/CLAUDE.md
@@ -736,32 +687,6 @@ Layout *inside each scope repository* — 12 tier dirs. The 26 directories direc
   mechanism before building routing on it.
 - **first seen:** 2026-09-11
 
-## ed4baa7e · promote · /home/me/my/skep/.claude/memory/project.md
-
-- **action:** promote · **scope:** repo:skep → shared (global.md)
-- **survives:** `/home/me/.claude/memory/global.md` under the existing `## Harness behavior (empirical)` heading
-- **why:** both bullets are **`claude` CLI behaviour that applies in every repo on every
-  box**, not skep facts, and global.md carries neither. A harness fact buried in one
-  project store is a fact nobody else will find.
-- **evidence:** skep project.md:642-660 · `grep -n 'permission-prompt-tool\|input-format' ~/.claude/memory/global.md` → no matches (only `--resume … --model` at :723) · global.md:636
-- **carry first:** move skep project.md:644-660 **verbatim** into global.md under
-  `## Harness behavior (empirical)`.
-- **bytes:** 1061 → 765 in skep; +~1 KB in global.md
-- **replacement:** (what stays in the skep store:)
-## Gotchas
-
-- **Both former entries here were `claude` CLI behaviour, not skep facts, and
-  moved verbatim to `~/.claude/memory/global.md` under
-  `## Harness behavior (empirical)`:** `--permission-prompt-tool` was REMOVED in
-  `claude` 2.1.201, and `claude -p … --input-format stream-json` BLOCKS on stdin
-  until EOF. skep's two consequences stay here: a Phase-3 gated-ops brake must be
-  a **blocking `PreToolUse` hook** (allow/deny), never that flag; and **Phase 1
-  deliberately omits `--input-format` and uses `stdin=DEVNULL`**
-  (`agent.py._argv` / `start`), so the Phase-3 soft-steer must reintroduce
-  `--input-format stream-json` *and* actually write a stream-json user message to
-  stdin *and* keep the pipe managed — don't naively re-add the flag.
-- **first seen:** 2026-09-11
-
 ## cd0c04cc · contradiction · /home/me/.claude/host-memory.md
 
 - **action:** contradiction · **scope:** host (g15) · **apply on:** g15 — this box
@@ -817,43 +742,6 @@ in that repo.
   one database — **184 GB** as of 2026-09-07, plus 7.6 GB of built `laws/`.
 - `~/.cache/huggingface` holds the BGE-M3 weights (4.3 GB), downloaded here
   2026-09-07. Not a cache to clear — the repo store explains why.
-- **first seen:** 2026-09-11
-
-## b7426f5c · promote · /home/me/my/airdrome/.claude/memory/project.md
-
-- **action:** promote · **scope:** repo:airdrome → shared (global.md)
-- **why:** the third bullet says Docker is unreachable and therefore `uv run pytest`
-  *"cannot run from a worktree here at all"* — it describes the **`g614jv` WSL distro
-  destroyed 2026-09-07**, while airdrome now runs on **native Docker on g15**. The Docker
-  Desktop shim mechanism is still true of the live `desktop-wsl` and is **NOT** in
-  global.md (whose WSL/Docker section covers compose project-name collisions, a different
-  failure), so it must move up rather than be deleted.
-- **evidence:** airdrome project.md:20-24 · `command -v docker` → `/usr/bin/docker`, server
-  29.8.0; `docker ps` → `airdrome-db-1 Up 4 hours`; `git worktree list` → single entry ·
-  global.md:900-918 covers only project-name collisions
-- **bytes:** 1100 → 778 in airdrome; +~1 KB in global.md
-- **replacement:** (what stays in airdrome's store:)
-## Worktrees
-
-- A fresh worktree (Orca or plain `git worktree add`) starts **without `.venv` and
-  `.env`** — both are gitignored, so nothing carries over from the base checkout. No
-  `uv run` command works until you `uv sync` and create `.env` (`DB_DSN`, `LIBRARY_DIR`
-  — see README *Configuration*). The repo has no `.orca/worktree-setup.sh`, so this is
-  manual per worktree.
-- The test suite additionally needs the compose Postgres up (`docker compose up -d`,
-  port 5437). **On g15 (native Ubuntu, Docker 29.8.0 at `/usr/bin/docker`) this works
-  from any checkout** — verified 2026-09-11, `airdrome-db-1` up 4 h. The old "Docker
-  is unreachable, use another box" caveat described the destroyed `g614jv` WSL distro
-  and is now in global memory as a WSL-only trap.
-- **carry first — APPEND to `~/.claude/memory/global.md` under `## Docker Desktop shares one engine across all WSL distros`:**
-- **Inside a WSL distro, `command -v docker` succeeding proves nothing.** Docker
-  Desktop puts a shim on `PATH` in every distro, but if the distro is not enabled
-  in Docker Desktop's WSL integration list every invocation dies with
-  `The command 'docker' could not be found in this WSL 2 distro` — so a probe that
-  tests for the binary passes and the compose stack still cannot start. Test with a
-  real `docker version`/`docker ps`, never `command -v`. (Hit on the Ubuntu-26.04
-  distro on `g614jv`, which hosted Orca worktrees; a native-Docker Linux box has no
-  such split.)
 - **first seen:** 2026-09-11
 
 ## c84614b2 · compress · /home/me/my/qaz-code/.claude/memory/project.md
