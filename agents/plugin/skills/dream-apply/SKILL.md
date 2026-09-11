@@ -51,6 +51,21 @@ then delete the source.** Never the other way round. If the item names a
 "carry first" fact, that carry is what makes the delete safe — do it and read
 it back before touching the source.
 
+**An item names one site; the error may live at several.** Before applying a
+correction, grep the WHOLE store for the fact being corrected — the serial, the
+address, the filename, the claim — and fix or cut every occurrence in the same
+edit. A half-applied correction is worse than none: the store still contradicts
+itself, and the next reader has no way to tell which half is current. Three
+times in one session (2026-09-11, `runs/2026-09-11.md`): `51df5bf5` named 2
+sites of a swapped dock pair and there were **3** — the missed one said which
+physical box carries immich-2024; `031261e5` named 1 site of a wrong tailnet
+table and there were **2**; `2ae4f3c7` said 2 copies of a `gh pr edit` duplicate
+and there were **3**, the third carrying two facts the survivor lacked.
+**Corollary for a `dedupe`: the item's copy count is a lower bound, never the
+count.** And for a `contradiction`, the item's survivor pointer is a claim to
+check, not an address — confirm the survivor still exists *and* is still the
+fuller copy, especially when an earlier item in the same session moved it.
+
 ## Step 2b — A `skill` item is applied with `writing-skills`
 
 An item targeting `dream/SKILL.md` or `dream-apply/SKILL.md` is a change to how

@@ -192,11 +192,28 @@ What only this pass can see:
   measured 2026-09-11, `origin/g15` carried a `global.md` 1183 B bigger than
   main's. A branch *smaller* than main's is just lagging its next sync tick;
   that is not a finding. Compare against `origin/main`, not against each other.
-- **A retired box's branch can be the last copy of a fact.** `origin/server`
-  (2026-07-28) still holds a 4109 B `pure/backend-api/.claude/memory/project.md`
-  that exists on no live branch; `origin/g15-wsl` is likewise dead. This is
-  `values.md`'s *a file can be the last copy of a FACT* at fleet scale — extract
-  and carry, never archive wholesale and never delete blind.
+- **A retired box's branch can be the last copy of a fact — so run the check,
+  never trust a name.** This is `values.md`'s *a file can be the last copy of a
+  FACT* at fleet scale: extract and carry, never archive wholesale and never
+  delete blind. The check is blob hashes against `main`, per path:
+
+  ```bash
+  dotfiles ls-tree -r origin/<branch>          # run from $HOME — a relative
+  dotfiles ls-tree -r origin/main              # pathspec matches nothing here
+  dotfiles rev-list --left-right --count origin/main...origin/<branch>
+  ```
+
+  A branch whose blobs all match `main`'s and which is 0 ahead carries nothing;
+  a branch with commits `main` lacks may carry a last copy. **State the check,
+  not the expected result** — this paragraph used to name `origin/server` and
+  `origin/g15-wsl` as its two examples, and by 2026-09-11 `origin/server` had
+  been deleted and `g15-wsl` was an ancestor of `main` holding zero unique
+  content, so a run that trusted the text would have skipped the hashing on a
+  false premise. The live example is **`origin/desktop-wsl`**: 135 commits ahead
+  of `main`, holding `pure/backend-api/.claude/memory/project.md` at 58333 B,
+  tracked on no other branch and not on `main`. A **per-project store is the
+  thing a dotfiles branch can hold that `main` does not** — that is the class to
+  look for, not any particular branch.
 - **Two branches for one physical machine.** `desktop` (Windows-native) and
   `desktop-wsl` are the same box; so were `g15` and `g15-wsl`. Their
   `host-memory.md` files overlap by construction.
@@ -240,9 +257,31 @@ queue item, so applying half of it cannot lose the fact.
 
 ## Step 5 — Standing checks (every run, regardless of what pass 1/2 found)
 
-- **`core.md` budget.** It is injected verbatim into every session and Claude
-  Code truncates a hook's stdout near 3500 bytes. Over ~2000 bytes → file an
-  item; over 3000 → file it as urgent, with the compressed text ready.
+- **`core.md` budget — measure the INJECTED bytes, not the file bytes.** The
+  loader strips HTML comments, so the two differ (measured 2026-09-11: 3330 B on
+  disk, 2608 B injected — a 722 B gap that is pure header comment).
+
+  ```bash
+  wc -c ~/.claude/memory/core.md                                    # file bytes
+  bash ~/machines/agents/plugin/hooks/global-memory-load.sh \
+       ~/.claude core | wc -c                                       # injected
+  ```
+
+  **The two numbers answer different questions and must never be compared to
+  each other's threshold:**
+  - **~3.4 KB is the harness cap** on a hook's stdout — Claude Code persists
+    past it and injects only a preview. It applies to the **injected** number.
+    Over it, or within ~10% of it, the store is being truncated: urgent.
+  - **~2 KB is this repo's style budget** on **file** bytes
+    (`~/.claude/CLAUDE.md`, *Keep `core.md` under ~2 KB*). Over it is a
+    consolidation item, not an emergency.
+
+  Report both numbers in any item you file. **Never call a file-byte overage
+  "urgent" without the injected number beside it** — the 2026-09-11 run read
+  `wc -c` = 3004 against the stdout cap, filed it as near-truncation, and the
+  hook was emitting 2442 B at the time. Same trap on another box: a branch whose
+  `core.md` is 3385 B on disk may be well inside the cap or over it depending on
+  how much of that is comments, and only the loader can say.
 - **Unharvested transcripts.**
   ```bash
   jq '.sessions | length' ~/machines/.claude/kb-harvest-state.json
@@ -294,8 +333,33 @@ the item comes back forever.
 | input | where it comes from | example |
 |---|---|---|
 | `target` | `scan`/`instructions` column 1 — the **absolute** path, no `~`. For a `CLAUDE.md` that is a symlink this is the resolved real path (`machines/AGENTS.md`, not `machines/CLAUDE.md`) | `/home/me/.claude/memory/global.md` |
-| `anchor` | `index` column 3 — the heading text, no `##`, no backticks | `Pure logging — Grafana/Loki vs Kibana (updated 2026-08-26)` |
+| `anchor` | `index` column 3 — the heading text, no `##`, no backticks. See the anchor table below for findings `index` cannot name | `Pure logging — Grafana/Loki vs Kibana (updated 2026-08-26)` |
 | `action` | one word from the taxonomy below | `dedupe` |
+| `discriminator` | the finding's **first evidence line range**, `<basename>:<start>-<end>` | `global.md:1283-1364` |
+
+**The id is a four-tuple, and the discriminator is not optional.** Without it,
+`(target, anchor, action)` can express only one finding per section per action —
+and one section routinely holds several. The 2026-09-11 run hit this on its
+largest section: `Fleet network` (39 KB) produced **three** distinct
+`contradiction` findings and **three** distinct `delete` findings; `Repo tooling
+& scripts` three `delete`s; `Backups` two `contradiction`s. Every one after the
+first suppressed as `open` against its own sibling, and the run worked around it
+by merging them into one item with numbered `### Part N` sub-decisions — which
+breaks *one item, one decision* below and asks a human to accept half an item
+the ledger cannot represent. The line range is already in every finding's
+`evidence`, and it is stable for as long as the section is unedited, which is
+exactly as long as the finding is open.
+
+**Anchors for findings `index` cannot name.** `index` emits `##` rows only, so
+these four cases have a fixed convention — use it verbatim, because an anchor
+invented fresh each night is a new id each night:
+
+| finding | anchor |
+|---|---|
+| under a `###` | the **enclosing `##`**, with the `###` quoted in the `why` |
+| the whole file | `(whole file)` |
+| one branch | `(branch: <name>)` |
+| the shared set across the fleet | `(fleet: shared stores vs origin/main)` |
 
 Actions: `dedupe` · `demote` · `promote` · `generalise` · `compress` ·
 `delete` · `contradiction` · `harvest` · `untracked` · `skill` · `hook`. Do
