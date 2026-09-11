@@ -211,9 +211,17 @@ cmd_decide() {
   mkdir -p "$DREAM_ROOT"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$state" "$(date +%F)" "$reason" "$file" "$phrase" >> "$LEDGER"
   if [ -f "$QUEUE" ] && grep -q "^## $id " "$QUEUE"; then
+    # Stop at the next ITEM header, not at any "## ". An item's replacement text
+    # routinely contains "## " headings (it is a memory-store section), and a bare
+    # /^## / ended the cut there — leaving the rest of the item as orphan text in
+    # the queue, which reads like content belonging to the NEXT item. 92 such lines
+    # had accumulated by 2026-09-11.
+    # The " · " separator is deliberately NOT in the pattern: "·" is two bytes in
+    # UTF-8, so awk's "." matches half of it in a C locale and the header stops
+    # matching. Id-plus-space is enough — no store heading looks like that.
     awk -v i="$id" '
       $0 ~ "^## " i " " { cut = 1; next }
-      cut && /^## / { cut = 0 }
+      cut && /^## [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f] / { cut = 0 }
       !cut { print }
     ' "$QUEUE" > "$QUEUE.tmp" && mv "$QUEUE.tmp" "$QUEUE"
   fi

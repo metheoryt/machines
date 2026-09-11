@@ -93,57 +93,6 @@ wrong repo — this is the same contradiction still live in the memory store.
 
 - **first seen:** 2026-09-11
 
-## bf5d7852 · delete · /home/me/machines/.claude/memory/project.md
-
-- **action:** delete
-- **scope:** repo:machines
-- **target:** `/home/me/machines/.claude/memory/project.md`
-- **anchor:** `Fleet network` (L192, 39369 B)
-- **why:** three bullets that describe files verified absent, or state a rule naming
-  a file that cannot be edited. Each carries its own evidence; **accept or reject
-  each part independently.**
-
-### Part 1 — "Orca serve on WSL is all gone" is false
-`provision/orca-serve.sh` exists on disk today, and `AGENTS.md` records that this
-exact script held Electron's one-instance lock on g15 for a day. The bullet reads
-as permission to stop looking for it.
-- **evidence:** project.md:376-380 · `ls provision/orca-serve.sh` → present
-- **bytes:** 400 → 478
-- **replacement:**
-- **Orca `serve` on WSL is not how Orca runs any more (2026-07-21).** Orca runs
-  on the Windows host and opens the WSL project directly; the per-distro systemd
-  unit and the `~/.local/bin/orca` CLI shim are gone. **`provision/orca-serve.sh`
-  is NOT gone** — it still ships, and must not autostart where Orca runs natively
-  (g15): a headless `serve` holds Electron's one-instance-per-userData lock and
-  the desktop app cannot open at all. It gates on WSL since `63472aa`.
-
-### Part 2 — the third ssh-config implementation is gone
-Both bullets are about `modules/home/ssh.nix`, deleted with the Nix tree — and the
-first states a live rule ("apply hub changes in both places") naming a file that no
-longer exists, while the real second implementation is the PowerShell renderer.
-- **evidence:** project.md:270-272 · project.md:293-299
-- **bytes:** 748 → 378
-- **replacement:**
-- SSH config generation is implemented twice — `ssh_wsl_render_config`
-  (`provision/ssh-wsl.sh`, jq) and `Render-FleetSshConfig` (`lib/Fleet.psm1`) —
-  so any hub/jump-host or `HostName` rule change must land in both or one
-  platform drifts (see the 2026-09-08 `SKIP unreachable` section below). The
-  third implementation, `modules/home/ssh.nix`, went with the Nix tree.
-
-### Part 3 — the stub-role list is one role out of date
-`provision/roles/` now holds `backup-client.{sh,ps1}` and `backup-hub.sh`, and
-`provision.sh:72` sets `PLANNED_ROLES="base ssh-server"`. The undeclared-role
-`--apply` guard is the load-bearing half and is missing from the record.
-- **evidence:** project.md:557 · `provision/provision.sh`:72
-- **bytes:** 80 → 241
-- **replacement:**
-  `base`/`ssh-server` remain UNIMPLEMENTED and are named in `provision.sh`'s
-  `PLANNED_ROLES`, so an undeclared role with no executor now fails `--apply`;
-  `backup-client` (`.sh` + `.ps1`) and `backup-hub` got real executors
-  2026-09-01.
-
-- **first seen:** 2026-09-11
-
 ## 51df5bf5 · contradiction · /home/me/machines/.claude/memory/project.md
 
 - **action:** contradiction · **scope:** repo:machines
@@ -193,56 +142,6 @@ The only durable fact in the three bullets is the offsite gap.
   came BACK on 2026-08-01, so the 2026-07-31 "no restic repo is planned at all"
   in the strategy bullet below is dead: see *The backup topology, rebuilt
   2026-08-01* for what latitude actually runs.
-
-- **first seen:** 2026-09-11
-
-## 5980c12b · delete · /home/me/machines/.claude/memory/project.md
-
-- **action:** delete · **scope:** repo:machines
-- **target:** `/home/me/machines/.claude/memory/project.md` · **anchor:** `Repo tooling & scripts` (L1204, 26839 B)
-- **why:** three blocks describing files and recipes verified absent on disk. Accept/reject each part independently.
-
-### Part 1 — the three `orca-profile-*.sh` scripts (3664 B → 0)
-Both bullets describe `agents/orca-profile-harvest.sh` / `-link.sh` / `-sync.sh`
-and `just agent-sync-orca`, all deleted 2026-09-09. Verified absent; no `just`
-recipe; no `~/.claude-profiles` on this box. The surviving fact — bootstrap
-**refuses** an Orca account dir (exit 3) — is already kept by the next bullet at 1534.
-- **evidence:** project.md:1487-1533 · `ls agents/orca-profile-*` → absent
-- **bytes:** 3664 → 0 · **replacement:** (none — deletion)
-
-### Part 2 — the `.nix`-era updaters (911 B → 409 B)
-`modules/`, `scripts/update-orca.sh`, `scripts/update-rustdesk.sh`, `just update`,
-`just update-orca` and `hosts/server/` all verified absent. Only the winget half survives.
-- **evidence:** project.md:1357-1361 · project.md:1414-1421
-- **bytes:** 911 → 409
-- **replacement:**
-- `hosts/desktop/windows/winget-packages.json` is a full `winget export` snapshot
-  of that laptop's installed state — and it is the only one left; the
-  `hosts/server/` counterpart went with the decommission. The `.nix`-era updaters
-  are gone too (`orca-bin.nix`, `update-orca.sh`, `update-rustdesk.sh`, `just
-  update`/`just upgrade`); `just update-gortex` is the only survivor and is
-  described below.
-
-### Part 3 — kb-refresh's Windows arm names a dead member (937 B → 894 B)
-The sub-bullet names "server=methe-server" as a Windows fleet member. `server` was
-renamed 2026-08-27 and that box is Ubuntu since 2026-09-07; `fleet.json` has
-exactly one `platform: windows` member. The plural framing sends a reader looking
-for a second Windows harvest target that cannot exist.
-- **evidence:** project.md:1362-1373 · `fleet.json`
-- **bytes:** 937 → 894
-- **replacement:**
-- `/cyphy:kb-refresh` (`agents/plugin/skills/kb-refresh/`) mines per-machine
-  Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
-  JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
-  (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
-  `fleet-gather.sh` distills in-place on other fleet boxes and copies back
-  only digests (via `cat`/`tar`, never raw transcripts).
-  - Its Windows arm dispatches on `fleet.json` `platform: windows`, and
-    **`desktop` is the only such member** (g15 is `debian` since 2026-09-07;
-    `server` has not existed since 2026-08-27). It bash-wraps every remote command
-    (Windows ssh lands in PowerShell), transports state/digests over `cat`/`tar`,
-    and stamps digests with the fleet `detect.hostname`. Design:
-    `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
 
 - **first seen:** 2026-09-11
 
@@ -456,22 +355,6 @@ unimplemented, when it got an executor 2026-09-01. Only `base` and `ssh-server` 
 - **evidence:** project.md:1604-1610 · `ls flake.nix` → No such file · `f3d63b2 feat!: delete the NixOS tree; rehome its two live inputs`
 - **bytes:** 615 → 0
 - **replacement:** (none — deletion)
-- **first seen:** 2026-09-11
-
-## Cross-machine memory writes
-
-- **You cannot write another box's host memory.** Per-host files are
-  branch-scoped, one per machine, so from any box another machine's copy is
-  readable but not writable:
-  `git --git-dir=$HOME/.dotfiles --work-tree=$HOME show origin/<machine>:.claude/host-memory.md`.
-  A `host:<name>` candidate for a box you are not sitting on has to be reported,
-  not written.
-- **There is no per-project tier in the dotfiles store.** Repo-specific facts go
-  to that repo's own `.claude/memory/project.md` and nowhere else.
-- **kb-refresh self-exclusion is by OS hostname, which a WSL distro shares with
-  its Windows parent** — so a run inside WSL prints `is this box, skipping self`
-  and never harvests the Windows-native profile. Run it from the Windows side to
-  cover those sessions.
 - **first seen:** 2026-09-11
 
 ## 8e41cba2 · demote · /home/me/.claude/memory/global.md
@@ -704,35 +587,6 @@ empty on air and absent on g15. The `~/.claude-personal` config dir and the
   wrapper setting `CLAUDE_CONFIG_DIR` per repo were both superseded 2026-09-09 and
   were never built. Per-machine account layout is a host-memory fact — check the
   box, not this file.
-- **first seen:** 2026-09-11
-
-## Profile bootstrap gotchas
-
-- **Never run a profile bootstrap from inside a git worktree.** It can repoint
-  the profile symlinks (`~/.claude`, `~/.codex`) into that worktree, which breaks
-  them the moment the worktree is removed. Fix by deleting any symlink whose
-  target contains the worktree path, then re-running bootstrap from the real
-  checkout.
-- **first seen:** 2026-09-11
-
-## Root-vs-user git, and watching a repo for pulls (learned 2026-07-21)
-
-- **A root process building over a `me`-owned git repo fails with libgit2 error 7
-  "repository path is not owned by current user".** libgit2 IGNORES the
-  `GIT_CONFIG_COUNT/KEY/VALUE` env trio (that only steers the git CLI), so
-  exporting `safe.directory` into the environment does nothing. Fix: put
-  `safe.directory = <repo>` in a real gitconfig file root reads — e.g. a systemd
-  `ExecStartPre` doing `git config --global --replace-all safe.directory <repo>`
-  (HOME=/root ⇒ /root/.gitconfig). A dry run as `me` never reproduces it; only the
-  root path does. (Found under `nixos-rebuild`'s `git+file://` flake fetcher, which
-  the fleet no longer has — the libgit2 rule is not Nix-specific.)
-- **A systemd `.path` unit watching `.git/ORIG_HEAD` silently misses pulls.**
-  (a) A fast-forward `git pull` doesn't reliably rewrite ORIG_HEAD; (b) git
-  rewrites it via atomic rename-replace, staling systemd's inotify watch after
-  the first event (classic "first fire lands, second is missed"). Watch
-  `.git/logs/HEAD` instead — appended in place (stable inode) on every HEAD
-  advance, ff included; refs-only `git fetch` and read-only git calls don't
-  append to it, so no spurious/self fires.
 - **first seen:** 2026-09-11
 
 ## f1d3be7d · dedupe · /home/me/my/embedthat/CLAUDE.md
@@ -974,53 +828,6 @@ carrying `immich-2024` and `immich-mirror` is the flaky one — it logged 24
   credentials non-interactively — Wayland-native unattended RDP with no
   rendezvous server at all. Rejected only because RustDesk is one tool across
   Windows/macOS/Linux/Android; it stays the fallback if the preview regresses.
-- **first seen:** 2026-09-11
-
-## User
-
-- **Максим Романюк** (Maxim Romanyuk), Алматы. Senior Python backend, 10+ лет;
-  с марта 2026 — Pure App. `linkedin.com/in/cyphy`. ИБ — бэкграунд, не
-  специализация. Детали, голос → global.md `## User`.
-
-## Register — in-session replies to him
-
-<!-- REGISTER-REINJECT:START -->
-- **Answer first: line 1 is what he acts on, or the end state.** He learned to
-  skip to the bottom for the point — my defect, not his habit.
-- **The screen test: cut whatever the tool calls he watched already show.**
-  Named classes — lineage ("since 0.65.0…"), identifiers he did not ask for,
-  narration of my reasoning. ~80% of a bad reply, burying the 20%.
-- **Keep the load-bearing why — a contradicted assumption, a hard constraint.**
-  The genuinely surprising stays; cutting the tutorial is not cutting reasoning.
-- **~15 lines, each earning its place; longer needs a nameable reason.** Steps
-  he runs, a security warning, an explicit ask — not a skill's "report" step.
-<!-- REGISTER-REINJECT:END -->
-- **A correction in one surface binds every surface.** Settled four times, each
-  record too narrow — generalize at the broadest true scope.
-- Overflow → memory / commit / the screen; report end state, his decision, what
-  I did NOT do. tone.md is **archive**: only the bullets above re-inject, so
-  read it before writing as him.
-
-## Non-negotiable (personality/values.md)
-
-- **Never destroy the last copy of a secret**, however reconstructable it looks.
-- Proven-redundant copies get deleted, not parked — but the gate is proof
-  (content hashes), not confidence. Verify before copying, not after.
-- **Don't manufacture a misconception to correct.** Read what came immediately
-  before; assume the colleague is right and find out why. Correct what changes a
-  decision, not what merely differs from my phrasing.
-- **first seen:** 2026-09-11
-
-## Non-negotiable (personality/values.md)
-
-- **Never destroy the last copy of a secret**, however reconstructable it looks.
-- Proven-redundant copies get deleted, not parked — but the gate is proof
-  (content hashes), not confidence. Verify before copying, not after.
-- **Don't ask permission for a cheap reversible action** — his instruction, twice.
-  The gate is irreversible-or-seen-by-others, not touches-files. Do it, name it.
-- **Don't manufacture a misconception to correct.** Read what came immediately
-  before; assume the colleague is right and find out why. Correct what changes a
-  decision, not what merely differs from my phrasing.
 - **first seen:** 2026-09-11
 
 ## 398b5299 · contradiction · /home/me/machines/AGENTS.md

@@ -73,6 +73,27 @@ D decide "$id" applied "landed" >/dev/null
 grep -q "^## $id " "$DREAM_ROOT/queue.md" && die "decide cuts the item out" || pass "decide cuts the item out"
 grep -q "^## $id2 " "$DREAM_ROOT/queue.md" && pass "decide leaves other items alone" || die "decide leaves other items alone"
 [ "$(D status "$id")" = "$(printf 'decided\tapplied')" ] && pass "an applied id reads decided" || die "an applied id reads decided: $(D status "$id")"
+# An item's replacement text is a memory-store section, so it routinely contains
+# "## " headings. `decide` must cut past them to the next ITEM header — a bare
+# /^## / stopped there and left the rest of the item as orphan text in the queue
+# (92 such lines had accumulated by 2026-09-11). The " · " separator stays out of
+# the pattern on purpose: "·" is two bytes in UTF-8, so awk's "." matches half of
+# it in a C locale.
+id3="$(D id "$store" '## Gamma' compress)"
+item3="$tmp/item3.md"
+printf '## %s · compress · %s\n\n- **replacement:**\n## Embedded Store Heading\n- body line\n- **first seen:** 2026-01-01\n' "$id3" "$store" > "$item3"
+D append "$id3" "$item3" >/dev/null
+D decide "$id3" applied "landed" >/dev/null
+grep -q '^## Embedded Store Heading' "$DREAM_ROOT/queue.md" \
+  && die "decide cuts past a ## heading inside the item" \
+  || pass "decide cuts past a ## heading inside the item"
+grep -q 'first seen: 2026-01-01' "$DREAM_ROOT/queue.md" \
+  && die "decide leaves no orphan tail" || pass "decide leaves no orphan tail"
+grep -q "^## $id2 " "$DREAM_ROOT/queue.md" \
+  && pass "cutting past a ## heading still spares the next item" \
+  || die "cutting past a ## heading still spares the next item"
+
+
 [ "$(D append "$id" "$item" | cut -f1)" = suppressed ] && pass "an applied item never returns" || die "an applied item never returns"
 
 D decide "$id2" rejected "not worth it" >/dev/null
