@@ -280,81 +280,14 @@ tools. Anything recorded
 - **first seen:** 2026-09-11
 
 
-## 7e5af187 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
-
-- **action:** skill
-- **scope:** repo:machines — the run's own brief
-- **apply on:** g15 (or any box; it is a file in `machines`)
-- **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
-- **anchor:** `Step 6 — File the items` (L334; the four-tuple paragraph is L354-367)
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 6 — File the items#consolidate-phase.md:354-367` # `skill`
-- **why:** the brief mandates a four-tuple id whose fourth element the tool
-  cannot accept. `consolidate.sh cmd_id` is
-  `printf '%s\037%s\037%s' "$1" "$2" "$3" | sha256sum | cut -c1-8` — three
-  positional arguments, and a fourth is silently ignored. So the discriminator
-  the brief calls **not optional** has, since it was written, changed nothing:
-  two findings on one section with one action still collide exactly as
-  L358-364 describes, and the run that hits it still has no way out but the
-  `### Part N` workaround that same paragraph forbids.
-- **evidence:** measured on this box 2026-09-12, three calls, one hash:
-  ```console
-  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete
-  857b229a
-  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete global.md:785-800
-  857b229a
-  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete global.md:900-910
-  857b229a
-  ```
-  Source: `agents/plugin/skills/lib/consolidate.sh:148-150` (`cmd_id`) and its
-  dispatch at `:237`. The brief's mandate is at consolidate-phase.md:354-367;
-  the ledger shows it applied as `f7082e6e` on 2026-09-11 — **prose only, the
-  tool was never touched in that change.**
-- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md` — this run
-  could not produce a distinct id for a second finding on the same section+action
-  through the documented interface, and worked around it by folding the
-  discriminator into the **anchor argument** (`<anchor>#<basename>:<a>-<b>`),
-  recording the literal string it passed in an `id-inputs` field on every item.
-  That workaround is why tonight's ids are reproducible at all; it is not in the
-  brief and the next run will not guess it.
-- **bytes:** n/a (a tool change plus ~3 lines of brief)
-- **replacement — two edits, one decision.**
-  (1) `agents/plugin/skills/lib/consolidate.sh`, replace `cmd_id`:
-```bash
-cmd_id() {
-  # Four-tuple: target, anchor, action, discriminator. The discriminator is the
-  # finding's first evidence line range, and it is what lets one section hold
-  # more than one finding per action. Optional only for a whole-file finding.
-  printf '%s\037%s\037%s\037%s' "$1" "$2" "$3" "${4:-}" | _sha | cut -c1-8
-}
-```
-  and its usage line:
-```
-  id <target> <anchor> <action> [discriminator]
-                             8-hex stable item id. The discriminator is the
-                             finding's first evidence line range
-                             (<basename>:<start>-<end>) and is REQUIRED unless
-                             the anchor is (whole file).
-```
-  (2) In this brief at L354, after the `discriminator` table row, add:
-```
-Pass it as the **fourth argument** to `consolidate.sh id`. A run that omits it
-on a section-level finding gets the same id as its sibling and the sibling is
-suppressed as `open` — silently, with no error.
-```
-- **NOTE for /memory-review:** applying (1) changes no existing id — every id in
-  `queue.md` and `ledger.tsv` was computed with an empty fourth element, which
-  `${4:-}` reproduces byte-for-byte. Verified: the three-arg call above still
-  returns `857b229a` under the proposed body.
-- **first seen:** 2026-09-12
-
-## 0e45736a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+## 5d2bfaaa · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
 
 - **action:** skill
 - **scope:** repo:machines — the run's own brief + `consolidate.sh`
 - **apply on:** g15 (or any box)
 - **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
 - **anchor:** `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` (L274; the `verify` bullet is L314-322)
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)#consolidate-phase.md:314-322` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` # `skill` # `consolidate-phase.md:314-322`
 - **why:** `verify` cannot follow a **rename**, and it reports the failure as
   `drifted` — the same word it uses for "an approved consolidation was undone",
   which the brief calls *a finding, not an error*. Tonight all four non-`ok`
@@ -403,14 +336,14 @@ suppressed as `open` — silently, with no error.
   the writer's — hence a brief change rather than a tool change.
 - **first seen:** 2026-09-12
 
-## b59b26a8 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+## 2249f890 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
 
 - **action:** skill
 - **scope:** repo:machines — the run's own brief
 - **apply on:** g15 (or any box)
 - **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
 - **anchor:** `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` (L274; the transcript-gap bullet is L301-311)
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)#consolidate-phase.md:301-311` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` # `skill` # `consolidate-phase.md:301-311`
 - **why:** the two-command recipe compares **every project slug on the box**
   against **one repo's** watermark file, so it reports as "unharvested" every
   session that belongs to a *different* repo. It cannot return a small number
@@ -476,9 +409,9 @@ suppressed as `open` — silently, with no error.
   (hit twice in this run).
 - **first seen:** 2026-09-12
 
-## fa2da900 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+## a216a4c2 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
 
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 3b — Pass 1b: across the FLEET (read-only, from this box)#consolidate-phase.md:205-210` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 3b — Pass 1b: across the FLEET (read-only, from this box)` # `skill` # `consolidate-phase.md:205-210`
 - **action:** skill
 - **scope:** repo:machines — the run's own brief
 - **apply on:** g15 (or any box)
@@ -547,9 +480,9 @@ suppressed as `open` — silently, with no error.
 ```
 - **first seen:** 2026-09-12
 
-## 1013e182 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+## b2db3785 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
 
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 1 — Scan and measure#consolidate-phase.md:96-120` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 1 — Scan and measure` # `skill` # `consolidate-phase.md:96-120`
 - **action:** skill
 - **scope:** repo:machines — the run's own brief + `consolidate.sh`
 - **apply on:** g15 (or any box)
@@ -624,9 +557,9 @@ suppressed as `open` — silently, with no error.
 ```
 - **first seen:** 2026-09-12
 
-## a7031b1a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
+## 60604a4f · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
 
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos#SKILL.md:108-116` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos` # `skill` # `SKILL.md:108-116`
 - **action:** skill
 - **scope:** repo:machines — Phase A's brief (the per-repo harvest)
 - **apply on:** g15 (or any box)
@@ -682,9 +615,9 @@ suppressed as `open` — silently, with no error.
 ```
 - **first seen:** 2026-09-12
 
-## 8a3a9801 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
+## ae9ea0da · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
 
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos#SKILL.md:117-125` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos` # `skill` # `SKILL.md:117-125`
 - **action:** skill
 - **scope:** repo:machines — Phase A's brief (the per-repo harvest)
 - **apply on:** g15 (or any box)
@@ -753,9 +686,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 68d648b2 · promote · /home/me/.claude/memory/global.md
+## d0971e33 · promote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: g15)#global.md:1548-1728` # `promote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: g15)` # `promote` # `global.md:1548-1728`
 - **action:** promote
 - **scope:** shared — `global.md` is byte-identical on every box, so this is a fleet-wide change
 - **apply on:** **g15** — this box. `/dotfiles-promote` runs here.
@@ -792,9 +725,9 @@ strands every session it had recorded.
   on g15, path `.claude/memory/global.md`.)
 - **first seen:** 2026-09-12
 
-## b09de79d · promote · /home/me/.claude/memory/personality/practices.md
+## 5fb4bf31 · promote · /home/me/.claude/memory/personality/practices.md
 
-- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `(branch: desktop-wsl)#practices.md:branch-vs-mergebase-ae03a7d` # `promote`
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `(branch: desktop-wsl)` # `promote` # `practices.md:branch-vs-mergebase-ae03a7d`
 - **action:** promote
 - **scope:** shared — three fleet-wide stores
 - **apply on:** **desktop-wsl** — NOT this box. `/memory-review` on g15 must refuse it.
@@ -838,9 +771,9 @@ strands every session it had recorded.
   above. Nothing to apply on g15.)
 - **first seen:** 2026-09-12
 
-## 12e550e9 · promote · /home/me/.claude/memory/global.md
+## a82195c2 · promote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: air)#global.md:branch-vs-mergebase-57551c6` # `promote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: air)` # `promote` # `global.md:branch-vs-mergebase-57551c6`
 - **action:** promote
 - **scope:** shared — three fleet-wide stores
 - **apply on:** **air** — NOT this box. `/memory-review` on g15 must refuse it.
@@ -882,9 +815,9 @@ strands every session it had recorded.
 - **replacement:** (none — `/dotfiles-promote` **on air**, the three paths above.)
 - **first seen:** 2026-09-12
 
-## 2a4a14a7 · contradiction · /home/me/.claude/memory/global.md
+## 03829ac8 · contradiction · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Fleet SSH reachability#global.md:142-151` # `contradiction`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Fleet SSH reachability` # `contradiction` # `global.md:142-151`
 - **action:** contradiction
 - **scope:** shared → fleet-wide change
 - **apply on:** g15 (the store is `main`-tracked; `/dotfiles-promote` after)
@@ -940,9 +873,9 @@ strands every session it had recorded.
   rewrites of this section.
 - **first seen:** 2026-09-12
 
-## 8dd9b242 · delete · /home/me/.claude/memory/global.md
+## eac9e0fb · delete · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:390-394` # `delete`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns` # `delete` # `global.md:390-394`
 - **action:** delete
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -961,9 +894,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## e7ffdcae · compress · /home/me/.claude/memory/global.md
+## a6f70ff5 · compress · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:448-453` # `compress`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns` # `compress` # `global.md:448-453`
 - **action:** compress
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -998,9 +931,9 @@ strands every session it had recorded.
   fallback that can be applied here today.
 - **first seen:** 2026-09-12
 
-## 5427b0c9 · compress · /home/me/.claude/memory/global.md
+## 34ccf2ed · compress · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:404-418` # `compress`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns` # `compress` # `global.md:404-418`
 - **action:** compress
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1036,9 +969,9 @@ strands every session it had recorded.
   still points at it. Check that back-reference before choosing.
 - **first seen:** 2026-09-12
 
-## 62fdb312 · demote · /home/me/.claude/memory/global.md
+## e9f60c10 · demote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:469-482` # `demote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns` # `demote` # `global.md:469-482`
 - **action:** demote
 - **scope:** shared → shared (a move within one file; no scope change)
 - **apply on:** g15
@@ -1078,9 +1011,9 @@ strands every session it had recorded.
   number — several items this run change line offsets above L489.
 - **first seen:** 2026-09-12
 
-## 4a3648ca · delete · /home/me/.claude/memory/global.md
+## 884ce6fa · delete · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex#global.md:893-902` # `delete`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex` # `delete` # `global.md:893-902`
 - **action:** delete
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1117,9 +1050,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## c49d9dfe · delete · /home/me/.claude/memory/global.md
+## 119eea90 · delete · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — workspace model & CLI#global.md:687-697` # `delete`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — workspace model & CLI` # `delete` # `global.md:687-697`
 - **action:** delete
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1153,9 +1086,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 37c7fdd7 · promote · /home/me/.claude/memory/global.md
+## aae87b79 · promote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Repo layout (WSL boxes)#global.md:728-739` # `promote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Repo layout (WSL boxes)` # `promote` # `global.md:728-739`
 - **action:** promote
 - **scope:** shared → shared (a heading rename + one clause; no scope change)
 - **apply on:** g15
@@ -1191,9 +1124,9 @@ strands every session it had recorded.
   rename.
 - **first seen:** 2026-09-12
 
-## 17345183 · dedupe · /home/me/.claude/memory/global.md
+## ba9f6cc5 · dedupe · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex#global.md:836-844` # `dedupe`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex` # `dedupe` # `global.md:836-844`
 - **action:** dedupe
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1240,9 +1173,9 @@ strands every session it had recorded.
   and the line offsets shift.
 - **first seen:** 2026-09-12
 
-## 48cf4ada · dedupe · /home/me/.claude/memory/global.md
+## 766db309 · dedupe · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1646-1649` # `dedupe`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)` # `dedupe` # `global.md:1646-1649`
 - **action:** dedupe
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1264,9 +1197,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## 5176d863 · dedupe · /home/me/.claude/memory/global.md
+## 6d1ad247 · dedupe · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1586-1588` # `dedupe`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)` # `dedupe` # `global.md:1586-1588`
 - **action:** dedupe
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1291,9 +1224,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## 55a5fc14 · dedupe · /home/me/.claude/memory/global.md
+## ee4f64e0 · dedupe · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1700-1701` # `dedupe`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)` # `dedupe` # `global.md:1700-1701`
 - **action:** dedupe
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1312,9 +1245,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## 551ea67a · dedupe · /home/me/.claude/memory/global.md
+## 4bc5d940 · dedupe · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Git & bash footguns#global.md:1024-1029` # `dedupe`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Git & bash footguns` # `dedupe` # `global.md:1024-1029`
 - **action:** dedupe
 - **scope:** shared → fleet-wide change
 - **apply on:** g15
@@ -1342,9 +1275,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 3560d37a · demote · /home/me/.claude/memory/global.md
+## 5c651504 · demote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1550-1563` # `demote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)` # `demote` # `global.md:1550-1563`
 - **action:** demote
 - **scope:** shared → shared (a move within one file)
 - **apply on:** g15
@@ -1373,9 +1306,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 56785728 · demote · /home/me/.claude/memory/global.md
+## 63d81ceb · demote · /home/me/.claude/memory/global.md
 
-- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1548-1728` # `demote`
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)` # `demote` # `global.md:1548-1728`
 - **action:** demote
 - **scope:** shared → shared (structural reorganisation within one file)
 - **apply on:** g15
@@ -1429,9 +1362,9 @@ strands every session it had recorded.
   error string, both true. Recorded so a later pass does not re-open it.
 - **first seen:** 2026-09-12
 
-## e212952a · compress · /home/me/machines/.claude/memory/project.md
+## 45e6a3cb · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:193-250` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `compress` # `project.md:193-250`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15 (any box with the checkout)
@@ -1482,9 +1415,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 11a30da7 · dedupe · /home/me/machines/.claude/memory/project.md
+## 3b71c80d · dedupe · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:278-297` # `dedupe`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `dedupe` # `project.md:278-297`
 - **action:** dedupe
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1525,9 +1458,9 @@ strands every session it had recorded.
   same day so the same file does not get two competing proposals.
 - **first seen:** 2026-09-12
 
-## f61bdeeb · dedupe · /home/me/machines/.claude/memory/project.md
+## 90c837eb · dedupe · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:301-314` # `dedupe`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `dedupe` # `project.md:301-314`
 - **action:** dedupe
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1562,9 +1495,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## 3a584332 · delete · /home/me/machines/.claude/memory/project.md
+## af15caff · delete · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:547-553` # `delete`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `delete` # `project.md:547-553`
 - **action:** delete
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1587,9 +1520,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## a23f0626 · compress · /home/me/machines/.claude/memory/project.md
+## 131173da · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:532-546` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `compress` # `project.md:532-546`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1617,9 +1550,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## b127730e · compress · /home/me/machines/.claude/memory/project.md
+## 7a8ce25a · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:471-480` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `compress` # `project.md:471-480`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1647,9 +1580,9 @@ strands every session it had recorded.
   rather keep both copies whole, that is a defensible call.
 - **first seen:** 2026-09-12
 
-## 1bece31f · delete · /home/me/machines/.claude/memory/project.md
+## b069cc28 · delete · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:971-976` # `delete`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `delete` # `project.md:971-976`
 - **action:** delete
 - **scope:** repo:machines — **highest-consequence item in this slice**
 - **apply on:** g15
@@ -1682,9 +1615,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## dd7e1e9f · contradiction · /home/me/machines/.claude/memory/project.md
+## 83538d13 · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:849-854` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `contradiction` # `project.md:849-854`
 - **action:** contradiction
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1730,9 +1663,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## ea015f3f · compress · /home/me/machines/.claude/memory/project.md
+## 7dc3f946 · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:800-803` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `compress` # `project.md:800-803`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1760,9 +1693,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## c17c23f4 · delete · /home/me/machines/.claude/memory/project.md
+## 2a10559c · delete · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:942-945` # `delete`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `delete` # `project.md:942-945`
 - **action:** delete
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1787,9 +1720,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## c77ec2dc · compress · /home/me/machines/.claude/memory/project.md
+## dd41f743 · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:901-906` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `compress` # `project.md:901-906`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1818,9 +1751,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## e669ce26 · delete · /home/me/machines/.claude/memory/project.md
+## a856256c · delete · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts#project.md:1424-1427` # `delete`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts` # `delete` # `project.md:1424-1427`
 - **action:** delete
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1839,9 +1772,9 @@ strands every session it had recorded.
 - **replacement:** (none — deletion)
 - **first seen:** 2026-09-12
 
-## 6a103ba9 · dedupe · /home/me/machines/.claude/memory/project.md
+## 2ea760f6 · dedupe · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts#project.md:1419-1421` # `dedupe`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts` # `dedupe` # `project.md:1419-1421`
 - **action:** dedupe
 - **scope:** repo:machines
 - **apply on:** g15
@@ -1866,94 +1799,22 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## c1a94d32 · delete · /home/me/machines/AGENTS.md
+## fe27f639 · delete · /home/me/machines/AGENTS.md
 
-- **id-inputs:** `/home/me/machines/AGENTS.md` # `Host configurations#AGENTS.md:594-598` # `delete`
-- **action:** delete
-- **scope:** repo:machines — an **auto-loaded instruction file**, so this is a standing context error for every session in this repo
-- **apply on:** g15
-- **target:** `/home/me/machines/AGENTS.md`
-- **anchor:** `Host configurations` (the `restic-hub-selfcheck.sh` bullet, L594-598)
-- **why:** the bullet names the hub's repo directory at a path the profiles moved
-  off on 2026-09-10. A reader debugging "healthy repos report MISSING" goes to
-  `/mnt/spare320/restic-rest/`, finds nothing, and concludes the checker is
-  broken. The **rule** (must run as root; exit 2 for non-root vs 1 for a real
-  failure; `role_backup_hub` sudo-wraps it) is correct and is kept verbatim —
-  only the path is wrong.
-- **evidence:** `AGENTS.md:596` → *"the repo dirs under
-  `/mnt/spare320/restic-rest/` are `drwx------ root:root`"*.
-  `awk '/restic-rest/' backup/latitude/profiles.yaml` →
-  `:91 # /mnt/wd8/restic-rest/g614jv one the REST server serves…`,
-  `:218 repository: "/mnt/wd8/restic-rest/g614jv"`,
-  `:240 test -f /mnt/wd8/restic-rest/g614jv/config`,
-  `:336 repository: "/mnt/wd8/restic-rest/g513ie"`,
-  `:346 test -f /mnt/wd8/restic-rest/g513ie/config`.
-  Same 2026-09-10 move that the `Backups` `delete` item filed this run corrects
-  in `project.md:971-976`; `AGENTS.md` was missed by that fix.
-- **bytes:** 5 characters (`spare320` → `wd8`), but the consequence is a dead
-  recovery path in the file every session loads.
-- **replacement — replace `AGENTS.md:596` with:**
-```
-  under `/mnt/wd8/restic-rest/` are `drwx------ root:root`, so an unprivileged
-```
-- **NOTE:** `/improve config audit` proposes against `CLAUDE.md`/`AGENTS.md`
-  bloat too. This run files several `AGENTS.md` items; say so if both are run the
-  same day.
-- **first seen:** 2026-09-12
-
-## 4dbe8dc8 · contradiction · /home/me/my/vps/.claude/memory/project.md
-
-- **id-inputs:** `/home/me/my/vps/.claude/memory/project.md` # `Services on latitude#vps-project.md:94` # `contradiction`
-- **action:** contradiction
-- **scope:** cross-store — `repo:vps` vs `repo:machines`
-- **apply on:** g15 (both checkouts are here)
-- **target:** `/home/me/my/vps/.claude/memory/project.md`
-- **anchor:** `Services on latitude` (the `What is UP on latitude` bullet, L94)
-- **why:** `vps`' store lists **`restic-server` as "Down on purpose"**, dated
-  2026-08-01, while `machines`' `Backups` section describes the restic REST hub
-  as live, bound and serving — and `machines` ships a systemd timer
-  (`restic-hub-selfcheck`) whose whole job is to catch that hub serving an empty
-  bind. Both cannot be true. The repo boundary is exactly where this kind of
-  drift survives: `machines` owns the backup *profiles*, `vps` owns the REST
-  *server container*, so each store records half the system and neither reader
-  sees the other half.
-- **evidence:** `vps/project.md:94` → *"Down on purpose: navidrome,
-  restic-server, forgejo, plus the four below."* (dated 2026-08-01).
-  Against `machines`: `backup/latitude/profiles.yaml` defines two REST-served
-  repositories (`:218` `/mnt/wd8/restic-rest/g614jv`, `:336`
-  `/mnt/wd8/restic-rest/g513ie`) with `test -f …/config` health checks; and
-  `machines/AGENTS.md:594-598` documents `restic-hub-selfcheck.sh` as one of
-  latitude's **three installed system timers**, "the only thing that catches the
-  restic REST hub serving an empty bind". `machines/AGENTS.md` also states the
-  hub role is live (`role_backup_hub` sudo-wraps the check).
-- **do not resolve by authority — measure on latitude:**
-  `docker ps --filter name=restic` and
-  `systemctl status restic-hub-selfcheck.timer`. One command settles it.
-  The `vps` line is the older and the more likely stale, but it is also the only
-  statement of *deliberate* intent, so a silent flip would destroy a decision
-  record.
-- **bytes:** n/a until resolved
-- **replacement:** (none — this is a pair for a human. If the hub is up, the
-  `vps` bullet needs `restic-server` struck from its "Down on purpose" list with
-  the date it came back, **not** deleted — the list is a decision record.)
-- **first seen:** 2026-09-12
-
-## 8c6eeaa0 · delete · /home/me/machines/AGENTS.md
-
-- **id-inputs:** `/home/me/machines/AGENTS.md` # `Architecture#AGENTS.md:594-598` # `delete`
+- **id-inputs:** `/home/me/machines/AGENTS.md` # `Architecture` # `delete` # `AGENTS.md:594-598`
 - **action:** delete
 - **scope:** repo:machines — an **auto-loaded instruction file**, so this is a standing context error for every session in this repo
 - **apply on:** g15
 - **target:** `/home/me/machines/AGENTS.md`
 - **anchor:** `Architecture` (L271, 31696 B) — the finding is under the `###`-level
   `**`hosts/latitude/debian/`**` block, in the `restic-hub-selfcheck.sh` bullet at L594-598
-- **SUPERSEDES `c1a94d32`, filed minutes earlier in this same run under the
+- **SUPERSEDES `94fc81c8`, filed minutes earlier in this same run under the
   invented anchor `Host configurations`.** That string is a bolded inline label,
   not a `##` heading — `consolidate.sh index AGENTS.md` emits only four rows
   (`Repository Overview` L19, `Common Commands` L146, `Architecture` L271,
   `Hardware Context` L722), and `awk` confirms L594 is enclosed by `## Architecture`.
   This item is the same finding with the correct anchor and therefore the
-  reproducible id. **/memory-review: reject `c1a94d32` as a mis-anchored
+  reproducible id. **/memory-review: reject `94fc81c8` as a mis-anchored
   duplicate and apply this one.** (An item is never rewritten in place, which is
   why the correction arrives as a second item rather than an edit.)
 - **why:** the bullet names the hub's repo directory at a path the profiles moved
@@ -1978,18 +1839,18 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## cd546d48 · contradiction · /home/me/my/vps/.claude/memory/project.md
+## 03b60232 · contradiction · /home/me/my/vps/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/my/vps/.claude/memory/project.md` # `Services & scheduler#vps-project.md:94` # `contradiction`
+- **id-inputs:** `/home/me/my/vps/.claude/memory/project.md` # `Services & scheduler` # `contradiction` # `vps-project.md:94`
 - **action:** contradiction
 - **scope:** cross-store — `repo:vps` vs `repo:machines`
 - **apply on:** g15 (both checkouts are here)
 - **target:** `/home/me/my/vps/.claude/memory/project.md`
 - **anchor:** `Services & scheduler` (L85, 25176 B) — the `What is UP on latitude` bullet is at L94
-- **SUPERSEDES `4dbe8dc8`, filed minutes earlier in this same run under the
+- **SUPERSEDES `1939af4c`, filed minutes earlier in this same run under the
   invented anchor `Services on latitude`.** That heading does not exist:
   `consolidate.sh index` on this store gives `Services & scheduler` at L85.
-  **/memory-review: reject `4dbe8dc8` as a mis-anchored duplicate and apply this
+  **/memory-review: reject `1939af4c` as a mis-anchored duplicate and apply this
   one.**
 - **why:** `vps`' store lists **`restic-server` as "Down on purpose"**, dated
   2026-08-01, while `machines` describes the restic REST hub as live, bound and
@@ -2018,9 +1879,9 @@ strands every session it had recorded.
   do not delete the list — it is a decision record.)
 - **first seen:** 2026-09-12
 
-## 8c2dee2d · compress · /home/me/machines/.claude/memory/project.md
+## 01ba3c32 · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)#project.md:2029-2223` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)` # `compress` # `project.md:2029-2223`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2046,7 +1907,7 @@ strands every session it had recorded.
   both halves of the `--ignored` qualifier, which sit in two different paragraphs
   (L2123 and L2160) and are merged here deliberately.
 - **bytes:** 12627 → 8808 (−3819, 30%)
-- **replacement:** **`docs/memory-consolidate/replacements/8c2dee2d.md`** — verbatim,
+- **replacement:** **`docs/memory-consolidate/replacements/01ba3c32.md`** — verbatim,
   replaces L2029-2223 inclusive. It is 8.8 KB, kept as a sibling file rather than
   inline so this queue stays readable; the file is inside
   `docs/memory-consolidate/` and therefore inside this phase's write boundary.
@@ -2056,9 +1917,9 @@ strands every session it had recorded.
   **Apply this compress OR that contradiction, never both.**
 - **first seen:** 2026-09-12
 
-## 7a0ced30 · generalise · /home/me/machines/.claude/memory/project.md
+## 462d1839 · generalise · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)#project.md:1684-1710` # `generalise`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)` # `generalise` # `project.md:1684-1710`
 - **action:** generalise
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2103,9 +1964,9 @@ strands every session it had recorded.
 ```
 - **first seen:** 2026-09-12
 
-## f329fdc8 · contradiction · /home/me/machines/.claude/memory/project.md
+## 76f548ac · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `latitude storage layout (settled 2026-08-01)#project.md:1773-1780` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `latitude storage layout (settled 2026-08-01)` # `contradiction` # `project.md:1773-1780`
 - **action:** contradiction
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2145,9 +2006,9 @@ here. Detail: *ServarrMedia переехал на 8 ТБ WD Blue* and *Архи�
 ```
 - **first seen:** 2026-09-12
 
-## 0c7cf833 · contradiction · /home/me/machines/.claude/memory/project.md
+## 7a966544 · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `g15 phase 1 done — where the only copies live (2026-09-07)#project.md:2440-2444` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `g15 phase 1 done — where the only copies live (2026-09-07)` # `contradiction` # `project.md:2440-2444`
 - **action:** contradiction
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2175,15 +2036,15 @@ here. Detail: *ServarrMedia переехал на 8 ТБ WD Blue* and *Архи�
 ```
 - **first seen:** 2026-09-12
 
-## d33983b5 · contradiction · /home/me/machines/.claude/memory/project.md
+## e0003b52 · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)#project.md:2147-2154` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)` # `contradiction` # `project.md:2147-2154`
 - **action:** contradiction
 - **scope:** repo:machines
 - **apply on:** g15
 - **target:** `/home/me/machines/.claude/memory/project.md`
 - **anchor:** `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)` (L2029, 12627 B)
-- **EITHER/OR — apply this ONLY if the `compress` item `8c2dee2d` for this same
+- **EITHER/OR — apply this ONLY if the `compress` item `01ba3c32` for this same
   section is DECLINED.** That item's replacement already folds this correction
   in, and L2147-2154 sits inside its range. Applying both double-edits the same
   passage.
@@ -2216,9 +2077,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
 ```
 - **first seen:** 2026-09-12
 
-## f65ade16 · contradiction · /home/me/machines/.claude/memory/project.md
+## 5d32d3b4 · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `What was still left of the g15 Ubuntu setup — audited on the box (2026-09-08)#project.md:2774-2780` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `What was still left of the g15 Ubuntu setup — audited on the box (2026-09-08)` # `contradiction` # `project.md:2774-2780`
 - **action:** contradiction
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2261,9 +2122,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
 ```
 - **first seen:** 2026-09-12
 
-## df2ac26c · dedupe · /home/me/machines/.claude/memory/project.md
+## c079a0d5 · dedupe · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)#project.md:3662-3666` # `dedupe`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)` # `dedupe` # `project.md:3662-3666`
 - **action:** dedupe
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2284,9 +2145,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
   2026-09-01 and again 2026-09-10); combine that with…`. **Carry before cutting.**
 - **first seen:** 2026-09-12
 
-## e6659fbb · contradiction · /home/me/machines/.claude/memory/project.md
+## f6c079f9 · contradiction · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Доки роняет розетка, а не USB — и это два разных отказа (измерено 2026-09-10)#project.md:3065-3068` # `contradiction`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Доки роняет розетка, а не USB — и это два разных отказа (измерено 2026-09-10)` # `contradiction` # `project.md:3065-3068`
 - **action:** contradiction
 - **scope:** repo:machines — **and it has money attached**
 - **apply on:** g15 (the marker), but the measurement is on **latitude**
@@ -2323,9 +2184,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
 ```
 - **first seen:** 2026-09-12
 
-## c3f4e959 · dedupe · /home/me/machines/.claude/memory/project.md
+## dc9d304c · dedupe · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Приёмка нового диска: identity-гейт впереди surface (2026-09-08)#project.md:2905-2911` # `dedupe`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Приёмка нового диска: identity-гейт впереди surface (2026-09-08)` # `dedupe` # `project.md:2905-2911`
 - **action:** dedupe
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2364,9 +2225,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
 ```
 - **first seen:** 2026-09-12
 
-## 92ae95ad · generalise · /home/me/machines/.claude/memory/project.md
+## b2014b67 · generalise · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)#project.md:3577-3595` # `generalise`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)` # `generalise` # `project.md:3577-3595`
 - **action:** generalise
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2406,9 +2267,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
   copy** and must never be deduped away.
 - **first seen:** 2026-09-12
 
-## 541d2cef · compress · /home/me/machines/.claude/memory/project.md
+## 5b5d4e19 · compress · /home/me/machines/.claude/memory/project.md
 
-- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `ServarrMedia переехал на 8 ТБ WD Blue (выполнено 2026-09-10)#project.md:3116-3121` # `compress`
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `ServarrMedia переехал на 8 ТБ WD Blue (выполнено 2026-09-10)` # `compress` # `project.md:3116-3121`
 - **action:** compress
 - **scope:** repo:machines
 - **apply on:** g15
@@ -2433,9 +2294,9 @@ before deleting any project directory, `grep -rl '/home/me/my/'
 ```
 - **first seen:** 2026-09-12
 
-## 7a4bfc0a · contradiction · /home/me/my/qaz-code/CLAUDE.md
+## 15000ee6 · contradiction · /home/me/my/qaz-code/CLAUDE.md
 
-- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `CLI Commands#qaz-code-CLAUDE.md:106-128` # `contradiction`
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `CLI Commands` # `contradiction` # `qaz-code-CLAUDE.md:106-128`
 - **action:** contradiction
 - **scope:** repo:qaz-code — an **auto-loaded instruction file**, 64852 B, loaded in every session under that repo and its two worktrees
 - **apply on:** g15 (the only box with `repo_groups: ["my"]`)
@@ -2484,9 +2345,9 @@ runs**, so pass it when you are reproducing a recorded sha.
   trails an `audit-render` fence and reads as documenting *that* command's flags.
 - **first seen:** 2026-09-12
 
-## 62186e74 · contradiction · /home/me/my/qaz-code/CLAUDE.md
+## f13fc8e8 · contradiction · /home/me/my/qaz-code/CLAUDE.md
 
-- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `Tests#qaz-code-CLAUDE.md:143-157` # `contradiction`
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `Tests` # `contradiction` # `qaz-code-CLAUDE.md:143-157`
 - **action:** contradiction
 - **scope:** repo:qaz-code — auto-loaded instruction file
 - **apply on:** g15
@@ -2529,9 +2390,9 @@ outside it. <!-- src: qaz-code 6eaadf7 | 2026-09-12 -->
   duplication to remove.
 - **first seen:** 2026-09-12
 
-## 0b49159e · contradiction · /home/me/my/qaz-code/CLAUDE.md
+## 974de1d0 · contradiction · /home/me/my/qaz-code/CLAUDE.md
 
-- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `(whole file)#qaz-baseline:849407c-detached` # `contradiction`
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `(whole file)` # `contradiction` # `qaz-baseline:849407c-detached`
 - **action:** contradiction
 - **scope:** repo:qaz-code — a **detached-HEAD worktree whose auto-loaded `CLAUDE.md` asserts the opposite of `main` in four places**
 - **apply on:** g15 (the only box holding these checkouts)
@@ -2589,9 +2450,9 @@ outside it. <!-- src: qaz-code 6eaadf7 | 2026-09-12 -->
   It cannot be told apart from outside the repo. Ask before doing either.
 - **first seen:** 2026-09-12
 
-## 1cd0da76 · contradiction · /home/me/.claude/CLAUDE.md
+## 9b955990 · contradiction · /home/me/.claude/CLAUDE.md
 
-- **id-inputs:** `/home/me/.claude/CLAUDE.md` # `MANDATORY: Use Gortex MCP tools instead of Read/Grep/Glob#claude-CLAUDE.md:95-102` # `contradiction`
+- **id-inputs:** `/home/me/.claude/CLAUDE.md` # `MANDATORY: Use Gortex MCP tools instead of Read/Grep/Glob` # `contradiction` # `claude-CLAUDE.md:95-102`
 - **action:** contradiction
 - **scope:** shared → fleet-wide. This file is auto-loaded in **every session on every box**.
 - **apply on:** g15
@@ -2639,9 +2500,9 @@ state and a normal one; do not "fix" it by trimming a rule out of `## Register`.
 ```
 - **first seen:** 2026-09-12
 
-## 6c545daa · contradiction · /home/me/.claude/host-memory.md
+## a3e1b01f · contradiction · /home/me/.claude/host-memory.md
 
-- **id-inputs:** `/home/me/.claude/host-memory.md` # `Environment#host-memory.md:13-16` # `contradiction`
+- **id-inputs:** `/home/me/.claude/host-memory.md` # `Environment` # `contradiction` # `host-memory.md:13-16`
 - **action:** contradiction
 - **scope:** host (g15) — `host-memory.md` is this branch only
 - **apply on:** g15 — this box
@@ -2675,9 +2536,9 @@ state and a normal one; do not "fix" it by trimming a rule out of `## Register`.
 ```
 - **first seen:** 2026-09-12
 
-## 5d183430 · generalise · /home/me/CLAUDE.md
+## e70e98cb · generalise · /home/me/CLAUDE.md
 
-- **id-inputs:** `/home/me/CLAUDE.md` # `Branches#home-CLAUDE.md:61-63` # `generalise`
+- **id-inputs:** `/home/me/CLAUDE.md` # `Branches` # `generalise` # `home-CLAUDE.md:61-63`
 - **action:** generalise
 - **scope:** shared → fleet-wide. Auto-loaded in every session under `$HOME`, which is every session on every box.
 - **apply on:** g15
@@ -2708,9 +2569,9 @@ state and a normal one; do not "fix" it by trimming a rule out of `## Register`.
 ```
 - **first seen:** 2026-09-12
 
-## 3687ea85 · promote · /home/me/.claude/memory/personality/practices.md
+## 4be18f13 · promote · /home/me/.claude/memory/personality/practices.md
 
-- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Before writing to a path, look at what is already there (2026-09-07, g15/Orca)#practices.md:479-489` # `promote`
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Before writing to a path, look at what is already there (2026-09-07, g15/Orca)` # `promote` # `practices.md:479-489`
 - **action:** promote
 - **scope:** shared → fleet-wide (a heading insertion; no text changes)
 - **apply on:** g15
@@ -2738,9 +2599,9 @@ state and a normal one; do not "fix" it by trimming a rule out of `## Register`.
 ```
 - **first seen:** 2026-09-12
 
-## 262c77ce · demote · /home/me/.claude/memory/personality/tone.md
+## a8f45a4a · demote · /home/me/.claude/memory/personality/tone.md
 
-- **id-inputs:** `/home/me/.claude/memory/personality/tone.md` # `In-session chat replies to me — peer register (calibrated 2026-08-04)#tone.md:45-48` # `demote`
+- **id-inputs:** `/home/me/.claude/memory/personality/tone.md` # `In-session chat replies to me — peer register (calibrated 2026-08-04)` # `demote` # `tone.md:45-48`
 - **action:** demote
 - **scope:** shared → shared (a cross-store move: `tone.md` → `global.md`)
 - **apply on:** g15
@@ -2781,9 +2642,9 @@ plugin's always-on rules.
   (empirical)`. Locate the destination by heading, not by line number.
 - **first seen:** 2026-09-12
 
-## 99d8de76 · demote · /home/me/.claude/memory/personality/practices.md
+## b08cb236 · demote · /home/me/.claude/memory/personality/practices.md
 
-- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Gortex-tuned#practices.md:62-70` # `demote`
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Gortex-tuned` # `demote` # `practices.md:62-70`
 - **action:** demote
 - **scope:** shared → shared (a cross-store move: `practices.md` → `global.md`)
 - **apply on:** g15
@@ -2832,9 +2693,9 @@ plugin's always-on rules.
   `delete` and the `gortex init` `dedupe`). Locate by heading, not line number.
 - **first seen:** 2026-09-12
 
-## f5452f6a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+## effa9c8c · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
 
-- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 8 — Prove the invariant held, then commit#consolidate-phase.md:482-486` # `skill`
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 8 — Prove the invariant held, then commit` # `skill` # `consolidate-phase.md:482-486`
 - **action:** skill
 - **scope:** repo:machines — the run's own brief
 - **apply on:** g15 (or any box)

@@ -34,8 +34,11 @@ usage: consolidate.sh <command> [args]
   branches                   TSV of OTHER boxes' memory, read from dotfiles branches:
                              branch, tip date, path, bytes (read-only, never written)
   index <file>               TSV of a store's ## sections: line, bytes, heading
-  id <target> <anchor> <action>
-                             8-hex stable item id (target+anchor+action)
+  id <target> <anchor> <action> [discriminator]
+                             8-hex stable item id. The discriminator is the
+                             finding's first evidence line range
+                             (<basename>:<start>-<end>) and is REQUIRED unless
+                             the anchor is (whole file).
   status <id>                new | open | decided<TAB>applied|rejected
   append <id> <item-file>    append an item to the queue unless already open/decided
   decide <id> <state> <reason> [file] [phrase]
@@ -146,7 +149,20 @@ cmd_index() {
 }
 
 cmd_id() {
-  printf '%s\037%s\037%s' "$1" "$2" "$3" | _sha | cut -c1-8
+  # Four-tuple: target, anchor, action, discriminator. The discriminator is the
+  # finding's first evidence line range, and it is what lets one section hold
+  # more than one finding per action. Optional only for a whole-file finding.
+  # An absent fourth argument reproduces the old three-field hash byte for byte,
+  # so every id already in queue.md and ledger.tsv is unchanged.
+  # An ABSENT fourth argument must not append a trailing separator: the queue's
+  # existing ids were hashed from three fields, and "a\037b\037c\037" is a
+  # different string from "a\037b\037c". ${4:-} alone silently rehashes all of
+  # them — measured 2026-09-12, 857b229a became 91bb8eda.
+  if [ -n "${4:-}" ]; then
+    printf '%s\037%s\037%s\037%s' "$1" "$2" "$3" "$4" | _sha | cut -c1-8
+  else
+    printf '%s\037%s\037%s' "$1" "$2" "$3" | _sha | cut -c1-8
+  fi
 }
 
 # ok | drifted | missing | unverifiable, one row per applied decision.

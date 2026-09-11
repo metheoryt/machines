@@ -353,6 +353,12 @@ the item comes back forever.
 | `action` | one word from the taxonomy below | `dedupe` |
 | `discriminator` | the finding's **first evidence line range**, `<basename>:<start>-<end>` | `global.md:1283-1364` |
 
+Pass it as the **fourth argument** to `consolidate.sh id`. A run that omits it
+on a section-level finding gets the same id as its sibling, and the sibling is
+suppressed as `open` — silently, with no error. Omit it only for a whole-file
+finding: an absent fourth argument reproduces the old three-field hash exactly,
+which is what keeps every id filed before 2026-09-12 valid.
+
 **The id is a four-tuple, and the discriminator is not optional.** Without it,
 `(target, anchor, action)` can express only one finding per section per action —
 and one section routinely holds several. The 2026-09-11 run hit this on its

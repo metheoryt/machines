@@ -93,3 +93,6 @@ f7082e6e	applied	2026-09-11	dream SKILL.md Step 6: id is now a four-tuple with t
 e9310fe2	applied	2026-09-11	dream SKILL.md Step 5: core.md budget measures injected bytes via the loader; the 3.4 KB harness cap and the 2 KB style budget stated separately	/home/me/machines/agents/plugin/skills/dream/SKILL.md	measure the INJECTED bytes, not the file bytes
 06ccc498	applied	2026-09-11	dream-apply SKILL.md Step 2 (NOT dream's, as filed): an item names one site, the error may live at several; a dedupe count is a lower bound	/home/me/machines/agents/plugin/skills/dream-apply/SKILL.md	An item names one site; the error may live at several
 98c3201a	applied	2026-09-11	card-processing archived (owner); section cut from global.md 2177->760 B instead of demoted into a repo nobody opens — the AES-ECB attribution guard kept	/home/me/.claude/memory/global.md	was the project head's decision, not his
+d5f4b69f	applied	2026-09-12	four-tuple id now reaches the tool; item's own ${4:-} patch was wrong (rehashed all 168 ids), applied an if/else instead and migrated the 63 anchor#disc ids	agents/plugin/skills/lib/consolidate.sh	if [ -n "${4:-}" ]; then
+94fc81c8	rejected	2026-09-12	invented anchor; refiled correctly as fe27f639		
+1939af4c	rejected	2026-09-12	invented anchor; refiled correctly as 03b60232		
