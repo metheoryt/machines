@@ -195,8 +195,10 @@ global + per-host). One bullet per fact under a topical heading.
   the bullet below as history, not as the present. The rename and re-enrollment
   are recorded under *`g15` (ex-`server`) back in the fleet* further down this
   file; `AGENTS.md` carries the current facts. Two live corrections to what
-  follows: **reach it as `methe@g15.gg.ez`** — `server.gg.ez` no longer resolves
-  — and the member block is restored, so the bare `ssh g15` alias works from any
+  follows: **reach it as `me@g15.gg.ez`** — `server.gg.ez` no longer resolves,
+  and `methe@` was the Windows-era user (`ssh.user` defaults to `me`; `d7427db`
+  regenerated the block and dropped its stale `User methe`) — and the member
+  block is restored, so the bare `ssh g15` alias works from any
   box that has re-provisioned since. What the decommission *did* is not undone:
   `hosts/server/` stays deleted, Forgejo stays wiped, `C:` stays unreviewed.
 - **`server` (g513ie) left `fleet.json` on 2026-08-01 — but the hardware is still
@@ -259,9 +261,11 @@ global + per-host). One bullet per fact under a topical heading.
   never fired, no roles printed, status 0. `fleet_has_machine` now guards the front
   door: exit 2, and it lists the known members.
 
-- Boundary: `machines` (this repo) owns NixOS/Windows machine provisioning;
-  the sibling `~/my/vps` repo owns the cyphy.kz service platform (Immich,
-  Navidrome, Forgejo, RustDesk server, Caddy, the VPS's AmneziaWG hub).
+- Boundary: `machines` (this repo) owns the machines — Debian/Windows/macOS
+  provisioning **and the restic backup profiles** (`backup/<identity>/`, moved
+  here from `vps` 2026-09-01); the sibling `~/my/vps` repo owns the services
+  (Immich, Navidrome, Caddy, RustDesk server, the restic REST server container,
+  the VPS's AmneziaWG hub). Forgejo is not on that list — wiped 2026-08-01.
 - The WSL fleet SSH key store (`ssh-wsl.sh`, `FLEET_KEY_DIR` default
   `/mnt/c/Users/<winuser>/.fleet/id_fleet`) is keyed by Windows user with no
   distro in the path, so every WSL distro on the same Windows box shares one
@@ -463,15 +467,15 @@ global + per-host). One bullet per fact under a topical heading.
   address from `fleet.json`. base_domain `gg.ez` (MagicDNS; renamed from
   `fleet.mesh`).
 - Probe PASSED 2026-07-13 (spec/plan/results under machines
-  `docs/superpowers/`): LAN-direct 3ms; SSH + RustDesk over the tailnet work;
-  DERP fallback through our own relay is reliable. **KEY FINDING:**
-  latitude(hotspot) + homeserver share this ISP's CGNAT (public `37.99.47.9`),
-  so cross-network hole-punch FAILS → traffic relays through the VPS's embedded
-  DERP (no regression vs today's all-via-VPS shape; the "P2P saves bandwidth"
-  upside won't appear here). The fleet spans **two separate LANs**; same-LAN
-  pairs get direct P2P (~3ms), cross-LAN pairs relay via our own DERP — EXPECTED
-  and ACCEPTED by the user, so UPnP/router port-mapping is explicitly NOT a
-  follow-up. Backlog/roadmap lives at `docs/fleet-roadmap.md`.
+  `docs/superpowers/`): SSH + RustDesk over the tailnet work, and DERP fallback
+  through our own relay is reliable. **Its other finding — "the fleet spans two
+  separate LANs; cross-LAN pairs relay via our own DERP, EXPECTED and ACCEPTED"
+  — is DEAD.** It rested on latitude sitting on a hotspot behind this ISP's
+  CGNAT. Measured 2026-09-07: every member except `hub` is behind the one router
+  and gets direct P2P (latitude 2 ms, g15 3 ms, 99 MB/s), and that sentence is
+  why a migration design wrote latitude off as a 7-hour target. "Expected and
+  accepted" is how a stale measurement survives — measure a relayed pair before
+  accepting it. Backlog/roadmap lives at `docs/fleet-roadmap.md`.
 - **Windows sshd gotchas** (for the future `ssh-server` role executor): (a)
   `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0` throws "Class not
   registered" under PowerShell 7 (DISM COM only registers under WinPS 5.1) — use
@@ -805,8 +809,13 @@ global + per-host). One bullet per fact under a topical heading.
   `ImmichMedia/library`, `music-from-g513ie`, the GoPro video, `qb`. Versions are
   genuinely needed for only ~1.5 GB — `Media/config` (jellyfin `encoding.xml`,
   the *arr SQLite DBs) and `secrets` — and at that size a dated `tar.gz` + rsync
-  beats restic, so **no restic repo is planned** and the destroyed
-  `immich-media` / `immich-postgres` repos are not being recreated.
+  beats restic. **That "no restic repo is planned" was true on 2026-07-31 and is
+  not true now** — restic came back on 2026-08-01 and latitude runs it daily to
+  `/mnt/spare320/restic/latitude` plus a REST hub for the other boxes; see *The
+  backup topology, rebuilt 2026-08-01* below. What stayed dead is the pair of
+  destroyed `immich-media` / `immich-postgres` repos, which are not being
+  recreated. The offsite gap also stands: every copy is in one apartment, and the
+  fix remains rotating one dock's drive off-site rather than cloud storage.
 - **`-H` is mandatory.** Media is 523059206143 B unique against 788634637218 B
   summed per-directory — 265 GB of hardlink overlap. Without `-H` the target
   needs 734 GiB instead of 487.
@@ -837,16 +846,19 @@ global + per-host). One bullet per fact under a topical heading.
   accept that recovery otherwise needs the user to power-cycle the dock.
 - **The docks also reset unprompted — check the journal before blaming your own
   command.** Marginal cabling and physical knocks are a chronic fault mode here;
-  dock B (`usb 4-1`) is the worst offender. Check with
+  dock B (`usb 4-2`) is the worst offender. Check with
   `sudo journalctl -k --since today | grep -aE "usb [0-9.-]+: (reset|USB disconnect)"`.
   Layout consequence: archive *primary* on dock A, *copy* on flakier dock B, and
   give any long write into dock B `--partial --append-verify` so a drop resumes.
 - **Neither dock is bus-powered, and both hang off ONE root hub** (measured
   2026-09-07). Both are Ugreen **CM198** two-bay units on JMicron **JMS561U**
   bridges (`152d:1561`), each with its own 12 V brick, occupying ports 1 and 2 of
-  the same xhci root hub (`usb4`, 5 Gbps). Serial ↔ port, the pair that is stable:
-  **dock A = `6702002103E1` = `usb 4-2`**, **dock B = `670200210032` = `usb 4-1`**
-  (the flaky one). Consequence for diagnosis: two docks dropping *together* is
+  the same xhci root hub (`usb4`, 5 Gbps). Serial ↔ port ↔ label:
+  **dock A = `670200210032` = `usb 4-1`**, **dock B = `6702002103E1` = `usb 4-2`**
+  — the flaky one, and the one carrying immich-2024. This bullet had A and B
+  SWAPPED until 2026-09-11; the authority is the live map
+  `provision/statusboard/disks.latitude5520.conf`, which the board reads and
+  which is re-measured in the room. Consequence for diagnosis: two docks dropping *together* is
   explained by the shared host controller, NOT by shared bus power — a "buy a
   self-powered drive" fix does not address it, and the 2026-08-16 double drop
   stays undiagnosed. Consequence for scheduling: two long jobs on "different
@@ -875,7 +887,7 @@ global + per-host). One bullet per fact under a topical heading.
   down anywhere as point-in-time only.** Five external USB devices plus a card
   reader race to enumerate, and **USB port paths are not stable either**. Identify
   a drive by **UUID** (mounts), **bridge serial** in `/dev/disk/by-id/usb-*`
-  (`6702002103E1` = dock A, `670200210032` = dock B; suffix `-0:0` is bay 1,
+  (`670200210032` = dock A on 4-1, `6702002103E1` = dock B on 4-2; suffix `-0:0` is bay 1,
   `-0:1` bay 2), or drive model — never a letter. One enclosure passes a **fake
   serial** (`…_0123456789ABCDE-0:0`), so guard on the UUID too.
 - **A SCSI rescan force-spins-up every sleeping drive on that host and re-adds
@@ -1016,14 +1028,12 @@ same names, `WorkingDirectory=/home/me/machines/backup/latitude`, snapshot
   is reinstalled, and the env var is not a fallback the `password-file:` flag
   merely overrides — it is copied verbatim into `/etc/systemd/system`. That is why
   moving a password path means moving *both* keys and then re-running `schedule`.
-- **`resticprofile schedule --all` ignores `-n` and schedules every profile in the
-  config.** One invocation does the whole file; a second `-n <other>` run is the
-  same command twice.
-- **Unit names derive from the profile name, not the directory** —
-  `resticprofile-backup@profile-latitude`. So relocating the config directory
-  overwrites the same unit files rather than creating a second set. Renaming a
-  *profile* is what strands a timer and orphans snapshots, which is why the
-  relocation freezes every profile name and every repository URL.
+- **Renaming a *profile* strands its timer and orphans its snapshots.** Unit
+  names derive from the profile, not the directory
+  (`resticprofile-backup@profile-latitude` — see the `schedule --all` bullet
+  above), so relocating a config directory overwrites the same unit files rather
+  than creating a second set. That is why the relocation froze every profile name
+  and every repository URL.
 - **latitude's password is one file reached through one symlink, deliberately.**
   The dotfiles-tracked byte-source is still
   `~/g513ie-prod-config/vps/backup/homeserver/pass.txt` — every word of which is
