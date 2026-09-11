@@ -1,8 +1,8 @@
 {
   "last_refresh": {
-    "commit": "b69d13b",
+    "commit": "ac285c4",
     "date": "2026-09-11",
-    "scope": "Fleet harvest: g15 (local, 14), desktop/g614jv (7), desktop-wsl (26) via wsl.exe through its Windows parent, air (14, brought back online mid-run). latitude has NO ~/.claude/projects directory — zero transcripts, by absence, not failure. Permanent gap 2026-07-24..~2026-08-11: the 30-day cleanupPeriodDays default deleted those transcripts before the value was raised to 90 on 2026-09-10. Track B diffed dd3d74b..HEAD (594 commits) at name level. Suite measured green: 55 suites, 0 failures.",
+    "scope": "Fleet harvest: g15 (local, 14), desktop/g614jv (7), desktop-wsl (26) via wsl.exe through its Windows parent, air (14, brought back online mid-run). latitude has NO ~/.claude/projects directory — zero transcripts, by absence, not failure. Permanent gap 2026-07-24..~2026-08-11: the 30-day cleanupPeriodDays default deleted those transcripts before the value was raised to 90 on 2026-09-10. Track B diffed dd3d74b..HEAD (594 commits) at name level. Suite measured green: 55 suites, 0 failures. AIR ADDENDUM (same day, second pass): air was asleep on the first gather and reachable on the second — 14 sessions, 2026-07-31..08-31, 46 more rows. Its window predates most of the rest, so what survived dedup is machinery nobody revisited: the gortex-hook defects (no gortex PreToolUse hook ever ran on any Windows box until 2026-08-30, because windows.ps1 never installed the jq that gortex_merge_hooks is written in), the fleet-selfpull dirty-streak asymmetry between .sh and .ps1, and two security items parked for other boxes — latitude's restic repo backing up its own password file, and two live reusable unused Headscale pre-auth keys on hub. air went unreachable again before ~/pure could be re-probed, so the 'primary dev box' label is marked doubtful rather than corrected.",
     "sessions_processed": 190,
     "tiers_touched": [
       "AGENTS.md",

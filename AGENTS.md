@@ -29,7 +29,12 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   `base, ssh-server, agents, dotfiles, repos, backup-hub, backup-client`.
   Reinstalled from NixOS during the 2026-07/08 fleet migration.
 - **air** — MacBook, `platform: darwin`, tailnet `100.64.0.7`, roles `base,
-  ssh-server, agents, dotfiles, repos`. The **primary dev box**. Provisioned with
+  ssh-server, agents, dotfiles, repos`. Called **the primary dev box** here since
+  the 2026-07 migration, and that label is doubtful: every `pure` work repo moved
+  off it to `desktop-wsl` by 2026-08-02 (`~/pure` was found absent on air that
+  day) and has not moved back. Not re-verified since — air is frequently asleep
+  and was unreachable again on 2026-09-11 — so check the box before trusting
+  either the label or this caveat. Provisioned with
   `just provision-mac air` plus the dotfiles role. It runs a **pre-release macOS
   27 (Tahoe)**, which Homebrew says out loud it does not support — bottles come
   tagged `arm64_tahoe` and `brew doctor` opens with the unsupported-version

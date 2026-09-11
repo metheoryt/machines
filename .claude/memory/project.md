@@ -3717,3 +3717,117 @@ qBittorrent's WebUI returns `Forbidden` for API calls from localhost
 power outages**, not the brief voltage dips previously assumed — which moves UPS
 selection from AVR-only toward runtime/autonomy plus USB NUT monitoring for a
 graceful shutdown.
+
+## kb-refresh 2026-09-11, air addendum — 14 sessions, 2026-07-31..08-31
+
+Air was unreachable on the first pass and harvested on a second. Its window
+predates most of the above, so what survived dedup is mostly machinery nobody
+revisited since.
+
+### gortex hooks — three defects, one of which meant no hook ever ran on Windows
+
+- **`windows.ps1` never installed `jq`**, and `gortex_merge_hooks` is written in
+  jq — so it silently no-opped and **gortex's `PreToolUse` hooks never ran on ANY
+  Windows box, at any posture, until 2026-08-30**, when `windows.ps1` gained
+  `winget --id jqlang.jq`.
+- **`gortex_merge_hooks`' jq predicate `isgx` matched only the literal
+  `"gortex hook"`** and missed `gortex.exe hook`, so it never converged on Windows
+  and left duplicate bare+nudge hook entries with **deny winning** on desktop and
+  g15 for two weeks. Fixed 2026-08-30 by anchoring an optional `.exe` suffix.
+- **`agents/bootstrap.sh` pins `GORTEX_HOOK_MODE=nudge`** by default (2026-08-05),
+  overriding gortex's own `--hook-mode deny`. Override per run with
+  `GORTEX_HOOK_MODE=deny just gortex-setup`.
+- **The `consult-unlock` posture never unlocks.** Ten probes on 2026-08-05: a
+  source `Read` stayed denied even after a real `mcp__gortex__search` in the same
+  session. That is why the fleet runs `nudge`, not a preference.
+- **gortex's `PreCompact` handler returns `additionalContext`**, which Claude
+  Code's hook schema allows only for UserPromptSubmit / PostToolUse /
+  PostToolBatch / Stop / SubagentStop — so every compact prints a visible
+  "Hook JSON output validation failed".
+
+### Fleet plumbing
+
+- **`fleet-selfpull.sh` escalates a persistently dirty tree** to `STALE dirty Nt`
+  and a non-zero exit after `FLEET_SELFPULL_DIRTY_LIMIT` (default 36 ticks, ~6h at
+  the 10-minute cadence). Non-`main` branches are deliberately excluded so a
+  feature branch never escalates.
+- **`fleet-selfpull.ps1` has no such guard and no test coverage**, so `desktop` —
+  the one Windows-native member — can still freeze silently the way desktop-wsl
+  did for ~35 hours. Roadmap P6, not fixed.
+- **The three periodic-git mechanisms are NOT redundant; do not merge them.**
+  `git-autofetch` fetches every repo under `$HOME` and never touches a worktree;
+  `fleet-selfpull` ff-pulls the fleet repos and fires post-merge convergence;
+  `dotfiles-sync` commits, pushes and merges on the bare repo. Different subject,
+  different verb. (An earlier session in the same window flagged their near-
+  identical ~10-minute cadence as unreviewed duplication — that reading is wrong.)
+- **`agents/settings.json` hardcodes `/home/me/pure/claude-plugins`** (line 27),
+  real only on desktop-wsl, and ships verbatim to every agents-role box where it
+  resolves to nothing. Still true on 2026-09-11.
+- **`windows.ps1`'s `core.symlinks` repair must THROW, not retry.** A retry with
+  `git checkout -f` runs the identical checkout under the same `core.symlinks`
+  state and can silently rewrite the 9-byte plain `CLAUDE.md` back, while logging
+  a message that reads like a successful recovery. Fixed 2026-08-30.
+- **Two statusboard defects, both fixed 2026-07-31**: it erased the screen as its
+  own write before drawing, leaving a genuinely blank pane that tmux could flush
+  downstream as a visible blink every 2–5 s (fixed with a single-write paint,
+  `\033[K` before every newline); and it ignored SIGTERM, because
+  `trap cleanup EXIT INT TERM` *resumes* the script after the handler returns — so
+  every `systemctl stop` sat out the full 90 s timeout before SIGKILL. The fix is
+  `trap 'cleanup; exit 0' INT TERM HUP`.
+- **The caveman plugin's hooks shell out to a bare `node`**, which no fleet box had
+  until 2026-08-02 — so they failed silently (non-blocking) on every session since
+  the plugin was installed 2026-07-27. Fixed by adding `node` to `tier_brew_dev`
+  and `nodejs` plus a guarded symlink to `tier_apt_dev`. **hub deliberately still
+  has none**: its lean profile skips `tier_apt_dev` on a 960 MB VPS, so any plugin
+  hook shelling out to `node` still fails there. Accepted tradeoff, not a bug.
+
+### macOS — facts about `air` (its own host memory is on another branch)
+
+- **No `timeout`, no `findmnt`** — both GNU/Linux-only. A script meant to run on
+  air and the Linux members needs guarded fallbacks; for the first, ssh's own
+  `-o ConnectTimeout`.
+- **The built-in BWK awk rejects embedded newlines in `-v`** ("awk: newline in
+  string") — pass multi-line data via a file or process substitution.
+- **`/var` is a symlink to `/private/var`**, so `mktemp -d` returns
+  `/var/folders/…` while a script that resolves paths reports `/private/var/…`; a
+  test comparing the two spellings false-negatives on correct behaviour. (BSD
+  `wc -l` padding is the same family of trap and is already recorded above.)
+- **The `tailscale` CLI may not be on PATH** — fall back to
+  `/Applications/Tailscale.app/Contents/MacOS/Tailscale`.
+- **ssh silently offers the default `id_ed25519`** for any host with no explicit
+  `Host` block pinning `IdentityFile ~/.ssh/id_fleet`, which read as a server-side
+  auth bug on desktop until diagnosed with `-o IdentitiesOnly=yes`.
+
+### More parked facts — latitude and hub
+
+- **⚠ latitude's restic repo backs up its own password.** `/home/me/my/vps` is a
+  backup source and contains a plaintext copy of that same repo's 12-character
+  password at `backup/homeserver/pass.txt`, confirmed present in the 2026-08-30
+  snapshot via `restic find`. The repo lives on a removable dock drive slated for
+  eventual offsite rotation.
+- **⚠ hub held two live REUSABLE, unused Headscale pre-auth keys** as of
+  2026-08-30 (id 5 → 2026-10-14, id 9 → 2026-11-25), neither near expiry. With
+  ACLs still deferred, either key gives a joiner full fleet reach. A third was
+  found untracked on disk at `provision/secrets/authkey` (created 2026-07-27),
+  against the fleet's own post-rollout policy to revoke reusable keys; resolution
+  was never confirmed in-session.
+- **Correcting an earlier record**: latitude's own restic repo and desktop-wsl's
+  REST-server repo use DIFFERENT per-client passwords (12-char vs 63-char),
+  verified 2026-08-30 — not one password unlocking both.
+- **latitude's system clock is UTC+5, not UTC.** A 2026-08 incident review misread
+  a UTC log timestamp as local and built a 5-hour error into the fault timeline.
+- **`restic/rest-server:latest` is unpinned** — measured digest `d2aff06f` (built
+  2025-05-31) on 2026-08-30, so a routine `docker compose pull` would silently
+  swap the image under the fleet's backup hub.
+- **The NS1066 enclosure reports a hardcoded placeholder bridge serial**
+  (`0123456789ABCDE`), so its `usb-*` by-id path is not enclosure-unique — address
+  the drive behind it by `wwn-` or `ata-<model>_<serial>`.
+- **latitude's immich compose must extend `quicksync`/`openvino` and bind
+  `/dev/dri`** for the Intel iGPU — not the `nvenc`/`cuda` variants g513ie used for
+  its RTX 3050 Ti. Copying a compose across GPU vendors silently targets the wrong
+  hardware.
+- **Container DNS is pinned in `daemon.json` to 100.100.100.100 (MagicDNS) then
+  1.1.1.1**, because Tailscale rewrites `/etc/resolv.conf` just after `tailscaled`
+  starts and any container started before that snapshots the dead `127.0.0.53`
+  stub. That was the root cause of the 2026-08-03 fleet-wide indexer DNS outage —
+  alongside, and distinct from, the mount-ordering failure from the same reboot.
