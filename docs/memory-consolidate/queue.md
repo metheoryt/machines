@@ -279,3 +279,2638 @@ tools. Anything recorded
 - **replacement:** (none — this is a question, not an edit)
 - **first seen:** 2026-09-11
 
+
+## 7e5af187 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **action:** skill
+- **scope:** repo:machines — the run's own brief
+- **apply on:** g15 (or any box; it is a file in `machines`)
+- **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
+- **anchor:** `Step 6 — File the items` (L334; the four-tuple paragraph is L354-367)
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 6 — File the items#consolidate-phase.md:354-367` # `skill`
+- **why:** the brief mandates a four-tuple id whose fourth element the tool
+  cannot accept. `consolidate.sh cmd_id` is
+  `printf '%s\037%s\037%s' "$1" "$2" "$3" | sha256sum | cut -c1-8` — three
+  positional arguments, and a fourth is silently ignored. So the discriminator
+  the brief calls **not optional** has, since it was written, changed nothing:
+  two findings on one section with one action still collide exactly as
+  L358-364 describes, and the run that hits it still has no way out but the
+  `### Part N` workaround that same paragraph forbids.
+- **evidence:** measured on this box 2026-09-12, three calls, one hash:
+  ```console
+  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete
+  857b229a
+  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete global.md:785-800
+  857b229a
+  $ bash consolidate.sh id /home/me/.claude/memory/global.md Gortex delete global.md:900-910
+  857b229a
+  ```
+  Source: `agents/plugin/skills/lib/consolidate.sh:148-150` (`cmd_id`) and its
+  dispatch at `:237`. The brief's mandate is at consolidate-phase.md:354-367;
+  the ledger shows it applied as `f7082e6e` on 2026-09-11 — **prose only, the
+  tool was never touched in that change.**
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md` — this run
+  could not produce a distinct id for a second finding on the same section+action
+  through the documented interface, and worked around it by folding the
+  discriminator into the **anchor argument** (`<anchor>#<basename>:<a>-<b>`),
+  recording the literal string it passed in an `id-inputs` field on every item.
+  That workaround is why tonight's ids are reproducible at all; it is not in the
+  brief and the next run will not guess it.
+- **bytes:** n/a (a tool change plus ~3 lines of brief)
+- **replacement — two edits, one decision.**
+  (1) `agents/plugin/skills/lib/consolidate.sh`, replace `cmd_id`:
+```bash
+cmd_id() {
+  # Four-tuple: target, anchor, action, discriminator. The discriminator is the
+  # finding's first evidence line range, and it is what lets one section hold
+  # more than one finding per action. Optional only for a whole-file finding.
+  printf '%s\037%s\037%s\037%s' "$1" "$2" "$3" "${4:-}" | _sha | cut -c1-8
+}
+```
+  and its usage line:
+```
+  id <target> <anchor> <action> [discriminator]
+                             8-hex stable item id. The discriminator is the
+                             finding's first evidence line range
+                             (<basename>:<start>-<end>) and is REQUIRED unless
+                             the anchor is (whole file).
+```
+  (2) In this brief at L354, after the `discriminator` table row, add:
+```
+Pass it as the **fourth argument** to `consolidate.sh id`. A run that omits it
+on a section-level finding gets the same id as its sibling and the sibling is
+suppressed as `open` — silently, with no error.
+```
+- **NOTE for /memory-review:** applying (1) changes no existing id — every id in
+  `queue.md` and `ledger.tsv` was computed with an empty fourth element, which
+  `${4:-}` reproduces byte-for-byte. Verified: the three-arg call above still
+  returns `857b229a` under the proposed body.
+- **first seen:** 2026-09-12
+
+## 0e45736a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **action:** skill
+- **scope:** repo:machines — the run's own brief + `consolidate.sh`
+- **apply on:** g15 (or any box)
+- **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
+- **anchor:** `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` (L274; the `verify` bullet is L314-322)
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)#consolidate-phase.md:314-322` # `skill`
+- **why:** `verify` cannot follow a **rename**, and it reports the failure as
+  `drifted` — the same word it uses for "an approved consolidation was undone",
+  which the brief calls *a finding, not an error*. Tonight all four non-`ok`
+  rows were renames, not drift: the content is intact at the new path. A run
+  that trusted the word would have filed four false items against decisions that
+  held perfectly.
+- **evidence:** `bash consolidate.sh verify` on 2026-09-12 → 87 `ok`, 4
+  `drifted`, 0 `missing`, 0 `unverifiable`. The four:
+  ```
+  drifted  f7082e6e  …/skills/dream/SKILL.md
+  drifted  35ce7179  …/skills/dream/SKILL.md
+  drifted  e9310fe2  …/skills/dream/SKILL.md
+  drifted  06ccc498  …/skills/dream-apply/SKILL.md
+  ```
+  `dream` was renamed to `memory-harvest` and `dream-apply` to `memory-review`
+  on 2026-09-11 (commits `1b38ff8`, `d0bcdda`). Both old paths still exist as
+  **660 B / 661 B redirect stubs**, which is why the rows read `drifted` and not
+  `missing`. Each phrase was re-checked at the new path with the same test
+  `verify` uses (`grep -qF`) and all four were found:
+  ```
+  f7082e6e  "The id is a four-tuple, and the discriminator is not optional"  -> memory-harvest/consolidate-phase.md
+  35ce7179  "State the check,"                                              -> memory-harvest/consolidate-phase.md
+  e9310fe2  "measure the INJECTED bytes, not the file bytes"                -> memory-harvest/consolidate-phase.md
+  06ccc498  "An item names one site; the error may live at several"         -> memory-review/SKILL.md
+  ```
+  Cause: `cmd_decide` writes the target path into ledger column 5 at decide
+  time (`consolidate.sh:206-216`) and `cmd_verify` greps that frozen path
+  (`:153-170`). Nothing re-resolves it.
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md`.
+- **bytes:** n/a
+- **replacement — add to the `verify` bullet at L322, after "`missing` means the target file is gone entirely.":**
+```
+  **`drifted` has a false-positive class: a renamed file.** The ledger freezes
+  the target path at decide time and `verify` greps that path, so a skill or
+  store that moved reports `drifted` (or `missing`) with its content perfectly
+  intact — measured 2026-09-12, all four non-`ok` rows were the 2026-09-11
+  `dream`→`memory-harvest` / `dream-apply`→`memory-review` rename, and every
+  phrase was present at the new path. Before filing a `drifted` row as a
+  finding, re-run its own test at the plausible new path:
+  `grep -cF -- "<phrase>" <new path>`. If it is found, the row is a rename:
+  say so in the report and file nothing.
+```
+- **also worth doing, same decision:** `consolidate.sh decide` could store the
+  path **relative to `$HOME`** instead of absolute, which would not have helped
+  here (the rename was below `$HOME`), so the durable fix is the reader's, not
+  the writer's — hence a brief change rather than a tool change.
+- **first seen:** 2026-09-12
+
+## b59b26a8 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **action:** skill
+- **scope:** repo:machines — the run's own brief
+- **apply on:** g15 (or any box)
+- **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
+- **anchor:** `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` (L274; the transcript-gap bullet is L301-311)
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)#consolidate-phase.md:301-311` # `skill`
+- **why:** the two-command recipe compares **every project slug on the box**
+  against **one repo's** watermark file, so it reports as "unharvested" every
+  session that belongs to a *different* repo. It cannot return a small number
+  even when every repo on the box is fully harvested, and it overstated the gap
+  by 29× tonight. A standing check that cannot return "fine" trains its reader
+  to skip it.
+- **evidence:** measured 2026-09-12 on g15.
+  - The recipe as written: `jq '.sessions|length' machines/.claude/kb-harvest-state.json`
+    → **191**; `ls ~/.claude/projects/*/*.jsonl | wc -l` → **44**; the
+    `comm -13` the recipe implies → **29 of 44 unharvested**.
+  - Per repo, each slug dir against **its own** state file:
+    ```
+    machines   local=16  gap=1    (1abc7229…, this very session, still open)
+    airdrome   local=5   gap=0
+    embedthat  local=4   gap=0
+    qaz-code   local=5   gap=0
+    telegrind  local=5   gap=0
+    vps        local=2   gap=0
+    ```
+    The true local gap is **1 of 44**, and that one is the session doing the
+    measuring. The other 28 "unharvested" sessions are other repos' transcripts,
+    each already harvested by its own repo's Phase A pass tonight.
+  - `.sessions|length` = 191 > 44 because `fleet-gather.sh` merges **other
+    boxes'** sessions into the same map. So the two numbers are not even drawn
+    from the same population, in either direction.
+- **consequence for the open queue:** item **`0c1fdb6a`** (filed 2026-09-11,
+  still open) rests entirely on this miscount — it reads "30 of 30 outside the
+  harvested set". Its premise is false. **/memory-review: re-measure per repo
+  before applying it**; this run may not rewrite an existing item, so it is
+  flagged here instead.
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md`.
+- **bytes:** n/a
+- **replacement — replace L301-311 with:**
+```
+- **Unharvested transcripts.** Compare **per repo**: a repo's watermark only
+  ever covers its own slug dirs, and `.sessions` also carries other boxes'
+  sessions merged in by `fleet-gather.sh`, so a box-wide count against one
+  state file is meaningless in both directions (measured 2026-09-12: the
+  box-wide form said 29 of 44 unharvested; the per-repo form said 1, and that
+  one was the running session).
+  ```bash
+  for r in ~/machines ~/*/ ~/*/*/; do
+    [ -d "$r/.git" ] && [ -f "$r/.claude/kb-harvest-state.json" ] || continue
+    slug="$(printf '%s' "${r%/}" | tr / -)"
+    ls ~/.claude/projects/$slug/*.jsonl 2>/dev/null | xargs -rn1 basename \
+      | sed 's/\.jsonl$//' | LC_ALL=C sort > /tmp/l.$$
+    jq -r '.sessions|keys[]' "$r/.claude/kb-harvest-state.json" | LC_ALL=C sort > /tmp/h.$$
+    printf '%s gap=%s\n' "${r%/}" "$(comm -13 /tmp/h.$$ /tmp/l.$$ | wc -l)"
+  done
+  ```
+  Discount the session that is running the check — its transcript is open and
+  cannot be harvested yet, so a gap of 1 on this box's own repo is the floor,
+  not a finding. A real gap means facts are ageing out of transcripts
+  unrecorded. File **one** `harvest` item naming the repo, the gap and the last
+  refresh commit — and **do not run repo-harvest from here.**
+  `fleet-gather.sh` advances its watermark at *gather* time, before its own
+  review gate, so a nightly gather whose candidates nobody applies marks those
+  sessions harvested and strands them permanently. Harvest is an attended
+  action.
+```
+  `LC_ALL=C` is not decoration: this box has a Russian locale and `comm`
+  emits "input is not in sorted order" and returns wrong counts without it
+  (hit twice in this run).
+- **first seen:** 2026-09-12
+
+## fa2da900 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 3b — Pass 1b: across the FLEET (read-only, from this box)#consolidate-phase.md:205-210` # `skill`
+- **action:** skill
+- **scope:** repo:machines — the run's own brief
+- **apply on:** g15 (or any box)
+- **anchor:** `Step 3b — Pass 1b: across the FLEET (read-only, from this box)` (L189; the drift bullet is L205-210)
+- **why:** the bullet makes byte size the test — *larger than main* is a
+  finding, *smaller than main* "is just lagging its next sync tick; that is not
+  a finding." Both halves are measurably wrong, and the false-negative half is
+  the dangerous one: a branch can be **smaller** than `main` and still hold
+  memory `main` has never seen, because the 2026-09-11 consolidation DELETED
+  several hundred lines from the shared stores. Size compares two numbers that
+  moved for unrelated reasons.
+- **evidence:** measured on this box 2026-09-12 against freshly fetched refs.
+  Naive size test vs `origin/main`:
+  ```
+  origin/desktop-wsl  practices.md  31990 B  vs main 32725 B  -> "smaller, not a finding"
+  ```
+  Merge-base test on the same file — lines present on the branch and absent from
+  the version both sides diverged from:
+  ```
+  desktop-wsl  merge-base ae03a7d (2026-09-11)
+     practices.md  126 NEW lines
+     tone.md        21 NEW lines
+     values.md      13 NEW lines
+     core.md         5 NEW lines
+     .claude/CLAUDE.md 5 NEW lines
+  air          merge-base 57551c6 (2026-08-24)
+     global.md      17 NEW lines
+     practices.md   11 NEW lines
+     tone.md         7 NEW lines
+  g15          merge-base 21abe71 (2026-09-11)
+     global.md     166 NEW lines
+  ```
+  126 lines of unpromoted personality memory sat inside a file the rule tells
+  the run to skip. Conversely a naive whole-file `comm` against `main` reports
+  332 desktop-wsl lines "main lacks" — mostly text `main` deliberately deleted
+  on 2026-09-11, which is how three items were rejected as *already done* last
+  run (`6d32518b`, `08ade540`, `6b30ae15`). Only the merge-base form separates
+  the two populations.
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md`.
+- **bytes:** n/a
+- **replacement — replace L205-210 with:**
+```
+- **Unpromoted drift on a shared file — test by merge-base, never by size.**
+  `core.md`, `global.md`, `personality/*` are supposed to be byte-identical
+  everywhere. **Do not compare byte counts**: a branch can be SMALLER than
+  `main` and still hold memory `main` has never seen, because a consolidation
+  pass deletes lines from `main` (measured 2026-09-12: `origin/desktop-wsl`'s
+  `practices.md` is 735 B smaller than main's and holds **126** lines written on
+  that branch since divergence). And a whole-file `comm` against `main` is just
+  as wrong in the other direction — it counts every line `main` deliberately
+  deleted, which is how three items were rejected as *already done* in the
+  2026-09-11 run. The check that answers the actual question:
+  ```bash
+  export LC_ALL=C                 # a non-C locale silently breaks comm here
+  mb=$(dotfiles merge-base origin/main origin/<branch>)
+  for p in .claude/memory/global.md .claude/memory/core.md \
+           .claude/memory/personality/*.md .claude/CLAUDE.md CLAUDE.md; do
+    dotfiles show "$mb:$p"            2>/dev/null | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u > /tmp/mb
+    dotfiles show "origin/<branch>:$p" 2>/dev/null | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u > /tmp/br
+    printf '%s %s\n' "$p" "$(comm -13 /tmp/mb /tmp/br | wc -l)"
+  done
+  ```
+  A non-zero count is memory written on that branch and reaching no other box.
+  File it as `promote`, `apply on:` that branch's box — the write boundary
+  below still holds, so it is fixed there, never from here.
+```
+- **first seen:** 2026-09-12
+
+## 1013e182 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 1 — Scan and measure#consolidate-phase.md:96-120` # `skill`
+- **action:** skill
+- **scope:** repo:machines — the run's own brief + `consolidate.sh`
+- **apply on:** g15 (or any box)
+- **anchor:** `Step 1 — Scan and measure` (L96)
+- **why:** `scan` and `instructions` count a **git worktree's** checkout of a
+  tracked file as a separate store, under a separate `repo:<name>` scope. So one
+  file appears three times, at three different sizes, and the run is invited to
+  file items against paths whose edits are lost on the next checkout. This is
+  the exact hazard the brief already names for Orca workspaces at L47-56 — *"a
+  second copy of the largest store in the corpus… Two versions of one store in
+  one session is the confusion this skill exists to remove"* — but it is
+  enforced only on the run's **cwd**, never on what `scan` reports.
+- **evidence:** measured 2026-09-12 on g15.
+  ```console
+  $ cat /home/me/qaz-baseline/.git
+  gitdir: /home/me/my/qaz-code/.git/worktrees/qaz-baseline
+  $ cat /home/me/my/qaz-pool/.git
+  gitdir: /home/me/my/qaz-code/.git/worktrees/qaz-pool
+  $ git -C /home/me/my/qaz-code worktree list
+  /home/me/my/qaz-code   a9a1d5a [main]
+  /home/me/my/qaz-pool   47933ca [perf/parallel-render]
+  /home/me/qaz-baseline  849407c (detached HEAD)
+  ```
+  `git ls-files --error-unmatch .claude/memory/project.md` succeeds from all
+  three, against the one `qaz-code` repo. Yet tonight's `scan` reported:
+  ```
+  /home/me/my/qaz-code/.claude/memory/project.md      41639  repo:qaz-code
+  /home/me/qaz-baseline/.claude/memory/project.md     22383  repo:qaz-baseline
+  /home/me/my/qaz-pool/.claude/memory/project.md      23571  repo:qaz-pool
+  ```
+  and `instructions` the same for the three `CLAUDE.md` (64852 / 59558 / 60019).
+  That is **~184 KB of the reported corpus that is two stale checkouts of one
+  store family** — about a quarter of tonight's total. Cause: `_scope()` at
+  `consolidate.sh:69-75` derives the label from
+  `basename $(git rev-parse --show-toplevel)`, and a worktree's toplevel is the
+  worktree directory.
+  Line-level, the worktree copies hold nothing new — qaz-pool 1 line and
+  qaz-baseline 87 lines that the main checkout lacks, all of it older text the
+  `main` branch has since edited — so nothing is *lost* tonight. The cost is
+  inflated totals and a live invitation to file against the wrong path.
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md` — the qaz
+  pass-1 agent was launched against all three files and had to be corrected
+  mid-flight once the worktree relationship was measured.
+- **bytes:** n/a
+- **replacement — two edits, one decision.**
+  (1) `consolidate.sh`, in `_scope()`, after the `rev-parse --show-toplevel`
+  block, resolve a worktree to its main checkout so one tracked file gets one
+  identity:
+```bash
+  local top
+  if top="$(git -C "$(dirname "$p")" rev-parse --show-toplevel 2>/dev/null)"; then
+    # A worktree's toplevel is the worktree dir, so the SAME tracked file is
+    # reported once per worktree under a different repo name (measured
+    # 2026-09-12: qaz-code/project.md counted three times, 87 KB of phantom
+    # corpus). Resolve to the main checkout instead.
+    local common main
+    if common="$(git -C "$top" rev-parse --git-common-dir 2>/dev/null)"; then
+      case "$common" in /*) ;; *) common="$top/$common" ;; esac
+      main="$(cd "$common/.." 2>/dev/null && pwd)" || main="$top"
+    else main="$top"; fi
+    if git -C "$top" ls-files --error-unmatch "$p" >/dev/null 2>&1; then
+      if [ "$main" != "$top" ]; then
+        echo "worktree:$(basename "$main")"; return
+      fi
+      echo "repo:$(basename "$main")"; return
+    fi
+  fi
+```
+  (2) In this brief's `scope` table at L104-112, add the row:
+```
+| `worktree:<name>` | a git worktree's checkout of a file tracked by `<name>` | **not a store** — the same file is already counted under `repo:<name>`. Never file an item against this path: an edit here is lost on the next checkout or lands on the worktree's branch. Fold it into the `repo:<name>` item instead, and exclude these bytes from the corpus total. |
+```
+- **first seen:** 2026-09-12
+
+## a7031b1a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos#SKILL.md:108-116` # `skill`
+- **action:** skill
+- **scope:** repo:machines — Phase A's brief (the per-repo harvest)
+- **apply on:** g15 (or any box)
+- **anchor:** `Step 0 — Pick the repos` (L68; the slug-match bullet is L108-116)
+- **why:** *"the repo's basename is enough"* is stated as settled and was
+  measured false on this box tonight. A basename is a substring match against
+  the transcript slug, so a basename that repeats under two parents matches both
+  repos' transcripts, and a basename that is a **prefix of its own children's
+  paths** matches every child. Phase A had to qualify both by parent directory
+  to get a correct gather; the skill gave it no rule for doing so.
+- **evidence:** observed in tonight's Phase A run on g15 (11 repos harvested).
+  - `~/kazakhstan-law/codes` and `~/split-test/codes` are both basename
+    `codes`, so `--match codes` matches the slugs of both:
+    ```console
+    $ ls -d /home/me/kazakhstan-law/codes /home/me/split-test/codes
+    /home/me/kazakhstan-law/codes  /home/me/split-test/codes
+    ```
+  - `~/kazakhstan-law` is itself a repo (`.git` directory present) whose name is
+    a substring of every one of its nested children's slugs, so `--match
+    kazakhstan-law` sweeps in every child repo's transcripts.
+  The skill already half-knows this — L114-116 say *"A basename is a substring
+  match, so name the slug directories that matched in the report — that is how a
+  cross-match with an unrelated repo becomes visible instead of silent."* That
+  makes the collision **visible after the fact**; it does not stop the gather
+  from advancing a watermark over another repo's sessions, which is the
+  irreversible half (`### Recovery / aborted runs`, L176-189).
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md` (Phase A, same box, same night).
+- **bytes:** n/a
+- **replacement — replace the first sentence of L108 and add the qualification rule:**
+```
+- Slug matches: **start from the repo's basename, then check it is unambiguous.**
+  Transcript directories are the cwd path with `/` replaced by `-`, and an Orca
+  workspace lives at `~/orca/workspaces/<repo-basename>/<workspace-name>/`, so
+  one `--match <basename>` covers the main checkout AND every workspace —
+  including workspaces already deleted, whose transcripts outlive them (measured
+  2026-09-11: `-home-me-orca-workspaces-qaz-code-kazhackstan-2026` was still
+  present with no workspace directory left).
+  **But a basename is a substring match and it is not always unique.** Measured
+  2026-09-12 on g15: `~/kazakhstan-law/codes` and `~/split-test/codes` share the
+  basename `codes`, and `~/kazakhstan-law` is itself a repo whose name is a
+  substring of every nested child's slug. Before gathering, test it:
+  ```bash
+  ls -d ~/.claude/projects/*"$(basename "$repo")"* 2>/dev/null
+  ```
+  If that lists a slug belonging to a different repo, **do not use the
+  basename** — match on the `$HOME`-relative path with `/` replaced by `-`
+  instead (`--match my-qaz-code`, `--match kazakhstan-law-codes`), which is
+  unique by construction, and add a second `--match` for the workspace form
+  (`--match orca-workspaces-<basename>`) so workspaces are still covered.
+  Either way, **name the slug directories that matched in the report** — a
+  cross-match must be visible, not silent, and an unnoticed one advances a
+  watermark over another repo's sessions, which `### Recovery` cannot undo.
+```
+- **first seen:** 2026-09-12
+
+## 8a3a9801 · skill · /home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/SKILL.md` # `Step 0 — Pick the repos#SKILL.md:117-125` # `skill`
+- **action:** skill
+- **scope:** repo:machines — Phase A's brief (the per-repo harvest)
+- **apply on:** g15 (or any box)
+- **anchor:** `Step 0 — Pick the repos` (L68; the watermark backup is L120-125, the create-empty is L117-118)
+- **why:** the recovery backup is taken **after** the "create with an empty `{}`
+  on first run" instruction, so in a repo with no prior state the file copied to
+  `.claude/harvest/state-before.json` is the literal string `{}`. Restoring from
+  it would set the watermark to empty — which, for a repo that *does* have a
+  state file by the time recovery is needed, **wipes the watermark instead of
+  restoring it**: the exact opposite of what `### Recovery / aborted runs` (L176-189)
+  promises. Two Phase A subagents hit this independently tonight.
+- **evidence:** the ordering is plain in the file — `sed -n '117,125p' SKILL.md`:
+  ```
+  - State file: `"$repo/.claude/kb-harvest-state.json"` (create with an empty
+    `{}` on first run — `distill.py` initializes its own `sessions` key).
+    Digests out dir: a scratchpad path, never inside the repo.
+  - **Before the gather, back up the watermark** — see *Recovery* below:
+    ```bash
+    mkdir -p "$repo/.claude/harvest"
+    cp "$repo/.claude/kb-harvest-state.json" \
+       "$repo/.claude/harvest/state-before.json" 2>/dev/null || true
+    ```
+  ```
+  The create step precedes the `cp`, and the `cp` has no guard distinguishing
+  "no prior state" from "prior state to protect". Six repos on this box gained
+  their first `project.md` today and several their first state file, so the
+  first-run branch was live, not hypothetical. The stakes are set by the skill
+  itself at L177-183: a gather that dies leaves the watermarks moved and the
+  facts nowhere, *"and that harvest is **gone for good**. The fleet has already
+  lost 2026-07-24 → 08-11 this way."*
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md` (Phase A, same box, same night — two subagents, independently).
+- **bytes:** n/a
+- **replacement — reorder, and make the first-run case explicit. Replace L117-125 with:**
+```
+- State file: `"$repo/.claude/kb-harvest-state.json"`. Digests out dir: a
+  scratchpad path, never inside the repo.
+- **Back up the watermark BEFORE creating anything** — see *Recovery* below.
+  The order matters: taking the backup after the first-run create copies the
+  literal `{}`, and restoring *that* wipes a watermark rather than restoring it
+  (hit by two subagents on 2026-09-12). Back up only a file that already exists,
+  and record that there was none when there was none:
+  ```bash
+  mkdir -p "$repo/.claude/harvest"
+  if [ -s "$repo/.claude/kb-harvest-state.json" ]; then
+    cp "$repo/.claude/kb-harvest-state.json" \
+       "$repo/.claude/harvest/state-before.json"
+  else
+    rm -f "$repo/.claude/harvest/state-before.json"   # no watermark to protect
+    printf '{}' > "$repo/.claude/kb-harvest-state.json"   # first run
+  fi
+  ```
+  `distill.py` initializes its own `sessions` key, so `{}` is a valid start.
+  **Absence of `state-before.json` means "there was no watermark", not "the
+  backup failed"** — recovery for such a repo is to delete the state file, not
+  to restore one.
+```
+  and in `### Recovery / aborted runs` at L184, replace *"Restore from
+  `"$repo/.claude/harvest/state-before.json"`, written in Step 0."* with:
+```
+Restore from `"$repo/.claude/harvest/state-before.json"`, written in Step 0 —
+**but only if it exists.** Step 0 writes it only when there was a watermark to
+protect, so a missing backup means this repo had none and recovery is
+`rm -f "$repo/.claude/kb-harvest-state.json"`. Never restore a backup whose
+whole content is `{}`: that is not a watermark, and writing it over a real one
+strands every session it had recorded.
+```
+- **first seen:** 2026-09-12
+
+## 68d648b2 · promote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: g15)#global.md:1548-1728` # `promote`
+- **action:** promote
+- **scope:** shared — `global.md` is byte-identical on every box, so this is a fleet-wide change
+- **apply on:** **g15** — this box. `/dotfiles-promote` runs here.
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `(branch: g15)`
+- **why:** `origin/g15` carries **166 lines of `global.md` that `origin/main` has
+  never had** — written on this box and reaching no other. It is the whole
+  `## Harvested 2026-09-11 (memory-harvest, machines fleet)` section, 11175 B at
+  L1548. `global.md` is a *shared* store: latitude and hub are byte-identical to
+  `main` on all eight shared paths, so this fact set exists on exactly one disk.
+- **evidence:** measured 2026-09-12 after `dotfiles fetch --all --prune`.
+  ```
+  blob sizes, origin/g15 vs origin/main (only differing path):
+    .claude/memory/global.md   122120  vs  110911   (+11209 B)
+  every other shared path: identical blob
+  merge-base origin/main...origin/g15 = 21abe71 (2026-09-11)
+  lines on g15 and not in the merge-base version: global.md 166
+  rev-list --left-right --count origin/main...origin/g15 = 0  40
+  ```
+  `bash consolidate.sh index ~/.claude/memory/global.md` puts the only section
+  after L1522 at `1548  11175  Harvested 2026-09-11 (memory-harvest, machines fleet)`.
+- **COLLIDES WITH:** two other open decisions touching the same text — do not
+  apply them in the wrong order.
+  1. Pass-1 finding this run proposes folding that whole dated section into the
+     topical headings above it (it is an ingestion artefact, and three of its
+     bullets are already duplicated by topical ones). **Decide the fold first,
+     then promote the result** — promoting first pushes the duplicates fleet-wide
+     and the fold then has to be promoted a second time.
+  2. All **11** Phase A `shared-proposal-2026-09-12.md` files queue further
+     additions to `global.md`. Batch them into the same promote rather than
+     running `/dotfiles-promote` once per item.
+- **bytes:** +11209 B to `main` (or less, if the fold is applied first)
+- **replacement:** (none — this is a promote, not an edit. `/dotfiles-promote`
+  on g15, path `.claude/memory/global.md`.)
+- **first seen:** 2026-09-12
+
+## b09de79d · promote · /home/me/.claude/memory/personality/practices.md
+
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `(branch: desktop-wsl)#practices.md:branch-vs-mergebase-ae03a7d` # `promote`
+- **action:** promote
+- **scope:** shared — three fleet-wide stores
+- **apply on:** **desktop-wsl** — NOT this box. `/memory-review` on g15 must refuse it.
+  A push to another box's branch strands that box's next sync as a conflict
+  (*The write boundary*, consolidate-phase.md:237-252).
+- **target:** `/home/me/.claude/memory/personality/practices.md`
+- **anchor:** `(branch: desktop-wsl)`
+- **why:** `origin/desktop-wsl` holds **170 lines across five shared stores that
+  `main` has never had** — the largest unpromoted block in the fleet, and it is
+  *personality* memory, the class that is supposed to be byte-identical
+  everywhere. It is invisible to every other box: none of it is on `main`, and
+  `desktop-wsl`'s branch is the only copy.
+- **evidence:** measured 2026-09-12 after `dotfiles fetch --all --prune`.
+  merge-base `origin/main...origin/desktop-wsl` = `ae03a7d` (2026-09-11);
+  lines present on the branch and absent from the merge-base version:
+  ```
+  .claude/memory/personality/practices.md   126
+  .claude/memory/personality/tone.md         21
+  .claude/memory/personality/values.md       13
+  .claude/memory/core.md                      5
+  .claude/CLAUDE.md                           5
+  ```
+  **Size would have hidden all of it**: `practices.md` on that branch is 31990 B
+  against main's 32725 — *smaller*, which the brief's current Step 3b rule
+  (L205-210) calls "just lagging… not a finding". See the companion `skill` item
+  filed this run against that rule.
+  Seven whole `##` sections are among the new lines, e.g.
+  `## A guard asserted only on its refusal is not tested (measured 2026-09-07, machines/hosts/g15/staging)`,
+  `## Review findings — the observations hold, the remedies don't (measured 2026-08-28, backend-chats PR #742)`,
+  `## Never re-expand text a human edited down (2026-09-03, PR #4384)` (values.md),
+  `## Review findings I draft — how he cut them (measured 2026-08-27, PR #4360)` (tone.md).
+- **carry first / caution:** several of these sections cite employer PRs and
+  tickets by number (`PR #4384`, `CFT-4888`, `CFT-5051`). They are *behavioral*
+  rules, which is why they are in `personality/` — but promoting puts the ticket
+  ids on **every** box including `hub` (the public VPS). That is the same
+  judgement the six open `Pure …` demote items turn on; decide it once, the same
+  way, for both. Generalising the citation to a date (`measured 2026-09-02, a
+  review`) preserves the rule and drops the identifier.
+- **bytes:** up to +6 KB across five shared paths on `main`
+- **replacement:** (none — `/dotfiles-promote` **on desktop-wsl**, the five paths
+  above. Nothing to apply on g15.)
+- **first seen:** 2026-09-12
+
+## 12e550e9 · promote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `(branch: air)#global.md:branch-vs-mergebase-57551c6` # `promote`
+- **action:** promote
+- **scope:** shared — three fleet-wide stores
+- **apply on:** **air** — NOT this box. `/memory-review` on g15 must refuse it.
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `(branch: air)`
+- **why:** `origin/air` holds **35 lines across three shared stores that `main`
+  has never had**, written on air since it diverged on 2026-08-24. Air's branch
+  tip is 2026-09-07 and the box is frequently asleep (unreachable again
+  2026-09-11), so this has had three weeks to reach the rest of the fleet and
+  has not. Every other shared path on that branch is *smaller* than main's —
+  i.e. air is also lagging — which is exactly the state in which a naive sync
+  merge can lose the 35 lines silently.
+- **evidence:** measured 2026-09-12 after `dotfiles fetch --all --prune`.
+  merge-base `origin/main...origin/air` = `57551c6` (2026-08-24);
+  lines present on the branch and absent from the merge-base version:
+  ```
+  .claude/memory/global.md                  17
+  .claude/memory/personality/practices.md   11
+  .claude/memory/personality/tone.md         7
+  ```
+  `rev-list --left-right --count origin/main...origin/air` = `17  62`.
+  The `global.md` block is one coherent, high-value finding that exists nowhere
+  else in the corpus — a gortex MCP session's project is pinned by the client's
+  cwd and an in-process subagent inherits it and cannot switch (probed
+  2026-08-17), so any agent reviewing code in a different checkout than the
+  caller's is graph-blind **silently**, and the fix is to launch it as its own
+  session with cwd inside that worktree. Two bullets in `## Gortex` and the
+  worktree-indexing rule consolidated on 2026-09-11 both assume the reader knows
+  this and neither states it.
+- **carry first / caution:** the evidence line names an employer worktree
+  (`backend-api-pure-review-4336`). Same judgement as the desktop-wsl promote
+  and the six open `Pure …` demotes: generalise the identifier or accept it
+  fleet-wide, but decide it once for all three.
+- **precondition:** air must be awake. `rev-list` shows it 62 commits ahead of
+  `main` and 17 behind, so run `/dotfiles-sync` there first — promoting from a
+  stale checkout is how the 2026-09-11 run produced three items that had to be
+  rejected as *already done*.
+- **bytes:** ~+2 KB across three shared paths on `main`
+- **replacement:** (none — `/dotfiles-promote` **on air**, the three paths above.)
+- **first seen:** 2026-09-12
+
+## 2a4a14a7 · contradiction · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Fleet SSH reachability#global.md:142-151` # `contradiction`
+- **action:** contradiction
+- **scope:** shared → fleet-wide change
+- **apply on:** g15 (the store is `main`-tracked; `/dotfiles-promote` after)
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Fleet SSH reachability` (L140, 8746 B)
+- **why:** one section asserts two incompatible remote shells for `g15` — L142-151
+  says its SSH "lands in PowerShell, like `desktop`", L190-201 says Debian/Ubuntu
+  members including `g15` "log in to **fish**" — and live measurement refutes
+  both. The same bullet also cites a dead renderer.
+- **evidence:** `global.md:142-151` vs `global.md:190-201`. On the box
+  2026-09-12: `getent passwd me | awk -F: '{print $7}'` → `/bin/bash`; no
+  `exec fish` in `~/.bashrc`/`~/.profile` (fish is installed at `/usr/bin/fish`,
+  never exec'd). The renderer: `ls ~/machines/modules` → *No such file*;
+  `git log -1 -- '*ssh.nix'` → `f3d63b2 feat!: delete the NixOS tree`. It is
+  `tier_ssh_fleet` (`provision/lib/tiers.sh:1558`) / `provision/lib/fleet-ssh-config.ps1`
+  now. L199 in this same section already says g15 "is not one now", so bullet 1
+  is internally contradicted too. latitude/hub were NOT re-probed from here —
+  their fish half is left standing on purpose.
+- **bytes:** 1653 → 1830 (749+904 → 808+1022; it grows, because two wrong
+  statements are replaced by one correct one that names three cases)
+- **replacement — TWO ranges, one decision. Replace L142-151 with:**
+```
+- **The fleet machines are mutually reachable over SSH via the Tailscale/Headscale
+  tailnet — assume it, don't re-probe each session.** SSH aliases live in
+  `~/.ssh/config`, rendered from `fleet.json` (repo root) by `tier_ssh_fleet`
+  (posix) / `provision/lib/fleet-ssh-config.ps1` (Windows) — the old `ssh.nix`
+  renderer died with the NixOS tree (`f3d63b2`): `latitude` (latitude5520),
+  `desktop` (the ROG G16 2024 laptop — Windows hostname `g614jv` inside WSL /
+  `ME-G614JV` native; its old NixOS identity `g16` is retired), `g15` (g513ie, the
+  ROG G15 2023 — **the logical name was `server` until 2026-08-27**, and
+  `server.gg.ez` no longer resolves; OS hostname renamed from `methe-server`
+  2026-07-20), `hub` (the cyphy.kz VPS, not a fleet workstation). Keys-only, no
+  public exposure.
+```
+  **and replace L190-201 with:**
+```
+- **The remote login shell differs by box — check, don't assume.** `latitude` and
+  `hub` log in to **fish**, which chokes on `$(...)` / POSIX-test syntax passed as
+  `ssh host '<script>'` (fails silently / non-zero). **`g15` is neither fish nor
+  PowerShell**: since the 2026-09-07 Ubuntu reinstall its passwd shell is
+  `/bin/bash`, with no `exec fish` in `~/.bashrc`/`~/.profile` (measured on the
+  box 2026-09-12). The **Windows fleet member `desktop` (=g614jv) SSHes into
+  PowerShell**, which chokes on `&&` and shell quoting. Either way, force bash:
+  `ssh host bash -s < script.sh` (piping a script file is the most robust). On the
+  Windows box `bash -s`/`bash -lc` dispatches to WSL bash — specifically the
+  **DEFAULT WSL distro** (`bash.exe`), which on `desktop` is **`desktop-wsl`**
+  (`$HOME=/home/me`; the distro was named `Ubuntu-26.04` until it was renamed
+  2026-08-01). A non-default distro is never reached this way. `latitude` was
+  NixOS until 2026-08-01 and the fish half is what survived that.
+```
+- **NOTE — 11 Phase A `shared-proposal-2026-09-12.md` files also queue additions
+  to `global.md`.** Coordinate so `/memory-review` does not produce two competing
+  rewrites of this section.
+- **first seen:** 2026-09-12
+
+## 8dd9b242 · delete · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:390-394` # `delete`
+- **action:** delete
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Orca IDE — tooling footguns` (L378, 7815 B)
+- **why:** every clause of the bullet is Nix-conditioned (`Nix-wrapped orca-ide`,
+  the store-path AppImage unwrap). With no NixOS host anywhere in the fleet it
+  cannot apply on any box, and nothing else depends on it.
+- **evidence:** `global.md:390-394`. `ls ~/machines/modules` → *No such file or
+  directory*; `git -C ~/machines log --oneline -1 -- '*ssh.nix'` →
+  `f3d63b2 feat!: delete the NixOS tree; rehome its two live inputs`;
+  `ls -d /nix` → absent. Not a deliberate keep: `git show --stat 23e4315` shows
+  the 2026-09-11 consolidation touched `global.md` with a **single append hunk**
+  (`@@ -1544,3 +1544,106 @@`) and never entered this section.
+- **bytes:** 362 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## e7ffdcae · compress · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:448-453` # `compress`
+- **action:** compress
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Orca IDE — tooling footguns` (L378, 7815 B)
+- **why:** the snapshot-vs-live warning existed only because
+  `orca-profile-harvest.sh` wrote the copies; the script and the directory are
+  both gone fleet-wide. Not a bare delete — the pointer to
+  `~/.claude-migration-backup-20260804/` on `desktop` may be the last record of
+  where the Pure profile copy lives, and only its absence on **g15** could be
+  proven from here.
+- **evidence:** `global.md:448-453`. `ls -d ~/machines/agents/orca-profile-*.sh`
+  → *No such file*; `git log --diff-filter=D` →
+  `fe70e7a feat!: retire the Orca per-account profile machinery (1,809 lines)`,
+  deleting `orca-profile-{harvest,link,sync}.sh`. `machines/AGENTS.md:192-194`:
+  "Orca's own account switcher is what the fleet uses now …
+  `~/.local/share/orca/claude-accounts` was EMPTY on air and absent on g15".
+  `ls -d ~/.claude-profiles` → absent on g15.
+- **bytes:** 416 → 298
+- **replacement:**
+```
+- **`~/.claude-profiles/` is gone fleet-wide** — `agents/orca-profile-*.sh` was
+  deleted 2026-09-09 (`fe70e7a`) and no box had the directory. The one pointer
+  worth keeping: on `desktop` the Orca-managed Pure profile's last full copy is
+  the tarball in `~/.claude-migration-backup-20260804/`.
+```
+- **OVERLAPS open item `8dd3022d`** (demote, Part 1), which carries the *same*
+  `~/.claude-migration-backup-20260804/` pointer to **desktop's** `host-memory.md`
+  instead of keeping it in `global.md`. **These two are alternatives, not a
+  sequence** — apply one. `8dd3022d` is the better end state (the pointer is
+  host-local by nature) but it must be applied **on desktop**; this item is the
+  fallback that can be applied here today.
+- **first seen:** 2026-09-12
+
+## 5427b0c9 · compress · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:404-418` # `compress`
+- **action:** compress
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Orca IDE — tooling footguns` (L378, 7815 B)
+- **why:** two bullets narrate a decision ("abandoned 2026-08-04") and its
+  partial reversal ("partly reversed 2026-08-20"), both overtaken on 2026-09-09
+  when the mirror machinery was deleted and the fleet moved to Orca's own
+  account switcher. The `desktop → Pure / air → personal` mapping and the "login
+  flip pending" state are no longer live. The wrapper-script mechanism is kept
+  deliberately: L434 ("which is what makes a user-side wrapper safe here") refers
+  back to it and would dangle otherwise.
+- **evidence:** `global.md:404-418`. Superseded by `machines/AGENTS.md:192`
+  ("Orca's own account switcher is what the fleet uses now") and `AGENTS.md:65`
+  (g15's "own `~/.claude` is the point, so a personal Claude account needs no
+  Orca profile juggling"), plus commit `fe70e7a`.
+- **bytes:** 1098 → 649
+- **replacement:**
+```
+- **Per-machine Claude accounts, not Orca multi-account** (decided 2026-08-04;
+  superseded again 2026-09-09, when the fleet moved to Orca's own account switcher
+  and `agents/orca-profile-*.sh` was deleted — `machines/AGENTS.md:192`). `g15`
+  exists precisely so a personal account needs no Orca profile juggling. One
+  durable mechanism survives the abandoned per-project plan: if you ever do hook
+  Orca's launch-command override, point it at a wrapper **script path** that reads
+  a `.claude-profile` marker in the repo root and sets `CLAUDE_CONFIG_DIR` — not
+  an `env VAR=x claude` string, which does not survive a non-interactive launch.
+```
+- **OVERLAPS open item `8dd3022d`** (demote, Part 2), which proposes a 1098 → 292
+  rewrite of the *same* L551-565 multi-account text, to be applied **on desktop**.
+  Two competing replacements for one passage: **pick one.** `8dd3022d`'s version
+  is shorter and drops the wrapper mechanism; this one keeps it because L434
+  still points at it. Check that back-reference before choosing.
+- **first seen:** 2026-09-12
+
+## 62fdb312 · demote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — tooling footguns#global.md:469-482` # `demote`
+- **action:** demote
+- **scope:** shared → shared (a move within one file; no scope change)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Orca IDE — tooling footguns` (L378, 7815 B)
+- **why:** two bullets with no Orca content at all — MCP config-scope behaviour
+  and `gortex track` — are filed under an IDE-vendor heading, so nobody looking
+  for MCP-scope or gortex-tracking behaviour finds them. Both are Claude
+  Code / gortex **harness** facts and belong under `## Harness behavior
+  (empirical)` (L489).
+- **evidence:** `global.md:469-482`. Destination `## Harness behavior
+  (empirical)` begins at `global.md:489`. L483-487 (the `~/.claude.json` projects
+  map) is deliberately **left in place** — it ends on Orca-worktree session
+  migration and is in context there.
+- **bytes:** 1059 → 0 under the Orca heading; the same 1059 moved verbatim under
+  Harness behavior. Net 0.
+- **replacement — remove L469-482 from `## Orca IDE — tooling footguns` and paste
+  verbatim at the end of `## Harness behavior (empirical)`:**
+```
+- **MCP servers: `~/.claude.json` is user scope; `~/.claude/.claude.json` is read
+  by NOTHING** (probed 2026-08-05 — `claude mcp get gortex` from a dir with no
+  `.mcp.json` reported no such server while the config-dir-root file listed it).
+  Same trap as `settings.local.json` at the config-dir root. `gortex install`
+  writes the useless one, so **after any `gortex-setup` / `just gortex-setup`,
+  register at user scope too**: `claude mcp add gortex gortex mcp -s user`. Until
+  then gortex loads ONLY in repos carrying a committed `.mcp.json` (`~/machines`
+  has one; the Pure repos do not) — which reads exactly like a broken profile.
+- **`gortex track <repo>` is per-repo and is NOT implied by wiring the MCP
+  server.** `~/machines` was wired for months and still untracked (found
+  2026-08-05), so every session there got "not covered by any tracked repo" and
+  silently lost the graph tools while the hooks still denied Read/Grep/Glob —
+  the worst combination. Check `workspace(operation:"repos")` when the
+  orientation hook says uncovered.
+```
+- **ORDERING:** apply this **after** any other edit to `## Harness behavior
+  (empirical)`, and re-locate the destination by heading rather than by line
+  number — several items this run change line offsets above L489.
+- **first seen:** 2026-09-12
+
+## 4a3648ca · delete · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex#global.md:893-902` # `delete`
+- **action:** delete
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Gortex` (L785, 11407 B)
+- **why:** the bullet says the `gortex-align` skill "commits the
+  `.gortex.yaml`/`.mcp.json` wiring", which the **same section** already denies
+  and the repo on disk disproves. `.gortex.yaml` is not written by recent builds.
+- **evidence:** `global.md:893-902`. `ls -la ~/machines/.gortex*` → *No such file
+  or directory*; `ls ~/machines/.mcp.json` → exists. The skill's own body says
+  the opposite (`gortex-align/SKILL.md:49-50`: *"index state — not a committed
+  `.gortex.yaml`; older builds wrote `.gortex.yaml`. Don't assume the file
+  name."*), and `global.md:839-841` already carries the correction: *"recent
+  builds write a **gitignored `.gortex/`** … NOT a committed `.gortex.yaml`"*.
+- **UPSTREAM, and this is why the fix is not just a `delete`:** the error was
+  copied from the skill's **frontmatter `description`** (`gortex-align/SKILL.md:3`),
+  which still says `.gortex.yaml / .mcp.json` and loads into every session's
+  skill listing. Fixing `global.md` alone means the next harvest re-imports it.
+  Flag the frontmatter to `/memory-review` as a one-line repo fix; it is outside
+  this phase's write boundary.
+- **bytes:** 723 → 708
+- **replacement:**
+```
+- **`/gortex-align` skill does the alignment.** When a gortex-backed repo could
+  be tuned — wiring not committed, or a Python project resolving to
+  `text_matched` — offer the `gortex-align` skill. It detects the daemon (won't
+  install the binary — that's machine provisioning), commits the `.mcp.json`
+  wiring, verifies index health, and for Python sets
+  up pyright governance from a bundled resolution-focused `pyrightconfig.json`
+  (resolution knobs like `useLibraryCodeForTypes`/venv vs gap diagnostics that
+  surface every `text_matched`-bound spot; adopt at `standard`, ratchet to
+  `strict`). Pyright won't load the django-stubs mypy plugin, so the "often
+  missed" tier above still stands.
+```
+- **first seen:** 2026-09-12
+
+## c49d9dfe · delete · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Orca IDE — workspace model & CLI#global.md:687-697` # `delete`
+- **action:** delete
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Orca IDE — workspace model & CLI` (L685, 3002 B)
+- **why:** the bullet asserts "The CLI is Orca's own `orca` **on the Windows
+  host** … Orca now runs on Windows and opens the WSL project directly." On g15
+  Orca is a **native Linux app** with its own Linux CLI shim and Linux-path
+  workspaces. The Windows statement is true of `desktop` only and is being read
+  as a fleet fact.
+- **evidence:** `global.md:687-697`, measured on the box 2026-09-12:
+  `command -v orca` → `/home/me/.config/orca/linux-orca-cli-shim/orca`;
+  its `head -5` → `exec '/home/me/.local/opt/orca/squashfs-root/resources/bin/orca-ide' "$@"`;
+  `ps -eo comm | awk /orca/` → `orca-ide`;
+  `ls -d ~/orca/workspaces/*` → `DeMarket  qaz-code  telegrind`;
+  `ls ~/.local/bin/orca` → absent.
+- **bytes:** 841 → 837
+- **replacement:**
+```
+- **Orca is StablyAI's multi-agent IDE; its "workspaces" are orca-managed git
+  worktrees.** They live at `~/orca/workspaces/<repo>/<name>` (Windows:
+  `C:\Users\methe\orca\workspaces\...`). The CLI is Orca's own `orca`, shipped by
+  whichever runtime hosts the IDE — Windows on `desktop`, a NATIVE Linux app on
+  `g15` (`orca-ide`, shimmed at `~/.config/orca/linux-orca-cli-shim/orca`,
+  verified 2026-09-12). Key commands: `orca repo add --path <p>` / `orca repo
+  list` register a project repo; `orca worktree create --repo name:<r> --name
+  <n> --base-branch <ref> [--setup skip]` materializes AND registers a worktree
+  checkout; `orca worktree ps` / `orca worktree list --json` enumerate them.
+  Prefer creating workspaces through the CLI so Orca's registry knows them — a
+  hand-built `git worktree add` is invisible to Orca.
+```
+- **first seen:** 2026-09-12
+
+## 37c7fdd7 · promote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Repo layout (WSL boxes)#global.md:728-739` # `promote`
+- **action:** promote
+- **scope:** shared → shared (a heading rename + one clause; no scope change)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Repo layout (WSL boxes)` (L728, 791 B)
+- **why:** the layout is enforced by `provision/repos.sh`, which serves every
+  posix platform, and it is live on **g15 — a native Linux box with no WSL
+  anywhere**. The "(WSL boxes)" heading makes a fleet-wide convention look like a
+  distro quirk, so a reader on a non-WSL box discounts it.
+- **evidence:** `global.md:728-739`. On g15 2026-09-12:
+  `ls -d ~/my ~/cyphy671 ~/pure ~/exactly ~/gh` → only `/home/me/my` exists.
+  `awk '/wsl/' ~/machines/provision/roles/repos.sh` → line 19: `wsl|debian|darwin)`
+  — the role's own platform allowlist. The `cyphy671` group is kept: g15's
+  absence of it is evidence about g15's `repo_groups`, not about the group being
+  retired.
+- **bytes:** 790 → 658
+- **replacement — heading and first bullet; the second bullet at L737-739
+  (local-only personal repos) is unchanged:**
+```
+## Repo layout (posix boxes)
+
+- **Namespace folders live directly under `~/`, not `~/gh/`.** Repo clones are
+  grouped by GitHub owner into per-namespace folders at the home root: `~/my`
+  (`metheoryt`), `~/pure` (`thepureapp`), `~/cyphy671`, and `~/exactly`
+  (`exactly-ai`, archived — kept for reference only). `~/gh/` is the **retired
+  legacy location**; migrate any stragglers out of it. Each box clones only the
+  namespaces its `repo_groups` names (personal: `my`, `cyphy671` — g15 declares
+  `my` only; work: `pure`, `exactly`), wired by `provision/repos.sh` — whose
+  platform allowlist is `wsl|debian|darwin`, so this layout is not WSL-only.
+```
+- **NOTE:** the anchor heading itself changes, so this item's own id will not
+  reproduce after it is applied. That is correct — the finding is closed by the
+  rename.
+- **first seen:** 2026-09-12
+
+## 17345183 · dedupe · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Gortex#global.md:836-844` # `dedupe`
+- **action:** dedupe
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Gortex` (L785, 11407 B)
+- **why:** the same `gortex init` spray fact and the same gitignore remedy appear
+  **twice under one heading**, 70 lines apart. The later bullet is the fuller one
+  (adapter list, standing preference) but lacks the safe invocation; the earlier
+  one carries the invocation but buries it inside a bullet about committed
+  wiring. Neither is deletable as-is — merge into the dedicated bullet.
+- **evidence:** `global.md:836-844` and `global.md:909-916`.
+  `sed -n '840,844p'` → *"never run a bare `gortex init`: it sprays ~32 files
+  across every detected adapter incl. ~20 generated
+  `.claude/skills/generated/gortex-*` routing skills. Use `gortex init --yes
+  --agents claude-code --no-skills --no-hooks`, and gitignore
+  `.claude/skills/generated/`"*.
+  `sed -n '909,916p'` → *"**Trim what `gortex init` sprays.** It writes ~20
+  `.claude/skills/generated/gortex-*/SKILL.md` routing files … gitignore
+  `.claude/skills/generated/`"*.
+- **bytes:** 1262 (712 + 550) → 1055 (394 + 661)
+- **replacement — TWO ranges, one decision.**
+  At `global.md:836-844`:
+```
+- Integration is reproducible ONLY if the wiring is COMMITTED — a gortex server
+  entry in `.mcp.json` (the load-bearing file) plus `.claude/settings.json`. A
+  local daemon merely *tracking* a repo works for you but carries nothing to
+  teammates/CI. Note recent builds write a **gitignored `.gortex/`** (local index
+  state), NOT a committed `.gortex.yaml` — don't look for the old file.
+```
+  At `global.md:909-916`:
+```
+- **Trim what `gortex init` sprays.** It writes ~20
+  `.claude/skills/generated/gortex-*/SKILL.md` routing files plus a
+  marker-bounded "Community Skills" table into CLAUDE.md/AGENTS.md, and adapter
+  files for editors that go unused (`.gemini`/`GEMINI.md`, `.vscode`,
+  `.windsurfrules`, `.rules`, `.github/copilot-instructions.md`) — ~32 files in
+  all. Never run it bare: use `gortex init --yes --agents claude-code
+  --no-skills --no-hooks`. Standing preference: delete the unused adapters,
+  `git rm` the generated skills and gitignore `.claude/skills/generated/`, drop
+  the table — keep only the Claude Code wiring plus `AGENTS.md` (Codex is used).
+```
+- **ORDERING:** apply together with the `Gortex` `delete` item filed this run
+  (L893-902, the `gortex-align` `.gortex.yaml` claim) — both touch this section
+  and the line offsets shift.
+- **first seen:** 2026-09-12
+
+## 48cf4ada · dedupe · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1646-1649` # `dedupe`
+- **action:** dedupe
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Harvested 2026-09-11 (memory-harvest, machines fleet)` (L1548, 11175 B)
+- **why:** the WSL `command -v docker` probe fact is stated twice. The topical
+  copy is strictly richer — it carries the exact error string and the box it was
+  hit on — and the harvested copy carries nothing the topical one lacks.
+- **evidence:** `global.md:1646-1649` (the copy to delete).
+  Survivor `global.md:776-783` under `## Docker Desktop shares one engine across
+  all WSL distros`: *"**Inside a WSL distro, `command -v docker` succeeding
+  proves nothing.** … if the distro is not enabled in Docker Desktop's WSL
+  integration list every invocation dies with `The command 'docker' could not be
+  found in this WSL 2 distro` … Test with a real `docker version`/`docker ps`,
+  never `command -v`."* Located with
+  `awk '{printf "%d\t%s\n",NR,$0}' global.md | awk -F'\t' '$2 ~ /command -v docker/'`
+  → hits at 776 and 1646 only.
+- **bytes:** 310 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## 5176d863 · dedupe · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1586-1588` # `dedupe`
+- **action:** dedupe
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Harvested 2026-09-11 (memory-harvest, machines fleet)` (L1548, 11175 B)
+- **why:** the harvested bullet is a lossy restatement of the fish-login-shell
+  rule already under `## Fleet SSH reachability`, which additionally names the
+  boxes, covers the PowerShell half, and records that `g15` stopped being a
+  Windows member on 2026-09-07. Deleting the harvested copy loses nothing.
+- **evidence:** `global.md:1586-1588` (the copy to delete). Survivor
+  `global.md:190-200`: *"**The remote login shell differs by box.**
+  Debian/Ubuntu members (`latitude`, `g15`, `hub`) log in to **fish**, which
+  chokes on `$(...)` / POSIX-test syntax passed as `ssh host '<script>'` …
+  Either way, force bash: `ssh host bash -s < script.sh` (piping a script file is
+  the most robust)."*
+- **DEPENDS ON:** the `contradiction` item filed this run against
+  `Fleet SSH reachability` (global.md:142-151 / 190-201), which **rewrites the
+  survivor** — g15's login shell is `/bin/bash`, neither fish nor PowerShell
+  (measured 2026-09-12). **Apply that item first**, then this deletion; the
+  survivor must be correct before the duplicate is cut.
+- **bytes:** 190 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## 55a5fc14 · dedupe · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1700-1701` # `dedupe`
+- **action:** dedupe
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Harvested 2026-09-11 (memory-harvest, machines fleet)` (L1548, 11175 B)
+- **why:** the "never edit a running script in place" rule is stated twice; the
+  topical copy gives the same mechanism, the remedy, **and** explicitly covers
+  the detached case the harvested bullet is scoped to. Fully subsumed.
+- **evidence:** `global.md:1700-1701` (the copy to delete): *"Never edit a
+  long-running detached bash script in place — bash reads the file incrementally
+  as execution reaches each line."* Survivor `global.md:1018-1023` under
+  `## Git & bash footguns`: *"**NEVER edit a shell script while it is running.**
+  … Edit a copy and swap it, or wait for the run to finish. **Same applies to a
+  script you launched detached with `nohup`/`setsid`.**"*
+- **bytes:** 134 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## 551ea67a · dedupe · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Git & bash footguns#global.md:1024-1029` # `dedupe`
+- **action:** dedupe
+- **scope:** shared → fleet-wide change
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Git & bash footguns` (L984, 5036 B)
+- **why:** two copies of the rsync `--itemize-changes` rule, each holding half
+  the useful detail — so deleting either loses something. The harvested copy
+  alone carries the mechanism (`^.f.*c` matches any filename containing "c"; the
+  "third flag column"; that `c` only appears under `-c`/`--checksum`); the
+  topical copy alone carries the remedy phrasing ("cut the flag field first,
+  then count"). Merge into the topical heading, then delete the harvested half.
+- **evidence:** `global.md:1024-1029` (topical, rewritten) and
+  `global.md:1707-1712` (harvested, deleted). Located with
+  `awk -F'\t' '$2 ~ /itemize/'` → 1024 and 1707 only.
+- **bytes:** 818 (457 + 361) → 555
+- **replacement — replaces `global.md:1024-1029`; `global.md:1707-1712` is deleted:**
+```
+- **Classify `rsync --itemize-changes` output by fixed character COLUMN in the
+  11-char flag field, never by regex against the whole line.** The flags are the
+  first field (`>fcsT......`); the rest of the line is a filename, and a filename
+  can contain any substring you were grepping for — `^.f.*c` matches any filename
+  containing "c" and once invented thousands of false "content differs" results.
+  A real content difference means `c` in the THIRD flag column, which only appears
+  under `-c`/`--checksum`. Cut the flag field first, then count.
+```
+- **first seen:** 2026-09-12
+
+## 3560d37a · demote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1550-1563` # `demote`
+- **action:** demote
+- **scope:** shared → shared (a move within one file)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Harvested 2026-09-11 (memory-harvest, machines fleet)` (L1548, 11175 B)
+- **why:** **a live cross-reference already points at where these bullets
+  belong, and it is broken today.** `global.md:1543`, inside `## Shared memory
+  stores`, reads *"(The other half of this trap — a relative pathspec reading as
+  'identical' — is under *Git & bash footguns*.)"* — but the referenced fact
+  exists **only** inside the dated harvested section. The 2026-09-11
+  consolidation wrote the pointer to where the fact *belongs* while the harvest
+  had already parked it under an ingestion heading.
+- **evidence:** `awk -F'\t' '$2 ~ /pathspec|ABSOLUTE path/'` over the whole file
+  returns exactly 1011, 1543, 1557-1558. L1011 is the unrelated
+  `--git-common-dir` bullet, so the referenced fact lives only at
+  `global.md:1557-1562`. Move range: `global.md:1550-1563` — both bullets, the
+  branch-ancestry check before checkout and `/dotfiles-promote`'s
+  absolute-pathspec requirement.
+- **bytes:** 920 relocated (net 0); ~85 B of the parenthetical rewritten
+- **replacement — move `global.md:1550-1563` verbatim to the end of
+  `## Shared memory stores — `main` is the source of truth (settled 2026-09-11)`,
+  then replace the parenthetical at `global.md:1543-1544` with:**
+```
+  you, `fetch --all` first. (The other half of this trap — a relative pathspec
+  reading as "identical" — is the `/dotfiles-promote` bullet below.)
+```
+- **first seen:** 2026-09-12
+
+## 56785728 · demote · /home/me/.claude/memory/global.md
+
+- **id-inputs:** `/home/me/.claude/memory/global.md` # `Harvested 2026-09-11 (memory-harvest, machines fleet)#global.md:1548-1728` # `demote`
+- **action:** demote
+- **scope:** shared → shared (structural reorganisation within one file)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/global.md`
+- **anchor:** `Harvested 2026-09-11 (memory-harvest, machines fleet)` (L1548, 11175 B)
+- **why:** **`## Harvested <date>` is an ingestion artefact, not a topic** — the
+  only section in this file whose heading names an *event*. It is the largest
+  section after `## Gortex`, it holds nine already-topical `###` subsections, and
+  a "harvested on a date" heading is where facts go to stop being findable: four
+  of its bullets are already duplicated by topical ones and one is the target of
+  a cross-reference naming a different heading (all five filed separately this
+  run). Not every subsection has an existing home, so this is two verbs — **fold
+  six, promote three** — and no fact is deleted.
+- **evidence:** `global.md:1548-1728`, 11175 B, nine `###` subsections. This is
+  also the block that makes `origin/g15` 166 lines ahead of `origin/main` (see
+  the `promote` item filed this run for branch g15) — so it is simultaneously the
+  fleet's only copy of these facts and its least findable one.
+- **ORDER — apply the five per-fact items FIRST.** The ranges `1586-1588`,
+  `1646-1649`, `1700-1701`, `1707-1712` are deleted by them and are excluded
+  from the map below; `1550-1563` is moved by the sixth.
+- **bytes:** 11175 → ~10,020 B relocated under existing or new `##` headings,
+  ~1,155 B removed as duplicates. No fact lost.
+- **replacement:** (none — structural move; the map IS the decision)
+
+  | subsection | lines | destination |
+  |---|---|---|
+  | `### dotfiles` | 1550-1563 | `## Shared memory stores — main is the source of truth` (separate item) |
+  | `### Filters that silently pass — four shapes` | 1565-1579 | `## Git & bash footguns` (L984) |
+  | `### ssh / fleet probing` | 1582-1597 *(minus 1586-1588)* | `## Fleet SSH reachability` (L140) |
+  | `### restic` | 1599-1608 | **promote** — new `## restic / resticprofile`; no restic heading exists anywhere in the file |
+  | `### Hook and script authoring` | 1611-1616, 1622-1625 | `## Harness behavior (empirical)` (L489) — it already holds the hook-stdout and `sudo -n` facts |
+  | ” (the `sed` comment-range and `${#var}` bullets) | 1617-1621 | `## Git & bash footguns` |
+  | `### Copying and verifying data` — hardlink-grouping bullet | 1628-1631 | `## Git & bash footguns`, beside the existing `du`-on-hardlinks bullets at L1035-1043 |
+  | ” — `immich-cli -c 3`, `systemd-run --user --scope` | 1632-1639 | **promote** — new `## Moving bulk data without wedging the box`; no home exists |
+  | `### Tooling` — gortex `config.yaml` bullet | 1642-1645 | `## Gortex` (L785) |
+  | `### Windows / PowerShell over ssh` | 1653-1667 | `## Windows OpenSSH & winget footguns` (L258) / `## Windows & WSL scripting footguns` (L942) |
+  | `### git, cron and docker traps` — git/cron/base64/fstab | 1670-1683, 1702-1706 | `## Git & bash footguns` |
+  | ” — the four docker bullets | 1684-1699 | **promote** — new `## Docker traps that pass silently`; the existing docker heading (L758) is WSL-Desktop-specific and is the wrong home for `DOCKER-USER`, network-setup-failure and `--force-recreate` |
+  | `### SMART attributes that lie` | 1713-1728 | **promote** — its own `##`; no disk/SMART heading exists |
+
+- **AND THE SAME SHAPE EXISTS IN `machines/.claude/memory/project.md`** — two
+  dated `memory-harvest 2026-09-11 …` sections totalling 19.3 KB, filed
+  separately this run. If this fold is accepted, accept the rule, not just the
+  instance: **a harvest writes into the topical heading its facts belong to, or
+  Phase B folds it next run.** That is a `skill` change to Phase A's Step 6, and
+  is worth filing once this precedent is set rather than re-discovering it.
+- **NO CONTRADICTION FOUND in this section.** The one near-miss —
+  `The string is missing the terminator` at `global.md:954-957` (PS 5.1 decodes
+  BOM-less UTF-8 as cp1252; fix: add a BOM) and at `global.md:1658-1660` (ssh
+  here-string quoting; fix: base64 UTF-16LE) — is two unrelated causes of one
+  error string, both true. Recorded so a later pass does not re-open it.
+- **first seen:** 2026-09-12
+
+## e212952a · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:193-250` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15 (any box with the checkout)
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191, 40066 B — the largest section in the corpus)
+- **why:** 58 lines of live-sounding operational guidance about a Windows install
+  that no longer exists — the `C:` review gate, ~410 GB unreviewed, the
+  Docker-volume inventory, and in bold *"Reach it as `methe@server.gg.ez` — NAME
+  THE USER"*. That disk was wiped 2026-09-07. The block already opens with its
+  own SUPERSEDED banner, which is exactly the shape that stops being read while
+  the stale addressing underneath stays quotable.
+- **evidence:** `project.md:193-250`. Superseded twice in this same file:
+  `project.md:2428` (`## g15 phase 1 done`) and `project.md:2449` (`## g15 phase
+  4`). Live: `ls hosts/server` → *No such file or directory*; `ls -R hosts/g15` →
+  `hosts/g15/ubuntu: README.md compose.override.yml install-compose-override.sh
+  rustdesk-seed.sh`; `cat fleet.json` → g15 is `"platform": "debian"`,
+  `100.64.0.10`, **no `ssh` block**, so `ssh.user` defaults to `me`.
+- **bytes:** 4339 → 1881
+- **replacement:**
+```
+- **HISTORY — the `server` machine is gone twice over.** It was renamed to `g15`
+  and re-enrolled in `fleet.json` 2026-08-27 (see *`g15` (ex-`server`) back in
+  the fleet*), and the Windows install this block described was WIPED on
+  2026-09-07 when the box was reinstalled as native Ubuntu 26.04 (see *g15 phase
+  1 done* and *g15 phase 4*). So the `C:` review gate, the ~410 GB of unreviewed
+  profile data, the Docker-volume inventory and every `methe@server.gg.ez`
+  address in the old text are dead — reach the box as `me@g15.gg.ez`
+  (`ssh.user` defaults to `me`), and `hosts/server/` stays deleted. Five things
+  outlive it:
+  - **Forgejo was WIPED 2026-08-01, not rehomed** — zero repositories, a
+    bare-install `gitea.db`, nothing written since the 2026-05-03 install. Both
+    volumes removed. No old data exists to restore; start fresh if git hosting
+    is ever wanted again.
+  - **`telegrind_pgdata` lives on latitude now** — exported as a raw tar from a
+    cleanly-`Exited (0)` container (self-consistent data dir, a stronger
+    guarantee than a dump comparison), sha256-identical on three hosts, restored
+    and verified there: 987 files, `PG_VERSION` 15. `embedthat_redis_data` and
+    `tugtainer_tugtainer_data` are on latitude too.
+  - **`CACHEDIR.TAG` is the cheap disposability check.** Tooling that writes it
+    is telling you the directory is throwaway; testing for it beat reasoning
+    about contents and cleared 14 GB in one command.
+  - **The `server` PROFILE outlives the `server` MACHINE** — latitude runs
+    `profile: server` and `tiers.test.sh` exercises it as `plan server`. Don't
+    "clean up" the profile thinking it is the retired box.
+  - A `Permission denied (publickey)` names the user it tried. Reading that
+    field first would have saved a wrong "the key is unenrolled" diagnosis that
+    was really a username mismatch.
+```
+- **first seen:** 2026-09-12
+
+## 11a30da7 · dedupe · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:278-297` # `dedupe`
+- **action:** dedupe
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191)
+- **survives:** `/home/me/machines/AGENTS.md` `### Two-layer hostname convention` (L724-746) — the auto-loaded file, and the fuller copy (the g15 rename and its reason, hub's VPS special case, the live `Rename-Computer` verification, the WSL third identity)
+- **why:** the same convention in two files — but a plain dedupe would destroy
+  something. `project.md:278` asserts a **universal** that is false ("Every fleet
+  machine's OS hostname differs from its SSH alias by design") and AGENTS.md
+  silently omits the exception, so cutting project.md leaves a wrong rule
+  standing. The durable part — the probe rule — is in **neither** copy's
+  survivor form and must be kept verbatim.
+- **evidence:** `project.md:278-297` vs `AGENTS.md:724-746`.
+  `cat fleet.json` → `"air": { "platform": "darwin", …, "detect": { "hostname":
+  "air" } }` — OS hostname **equals** the SSH alias, so the universal is false.
+  `project.md:279` also still writes the pair as `` `g513ie`↔`server` ``, a
+  logical name deleted 2026-08-27.
+- **bytes:** 1356 → 603
+- **replacement — TWO edits, one decision.**
+  (1) Replace `project.md:278-297` with:
+```
+- **"Is this host me?" cannot be decided by comparing `hostname` to an SSH
+  alias** — use a runtime probe (`ssh $alias hostname` vs local `hostname`), as
+  `memory-harvest` self-exclusion does. Most members' OS hostname differs from
+  their alias (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `g513ie`↔`g15`),
+  but **`air` is both**, so the difference is a convention, not an invariant.
+  The two-layer convention itself (spec
+  `docs/superpowers/specs/2026-07-19-fleet-hostname-normalization-design.md`,
+  executed 2026-07-20) is documented in AGENTS.md, *Two-layer hostname
+  convention*.
+```
+  (2) **Companion edit to the survivor**, `AGENTS.md` `### Two-layer hostname
+  convention`: add `air` as the named exception, so the surviving copy is
+  actually complete. Without (2) the exception exists nowhere and (1) points at
+  a file that contradicts it.
+- **NOTE:** `/improve config audit` also proposes against `CLAUDE.md`/`AGENTS.md`
+  bloat. This run files several `AGENTS.md` items — say so if both are run on the
+  same day so the same file does not get two competing proposals.
+- **first seen:** 2026-09-12
+
+## f61bdeeb · dedupe · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:301-314` # `dedupe`
+- **action:** dedupe
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191)
+- **survives:** `/home/me/machines/AGENTS.md` *Fleet networking / tailnet architecture* (L486-518) — the corrected and more complete copy
+- **why:** not merely redundant — the project.md copy **dispatches to a machine
+  key that no longer exists in the manifest**, and hedges that WSL discovery is
+  "not yet live-verified end-to-end" while AGENTS.md describes that discovery as
+  live and in use by both callers.
+- **evidence:** `project.md:301-314` vs `AGENTS.md:486-518`. `project.md:307-308`
+  names the Windows-native dispatch members as `` (`desktop`, `server`) ``;
+  `cat fleet.json` has **no `server` key at all**, and `g15` is
+  `"platform": "debian"`. `AGENTS.md:501-503` already states the correction:
+  *"which means **`desktop` and only `desktop`**. `g15` was a Windows member from
+  2026-08-27 until the 2026-09-07 reinstall; its manifest platform is `debian`
+  now"*.
+- **carry first:** the `/mnt/c` root-removal detail is unique to project.md and
+  is kept in the replacement below.
+- **bytes:** 1034 → 620
+- **replacement:**
+```
+- **Fleet dispatch is platform-aware** —
+  `agents/plugin/skills/lib/fleet-dispatch.sh` (`fd_probe`/`fd_run`/
+  `fd_wsl_hosts`), sourced by `/ship`'s `fleet-pull.sh` and memory-harvest's
+  `fleet-gather.sh`. The mechanism, the Windows-native dispatch and the WSL
+  `dispatch:direct`/`dispatch:parent` split are in AGENTS.md, *Fleet networking
+  / tailnet architecture*. The one fact only recorded here: the old `/mnt/c`
+  cross-filesystem root was REMOVED — `machines` is located
+  canonical-path-first (`$HOME/machines`), root-scan fallback second.
+  Half-provision a WSL host with `just provision-wsl <nickname>`.
+```
+- **first seen:** 2026-09-12
+
+## 3a584332 · delete · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:547-553` # `delete`
+- **action:** delete
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191)
+- **why:** the bullet is a changelog of edits to five files that no longer exist,
+  in a repo that has no Nix tree. Its only durable content — the AmneziaVPN
+  client is gone from our machines, the VPS hub is untouched and owned by `vps` —
+  is stated **twice** elsewhere, once in this same section.
+- **evidence:** `project.md:547-553`. Every path it names is deleted:
+  `ls modules flake.nix pkgs hosts/g16 hosts/homeserver` → *No such file or
+  directory* for all five; `git log --oneline -1 f3d63b2` →
+  `feat!: delete the NixOS tree; rehome its two live inputs`.
+  Survivors: `project.md:318-320` (the AmneziaWG→Headscale DECISION bullet —
+  *"AmneziaWG stays ONLY as the obfuscated VPN for Russia-based relatives… on the
+  VPS hub"*) and `AGENTS.md:456-458` (*"The old AmneziaWG mesh was retired from
+  the repo 2026-07-17 (AmneziaWG survives only as the VPS's obfuscated VPN for RU
+  relatives)"*).
+- **bytes:** 547 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## a23f0626 · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:532-546` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191)
+- **why:** fifteen lines reasoning about `pkgs.linuxPackages_latest` in
+  `modules/system/base.nix`, a branch name, and "full `latitude5520` toplevel
+  builds green" — a build target that cannot exist. One line is transferable and
+  still live on g15 (RTX 3050 Ti, NVIDIA DKMS on Ubuntu 26.04), so this is a
+  compress, not a delete.
+- **evidence:** `project.md:532-546`. `ls modules flake.nix` → *No such file or
+  directory*; `git log --oneline -1 f3d63b2` → the NixOS-tree deletion;
+  `git tag -l 'nixos*'` → `nixos-final`;
+  `ls -la docs/2026-08-01-nixos-harvest.md` → present, 10094 B.
+- **bytes:** 1144 → 486
+- **replacement:**
+```
+- **An out-of-tree kernel module only loads under the kernel it was built for.**
+  After a kernel-changing upgrade it fails `Module <x> not found in
+  .../<old-kernel>` until you REBOOT into the new kernel — still live for g15's
+  NVIDIA DKMS. (The rest of this bullet tracked latitude's NixOS kernel pin,
+  taken out of force when AmneziaWG's out-of-tree module was retired
+  2026-07-17; the tree it named is gone — see `docs/2026-08-01-nixos-harvest.md`
+  and tag `nixos-final`.)
+```
+- **first seen:** 2026-09-12
+
+## b127730e · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network#project.md:471-480` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191)
+- **survives:** `/home/me/machines/AGENTS.md` *Fleet networking / tailnet architecture* (L460-472) — it holds the per-pair IPs (latitude via 192.168.8.155 in 2 ms, g15 via 192.168.8.170 in 3 ms, hub via public IP in 6 ms)
+- **why:** the same 2026-09-07 refutation of "two separate LANs" in both files,
+  with AGENTS.md the more complete. But project.md holds the one thing AGENTS.md
+  lacks: **why the wrong claim was ever true** ("It rested on latitude sitting on
+  a hotspot behind this ISP's CGNAT"). A straight delete drops that mechanism,
+  and the mechanism is what stops the claim being re-derived.
+- **evidence:** `project.md:471-480` vs `AGENTS.md:460-472`.
+- **bytes:** 766 → 553
+- **replacement:**
+```
+- Probe PASSED 2026-07-13 (spec/plan/results under `docs/superpowers/`): SSH +
+  RustDesk over the tailnet work, and DERP fallback through our own relay is
+  reliable. **Its other finding — "the fleet spans two separate LANs; cross-LAN
+  pairs relay via our own DERP, EXPECTED and ACCEPTED" — is DEAD.** It rested
+  on latitude sitting on a hotspot behind this ISP's CGNAT; that stopped being
+  true and the sentence outlived it. The current measurements and the lesson
+  drawn from them are in AGENTS.md, *Fleet networking / tailnet architecture*.
+```
+- **lowest-confidence of this slice's six** — ship it last; if a reviewer would
+  rather keep both copies whole, that is a defensible call.
+- **first seen:** 2026-09-12
+
+## 1bece31f · delete · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:971-976` # `delete`
+- **action:** delete
+- **scope:** repo:machines — **highest-consequence item in this slice**
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737, 25858 B)
+- **why:** the bullet names **both the restic repository and its config at paths
+  that no longer exist.** A restore attempt reads it, goes to `/mnt/spare320`,
+  and finds nothing. Everything else in this run is tidiness; this one is a
+  broken recovery path.
+- **evidence:** `project.md:971-976`. Superseded by `project.md:3128`
+  (`## Оба restic-репозитория на 8 ТБ…`) and by the config itself:
+  `awk '/repository|REPO PLACEMENT|It replaces/' backup/latitude/profiles.yaml` →
+  `31: # REPO PLACEMENT: /mnt/wd8, the WD Blue 8 TB, since 2026-09-10.` /
+  `35: # It replaces /mnt/spare320 (ST320LT020, 36k power-on hours, 293 G)` /
+  `103:   repository: "/mnt/wd8/restic/latitude"`.
+  Config location: `git -C /home/me/my/vps ls-files backup` → **empty**;
+  `git log --oneline --all | awk '/f70b9cb/'` →
+  `f70b9cb backup: the profiles move to \`machines\`, the REST server stays here`;
+  `ls machines/backup/latitude/` → `install-tasks.sh  profiles.yaml`.
+- **bytes:** 437 → 471 (it grows; a correct pointer costs more than a wrong one)
+- **replacement:**
+```
+  - **restic for the small irreplaceable set** — `/mnt/wd8/restic/latitude`
+    (moved off `/mnt/spare320` 2026-09-10; see *Оба restic-репозитория на 8 ТБ*),
+    repo `14f4eab544`, covering the nightly pg_dumpall, ServarrConfig,
+    xs-keepers and `~/my/vps` (for its seven gitignored `.env` files). 6.5 GiB →
+    2.3 G. Backup 04:30 daily, `check --read-data-subset 5%` Sundays 06:00.
+    Config `machines/backup/latitude/profiles.yaml`, `schedule-permission:
+    system` because pg_dumpall output is root-owned.
+```
+- **first seen:** 2026-09-12
+
+## dd7e1e9f · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:849-854` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737)
+- **why:** the Backups section still gives **layout advice derived from a
+  property this repo retracted on 2026-09-10**, and the advice is now backwards:
+  the archive *copy* lives on dock A and the source on 4-2, the reverse of what
+  the text says. Three sites, not one.
+- **evidence:** `project.md:849-854` ("dock B (`usb 4-2`) is the worst offender…
+  archive *primary* on dock A, *copy* on flakier dock B… `--partial
+  --append-verify`"), `project.md:860` ("— the flaky one, and"),
+  `project.md:940` ("the flaky dock-A bridge").
+  Retracted by `project.md:3078-3086`: *"AGENTS.md и этот файл описывают 4-2 как
+  постоянно флаки — это состояние июля-августа, а не свойство дока … С 17.08 не
+  повторялся"*. `AGENTS.md:783-785` is **already fixed**: *"**That storm has not
+  recurred since 17.08** … so do not read '4-2 is the flaky dock' as a standing
+  property"*. Live layout `project.md:3172-3173`: `u4-1:1 HGST
+  (/mnt/immich-2024-backup), u4-2:0 wd8, u4-2:1 immich-2024` — the copy is on
+  dock A. And `AGENTS.md:578` records *why `--partial-dir` rather than
+  `--append-verify`*. L940's "dock-A" is residue of the A/B swap that L860 itself
+  says was fixed 2026-09-11.
+- **bytes:** 630 (468 + 79 + 83) → 540
+- **replacement — THREE edits under one anchor, one decision.**
+  (a) Replace `project.md:849-854` with:
+```
+- **The docks also reset unprompted — check the journal before blaming your own
+  command.** Check with
+  `sudo journalctl -k --since today | grep -aE "usb [0-9.-]+: (reset|USB disconnect)"`.
+  **Two different failures, do not conflate them**: `disconnect` on BOTH docks in
+  the same second is mains, `reset` on ONE under load is link/enclosure — the
+  measurements are in *Доки роняет розетка, а не USB* (2026-09-10), and neither
+  dock is a standing "flaky" one (the 4-2 storm ended 17.08). Long writes into
+  either dock get `--partial-dir`, not `--append-verify`.
+```
+  (b) At L860, strike `— the flaky one, and` so the line reads:
+```
+  — the one carrying immich-2024. This bullet had A and B
+```
+  (c) At L940, strike the dock letter (immich-2024 is on 4-2, per L860):
+```
+  2024 archive across a single dock bridge — do it deliberately. Falling back
+```
+- **first seen:** 2026-09-12
+
+## ea015f3f · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:800-803` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737)
+- **why:** the headline is provably false and the clause it rests on is dead.
+  "latitude5520 has no dedicated backup today" is contradicted 170 lines below
+  and by the live config; "Whatever home-manager declares in this repo is already
+  'backed up' by being in git" names a mechanism no box has. The **last** clause
+  is still true and may be its only statement, so this is a compress.
+- **evidence:** `project.md:800-803`. Falsified by `project.md:971-976` and
+  `backup/latitude/profiles.yaml:103` (`repository: "/mnt/wd8/restic/latitude"`),
+  plus `ls machines/backup/` → `_retired-homeserver base.yaml desktop-wsl g15
+  latitude …`. The home-manager clause: `ls machines/hosts/` → `desktop g15
+  latitude`, no Nix tree (`AGENTS.md:271` *The NixOS tree is gone*, `f3d63b2`).
+  The surviving clause holds: `profiles.yaml`'s source list is
+  `/var/backups/immich-db`, `ServarrConfig`, `xs-keepers`, `~/my/vps` and
+  nothing else.
+- **bytes:** 307 → 231
+- **replacement:**
+```
+- **latitude's restic covers only the small irreplaceable set** (see *The backup
+  topology, rebuilt 2026-08-01*). Outside that scope — browser profiles, ad hoc
+  `~/.config`, local documents — nothing on this box is protected.
+```
+- **first seen:** 2026-09-12
+
+## c17c23f4 · delete · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:942-945` # `delete`
+- **action:** delete
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737)
+- **why:** two bullets in one section give **two different live symlink locations
+  for the same restic password**, and only the later one is current. A recovery
+  session reading top-down finds the dead one first.
+- **evidence:** `project.md:942-945` says the live path is
+  `~/my/vps/backup/homeserver/pass.txt`. Superseded by `project.md:1039-1044`
+  (*latitude's password is one file reached through one symlink, deliberately* —
+  `~/machines/backup/latitude/pass.txt` symlinks to it). The `vps` path is gone:
+  `git -C /home/me/my/vps ls-files backup` → **empty**;
+  `git log --oneline --all | awk '/f70b9cb/'` →
+  `f70b9cb backup: the profiles move to \`machines\`, the REST server stays here`.
+  `backup/latitude/profiles.yaml:51-58` states the same thing the surviving
+  bullet does, naming `~/machines/backup/latitude/pass.txt`.
+- **nothing is the last copy:** the tracked byte-source
+  (`!/g513ie-prod-config/vps/backup/homeserver/pass.txt`) and the
+  "don't create a second copy" rule both survive in the L1039 bullet.
+- **bytes:** 319 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## c77ec2dc · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups#project.md:901-906` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737)
+- **why:** half the bullet describes a drive that is out of the box and a music
+  collection that was deleted as proven redundant. The ntfs3 dirty-`$LogFile`
+  remount rule inside it has **no other copy anywhere**, so it stays — restated
+  as a general rule rather than a `/mnt/xs` fact.
+- **evidence:** `project.md:901-906`. The stick is gone — `AGENTS.md:578`
+  ("the HGST; it was `/mnt/xs` until that stick left the box 2026-09-09");
+  `project.md:3116` (*`/mnt/xs` в `/etc/fstab` закомментирован (диск физически
+  снят)*); `project.md:2902-2905` (*Вынули его из парка 2026-09-09*). The music
+  claim is dead too — `project.md:2814`: *"**The 89 G music pile on latitude was
+  proven redundant and is DELETED (2026-09-08, his go). spare320: 82 G → 170 G
+  free.**"*. Uniqueness of the kept rule: `awk '/ntfs3|LogFile/' project.md` →
+  only 901, 902, 1153; the same over `AGENTS.md` → **no hits**.
+- **NOT touched:** the `exfat xs700` row at L1780 — plausibly a different
+  partition on the same Ventoy stick, and not settleable from g15.
+- **bytes:** 380 → 233
+- **replacement:**
+```
+- **An ntfs3 filesystem with a dirty `$LogFile` cannot be remounted read-write in
+  place** — `ntfs3: Couldn't remount rw because journal is not replayed`, left by
+  an unclean Windows shutdown. Needs a full `umount` + `mount -o rw`.
+```
+- **first seen:** 2026-09-12
+
+## e669ce26 · delete · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts#project.md:1424-1427` # `delete`
+- **action:** delete
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Repo tooling & scripts` (L1214, 23041 B)
+- **why:** the bullet exists only to warn against conflating two files; **one of
+  them was deleted with `hosts/server/` on 2026-08-01**, so the advice cannot be
+  acted on.
+- **evidence:** `project.md:1424-1427`. `ls machines/hosts/` → `desktop  g15
+  latitude`; `ls -d machines/hosts/server` → *No such file or directory*.
+  `AGENTS.md:430` confirms: *"(hosts/server/ was deleted with the decommission —
+  git history has it.)"* The surviving fact (desktop's is a full `winget export`
+  snapshot) is already implied by `AGENTS.md`'s `hosts/desktop/windows/` line,
+  which names `winget-packages.json` alongside the runbook.
+- **bytes:** 350 → 0
+- **replacement:** (none — deletion)
+- **first seen:** 2026-09-12
+
+## 6a103ba9 · dedupe · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Repo tooling & scripts#project.md:1419-1421` # `dedupe`
+- **action:** dedupe
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Repo tooling & scripts` (L1214)
+- **survives:** `/home/me/machines/AGENTS.md` *Common Commands* (L185-186) — auto-loaded in every session in this repo, and the rationale sits next to the recipe menu, which is where a reader hits it
+- **why:** the rationale sentence is **verbatim identical** in both files.
+  `AGENTS.md` is the right home; what it does **not** carry is the
+  `update-gortex.sh` survivor clause, so that is kept here with a pointer.
+- **evidence:** `project.md:1419-1421` — *"they wrote only into
+  `modules/home/*-bin.nix` and nothing else read those files."*
+  `AGENTS.md:185-186` — *"update-orca and update-rustdesk are gone — they wrote
+  only into / `modules/home/*-bin.nix` and nothing else read those files."*
+  Same sentence.
+- **bytes:** 349 → 217
+- **replacement:**
+```
+- The `.nix`-era updaters are gone (`orca-bin.nix`, `update-orca.sh`,
+  `update-rustdesk.sh`, `just update`/`just upgrade`) — rationale in AGENTS.md
+  *Common Commands*. `scripts/update-gortex.sh` is the only survivor: it bumps
+  `provision/gortex.version`, the pin `tier_gortex` installs.
+```
+- **first seen:** 2026-09-12
+
+## c1a94d32 · delete · /home/me/machines/AGENTS.md
+
+- **id-inputs:** `/home/me/machines/AGENTS.md` # `Host configurations#AGENTS.md:594-598` # `delete`
+- **action:** delete
+- **scope:** repo:machines — an **auto-loaded instruction file**, so this is a standing context error for every session in this repo
+- **apply on:** g15
+- **target:** `/home/me/machines/AGENTS.md`
+- **anchor:** `Host configurations` (the `restic-hub-selfcheck.sh` bullet, L594-598)
+- **why:** the bullet names the hub's repo directory at a path the profiles moved
+  off on 2026-09-10. A reader debugging "healthy repos report MISSING" goes to
+  `/mnt/spare320/restic-rest/`, finds nothing, and concludes the checker is
+  broken. The **rule** (must run as root; exit 2 for non-root vs 1 for a real
+  failure; `role_backup_hub` sudo-wraps it) is correct and is kept verbatim —
+  only the path is wrong.
+- **evidence:** `AGENTS.md:596` → *"the repo dirs under
+  `/mnt/spare320/restic-rest/` are `drwx------ root:root`"*.
+  `awk '/restic-rest/' backup/latitude/profiles.yaml` →
+  `:91 # /mnt/wd8/restic-rest/g614jv one the REST server serves…`,
+  `:218 repository: "/mnt/wd8/restic-rest/g614jv"`,
+  `:240 test -f /mnt/wd8/restic-rest/g614jv/config`,
+  `:336 repository: "/mnt/wd8/restic-rest/g513ie"`,
+  `:346 test -f /mnt/wd8/restic-rest/g513ie/config`.
+  Same 2026-09-10 move that the `Backups` `delete` item filed this run corrects
+  in `project.md:971-976`; `AGENTS.md` was missed by that fix.
+- **bytes:** 5 characters (`spare320` → `wd8`), but the consequence is a dead
+  recovery path in the file every session loads.
+- **replacement — replace `AGENTS.md:596` with:**
+```
+  under `/mnt/wd8/restic-rest/` are `drwx------ root:root`, so an unprivileged
+```
+- **NOTE:** `/improve config audit` proposes against `CLAUDE.md`/`AGENTS.md`
+  bloat too. This run files several `AGENTS.md` items; say so if both are run the
+  same day.
+- **first seen:** 2026-09-12
+
+## 4dbe8dc8 · contradiction · /home/me/my/vps/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/my/vps/.claude/memory/project.md` # `Services on latitude#vps-project.md:94` # `contradiction`
+- **action:** contradiction
+- **scope:** cross-store — `repo:vps` vs `repo:machines`
+- **apply on:** g15 (both checkouts are here)
+- **target:** `/home/me/my/vps/.claude/memory/project.md`
+- **anchor:** `Services on latitude` (the `What is UP on latitude` bullet, L94)
+- **why:** `vps`' store lists **`restic-server` as "Down on purpose"**, dated
+  2026-08-01, while `machines`' `Backups` section describes the restic REST hub
+  as live, bound and serving — and `machines` ships a systemd timer
+  (`restic-hub-selfcheck`) whose whole job is to catch that hub serving an empty
+  bind. Both cannot be true. The repo boundary is exactly where this kind of
+  drift survives: `machines` owns the backup *profiles*, `vps` owns the REST
+  *server container*, so each store records half the system and neither reader
+  sees the other half.
+- **evidence:** `vps/project.md:94` → *"Down on purpose: navidrome,
+  restic-server, forgejo, plus the four below."* (dated 2026-08-01).
+  Against `machines`: `backup/latitude/profiles.yaml` defines two REST-served
+  repositories (`:218` `/mnt/wd8/restic-rest/g614jv`, `:336`
+  `/mnt/wd8/restic-rest/g513ie`) with `test -f …/config` health checks; and
+  `machines/AGENTS.md:594-598` documents `restic-hub-selfcheck.sh` as one of
+  latitude's **three installed system timers**, "the only thing that catches the
+  restic REST hub serving an empty bind". `machines/AGENTS.md` also states the
+  hub role is live (`role_backup_hub` sudo-wraps the check).
+- **do not resolve by authority — measure on latitude:**
+  `docker ps --filter name=restic` and
+  `systemctl status restic-hub-selfcheck.timer`. One command settles it.
+  The `vps` line is the older and the more likely stale, but it is also the only
+  statement of *deliberate* intent, so a silent flip would destroy a decision
+  record.
+- **bytes:** n/a until resolved
+- **replacement:** (none — this is a pair for a human. If the hub is up, the
+  `vps` bullet needs `restic-server` struck from its "Down on purpose" list with
+  the date it came back, **not** deleted — the list is a decision record.)
+- **first seen:** 2026-09-12
+
+## 8c6eeaa0 · delete · /home/me/machines/AGENTS.md
+
+- **id-inputs:** `/home/me/machines/AGENTS.md` # `Architecture#AGENTS.md:594-598` # `delete`
+- **action:** delete
+- **scope:** repo:machines — an **auto-loaded instruction file**, so this is a standing context error for every session in this repo
+- **apply on:** g15
+- **target:** `/home/me/machines/AGENTS.md`
+- **anchor:** `Architecture` (L271, 31696 B) — the finding is under the `###`-level
+  `**`hosts/latitude/debian/`**` block, in the `restic-hub-selfcheck.sh` bullet at L594-598
+- **SUPERSEDES `c1a94d32`, filed minutes earlier in this same run under the
+  invented anchor `Host configurations`.** That string is a bolded inline label,
+  not a `##` heading — `consolidate.sh index AGENTS.md` emits only four rows
+  (`Repository Overview` L19, `Common Commands` L146, `Architecture` L271,
+  `Hardware Context` L722), and `awk` confirms L594 is enclosed by `## Architecture`.
+  This item is the same finding with the correct anchor and therefore the
+  reproducible id. **/memory-review: reject `c1a94d32` as a mis-anchored
+  duplicate and apply this one.** (An item is never rewritten in place, which is
+  why the correction arrives as a second item rather than an edit.)
+- **why:** the bullet names the hub's repo directory at a path the profiles moved
+  off on 2026-09-10. A reader debugging "healthy repos report MISSING" goes to
+  `/mnt/spare320/restic-rest/`, finds nothing, and concludes the checker is
+  broken. The **rule** (must run as root; exit 2 for non-root vs 1 for a real
+  failure; `role_backup_hub` sudo-wraps it) is correct and kept verbatim — only
+  the path is wrong.
+- **evidence:** `AGENTS.md:596` → *"the repo dirs under
+  `/mnt/spare320/restic-rest/` are `drwx------ root:root`"*.
+  `awk '/restic-rest/' backup/latitude/profiles.yaml` →
+  `:91`, `:218 repository: "/mnt/wd8/restic-rest/g614jv"`,
+  `:240 test -f /mnt/wd8/restic-rest/g614jv/config`,
+  `:336 repository: "/mnt/wd8/restic-rest/g513ie"`, `:346`.
+  Same 2026-09-10 move the `Backups` `delete` item filed this run corrects in
+  `project.md:971-976`; `AGENTS.md` was missed by that fix.
+- **bytes:** 5 characters (`spare320` → `wd8`); the consequence is a dead
+  recovery path in the file every session loads.
+- **replacement — replace `AGENTS.md:596` with:**
+```
+  under `/mnt/wd8/restic-rest/` are `drwx------ root:root`, so an unprivileged
+```
+- **first seen:** 2026-09-12
+
+## cd546d48 · contradiction · /home/me/my/vps/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/my/vps/.claude/memory/project.md` # `Services & scheduler#vps-project.md:94` # `contradiction`
+- **action:** contradiction
+- **scope:** cross-store — `repo:vps` vs `repo:machines`
+- **apply on:** g15 (both checkouts are here)
+- **target:** `/home/me/my/vps/.claude/memory/project.md`
+- **anchor:** `Services & scheduler` (L85, 25176 B) — the `What is UP on latitude` bullet is at L94
+- **SUPERSEDES `4dbe8dc8`, filed minutes earlier in this same run under the
+  invented anchor `Services on latitude`.** That heading does not exist:
+  `consolidate.sh index` on this store gives `Services & scheduler` at L85.
+  **/memory-review: reject `4dbe8dc8` as a mis-anchored duplicate and apply this
+  one.**
+- **why:** `vps`' store lists **`restic-server` as "Down on purpose"**, dated
+  2026-08-01, while `machines` describes the restic REST hub as live, bound and
+  serving — and ships a systemd timer whose whole job is to catch that hub
+  serving an empty bind. Both cannot be true. The repo boundary is exactly where
+  this drift survives: `machines` owns the backup *profiles*, `vps` owns the REST
+  *server container*, so each store records half the system and neither reader
+  sees the other half.
+- **evidence:** `vps/project.md:94` → *"Down on purpose: navidrome,
+  restic-server, forgejo, plus the four below."* (dated 2026-08-01).
+  Against `machines`: `backup/latitude/profiles.yaml` defines two REST-served
+  repositories (`:218` `/mnt/wd8/restic-rest/g614jv`, `:336`
+  `/mnt/wd8/restic-rest/g513ie`) with `test -f …/config` health checks;
+  `machines/AGENTS.md:594-598` documents `restic-hub-selfcheck.sh` as one of
+  latitude's **three installed system timers**, "the only thing that catches the
+  restic REST hub serving an empty bind", sudo-wrapped by `role_backup_hub`.
+- **do not resolve by authority — measure on latitude:**
+  `docker ps --filter name=restic` and
+  `systemctl status restic-hub-selfcheck.timer`. One command settles it.
+  The `vps` line is older and the more likely stale, but it is also the only
+  statement of *deliberate* intent, so a silent flip would destroy a decision
+  record.
+- **bytes:** n/a until resolved
+- **replacement:** (none — a pair for a human. If the hub is up, strike
+  `restic-server` from the "Down on purpose" list **with the date it came back**;
+  do not delete the list — it is a decision record.)
+- **first seen:** 2026-09-12
+
+## 8c2dee2d · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)#project.md:2029-2223` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)` (L2029, 12627 B)
+- **why:** two thirds of the section is one-time forensics for a route whose
+  **both ends are gone** — per-repo branch inventory, `id_cyphy671` removal, the
+  184 GB / 25,468,309-chunk restatements, the 14 GB → 737 MB tallies, the
+  `172.26.x` portproxy names, "nothing deleted yet" status lines. Every portable
+  rule survives verbatim, including two that are live for a box that still
+  exists.
+- **evidence:** `project.md:2029-2223`. Dead state: `cat fleet.json` → `g15` is
+  `platform: debian`, `repo_groups:["my"]`, no WSL; `ls hosts/g15/` → `ubuntu`
+  only. **Live state, the opposite error:** AGENTS.md's `tier_docker` still
+  assumes Docker Desktop owns the engine on a WSL distro, so *"removing DD
+  removes the thing holding desktop-wsl up"* constrains a plan that has **not**
+  been executed — that bullet is not history.
+- **what is deliberately kept verbatim:** the blob-hash-by-hand recipe
+  (`$HOME/CLAUDE.md`'s *Branches* section tells readers to run it before deleting
+  a branch — cutting it would orphan a live policy reference); all four
+  pre-delete gate commands **with** the reason a worktree is invisible to the
+  other three; the `du`-vs-truncated-tar mechanism; `rc=0` + file-count-diff; and
+  both halves of the `--ignored` qualifier, which sit in two different paragraphs
+  (L2123 and L2160) and are merged here deliberately.
+- **bytes:** 12627 → 8808 (−3819, 30%)
+- **replacement:** **`docs/memory-consolidate/replacements/8c2dee2d.md`** — verbatim,
+  replaces L2029-2223 inclusive. It is 8.8 KB, kept as a sibling file rather than
+  inline so this queue stays readable; the file is inside
+  `docs/memory-consolidate/` and therefore inside this phase's write boundary.
+- **EITHER/OR with the `contradiction` item filed this run against
+  `project.md:2147-2154`** (the `~/my/vps` do-not-delete order). That range is
+  inside this one and the replacement above already folds the correction in.
+  **Apply this compress OR that contradiction, never both.**
+- **first seen:** 2026-09-12
+
+## 7a0ced30 · generalise · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)#project.md:1684-1710` # `generalise`
+- **action:** generalise
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)` (L1552, 11551 B)
+- **why:** three dangling `modules/` citations in the auto-pull bullets. The last
+  bullet's **rule** — one implementation read from the working tree, so a bad
+  commit breaks self-updating on every box at once — is live and load-bearing;
+  its **framing** (a `/nix/store` immutability contrast) describes a mechanism no
+  box has. Folding the two bullets keeps the tradeoff and drops the three
+  unresolvable paths.
+- **evidence:** `project.md:1684-1710`. `ls modules` → *No such file or
+  directory*; the NixOS tree was deleted 2026-08-01 (`f3d63b2`). Dead paths
+  cited: `modules/system/self-update.nix`, `modules/system/fleet-selfpull.nix`,
+  `services.fleetSelfpull`. Live: `provision/fleet-selfpull.sh` and
+  `provision/fleet-selfpull.test.sh` both exist.
+- **bytes:** 1882 → 1614 (−268)
+- **replacement — replaces L1684-1710 inclusive:**
+```
+- **One auto-pull mechanism fleet-wide, read from the working tree** (`9b8d63c`).
+  `nix-repo-auto-pull` is gone; every member runs `provision/fleet-selfpull.sh`,
+  so latitude keeps `~/my/vps` fresh too, which the old single-repo puller never
+  did. Converge is unaffected — `machines-converge.path` watches
+  `.git/logs/HEAD`, so it fires for whoever moved HEAD. **The tradeoff that came
+  with unifying is live and deliberate:** the old puller was an inline script
+  frozen in a `/nix/store` generation, so a bad commit could not brick it; the
+  shared script is read from the **working tree**, so a bad commit to
+  `fleet-selfpull.sh` breaks self-updating on **every box at once**. Treat
+  `provision/fleet-selfpull.test.sh` as load-bearing, not decorative.
+- **`fleet-selfpull.sh` had the same silent-failure bug** that
+  `nix-repo-auto-pull` did: it **always exited 0**, and reported *every* pull
+  failure as `SKIP diverged`, filing an auth failure as a branch-topology fact.
+  Now fetch and merge are split so the two are distinguishable, a real error
+  exits non-zero, the deliberate skips (`not-main` / `dirty` / `diverged`) stay
+  clean, and the fetch retries once. Guard: `provision/fleet-selfpull.test.sh`,
+  18 assertions.
+- **Two timers fetch the same repos — keep their `OnCalendar` off a shared
+  boundary.** `fleet-selfpull` is `*:03/10` (:03/:13/:23) precisely so it never
+  lands on `git-autofetch`'s `*:0/10` (:00/:10/:20). Sharing that boundary made
+  concurrent fetches collide on `refs/remotes/origin/main` and the loser fail.
+  If you ever retune either interval, re-check the offset.
+```
+- **first seen:** 2026-09-12
+
+## f329fdc8 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `latitude storage layout (settled 2026-08-01)#project.md:1773-1780` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `latitude storage layout (settled 2026-08-01)` (L1765, 3570 B)
+- **why:** the section's own opening rule is *always identify a drive by UUID*,
+  and **two rows of its table now point a reader at disks that were re-used** —
+  the exact failure the section exists to prevent. One of those UUIDs is
+  currently a backup destination under a different mountpoint.
+- **evidence:** table at `project.md:1773-1780`.
+  `hosts/latitude/debian/archive-mirror.sh:71-73` →
+  `DST=/mnt/immich-2024-backup/…`, `DST_UUID=fd0b0662-d574-40f5-930d-de8dc0fc5082`
+  — the same UUID the table still labels `/mnt/servarr`.
+  `install-docker-ordering.sh` → `MOUNTS=(/mnt/immich /mnt/immich-2024
+  /mnt/spare320 /mnt/wd8)`; neither `/mnt/servarr` nor `/mnt/xs` appears.
+  Corrections already exist at `project.md:3088` (ServarrMedia → `/mnt/wd8`,
+  2026-09-10) and in `archive-mirror.sh`'s WHY header.
+- **deliberately an INSERTED marker, not a rewritten table:** current UUIDs are
+  not verifiable from g15, and the corrections are already recorded twice
+  elsewhere — so nothing here is a last copy and nothing is guessed.
+- **bytes:** 0 → 860 (insertion)
+- **replacement — insert directly after L1780 (the last table row), before the
+  existing blank line at L1781:**
+```
+
+**Two rows of this table died on 2026-09-09/10 — the table is the 2026-08-01
+snapshot, the repo is authoritative.** `/mnt/servarr` (sdb2, HGST 931 G) is no
+longer a mount: `ServarrMedia` moved to the 8 TB WD Blue at `/mnt/wd8`, and that
+same HGST — UUID `fd0b0662…`, unchanged — came back as `/mnt/immich-2024-backup`
+and is now `archive-mirror.sh`'s destination. `/mnt/xs` (the exfat `xs700`
+partition on the Kingston XS2000 Ventoy stick) left the box 2026-09-09 and its
+`fstab` line is commented out; it was that job's destination for one week only.
+Read `hosts/latitude/debian/archive-mirror.sh` (`DST_MNT` / `DST_UUID` + its WHY
+header) and `install-docker-ordering.sh`'s `MOUNTS` before acting on any row
+here. Detail: *ServarrMedia переехал на 8 ТБ WD Blue* and *Архив 1970–2024
+получил вторую копию* below.
+```
+- **first seen:** 2026-09-12
+
+## 0c7cf833 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `g15 phase 1 done — where the only copies live (2026-09-07)#project.md:2440-2444` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `g15 phase 1 done — where the only copies live (2026-09-07)` (L2428, 1187 B)
+- **why:** an unqualified **future-dated action item that was superseded five
+  days after it was written**. Left alone it produces a pointless drive return on
+  2026-10-01, or worse, a belief that the archive's second copy depends on it.
+- **evidence:** `project.md:2440-2444` says the Ventoy drive holds latitude's
+  `xs700` archive-mirror partition and must be returned before
+  `archive-mirror.timer` fires 2026-10-01 05:01. But
+  `hosts/latitude/debian/archive-mirror.sh:71-73` → destination is
+  `/mnt/immich-2024-backup`, and its header records: *"In between, the target was
+  the Kingston XS2000 at `/mnt/xs` — a removable stick that then left the box"*.
+- **bytes:** 345 → 529 (+184)
+- **replacement — replaces L2440-2444 inclusive:**
+```
+- **The Ventoy drive was shared with latitude; the deadline is spent.** The same
+  physical drive that carried `ubuntu-26.04.1-desktop-amd64.iso` also held
+  latitude's exfat `xs700` partition, `archive-mirror.sh`'s destination at the
+  time. The stick left latitude 2026-09-09 and that job now writes
+  `/mnt/immich-2024-backup` (`archive-mirror.sh:71-73`), so the "return it
+  before `archive-mirror.timer` fires 2026-10-01 05:01" deadline no longer
+  binds. Secure Boot on g15 is OFF, so Ventoy needs no MokManager enrolment.
+```
+- **first seen:** 2026-09-12
+
+## d33983b5 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)#project.md:2147-2154` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Moving personal projects onto g15 — the WSL traps that cost the most (2026-08-28)` (L2029, 12627 B)
+- **EITHER/OR — apply this ONLY if the `compress` item `8c2dee2d` for this same
+  section is DECLINED.** That item's replacement already folds this correction
+  in, and L2147-2154 sits inside its range. Applying both double-edits the same
+  passage.
+- **why:** the stated *reason* for a standing do-not-delete order has moved into
+  another repo, so the order now rests on a file that is not there.
+- **evidence:** `project.md:2147-2154` orders `~/my/vps` never deleted because it
+  is the `WorkingDirectory` of `resticprofile-backup@profile-wsl.service`,
+  reading `vps/backup/wsl/profiles.yaml`. But `ls machines/backup/` →
+  `desktop-wsl/` exists here with `profiles.yaml` + `install-tasks.sh`, and that
+  script's body is `cd "$(dirname "$0")"; resticprofile schedule --all`.
+  `AGENTS.md` dates the move 2026-09-01. `project.md:1095` separately records the
+  `vps/backup/wsl/pass.txt` there as stale and deleted.
+- **scoped narrowly on purpose:** this does **not** establish that `~/my/vps` is
+  deletable. Whether desktop-wsl re-ran `install-tasks.sh` is not visible from
+  g15, and the checkout may be wanted for `vps` work regardless.
+- **bytes:** 559 → 794 (+235)
+- **replacement — replaces L2147-2154 inclusive:**
+```
+**Desktop copies deleted 2026-08-29 — except `vps`.** `~/my/` on `desktop-wsl`
+went 1.3 GB → 4.9 MB. `~/my/vps` was kept as the `WorkingDirectory` of the user
+timer `resticprofile-backup@profile-wsl.service`, reading
+`vps/backup/wsl/profiles.yaml`. **That reason is superseded:** the restic
+profiles moved into `machines/backup/<identity>/` on 2026-09-01, so the source is
+`backup/desktop-wsl/profiles.yaml` here, whose `install-tasks.sh` `cd`s next to
+itself. Whether desktop-wsl has re-run it — what the live unit's
+`WorkingDirectory` points at now — is not visible from another box; check there
+before deleting either path. The gate is the portable part and is unchanged:
+before deleting any project directory, `grep -rl '/home/me/my/'
+~/.config/systemd/user/ /etc/systemd/system/`.
+```
+- **first seen:** 2026-09-12
+
+## f65ade16 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `What was still left of the g15 Ubuntu setup — audited on the box (2026-09-08)#project.md:2774-2780` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `What was still left of the g15 Ubuntu setup — audited on the box (2026-09-08)` (L2714, 9880 B)
+- **why:** two copies disagree on how many tier-body extractions in
+  `tiers.test.sh` use the fragile `awk` range form — and **both are wrong against
+  the file they describe.** This is the store's own rule
+  (*"Механизм, который собираешься написать… — это ровно тот момент, когда его
+  надо померить"*) failing on itself.
+- **evidence:** `project.md:2774-2780` ("The other four tiers still use the
+  fragile form") vs `project.md:3619-3624` ("only `tier_battery_limit` and
+  `tier_lid_ignore` use the robust form"). Measured against the live suite
+  2026-09-12:
+  `awk "/awk '\/\^tier_/" provision/tests/tiers.test.sh | wc -l` → **8**;
+  `sed -n '173p;248p' provision/tests/tiers.test.sh` → L173 is the robust form
+  (`/^tier_battery_limit\(\)/{f=1} f&&/^tier_[a-z_]+\(\) *\{/&&!/^tier_battery_limit/{exit} f`)
+  but **L248 is fragile** (`awk '/^tier_lid_ignore\(\)/,/^}/'`). Fragile sites:
+  91, 133, 248, 281, 311, 347, 438 — seven, not four.
+- **bytes:** 1577 (1141 + 436) → ~1180
+- **replacement — TWO ranges, one decision. Replace `project.md:2774-2780` with
+  the text below; `project.md:3619-3624` is deleted outright (`(none — deletion)`).**
+  The surviving copy is the topical one because it alone names the `code()`
+  filter, `tailscale-wsl.test.sh`, and the mutation that passed clean.
+```
+  - **A nested function in a tier broke five unrelated assertions at once.**
+    `tiers.test.sh` extracted tier bodies with `awk '/^tier_x\(\)/,/^}/'`, which
+    stops at the first column-0 `}` — `charge_mode`'s. The fix is in the test
+    (run to the next tier definition, then trim back to the last column-0 `}`),
+    NOT indenting the function's brace to placate the awk. **Measured on the
+    live suite 2026-09-12: EIGHT tier-body extractions, exactly ONE robust —
+    `tier_battery_limit` (line 173).** `tier_gortex_autoupdate` (91),
+    `tier_statusboard` (133), `tier_lid_ignore` (248), `tier_oom_guard` (281),
+    `tier_sysrq` (311), `tier_rapl_read` (347) and `tier_dotfiles` (438) all
+    still carry the fragile range form; give the robust form to whichever of
+    them first grows a nested function. Two earlier records of this were both
+    wrong — "the other four tiers" (2026-09-08) and "only `tier_battery_limit`
+    and `tier_lid_ignore` use the robust form" (2026-09-11 harvest); line 248
+    is a plain `/^tier_lid_ignore\(\)/,/^}/`.
+```
+- **first seen:** 2026-09-12
+
+## df2ac26c · dedupe · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)#project.md:3662-3666` # `dedupe`
+- **action:** dedupe
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)` (L3575, 11789 B)
+- **survives:** the topical copy at `project.md:3017-3023`, under *RustDesk on g15…* — it alone names the `tier_gortex` precedent (untarring a pin unconditionally) and rejects per-asset `digest` pinning, and it sits in the section a future RustDesk session actually opens
+- **why:** same decision, same reason, two copies. The dump copy is misfiled
+  under `### Orca` and carries exactly one fact the survivor lacks — the observed
+  rebuild dates — which is folded in rather than lost.
+- **evidence:** `project.md:3017-3023` (survivor) and `project.md:3662-3666`
+  (deleted). `awk '/RustDesk/{print NR}'` shows only these two statements of the
+  rule.
+- **bytes:** 936 → ~610
+- **replacement:** `(none — deletion)` for `project.md:3662-3666`. **Fold into
+  the survivor first**, at `project.md:3018`: insert the verbatim parenthetical
+  `(rebuilt 2026-09-01 and again 2026-09-10)` after `replaced in place`, so the
+  clause reads `…URL is stable but its BYTES are replaced in place (rebuilt
+  2026-09-01 and again 2026-09-10); combine that with…`. **Carry before cutting.**
+- **first seen:** 2026-09-12
+
+## e6659fbb · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Доки роняет розетка, а не USB — и это два разных отказа (измерено 2026-09-10)#project.md:3065-3068` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:machines — **and it has money attached**
+- **apply on:** g15 (the marker), but the measurement is on **latitude**
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Доки роняет розетка, а не USB — и это два разных отказа (измерено 2026-09-10)` (L3049, 3322 B)
+- **why:** the measured mechanism (a voltage dip shorter than the EC's AC-loss
+  threshold) and the owner's 2026-09-11 statement (real home power outages)
+  cannot both be simply true, and the two answers buy **different hardware**:
+  an AVR-only UPS versus one specified for runtime/autonomy plus USB NUT for a
+  graceful shutdown. **Three copies exist**, one of them auto-loaded every
+  session, and they do not agree.
+- **evidence:** `project.md:3065-3068` — dip shorter than the EC's threshold,
+  *"Это и есть механизм"*; exactly one `ACPI: AC Adapter (off-line)` in six
+  weeks, and not at a drop. Against `project.md:3752-3755` — *"confirmed by the
+  owner on 2026-09-11 as **real home power outages**, not the brief voltage dips
+  previously assumed"*. **Third copy, loaded every session:**
+  `AGENTS.md:775-781`, which states the dip mechanism *and already prescribes the
+  purchase* ("a UPS on the dock bricks closes the class"). Eight paired dock
+  disconnects against one AC-off-line event is measured evidence against "real
+  outage"; the owner's statement is evidence for it.
+- **placement:** the marker goes in `project.md:3049` rather than `AGENTS.md`
+  because that is where a dock session reads, and `AGENTS.md` is the copy a later
+  pass would edit anyway once the pair is resolved.
+  **`project.md:3752-3755` is neither moved nor deleted** — it sits inside the
+  parked-host-facts block whose every fact is a last copy.
+- **bytes:** 444 → ~1000
+- **replacement — replaces `project.md:3065-3068`:**
+```
+- **`ACPI: AC Adapter [AC] (off-line)` за всё это время — РОВНО ОДИН раз
+  (29.07T02:15), и не в момент падения.** Значит просадка короче порога, на
+  котором EC замечает потерю AC: 65-ваттный кирпич ноутбука её переживает,
+  дешёвые 12 В блоки доков — нет. Это и есть механизм.
+  <!-- conflicts-with: "**the dual-dock disconnects were confirmed by the owner on 2026-09-11 as real home power outages**, not the brief voltage dips previously assumed" — этот файл, раздел «memory-harvest 2026-09-11 … (Track A + B)» → «Other boxes' host facts», и AGENTS.md *Key patterns* («the docks' cheap 12 V bricks dying on a dip … a UPS on the dock bricks closes the class»). Журнал за шесть недель даёт ОДИН `AC Adapter (off-line)` на восемь парных отвалов — настоящее отключение питания снимало бы AC каждый раз. Цена расхождения — покупка: AVR-UPS против «runtime/autonomy + USB NUT для graceful shutdown». Не разрешать по авторитету: замер — `journalctl --boot=all` по `AC Adapter` против времён `usb 4-*: USB disconnect`. -->
+```
+- **first seen:** 2026-09-12
+
+## c3f4e959 · dedupe · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Приёмка нового диска: identity-гейт впереди surface (2026-09-08)#project.md:2905-2911` # `dedupe`
+- **action:** dedupe
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Приёмка нового диска: identity-гейт впереди surface (2026-09-08)` (L2850, 8780 B)
+- **why:** three of the bullet's four claims are superseded — the bay layout, the
+  forward instruction ("вернуть `immich-mirror` в стойку можно только после…":
+  servarr moved, and the freed bay went to the archive instead), and the
+  "g15-staging в единственном экземпляре" warning. Per this store's own rule at
+  L3314 (*"Инструкция будущей сессии, ставшая ложной, опаснее устаревшего
+  факта… Помечены закрытыми с датой, не вычищены"*) it is **struck with a date,
+  not deleted**.
+- **evidence:** `project.md:2905-2911` vs `project.md:3173-3175` + `AGENTS.md:786-788`
+  (live topology: `u4-1:1` is HGST/`immich-2024-backup`, `u3-2.4:0` is
+  immich-mirror in the NS1066 stopgap), `project.md:3088-3127` (servarr moved to
+  wd8, 2026-09-10), `project.md:3279` (*"ждать освобождения `spare320` ради бэя
+  Ugreen, возможно, не нужно вовсе"*), `project.md:2828-2835` (pgdata staging leg
+  deleted 2026-09-10).
+- **what is NOT asserted:** only the **186 G pgdata** leg is provably gone. The
+  18 G `home-me` leg's fate is recorded nowhere in this slice, so the replacement
+  says so rather than guessing — it could be the last copy.
+- **bytes:** 764 → ~700
+- **replacement — replaces `project.md:2905-2911`:**
+```
+- ~~**Свободных бэев нет: 8 ТБ занял бэй зеркала.** Док 4-1 — servarr +
+  spare320, док 4-2 — новый 8 ТБ + immich-2024. Вернуть `immich-mirror` в
+  стойку можно только после того, как ServarrMedia переедет на 8 ТБ и
+  освободит свой бэй.~~ **ЗАКРЫТО 2026-09-10.** ServarrMedia переехал на wd8
+  (раздел про ServarrMedia), а освободившийся HGST ушёл не под зеркало, а под
+  вторую копию архива 1970–2024 (`/mnt/immich-2024-backup`). Живая расстановка
+  бэев — в разделе про архив 1970–2024 и в AGENTS.md; ждать освобождения
+  `spare320` ради бэя Ugreen, возможно, не нужно вовсе (раздел про 480 Мбит).
+  Из `g15-staging` на зеркале удалена нога **`pgdata` (186 G), 2026-09-10**
+  (см. «The DB leg is CLOSED»); о судьбе ноги **`home-me` (18 G)** записи нет —
+  проверить на диске, прежде чем считать её и удалённой, и единственной копией.
+```
+- **first seen:** 2026-09-12
+
+## 92ae95ad · generalise · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)#project.md:3577-3595` # `generalise`
+- **action:** generalise
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `memory-harvest 2026-09-11 — what the fleet transcripts held (Track A + B)` (L3575, 11789 B)
+- **why:** `### The harvest machinery itself` is the **one subsection of this
+  dated dump whose subject already has a topical `##` home elsewhere in the
+  store**. Moving it lets the ingestion heading shed its only misfiled block
+  without touching a single fact. Relocation, not deletion — every fact here is
+  unique.
+- **evidence:** `project.md:3577-3595` (4 bullets, 1278 B) against the topical
+  home `project.md:3355` (`## memory-harvest / fleet-gather.sh gotchas (demoted
+  from global.md 2026-09-11)`) and `project.md:3677` (`### Agent config`, inside
+  the same dump).
+- **bytes:** 1278 → 1278 (byte-neutral; the win is structural)
+- **replacement:** (text moves verbatim; the map IS the change)
+  - `project.md:3579-3582` "Run `/memory-harvest` BEFORE `memory-harvest` on the
+    same box" → **`## memory-harvest / fleet-gather.sh gotchas`** (L3355). Its
+    parenthetical *"(The `manifest.tsv` correction above is from the same run.)"*
+    still resolves there — `manifest.tsv` is at L3366-3374 — but **re-read it
+    after the move** rather than assuming.
+  - `project.md:3583-3585` "latitude has no `~/.claude/projects` directory at
+    all" → **L3355**.
+  - `project.md:3586-3592` "Transcripts had a 30-day expiry until 2026-09-10" →
+    **L3355**.
+  - `project.md:3593-3595` "`enabledPlugins` in `agents/settings.json` loads at
+    USER scope" → **`### Agent config`** (L3677), *not* L3355 — it is not a
+    harvest fact.
+  - Then delete the now-empty `### The harvest machinery itself` heading at L3577.
+- **HAZARD for any relocation in this store:** cross-references here are
+  **positional** ("см. раздел про гейты", "см. раздел про доки", "раздел про
+  `.Mounts` ниже", "выше"). Re-point every one that crosses a moved boundary.
+- **NOT A CANDIDATE, and this must not be re-derived next run:**
+  `### Other boxes' host facts (parked here — their host-memory.md is
+  branch-scoped)` at `project.md:3706-3755` says in its own text *"until then
+  this is their only home"* — **every fact in it is by construction the last
+  copy** and must never be deduped away.
+- **first seen:** 2026-09-12
+
+## 541d2cef · compress · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `ServarrMedia переехал на 8 ТБ WD Blue (выполнено 2026-09-10)#project.md:3116-3121` # `compress`
+- **action:** compress
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `ServarrMedia переехал на 8 ТБ WD Blue (выполнено 2026-09-10)` (L3088, 3448 B)
+- **survives:** `/home/me/machines/AGENTS.md` *Key patterns* (L674-692) — loaded in every session, states the rule most fully, and already names `/mnt/xs` as the offending line **plus** the `rc >= 2` segfault refusal that the project.md copy omits
+- **why:** third statement of one rule (a third mention sits at
+  `project.md:3226-3232`). What is genuinely local — that the line is commented
+  out because the disk is physically gone — is one sentence.
+- **evidence:** `project.md:3116-3121` vs `AGENTS.md:674-692`
+  (*"A stale fstab line used to switch this whole guard off… the `/mnt/xs` line
+  had to be commented out for exactly that reason. The gate now compares
+  candidate against current… It still refuses outright on `rc >= 2`"*), and
+  `project.md:3226-3232`.
+- **bytes:** 625 → ~255
+- **replacement — replaces `project.md:3116-3121`:**
+```
+- **`/mnt/xs` в `/etc/fstab` закомментирован** — диск физически снят 2026-09-09.
+  Механизм (одна чужая протухшая строка fstab вырубала
+  `install-docker-ordering.sh` целиком; гейт с тех пор сравнивает кандидата с
+  текущим файлом и отказывает на `rc >= 2`) — в AGENTS.md, *Key patterns*.
+```
+- **first seen:** 2026-09-12
+
+## 7a4bfc0a · contradiction · /home/me/my/qaz-code/CLAUDE.md
+
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `CLI Commands#qaz-code-CLAUDE.md:106-128` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:qaz-code — an **auto-loaded instruction file**, 64852 B, loaded in every session under that repo and its two worktrees
+- **apply on:** g15 (the only box with `repo_groups: ["my"]`)
+- **target:** `/home/me/my/qaz-code/CLAUDE.md`
+- **anchor:** `CLI Commands` (L33, 4255 B)
+- **why:** `## CLI Commands` states **two different signatures for `repo` and
+  `umbrella`, 56 lines apart**, and an agent reading top-down hits the incomplete
+  one first. This is a harvest that appended a correction and left the superseded
+  text in place — the machine-written `conflicts-with` markers quote the
+  superseded lines verbatim, so the tool knew and nobody closed the loop.
+- **evidence:** `qaz-code/CLAUDE.md:50` + `:53` (the canonical fences) vs
+  `:106-128` (the appended block); markers at `:127-128`:
+  `<!-- conflicts-with: "python cli.py repo <root> [--scope codes,local,local-astana,...] [--no-repack]" -->`
+  and `<!-- conflicts-with: "python cli.py umbrella <root> [--org kazakhstan-law]" -->`.
+  Measured: `sed -n '106,128p' | wc -c` = 1180; L50 = 79 B; L53 = 53 B.
+- **bytes:** 64852 → 64463 (−389, 0.6%)
+- **replacement — THREE edits, one decision.**
+  (1) replace L50 with:
+```
+python cli.py repo <root> [--scope codes,local,local-astana,...] [--no-repack] \
+    [--built-on YYYY-MM-DD] [--render-workers N]
+```
+  (2) replace L53 with:
+```
+python cli.py umbrella <root> [--org kazakhstan-law] [--built-on YYYY-MM-DD]
+```
+  (3) replace L106-128 with:
+````
+One command the fences above do not name:
+
+```bash
+# Audit a rendered corpus for structural defects (needs the DB).
+python cli.py audit-render [...]
+```
+
+`--built-on` (on `repo` and `umbrella`) names the annotated `build/` tag and
+since 2026-09-10 reaches no committed blob — the scope READMEs carry no build
+date at all any more. It defaults to today, which is what you want; how fresh
+the *data* is rides in the tag's own watermark field. `--render-workers` is
+`-1` by default, meaning read `ZANGOV_RENDER_WORKERS` and fall back to 4;
+**`0` keeps the in-process path, which is what the determinism reference
+runs**, so pass it when you are reproducing a recorded sha.
+<!-- src: qaz-code 6eaadf7 | 2026-09-12 -->
+````
+  The `(on `repo` and `umbrella`)` clause is **required**: without it the prose
+  trails an `audit-render` fence and reads as documenting *that* command's flags.
+- **first seen:** 2026-09-12
+
+## 62186e74 · contradiction · /home/me/my/qaz-code/CLAUDE.md
+
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `Tests#qaz-code-CLAUDE.md:143-157` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:qaz-code — auto-loaded instruction file
+- **apply on:** g15
+- **target:** `/home/me/my/qaz-code/CLAUDE.md`
+- **anchor:** `Tests` (L137, 1366 B)
+- **why:** the section asserts the suite **is** three files and then, four lines
+  later, that this is false — the file contradicts itself within one screen. The
+  correction is right and the original enumeration is still useful as origin, so
+  the fix is to mark it as origin in place rather than delete either half.
+- **evidence:** `qaz-code/CLAUDE.md:143-147` (*"It covers the three pieces with
+  non-obvious logic…"*) vs `:149-156` (*"The three-file list above is the suite's
+  origin, not its current reach"*); machine-written marker at `:157` quotes the
+  superseded sentence in full (342 B). Measured:
+  `sed -n '143,157p' | wc -c` = 1328.
+- **bytes:** 64852 → 64503 (−349, 0.5%)
+- **replacement — replaces L143-157:**
+```
+The suite is pure unit tests — no database, no network, no Docker. It began as
+three pieces with non-obvious logic: `tests/test_chunker.py` (anchor selection
+and oversized-chunk splitting), `tests/test_sync_resilience.py` (page-skip /
+retry behaviour in `iterate_documents` and `retry_failed_docs`), and
+`tests/test_dashboard.py` (`DashboardState` transitions and bar rendering).
+
+That three-file list is the suite's origin, not its current reach. It has
+since grown to cover the repository build and its scope routing, the renderer
+against frozen fixtures and goldens, the document split, the anchor grammar,
+the blob cache, the render pool, the tag and umbrella writers, the delta-run
+comparison, the CA pin and the client throttle. It is still hermetic — no
+database, no network, no Docker — which is the property that matters and the
+reason `render-capture` (the one DB-touching renderer command) is deliberately
+outside it. <!-- src: qaz-code 6eaadf7 | 2026-09-12 -->
+```
+- **MEASURED NEGATIVE, worth recording so the next run does not re-open it:**
+  both qaz-code `CLAUDE.md` items together save **738 B of 64,852 — 1.1%**. This
+  file's size is **not meaningfully reducible** under the no-compressing-rules
+  constraint. Its bulk is `## Architecture` (L159-718, 74% of the file), dense
+  incident-derived rules, not narrative. Supporting measurement: 598 non-blank
+  lines, 586 unique; the 12 duplicates are code-fence markers; **zero** non-blank
+  lines over 40 chars repeat anywhere in the file. There is no internal verbatim
+  duplication to remove.
+- **first seen:** 2026-09-12
+
+## 0b49159e · contradiction · /home/me/my/qaz-code/CLAUDE.md
+
+- **id-inputs:** `/home/me/my/qaz-code/CLAUDE.md` # `(whole file)#qaz-baseline:849407c-detached` # `contradiction`
+- **action:** contradiction
+- **scope:** repo:qaz-code — a **detached-HEAD worktree whose auto-loaded `CLAUDE.md` asserts the opposite of `main` in four places**
+- **apply on:** g15 (the only box holding these checkouts)
+- **target:** `/home/me/my/qaz-code/CLAUDE.md`
+- **anchor:** `(whole file)` — the finding is about which revision of this file a
+  session loads, not about a section of it
+- **why:** `/home/me/qaz-baseline` is a **git worktree of `qaz-code`**, pinned 30
+  commits behind `main` at a detached HEAD, **with no tag and no marker file**.
+  Every session opened under it auto-loads instructions that contradict `main`.
+  This is not fixable by editing text: an edit to the worktree's copy is lost on
+  the next checkout, or lands on a branch nobody meant to change. **The fix is a
+  tag or a marker file, and a human has to pick which.**
+- **evidence:** measured 2026-09-12 on g15.
+  ```console
+  $ git -C /home/me/my/qaz-code worktree list
+  /home/me/my/qaz-code   a9a1d5a [main]                     <- most complete
+  /home/me/my/qaz-pool   47933ca [perf/parallel-render]     3 behind main, 0 ahead
+  /home/me/qaz-baseline  849407c (detached HEAD)            30 behind main, an ancestor
+  $ git -C /home/me/qaz-baseline describe --all --exact-match
+  (nothing — no tag)
+  ```
+  All three remotes are `git@github.com:metheoryt/qaz-code.git`; `CLAUDE.md` is
+  clean against HEAD in all three. The four contradictions the pinned copy
+  asserts against `main`:
+  - `embedding_model != EMBEDDING_MODEL` — main: *"there is no module-level
+    `EMBEDDING_MODEL` constant"*
+  - *"Layout under `laws/` (**12 dirs total**)"* — main: *"12 tier dirs. The
+    **26** directories directly under `laws/` are the repositories themselves,
+    one level up"*
+  - *"**The past is preserved by** annotated `build/` tags"* — main:
+    *"**designed, not yet built.** Verified 2026-09-11: zero tags in all 26
+    published repositories"*
+  - *"The corpus **self-hosts (no GitHub limits)**"* — main: *"**published on
+    GitHub** — 26 public repositories under `kazakhstan-law` since 2026-09-09 —
+    so GitHub's limits are live constraints"*
+- **measured, and it rules out the obvious remedies:** no worktree holds
+  unmerged content. `diff pool code` = 71 added, 0 removed — **qaz-pool is a
+  strict subset of qaz-code**. Every line the worktrees have that `main` lacks is
+  older text `main` has since edited. **Nothing to promote back, and no `dedupe`
+  is possible**: writing "see qaz-code/CLAUDE.md" into a worktree copy dirties it
+  against its own HEAD, and committing that would *delete* the content from that
+  branch going forward. Pairwise shared lines: baseline∩code 520 (56,627 B),
+  code∩pool 525, all three 520.
+- **bytes:** n/a — this is a repo-state decision, not a text edit
+- **replacement:** (none — a question for a human, with two answers and a reason
+  each)
+  1. **The pin is deliberate** — sitting beside `qaz-pool` on
+     `perf/parallel-render`, `qaz-baseline` reads like a performance-comparison
+     baseline, in which case **moving it forward destroys the comparison**. Then
+     the fix is an annotated tag on `849407c` plus a one-line
+     `qaz-baseline/BASELINE.md` saying what it is a baseline *for* and that its
+     `CLAUDE.md` is frozen and not authoritative.
+  2. **The pin is forgotten** — then `git -C /home/me/qaz-baseline checkout main`
+     (or remove the worktree) and the four contradictions vanish with it.
+  It cannot be told apart from outside the repo. Ask before doing either.
+- **first seen:** 2026-09-12
+
+## 1cd0da76 · contradiction · /home/me/.claude/CLAUDE.md
+
+- **id-inputs:** `/home/me/.claude/CLAUDE.md` # `MANDATORY: Use Gortex MCP tools instead of Read/Grep/Glob#claude-CLAUDE.md:95-102` # `contradiction`
+- **action:** contradiction
+- **scope:** shared → fleet-wide. This file is auto-loaded in **every session on every box**.
+- **apply on:** g15
+- **target:** `/home/me/.claude/CLAUDE.md`
+- **anchor:** `MANDATORY: Use Gortex MCP tools instead of Read/Grep/Glob` (L2, 6187 B) — the memory-store prose at L95-102 is enclosed by it; the file has only two `##` lines (L2 and L104), and that mis-nesting is a separate structural oddity not proposed here
+- **why:** `CLAUDE.md` derives the ~2 KB file budget **causally** from the
+  ~3.5 KB stdout cap ("because…so…Keep `core.md` under ~2 KB"), while `core.md`'s
+  own header states the cap is checked on the **comment-stripped loader output**
+  and is "well under the file's own size". A reader applying `CLAUDE.md`
+  literally sees 3330 B, concludes `core.md` is 1.3 KB over a hard cap, and
+  starts cutting `## Register` bullets — when the real cap has ~800 B of
+  headroom. Both limits are real and both worth keeping; **the causal link
+  between them is the bug.** The 2026-09-11 run made exactly this mistake (see
+  ledger note on `7f7db67c`).
+- **evidence:** `~/.claude/CLAUDE.md:95-102` — *"…because Claude Code persists a
+  hook's / stdout past ~3.5 KB and injects only a preview, so the old `cat` of
+  all four / stores (142 KB) reached the model as a 2 KB stub. **Keep `core.md`
+  under ~2 KB**"*. Counter-copy `core.md:7-12` — *"HARD BUDGET: the hook that
+  emits this file is capped at ~3.4 KB of stdout… (comments are stripped, so that
+  number is well under the file's own size)"*. Measured 2026-09-12:
+  `bash machines/agents/plugin/hooks/global-memory-load.sh ~/.claude core | wc -c`
+  → **2608**; `wc -c < ~/.claude/memory/core.md` → **3330**.
+- **does not overlap open item `61aee193`**, whose range is L88-93 (the
+  Sentry / `pure-connectors` block).
+- **bytes:** 598 → 1172
+- **replacement — replaces L95-102 verbatim:**
+```
+pull. The `global-memory-load.sh`
+SessionStart hook loads them in EVERY session (it replaces the old
+`@memory/...` imports, which only Claude Code resolved — the hook works for Codex
+too). It injects `memory/core.md` verbatim and an INDEX of the rest — path, size
+and `##` headings with line numbers; everything else is read on demand from that
+index. Be concise, and never put secrets in them.
+
+**`core.md` has TWO limits, measured on two different numbers. Never check one
+against the other's threshold.** (1) The HARD cap is the hook's stdout: past
+~3.5 KB Claude Code persists the output and injects only a preview — how the old
+`cat` of all four stores (142 KB) once reached the model as a 2 KB stub. It
+binds the INJECTED bytes, which the loader emits with HTML comments stripped:
+`bash global-memory-load.sh ~/.claude core | wc -c` (2608 B on 2026-09-12).
+(2) The ~2 KB budget is a STYLE target on the file's own bytes
+(`wc -c ~/.claude/memory/core.md`, 3330 B on 2026-09-12) — detail belongs in the
+indexed stores, not here. Inside the cap and over the budget is the current
+state and a normal one; do not "fix" it by trimming a rule out of `## Register`.
+```
+- **first seen:** 2026-09-12
+
+## 6c545daa · contradiction · /home/me/.claude/host-memory.md
+
+- **id-inputs:** `/home/me/.claude/host-memory.md` # `Environment#host-memory.md:13-16` # `contradiction`
+- **action:** contradiction
+- **scope:** host (g15) — `host-memory.md` is this branch only
+- **apply on:** g15 — this box
+- **target:** `/home/me/.claude/host-memory.md`
+- **anchor:** `Environment` (L11, 636 B)
+- **why:** two files in the **same session's context** assert incompatible states
+  of one git ref. "Kept for history" is the dangerous half: it invites a future
+  session to treat a dead local ref as protected fleet content — exactly the
+  false last-copy scare `values.md` trains for. **The true state is stranger than
+  either claim and neither file records it:** the remote is gone, one local ref
+  survives on this box only.
+- **evidence:** `host-memory.md:13-16` — *"The sibling branch `g15-wsl` is the
+  *same hardware's* old WSL identity, / kept for history"*. Counter-copy
+  `~/CLAUDE.md:58-60` (`## Branches`) — *"`g15-wsl` did / until 2026-09-11, when
+  its ref was deleted"*. Measured 2026-09-12:
+  `dotfiles rev-parse --verify -q origin/g15-wsl` → **non-zero, absent**;
+  `dotfiles rev-parse -q g15-wsl` → `502c80c80d9d17a26d999cb5a763bd3c07776233`;
+  `dotfiles branch -a` lists a local `g15-wsl` but no `remotes/origin/g15-wsl`.
+- **bytes:** 298 → 666
+- **replacement — replaces L13-16:**
+```
+- **This box = `g513ie`** (fleet label `g15`, dotfiles branch `g15`): ASUS ROG
+  Strix G513IE, **native Ubuntu** (kernel 7.0), 16 cores, 30 GB RAM, 937 GB
+  NVMe. Work moved to native on **2026-09-07**.
+- **`g15-wsl` is not a fleet branch any more — do not treat it as history to
+  keep.** It was this hardware's old WSL identity. `origin/g15-wsl` was deleted
+  2026-09-11 after a blob-hash check found nothing on it that `main` lacked
+  (`~/CLAUDE.md` `## Branches`). What survives is a LOCAL ref on this box only —
+  `g15-wsl` at `502c80c`, which `dotfiles branch -a` still lists while
+  `rev-parse origin/g15-wsl` fails. Delete it knowingly, not by accident.
+```
+- **first seen:** 2026-09-12
+
+## 5d183430 · generalise · /home/me/CLAUDE.md
+
+- **id-inputs:** `/home/me/CLAUDE.md` # `Branches#home-CLAUDE.md:61-63` # `generalise`
+- **action:** generalise
+- **scope:** shared → fleet-wide. Auto-loaded in every session under `$HOME`, which is every session on every box.
+- **apply on:** g15
+- **target:** `/home/me/CLAUDE.md`
+- **anchor:** `Branches` (L52)
+- **why:** a hardcoded commit count, **40 commits stale, sitting four lines below
+  this file's own rule against trusting lists written into it** — the same
+  failure `machines/AGENTS.md` documents for its suite count. A count that drifts
+  silently is worse than no count, because it reads as a measurement. The
+  load-bearing half (which branch holds the only copy of that file) is still true
+  and was re-verified, so keep it and drop only the number.
+- **evidence:** `~/CLAUDE.md:61-63` — *"`desktop-wsl` is 135 commits ahead of /
+  `main` and is the only place `pure/backend-api/.claude/memory/project.md` /
+  exists."* Measured 2026-09-12: `dotfiles rev-list --count main..desktop-wsl` →
+  **95**. Four lines above, `~/CLAUDE.md:56` says *"Ask `dotfiles branch -a`
+  rather than any list written here"*. The second half checks out:
+  `cat-file -e <branch>:pure/backend-api/.claude/memory/project.md` across all
+  eight branches → present on `desktop-wsl` only.
+- **bytes:** 168 → 437
+- **replacement — replaces L61-63:**
+```
+  that check before deleting any branch. Do not trust a commit count written
+  here — ask `rev-list --count main..<branch>`; this line said "135 commits
+  ahead" for `desktop-wsl` and measured **95** on 2026-09-12. What is worth
+  writing down is the irreplaceable content, and it still holds: `desktop-wsl`
+  is the only branch carrying `pure/backend-api/.claude/memory/project.md`
+  (checked against all eight branches, 2026-09-12).
+```
+- **first seen:** 2026-09-12
+
+## 3687ea85 · promote · /home/me/.claude/memory/personality/practices.md
+
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Before writing to a path, look at what is already there (2026-09-07, g15/Orca)#practices.md:479-489` # `promote`
+- **action:** promote
+- **scope:** shared → fleet-wide (a heading insertion; no text changes)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/personality/practices.md`
+- **anchor:** `Before writing to a path, look at what is already there (2026-09-07, g15/Orca)` (L456)
+- **why:** **a rule filed under a heading that does not describe it is
+  unreachable by the only discovery path this store has.**
+  `global-memory-load.sh` injects an INDEX of `##` headings with line numbers,
+  and every read of this file is a targeted read against that index. The bullet
+  at L479-489 is about per-platform test fixtures; the heading above it is about
+  symlink-following writes. It is present but not findable.
+- **evidence:** `practices.md:456-478` is entirely about symlink-following writes
+  and sweeping for hazard instances; `practices.md:479-489` is a bullet about
+  per-platform test fixtures (*"A test that only ever sees ONE platform's string
+  shape… the literal `"gortex hook"`… `…/gortex.exe hook`"*). No connective
+  tissue — it was appended past the end of the section it landed in.
+  `awk '/^## /{print NR": "$0}' practices.md` shows the next `##` is EOF, so
+  L479-489 is the tail of a section it does not belong to.
+- **this is a heading insertion, not a rewrite:** L479-489 stay byte-identical.
+- **bytes:** 1007 → 1099
+- **replacement — insert a blank line, then this heading line, then a blank line,
+  immediately before L479:**
+```
+## A test that only ever sees one platform's string shape (measured 2026-08-30, machines)
+```
+- **first seen:** 2026-09-12
+
+## 262c77ce · demote · /home/me/.claude/memory/personality/tone.md
+
+- **id-inputs:** `/home/me/.claude/memory/personality/tone.md` # `In-session chat replies to me — peer register (calibrated 2026-08-04)#tone.md:45-48` # `demote`
+- **action:** demote
+- **scope:** shared → shared (a cross-store move: `tone.md` → `global.md`)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/personality/tone.md` (the side being rewritten)
+- **anchor:** `In-session chat replies to me — peer register (calibrated 2026-08-04)` (L43, 5283 B)
+- **survives at:** `/home/me/.claude/memory/global.md` `## Harness behavior (empirical)` (L489)
+- **why:** the scoping rule in `~/.claude/CLAUDE.md` puts outward voice in
+  `tone.md` and machine/tooling facts in `global.md`. A config path, its current
+  value, and a session-scoped-switch gotcha are **none of them voice** — they are
+  a harness-tooling fact, true on every box, and the only place they are recorded
+  is a file whose own L106 says it is *"archive, not live"*.
+- **evidence:** `tone.md:45-48` — *"Replaces the caveman / plugin's always-on
+  rules; `~/.config/caveman/config.json` `defaultMode` is now / `off` (its
+  `/caveman <level>` switch was session-scoped and never persisted, so / every
+  session re-booted at `full`)."* Verified 2026-09-12:
+  `cat ~/.config/caveman/config.json` → `{"defaultMode": "off"}`;
+  `dotfiles cat-file -e main:.config/caveman/config.json` → **exit 0**, so it is
+  *shared*, not host-local; `awk '/caveman/' ~/.claude/memory/global.md` → **no
+  matches**, so the fact exists nowhere else and this is a demote, not a dedupe.
+- **bytes:** 276 → 107 at source; +390 at destination
+- **replacement — TWO writes, one decision; the item is not done until both land.**
+  (1) **Write at destination** `/home/me/.claude/memory/global.md`, appended
+  under `## Harness behavior (empirical)`:
+```
+- **The caveman plugin is OFF fleet-wide, by config, not by habit.**
+  `~/.config/caveman/config.json` sets `"defaultMode": "off"`, and it is tracked
+  on `main`, so that holds on every box. Its `/caveman <level>` switch was
+  session-scoped and never persisted, so before that change every session
+  re-booted at `full`. In-session register now comes from `core.md`
+  `## Register` alone.
+```
+  (2) **Then remove at source** — `tone.md:45-48` become:
+```
+The one section here that DOES apply to in-session replies. Replaces the caveman
+plugin's always-on rules.
+```
+- **ORDERING:** several items this run append under `## Harness behavior
+  (empirical)`. Locate the destination by heading, not by line number.
+- **first seen:** 2026-09-12
+
+## 99d8de76 · demote · /home/me/.claude/memory/personality/practices.md
+
+- **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `Gortex-tuned#practices.md:62-70` # `demote`
+- **action:** demote
+- **scope:** shared → shared (a cross-store move: `practices.md` → `global.md`)
+- **apply on:** g15
+- **target:** `/home/me/.claude/memory/personality/practices.md` (the side being rewritten)
+- **anchor:** `Gortex-tuned` (L51)
+- **survives at:** `/home/me/.claude/memory/global.md` `## Gortex` (L785)
+- **why:** `practices.md`'s own header says *"Don't restate what global.md /
+  CLAUDE.md cover"*, and the facet is for coding-craft **opinions**; command
+  names, daemon state strings and index-coverage rules are **facts**. This is
+  also the largest facet (32.7 KB / 19 sections) and `## Gortex-tuned` is the one
+  part of it that is mostly not opinion. Two sibling bullets in the same section
+  already delegate their fact half elsewhere (`practices.md:58-59` *"voice rules
+  live in `tone.md`"*, `:60-61` *"Details in `global.md`"*) — this follows the
+  pattern the section itself set.
+- **evidence:** `practices.md:62-70` — nine lines of mechanism: re-index
+  triggers, warmup window, `gortex repos` / FRESHNESS / INDEXED, `graph_stats`,
+  `gortex daemon status` states, `detect_changes`/overlay. Destination checked:
+  `awk 'NR>=785 && NR<=941 && /fresh|FRESHNESS|warming|daemon status/'` over
+  `global.md` `## Gortex` → **no freshness coverage**, so this is a move, not a
+  duplicate.
+- **the moved text is byte-preserved including the `rg`/`ast-grep` fallback
+  clause** — a move must not quietly narrow a rule.
+- **bytes:** 687 → 295 at source; +684 at destination
+- **replacement — TWO writes, one decision.**
+  (1) **Write at destination** `/home/me/.claude/memory/global.md`, under
+  `## Gortex`:
+```
+- **Index freshness — how to check it, and what is never in the base index.**
+  The daemon re-indexes on HEAD change (branch switch / commit / rebase) and
+  after edits, with a warmup window where results are partial and the MCP
+  connection can flap. Before relying on a query, confirm the index is current:
+  `gortex repos` (FRESHNESS `fresh` + INDEXED == current HEAD) or `graph_stats` /
+  `gortex daemon status` (state `ready`, not `warming up`). If `stale`/warming,
+  wait for re-warm or fall back to `rg`/`ast-grep` rather than acting on a stale
+  graph. Uncommitted working-tree edits and worktrees aren't in the base index —
+  use `detect_changes` / an overlay for those.
+```
+  (2) **Then remove at source** — `practices.md:62-70` become:
+```
+- **Check freshness before trusting a query** — the graph lags the working tree,
+  and a stale answer looks exactly like a fresh one. Confirm the index is current
+  before you act on it; the check commands, the warmup window and the
+  working-tree/worktree gap are in `global.md` `## Gortex`.
+```
+- **ORDERING:** two other items this run edit `## Gortex` (the `.gortex.yaml`
+  `delete` and the `gortex init` `dedupe`). Locate by heading, not line number.
+- **first seen:** 2026-09-12
+
+## f5452f6a · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 8 — Prove the invariant held, then commit#consolidate-phase.md:482-486` # `skill`
+- **action:** skill
+- **scope:** repo:machines — the run's own brief
+- **apply on:** g15 (or any box)
+- **anchor:** `Step 8 — Prove the invariant held, then commit` (L458)
+- **why:** the invariant check has a **false-positive mode the brief does not
+  anticipate, and it fires as the most alarming possible result.** The check
+  attributes any change to a memory store during the run to *the run* — "If
+  either is not, the run edited a memory store" — but `~/machines` is a shared
+  working tree and **another interactive session in the same repo can edit
+  `.claude/memory/project.md` while Phase B is reading it.** That is not the
+  `dotfiles-sync` case the brief already excuses (a merge commits, so the tree is
+  clean either side of it); an interactive Lane-1 harvest write leaves the tree
+  **dirty**, indefinitely. The run then reports its own invariant as violated,
+  refuses to commit an otherwise-correct queue, and hands a human a scary first
+  line pointing at the wrong culprit.
+- **evidence:** this run, 2026-09-12 on g15. `before_repo` at Step 0 was empty;
+  `after_repo` at Step 8 was ` M .claude/memory/project.md`. It was not this run:
+  ```console
+  $ stat -c '%y  %n' .claude/memory/project.md AGENTS.md provision/orca-serve.sh provision/orca-serve.test.sh
+  2026-09-12 04:10:29  .claude/memory/project.md
+  2026-09-12 04:10:16  AGENTS.md
+  2026-09-12 04:11:40  provision/orca-serve.sh
+  2026-09-12 04:06:39  provision/orca-serve.test.sh
+  $ git diff --stat
+   .claude/memory/project.md      |  42 +
+   AGENTS.md                      |  10 +
+   provision/orca-serve.sh        | 234 +++-
+   provision/orca-serve.test.sh   |  36 +
+  ```
+  The added `project.md` section is `## Orca on g15 never self-updates: an
+  EXTRACTED AppImage cannot (2026-09-12)` — a Lane-1 record of feature work
+  (`ORCA_INSTALL_MODE`, 7 mutation-tested assertions) that Phase B neither did
+  nor was tasked with; all nine pass-1 subagents were forbidden to write and each
+  reported zero writes. And `ps` shows **three concurrent
+  `claude --dangerously-skip-permissions` sessions with transcripts under
+  `~/.claude/projects/-home-me-machines/`** (`96a76e02` = this run, plus
+  `1abc7229` and `08aa9fe8`, both still being written at 04:16).
+- **what this run did about it:** followed Step 8 literally — reported it as the
+  report's first line, named the file, **committed nothing**, reverted nothing —
+  and additionally copied `queue.md`, the run report and
+  `docs/memory-consolidate/replacements/` to the scratchpad, because 61 items
+  live in an uncommitted tracked file that a concurrent session's `git add -A`
+  or `git checkout --` would absorb or destroy. **That backup step is not in the
+  brief and it should be**, since "commit nothing" and "another session is
+  editing this repo" together mean the night's entire output is unprotected.
+- **run that hit it:** `docs/memory-consolidate/runs/2026-09-12.md`.
+- **bytes:** n/a
+- **replacement — replace the verdict paragraph at L482-486 ("Both diffs must be
+  empty. …do not 'clean up' by reverting.") with:**
+```
+Both diffs must be empty. If either is not, **find out who wrote it before
+calling it a violation** — `~/machines` is a shared working tree and another
+session can be editing `.claude/memory/project.md` right now:
+
+```bash
+stat -c '%y  %n' ~/machines/.claude/memory/project.md      # when, to the second
+git -C ~/machines diff --stat                              # what else moved with it
+ps -eo pid,lstart,args | grep -c '[c]laude --dangerously-skip-permissions'
+ls -lt ~/.claude/projects/-home-me-machines/*.jsonl | head # other live sessions
+```
+
+A change whose timestamp falls inside this run, alongside edits to files this
+phase never touches (a provisioning script, a test, `AGENTS.md`), from a box
+running more than one session, is **another session's work**. Say so, name the
+file, and commit nothing either way — but report it as *concurrent edit*, not as
+*this run edited a store*, because the two need different things from a human.
+(The `dotfiles-sync` timer is not this case: a merge commits, so the tree is
+clean on both sides of it.)
+
+Whatever the cause, **do not "clean up" by reverting** — the edit may be the only
+record of what went wrong, or someone else's uncommitted work.
+
+**When you commit nothing, back the output up.** The queue is a tracked file with
+this run's whole night in it, uncommitted; a concurrent session's `git add -A` or
+`git checkout --` would absorb or destroy it. Copy `queue.md`, the run report and
+`docs/memory-consolidate/replacements/` into the scratchpad and say where in the
+report.
+```
+- **first seen:** 2026-09-12
