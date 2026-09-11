@@ -2063,35 +2063,24 @@ were not, and all four will recur for the next project moved there.
   117 MB/s. PowerShell passes the stdin handle to the child rather than reading
   it. This is the simplest fast path into a distro and needs no port plumbing.
 
-Transport, for the next time something big has to move: the two boxes' WSL
-distros reach each other over tailscale **through the DERP relay on hub
-(cyphy.kz, Kazakhstan)** — 3-4 MB/s, and not a misconfiguration, just no direct
-path between two NATed distros. **But that is the ONLY relayed pair in the
-fleet, and "two separate LANs" was never true** (see AGENTS.md, corrected
-2026-09-07): every member but hub is behind one router, and `tailscale ping`
-gives latitude 2 ms direct, g15 3 ms direct. The winning route out of g15-wsl is
-therefore the distro **pushing outbound** to latitude's LAN address —
-`me@192.168.8.155` with `id_fleet`, **78 MB/s measured** — because NAT blocks
-reaching *in*, not going out. Ranked, all measured 2026-09-07 on 3 GB:
-g15-wsl→latitude LAN **78 MB/s** > desktop-wsl→latitude tailnet 99 MB/s (direct
-P2P) > latitude←g15-Windows-sshd→wsl.exe 44 MB/s (two wifi hops) > relay
-3.3 MB/s. **Re-measured 2026-09-07: the relay is still 3.3 MB/s, and
-the wifi is no longer the excuse** — both laptops now associate at a 1201 Mbps
-WiFi 6 rate (so the old "g15 is stuck on 2.4 GHz channel 12, 286 Mbps, and
-MT7921 exposes no band-preference property" no longer holds), and the relayed
-pair is unchanged. A faster radio cannot fix a relayed route; only leaving the
-relay can.
-**What does leave it: the LAN route through g15's Windows sshd into `wsl.exe`,
-measured at 44 MB/s** (13x the relay, same radio, no tailscale in the path).
-Two traps that cost three false zero-byte "measurements" before that number
-existed: `ssh` to a **bare IP** does not pick up the fleet identity, because the
-generated config keys on `Host *.gg.ez` — pass `-i ~/.ssh/id_fleet -o
-IdentitiesOnly=yes`, or it fails in 0.2 s having transferred nothing, which
-looks exactly like no bandwidth. And **only port 22 is open inbound** on either
-Windows box, so `nc` to any port you pick is refused and the transfer must ride
-ssh. A direct Ethernet cable between the two laptops, left on APIPA
-(169.254.x, no DHCP needed), gave 117 MB/s and turned an 8-hour transfer into
-40 minutes.
+Transport, for the next time something big has to move. The g15-wsl route table
+here is dead (that distro was destroyed 2026-09-07) and the live fleet numbers
+are in AGENTS.md's *One LAN, not two*. Two rules survive it:
+
+- **A relayed pair cannot be fixed with a faster radio; only by leaving the
+  relay.** Two NATed WSL distros had no direct path and sat at 3.3 MB/s through
+  hub's DERP in Kazakhstan — unchanged after both laptops moved to a 1201 Mbps
+  WiFi 6 rate. NAT blocks reaching *in*, not going out, so the winning route was
+  always the distro **pushing outbound** to a LAN address (78 MB/s), or the LAN
+  route through the Windows host's sshd into `wsl.exe` (44 MB/s, 13x the relay,
+  same radio). A direct Ethernet cable on APIPA (169.254.x, no DHCP) gave
+  117 MB/s and turned 8 hours into 40 minutes.
+- **Two traps that produced three false zero-byte "measurements":** `ssh` to a
+  **bare IP** does not pick up the fleet identity (the generated config keys on
+  `Host *.gg.ez`) — pass `-i ~/.ssh/id_fleet -o IdentitiesOnly=yes`, or it fails
+  in 0.2 s having transferred nothing, which looks exactly like no bandwidth. And
+  **only port 22 is open inbound** on a Windows box, so `nc` to any port you pick
+  is refused and the transfer must ride ssh.
 
 ### qaz-code PGDATA landed on g15 (2026-08-29, verified)
 
@@ -2233,52 +2222,40 @@ it needs Docker Desktop stopped and an elevated `diskpart` (`select vdisk file=�
 -Mode Full` where the Hyper-V module is present. Worth knowing before promising
 anyone that a volume delete freed disk space.
 
-## Orca headless runtime back on g15-wsl (2026-08-29)
+## Orca headless serve: what survives from g15-wsl (2026-08-29)
 
-`provision/orca-serve.sh` was restored from `f95cb3f^` and fixed. Why it came
-back: `orca serve` + `environment add --pairing-code` is the ONLY way `air` can
-drive g15's Linux side — Orca has no ssh-remote mode, and Windows Orca reaches
-only its own host's distro. The 2026-07-21 removal ("Orca runs on Windows now")
-was a host-local rationale, and the ABANDONED 2026-08-01 two-distro spec
-abandoned *two distros per host*, not the serve model. Don't re-read either as
-"serve was tried and rejected".
+The host is gone (g15 was wiped to native Ubuntu 2026-09-07), so the paired
+`ws://100.64.0.9:6768` environment and its three worktrees are history. The
+reason serve exists is not: **`orca serve` + `environment add --pairing-code` is
+the only way one box can drive another's Orca** — there is no ssh-remote mode,
+and Windows Orca reaches only its own host's distro. The 2026-07-21 removal
+("Orca runs on Windows now") was host-local, and the abandoned 2026-08-01 spec
+abandoned *two distros per host*, not the serve model; don't re-read either as
+"serve was tried and rejected". Four findings that still hold:
 
-- **Serve needs an X display, and under WSLg it cannot make its own.** Orca
-  starts an Xvfb on `:99` when `DISPLAY` is unset; WSLg mounts
-  `/tmp/.X11-unix` **read-only**, so Xvfb never binds its socket and Electron
-  dies with `Missing X server or $DISPLAY`. That is a crash loop (72 restarts
-  before it was caught), not the "browser panes may be unavailable" the warning
-  suggests. WSLg already serves `:0` on that same tmpfs — hand serve that.
-- **Electron flushes a non-tty stdout only at exit.** Under systemd the journal
-  showed nothing until the process died, so the documented "read the pairing
-  URL from `journalctl`" never worked. `script -qefc … /dev/null` gives it a
-  pty; `-e` preserves the exit status for `Restart=on-failure`.
-- **Most of what looked like crashes was my own test harness.** Piping serve
-  into `grep | head` or capping it with `timeout` makes Chromium tear down
-  noisily — "Network service crashed", "GPU process isn't usable. Goodbye.",
-  `SIGTRAP`. Judge a serve run by whether the unit stays active, never by the
-  shutdown lines. Two fixes were spent on that phantom (SUID `chrome-sandbox`,
-  `ELECTRON_DISABLE_SANDBOX`); both were reverted, neither was needed.
+- **Serve needs an X display and under WSLg cannot make its own.** Orca starts an
+  Xvfb on `:99` when `DISPLAY` is unset; WSLg mounts `/tmp/.X11-unix`
+  **read-only**, so Xvfb never binds and Electron dies with `Missing X server or
+  $DISPLAY` — a crash loop (72 restarts before it was caught), not the "browser
+  panes may be unavailable" the warning suggests. WSLg already serves `:0` on
+  that tmpfs; hand serve that.
+- **Electron flushes a non-tty stdout only at exit**, so under systemd the
+  journal shows nothing until the process dies and the documented "read the
+  pairing URL from `journalctl`" never works. `script -qefc … /dev/null` gives it
+  a pty; `-e` preserves the exit status for `Restart=on-failure`.
+- **Judge a serve run by whether the unit stays active, never by shutdown
+  lines.** Piping serve into `grep | head`, or capping it with `timeout`, makes
+  Chromium tear down noisily ("Network service crashed", "GPU process isn't
+  usable. Goodbye.", `SIGTRAP`). Two fixes were spent on that phantom (SUID
+  `chrome-sandbox`, `ELECTRON_DISABLE_SANDBOX`); both were reverted, neither was
+  needed.
 - **Backticks inside an UNQUOTED heredoc run as a command substitution.** A
-  comment reading `` `script -e` `` in the generated wrapper executed `script`,
-  which spawned an interactive bash and hung the provisioner — leaving a
-  0-byte `orca-serve-start` behind. And a `timeout` that kills the local ssh
-  client does NOT kill the remote script: three copies raced on the same files
-  before I noticed. `pkill -f "bash /tmp/orca-serve[.]sh"` — the bracket keeps
-  the pattern from matching your own command line.
-- **State now:** unit active on g15-wsl (`:6768`, user unit + linger); BOTH
-  `desktop` and `air` paired as environment `g15-wsl`
-  (`ws://100.64.0.9:6768`) and each lists its repos over the tailnet. The same
-  pairing code worked on both clients — the runtime's identity is stable across
-  restarts, so one code is not single-use. `air` also carries a `desktop`
-  environment at `ws://100.64.0.4:6768`, i.e. desktop already served one.
-- **The three worktrees under `~/orca/workspaces/` on g15-wsl are healthy but
-  invisible.** They rsync'd over with `~/my` and their gitdir pointers are
-  correct Linux paths (`git status` clean in all three). A newly added repo
-  defaults to `externalWorktreeVisibility: hide` and the CLI cannot flip it
-  (`orca repo` has list/add/show/set-base-ref/search-refs only) — so it is a
-  per-repo UI toggle, or a destructive `worktree rm` + `create`, which would
-  drop each worktree's gitignored state.
+  comment reading `` `script -e` `` executed `script`, spawned an interactive
+  bash and hung the provisioner. And a `timeout` that kills the local ssh client
+  does NOT kill the remote script — `pkill -f "bash /tmp/orca-serve[.]sh"`, where
+  the bracket keeps the pattern from matching your own command line.
+- A pairing code is **not single-use**: the runtime's identity is stable across
+  restarts, so the same code paired two clients.
 
 ## Servarr: a yearless release name stalls Radarr import forever (2026-09-03)
 
@@ -2614,21 +2591,16 @@ Freed 105 GB and pruned the dead fleet trust. What is worth keeping:
   live; node 5 `ipheoryt12` is his phone, offline is normal.
 
 ### A WSL-era shim survived the native reinstall and shadowed xdg-open (2026-09-08)
-
-- **Symptom:** Orca could not add a second Claude account — clicking it opened no
-  browser, silently. Cause was not Orca at all: `~/.local/bin/xdg-open` was a
-  symlink to `wslopen`, the WSL browser opener `provision/wsl-fixes.sh` installs
-  (`provision/assets/wslopen`, dated Aug 27, from the g15-wsl era). It shells out
-  to `powershell.exe`; on the native Ubuntu box that does not exist, so it exited
-  1 and every `shell.openExternal` in every Electron app did nothing.
-  `~/.local/bin` precedes `/usr/bin` on PATH, so the real `/usr/bin/xdg-open` was
-  never reached. Fixed by deleting `xdg-open`, `wslview` and `wslopen` there; no
-  Orca restart needed (PATH is resolved per exec).
-- **The class, which is the point:** `$HOME` survived the 2026-09-07 Windows→Ubuntu
-  reinstall, so every host-local shim installed for WSL is still sitting in
-  `~/.local/bin` shadowing a system binary. They are untracked, so no provision
-  run removes them and nothing reports them. When a GUI/tooling failure on g15
-  makes no sense, check `command -v <tool>` before believing the app is broken.
+- **A host-local WSL shim can outlive the distro and shadow a system binary.**
+  `$HOME` survived the 2026-09-07 Windows→Ubuntu reinstall, so `~/.local/bin`
+  still held `xdg-open`→`wslopen` (plus `wslview`), the opener
+  `provision/wsl-fixes.sh` installs; it shells out to `powershell.exe`, so every
+  `shell.openExternal` in every Electron app silently exited 1 — the symptom was
+  Orca refusing to add a second Claude account. `~/.local/bin` precedes
+  `/usr/bin`, the shims are untracked, so no provision run removes them and
+  nothing reports them. All three deleted 2026-09-08 and none remains on g15.
+  **When a GUI/tooling failure on g15 makes no sense, check `command -v <tool>`
+  before believing the app is broken.**
 
 ## g15 has a restic client — and what is still NOT in it (2026-09-08)
 
@@ -2692,10 +2664,8 @@ server. What a future session would otherwise re-derive:
 - **`e5940ee8`** — 124985 files, 95.540 GiB processed → **88.945 GiB added,
   82.012 GiB stored**, in **36:34** (≈44 MB/s end to end, not the 99 MB/s
   tailnet ceiling: the `laws` corpus is ~125k small files and per-file overhead
-  dominates the music half). On disk: **83 G**, leaving **82 G free** on
-  spare320. That is the number that decides the DB leg — it does not fit today
-  at all, and dropping the redundant 89 G `music-from-g513ie` pile would give
-  171 G against an unmeasured ~120–130 G leg.
+  dominates the music half). На диске **83 G**.
+
 - **Restore verified per source class, not just per repo**: `arbuz-concierge/.env`
   (362 B, gitignored), a `laws/codes/**/rus.md` (47983 B), and an mp3
   (1989603 B) — sha256 identical to the live files. `restic restore --include`
@@ -2920,13 +2890,12 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
 - **`g15-staging/pgdata` доказан избыточным 2026-09-09 — сверкой кластера, не
   на глаз.** `system_identifier` из `global/pg_control` staging-копии и из
   `pg_control_system()` живого `qaz-law-db-1` на g15 совпали:
-  **7659741180334813227**. То есть на g15 крутится физически эта же копия
-  (PG 18.4, база `postgres` 184 GB, bind `/data/qaz-code/pgdata`). Первые 8 байт
-  `pg_control` — это и есть `system_identifier`, читается питоном без
-  `pg_controldata`, который всё равно не прочёл бы v18 файл.
-  **Но удалять его пока нельзя:** restic-леги g15 исключают PGDATA ТОЛЬКО из-за
-  места на spare320, так что после удаления 184 GB базы останутся в одном
-  экземпляре и без бэкапа. Сначала лег в restic, потом удаление.
+  **7659741180334813227**. Первые 8 байт `pg_control` — это и есть
+  `system_identifier`, читается питоном без `pg_controldata`, который всё равно
+  не прочёл бы файл v18. **Стоявший здесь запрет «удалять пока нельзя, сначала
+  лег в restic» СНЯТ 2026-09-10** — БД признана перестраиваемой, лега не будет,
+  staging-копия удалена; см. «The DB leg is CLOSED» выше.
+
 - **На XS2000 нет ничего уникального, но он держит единственную вторую копию
   архива 1970–2024** (663 G, источник живой на `/mnt/immich-2024/admin`;
   `xs-keepers` уже лежит на зеркале; `Boot`/Ventoy пересобирается). Вынули его
@@ -3154,46 +3123,37 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
 ## Оба restic-репозитория на 8 ТБ — и почему гейт «поздний pull» не гейт (2026-09-10)
 
 Хаб `restic-rest` (112 G: g513ie + g614jv) и собственный репозиторий latitude
-(12 G) переехали `/mnt/spare320` → `/mnt/wd8`. Скрипт —
+(12 G) переехали `/mnt/spare320` → `/mnt/wd8` скриптом
 `hosts/latitude/debian/migrate-restic-wd8.sh`. Балк-проход 40 мин (123 G,
-~58 МБ/с), дельта под остановленными писателями — ноль переданных байт, обе
-проверки чистые с первого раза, в отличие от servarr: restic-репозиторий
-append-only, а хаб за время копии никто не тронул.
+~58 МБ/с), дельта под остановленными писателями — ноль байт, обе проверки
+чистые с первого раза (в отличие от servarr: репозиторий append-only, и хаба
+за время копии никто не трогал).
 
-**Проверять надо не rsync.** Байт-в-байт необходимо и недостаточно; свойство,
-которое сохраняем, — «restic этим может пользоваться». `restic check` по всем
-трём репозиториям, до и после: 33 / 19 / 4 снимка, одинаково. Baseline на
-источнике снимался ДО копии — иначе падение проверки на приёмнике нечем
-объяснить.
-
-**Главная ошибка проектирования, и она стоит того, чтобы её помнить.** Скрипт
-был написан в расчёте, что коммит с новыми путями можно придержать и подтянуть
-самим `cutover`. Нельзя: **`fleet-selfpull.service` — пользовательский таймер,
-который сам делает ff-merge всех fleet-репозиториев.** Он подтянул коммит в
-16:44:52, за 25 минут до конца копии — `profiles.yaml` указывал на `/mnt/wd8`
-поверх наполовину скопированного дерева.
-
-Ничего не сломалось, и не благодаря конструкции: до 04:30 не был запланирован
-ни один писатель. `run-before` в профилях — половина гейта: он проверяет
-наличие объекта `config`, а не **полноту** репозитория, так что
-`forget --prune`, попади он в это окно, отработал бы по частичной копии.
-Поэтому писателей теперь останавливает `sync`, в начале, а не `cutover`. Это
-суточные задания, вся миграция меньше часа — держать их выключенными дешевле,
-чем угадывать окно. `status` с тех пор печатает, сколько таймеров стоит:
-брошенная между `sync` и `cutover` миграция иначе тихо оставляет бэкапы
-выключенными, и `systemctl --failed` на просто остановленный таймер чист.
-
-**Что переезд НЕ купил.** На `/mnt/wd8` лежит и ServarrMedia, отдельного диска
-у репозиториев больше нет. Для медиа это неважно (восстановимо, не бэкапится),
-источники снимков — на других устройствах, но радиус поражения теперь
-ограничивает off-site копия, а не выбор отсека. И опасность пустой точки
-монтирования никуда не делась: доки роняет розетка, а 8 ТБ стоит в таком же
-доке.
-
-**Освободилось:** место для PGDATA-ноги g15 (~130 G) — это был единственный
-storage-блокер, теперь 6.4 T свободно; остаётся только отсутствие NOPASSWD
-sudo на g15. Копии на `/mnt/spare320` не тронуты — сносить только после
-выдержки, и это то, что освободит отсек дока.
+- **Проверять надо не rsync.** Байт-в-байт необходимо и недостаточно;
+  сохраняемое свойство — «restic этим может пользоваться». `restic check` по
+  всем трём репозиториям, до и после: 33 / 19 / 4 снимка, одинаково. Baseline
+  снимался на источнике ДО копии — иначе падение проверки на приёмнике нечем
+  объяснить.
+- **Коммит с новыми путями нельзя придержать до `cutover`.**
+  `fleet-selfpull.service` — пользовательский таймер, который сам делает
+  ff-merge всех fleet-репозиториев; он подтянул коммит за 25 минут до конца
+  копии, и `profiles.yaml` указал на `/mnt/wd8` поверх наполовину
+  скопированного дерева. Ничего не сломалось только потому, что до 04:30 не был
+  запланирован ни один писатель: `run-before` в профилях — половина гейта, он
+  проверяет наличие объекта `config`, а не ПОЛНОТУ репозитория, так что
+  `forget --prune` в этом окне отработал бы по частичной копии. Поэтому
+  писателей останавливает `sync`, в начале, а не `cutover`: это суточные
+  задания, вся миграция меньше часа — держать их выключенными дешевле, чем
+  угадывать окно. И `status` печатает, сколько таймеров стоит: брошенная между
+  `sync` и `cutover` миграция иначе тихо оставляет бэкапы выключенными, а
+  `systemctl --failed` на просто остановленный таймер чист.
+- **Что переезд НЕ купил.** На `/mnt/wd8` лежит и ServarrMedia, отдельного
+  диска у репозиториев больше нет; радиус поражения теперь ограничивает
+  off-site копия, а не выбор отсека. И опасность пустой точки монтирования
+  никуда не делась: доки роняет розетка, а 8 ТБ стоит в таком же доке.
+- **Освободилось:** место для PGDATA-ноги g15 (~130 G) — это был единственный
+  storage-блокер, теперь 6.4 T свободно. Копии на `/mnt/spare320` не тронуты —
+  сносить только после выдержки, и это то, что освободит отсек дока.
 
 ## Архив 1970–2024 получил вторую копию — и почему не на 8 ТБ (2026-09-10)
 
@@ -3348,34 +3308,26 @@ sudo на g15. Копии на `/mnt/spare320` не тронуты — снос�
 
 ## 280 строк защиты от зависания лежали незакоммиченными на g15 (2026-09-11)
 
-Спросил «я у g15, го» про NOPASSWD. NOPASSWD оказался не нужен, а нашлось другое.
-
 - **Работа, сделанная НА боксе, на боксе и осталась.** `~/machines` на g15 был
   грязным с 9 сентября: 280 строк — `tier_oom_guard` + `tier_sysrq`, AGENTS.md,
   README.md, `linux.sh`, `tiers.test.sh`. В репозиторий не попало ничего.
   Проверять надо не только «зелёный ли гейт», а **чистое ли дерево на каждом
   боксе фронта** — грязное дерево к тому же останавливает `fleet-selfpull`, так
-  что g15 два дня не подтягивал ничего. HEAD там был `c7d3f6f`, предок
-  собственного `origin/main`.
-- **Перенос: `git apply --3way` из `git diff` по ssh.** Легло чисто на текущий
-  main, включая AGENTS.md, который в этой же сессии правился в соседнем месте.
-  Патч сначала в scratchpad, `--3way` чтобы конфликт был маркерами, а не тихой
-  промашкой, и `git stash` на g15 (а не `checkout --`) пока не доказана
-  избыточность — единственная копия работы была именно в том diff.
+  что g15 два дня не подтягивал ничего.
+- **Перенос: `git apply --3way` из `git diff` по ssh.** Патч сначала в
+  scratchpad, `--3way` чтобы конфликт был маркерами, а не тихой промашкой, и
+  `git stash` на боксе (а не `checkout --`), пока не доказана избыточность —
+  единственная копия работы была именно в том diff.
 - **Из двух тиров применён был только один, и не тот, что казалось.**
   `tier_sysrq` жив с той ночи, а `tier_oom_guard` — нет: `user-.slice.d` не
   существовало, лимиты `infinity`. Защита при этом БЫЛА, но пользовательским
   файлом `~/.config/systemd/user/app.slice.d/50-memory-guard.conf`, то есть
-  только для того, что запускает рабочий стол. То же самое по ssh не покрывалось.
-  После прогона `bash provision/linux.sh` на его клавиатуре: user-1000.slice
-  MemoryHigh=18.2 G / MemoryMax=22.7 G / MemorySwapMax=2 G, вживую.
-- **Написать файл — не значит владеть значением.** `/etc/sysctl.d` применяется
-  в лексическом порядке, побеждает последний. Ручной файл той ночи назывался
-  `60-sysrq.conf` и сортируется ПОСЛЕ тировского `60-fleet-sysrq.conf`, то есть
-  переопределяет его. Безвредно, только пока значения совпадают. `tier_sysrq`
-  теперь предупреждает о любом конкурирующем файле (и ничего не удаляет —
-  прецедент `99-server.conf`), 4 мутации из 4 отловлены.
-- **NOPASSWD на g15 снят с списка, а не сделан.** Он был там ради ноги бэкапа
+  только для того, что запускает рабочий стол; по ssh то же самое не
+  покрывалось. После прогона `bash provision/linux.sh` на его клавиатуре:
+  user-1000.slice MemoryHigh=18.2 G / MemoryMax=22.7 G / MemorySwapMax=2 G,
+  вживую. (Про лексический порядок `/etc/sysctl.d` и конкурирующий
+  `60-sysrq.conf` — в AGENTS.md, *Key patterns*.)
+- **NOPASSWD на g15 снят со списка, а не сделан.** Он был там ради ноги бэкапа
   qaz-law/PGDATA, а её владелец отменил 2026-09-10: база пересобираема, а корпус
   `~/my/qaz-code/laws` (7.6 G), из которого она строится, уже лежит в restic
   g15. Спорили, выходит, про 186 G производного индекса. Плюс
@@ -3383,21 +3335,17 @@ sudo на g15. Копии на `/mnt/spare320` не тронуты — снос�
   NOPASSWD не выдаёт никогда.
 - **Четыре живых места в репо приказывали не удалять то, что удалено вчера** —
   `backup/g15/profiles.yaml`, `hosts/g15/ubuntu/README.md`,
-  `docs/fleet-roadmap.md` (дважды) и этот файл (дважды). Инструкция будущей
-  сессии, ставшая ложной, опаснее устаревшего факта: она запрещает действие,
-  которое уже совершено. Помечены закрытыми с датой, не вычищены.
-- **Побочно: `fleet-selfpull.test.sh` три недели гадил в живое состояние.**
-  `FLEET_SELFPULL_STATE` он подменял только начиная с блока про streak, а все
-  вызовы `selfpull_one` выше писали в `~/.local/state/fleet-selfpull` — тот
-  самый каталог, куда каждые 10 минут пишет реальный таймер. Накопилось 62
-  файла `dirty-_tmp_tmp.*_live` на этом боксе и 34 на g15 (на latitude 0 —
-  гейт там просто никто не гонял). Подмена перенесена в самое начало, и есть
-  утверждение, что после прогона в живом каталоге нет файлов под наши tmp-репы
-  (по счёту файлов проверять нельзя — тик таймера сделает его флаки). Мусор
-  удалён на всех трёх. Один прогон гейта из трёх в этой сессии дал одиночный
-  красный именно на этом сьюте и не воспроизвёлся; причину я не поймал —
-  общее изменяемое состояние с работающим таймером это объясняло бы, но
-  доказательства нет, и «environmental» это не диагноз.
+  `docs/fleet-roadmap.md` и этот файл. Инструкция будущей сессии, ставшая
+  ложной, опаснее устаревшего факта: она запрещает действие, которое уже
+  совершено. Помечены закрытыми с датой, не вычищены.
+- **Побочно: `fleet-selfpull.test.sh` три недели писал в живое состояние.**
+  `FLEET_SELFPULL_STATE` подменялся не с начала файла, и вызовы `selfpull_one`
+  выше писали в `~/.local/state/fleet-selfpull` — тот самый каталог, куда каждые
+  10 минут пишет реальный таймер (62 файла здесь, 34 на g15). Подмена перенесена
+  в начало, мусор удалён. Один прогон гейта из трёх дал одиночный красный именно
+  на этом сьюте и не воспроизвёлся; причину я не поймал — общее изменяемое
+  состояние с работающим таймером это объясняло бы, но доказательства нет, и
+  «environmental» это не диагноз.
 
 ## kb-refresh / fleet-gather.sh gotchas (demoted from global.md 2026-09-11)
 
