@@ -71,3 +71,7 @@ b7426f5c	applied	2026-09-11	WSL docker-shim trap carried into global.md § Docke
 89560bba	applied	2026-09-11	~/CLAUDE.md Branches now points at dotfiles branch -a instead of a stale machine list naming server	/home/me/CLAUDE.md	One branch per identity
 cd0c04cc	applied	2026-09-11	host-memory.md Notes now records six gortex-tracked repos and a live deny hook, replacing the dead repos:[] claim	/home/me/.claude/host-memory.md	Gortex tracks six repos on this box
 4ad05022	applied	2026-09-11	host-memory.md qaz-law section cut to machine-local facts; the reasoning survives in qaz-code project.md Machine move	/home/me/.claude/host-memory.md	Not a cache to clear
+5f6b88d0	applied	2026-09-11	vps Deploy pipeline now opens with THE ENGINE HAS NO HOST; every deploy is manual and embedthat must not be re-added	/home/me/my/vps/.claude/memory/project.md	THE ENGINE HAS NO HOST
+de96aa30	applied	2026-09-11	vps :90 drops the dead five-container claim and splits self-update: telegrind manual, embedthat via Tugtainer on a v* tag	/home/me/my/vps/.claude/memory/project.md	Self-update is now split
+ff910bb2	applied	2026-09-11	vps SQLite-lock gotcha keeps the rule, drops the dead D:\Media Windows-bind framing	/home/me/my/vps/.claude/memory/project.md	one process per config dir is mandatory on any filesystem
+cac27f8d	applied	2026-09-11	vps bind-mount section points at machines for the incident and remedy, keeps only the two diagnostic bits machines lacks	/home/me/my/vps/.claude/memory/project.md	The rule and the incident live in
