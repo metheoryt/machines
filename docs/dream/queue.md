@@ -325,69 +325,6 @@ tools. Anything recorded
   self-declared WSL hosts (`desktop-wsl`, `g15-wsl`) carry branches too.
 - **first seen:** 2026-09-11
 
-## fdaea448 · generalise · /home/me/machines/.claude/memory/project.md
-
-- **action:** generalise · **scope:** repo:machines
-- **why:** this row consumes BOTH adjacent sections (`findmnt --verify` 3515-3550 and
-  `Condition*` 3551-3614). Nearly every mechanism in them is already in **AGENTS.md
-  *Key patterns*** — `Condition*`→`Result=success` plus the 90 minutes, `findmnt -no
-  SOURCE` vs UUID, remount-once/never-umount-a-bound-tree, flock 75/78, `.Mounts` vs
-  `.HostConfig.Binds`, the whole `rc>=2` segfault paragraph. **AGENTS.md's copy survives
-  because it is auto-loaded in every session in this repo.** What remains is one named
-  general rule with **five** instances (two extra, from the restic section: `run-before`
-  checks for the `config` object rather than repository completeness; a merely-*stopped*
-  timer is clean in `systemctl --failed`) plus the repo-specific residue AGENTS.md lacks.
-- **evidence:** project.md:3515-3614 · AGENTS.md:600-643
-- **bytes:** 10810 → 5181 (−5629, the single largest saving filed this run)
-- **replacement:**
-## Гейт, который рапортует успех, ничего не сделав — общая форма (2026-09-10)
-
-Пять отказов одного класса за один день на latitude. Механизмы и итоговые
-правила лежат в `AGENTS.md` (*Key patterns*: `Condition*`/`Result=success`,
-гейт `findmnt --verify`, конвенция кодов 75/78, `.Mounts` вместо
-`.HostConfig.Binds`) — он грузится каждой сессией, здесь только то, чего там
-нет.
-
-- **Форма, по которой их узнавать:** защита, чей отказ неотличим от «работы не
-  было». Проваленная `Condition*` → `Result=success`; гейт `findmnt --verify`,
-  выключавший сам себя из-за чужой строки в fstab; `rollback`, направляющий
-  `DATA_ROOT` на путь, который уже не точка монтирования (docker создаст пустой
-  bind-источник, и откат уничтожит то, что должен вернуть); `run-before` в
-  restic-профилях, проверяющий наличие объекта `config`, а не ПОЛНОТУ
-  репозитория; просто остановленный таймер, который в `systemctl --failed`
-  чист. Спрашивать надо «как выглядит этот гейт, когда он не сработал», а не
-  «что он проверяет».
-- **Обоснование в комментарии было ещё и фактически ложным.** `/mnt/immich` —
-  это `/dev/nvme0n1p1`, второй ВНУТРЕННИЙ NVMe, никакого дока; «источник
-  отключили» там не бывает в принципе. Комментарий пережил переезд ФС,
-  на которой был написан.
-- **Остаточный риск, названный явно:** самолечение приёмника даёт
-  `Result=success`. Диск, отваливающийся каждую ночь, теперь перемонтируется и
-  копируется — из «невидимо и сломано» стало «невидимо и работает». Единственный
-  след — строка `WARN … remounting once` в журнале. Настоящее лечение — увести
-  зеркало с этого порта (см. раздел про 480 Мбит).
-- **У `install-docker-ordering.sh` не было ни одного теста** — при том что он
-  стоит между Docker и автосозданием bind-источника на корне (два инцидента:
-  servarr 03.08.2026, immich-2024 03.09.2026). Чтобы файл стал сорсабельным,
-  блок запуска ушёл в `main()` за `[ "${BASH_SOURCE[0]}" = "$0" ]`.
-- Сегфолт `findmnt --verify` в тесте **подменён функцией-заглушкой**, а не
-  воспроизведён: иначе кейс отвалится на util-linux, где багу починят.
-- `fstab_patch` **переписывает строку в выровненные колонки**, поэтому `remove`
-  обратен `add` по полям, но не по байтам — и наивный diff `/etc/fstab` после
-  прогона показывает изменённой каждую охраняемую строку.
-- Грабли тестов на юниты: оба зеркальных скрипта **описывают** в комментариях
-  тот `findmnt -no SOURCE`, который заменили, — утверждение «этой строки нет»
-  сначала запретило объяснять, зачем меняли; комментарии режутся `sed` перед
-  проверкой. И `archive-mirror.sh` держит два присваивания в одной строке, так
-  что якорь `^…UUID=` на регистр не сработал.
-- Мутации: `docker-ordering.test.sh` — снятие `rc>=2` 4 падения, возврат гейта
-  на весь файл 4, retirement-скан без пропуска членов набора 2;
-  `latitude-timer-units.test.sh` — 7 из 7.
-- **Апостроф внутри `ssh box '…'` разрывает команду.** Питон-правку с
-  `connector's` в комментарии съело на середине, `assert` ушёл в bash. Скрипт
-  правок — через stdin: `ssh box 'sudo python3 -' < file.py`.
-- **first seen:** 2026-09-11
-
 ## 78e36627 · contradiction · /home/me/machines/.claude/memory/project.md
 
 - **action:** contradiction · **scope:** repo:machines → **the fix lands in AGENTS.md**
@@ -436,66 +373,6 @@ carrying `immich-2024` and `immich-mirror` is the flaky one — it logged 24
   проверки, что в qBittorrent нет errored-торрентов. **Условие выполнено в тот
   же день** — qBittorrent перехешировал все раздачи против wd8, диск освобождён
   и принял вторую копию закрытого архива 1970–2024 вместо снятого `/mnt/xs`.
-- **first seen:** 2026-09-11
-
-## a88a78f4 · compress · /home/me/machines/.claude/memory/project.md
-
-- **action:** compress · **scope:** repo:machines
-- **why:** 6 KB narrating one evening's install, with the boot journal reconstructed
-  spawn by spawn and the same conclusion ("nothing is open on the client any more")
-  restated in three bullets. Every durable fact survives — preview-build-only, why it is
-  deliberately **not** a tier, the seat/greeter mechanism and its headless limit,
-  both-configs seeding, the id, direct-IP-off, the rejected alternative.
-- **evidence:** project.md:3228-3308
-- **bytes:** 6007 → 3355
-- **replacement:**
-## RustDesk on g15: unattended Wayland works, greeter included — but only in a preview build (2026-09-10)
-
-- **Upstream's own capability, not a community hack** — announced 2026-08-14 for
-  **x86_64 Debian/Ubuntu only**, which is exactly g15. **NOT in stable 1.4.9**;
-  it ships as a separate preview build, installed here as
-  `rustdesk-unattended-wayland` 1.5.0 (.deb from the `nightly` tag). Trust
-  `rustdesk.com/blog/unattended-remote-access-wayland` over third-party
-  writeups — both found were partly wrong, and the DRM/KMS capture backend
-  (discussion #15417) is a PROPOSAL, not a release.
-- **The mechanism, proven across a reboot on this box.** The packaged unit is
-  `User=root`, but root captures nothing itself: it `sudo -u <user>`s a
-  `rustdesk --server` into each graphical session on the seat, injecting that
-  session's `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`.
-  At boot one of the spawns is **`gdm-greeter` (uid 60578)** carrying the
-  greeter's own `wayland-0`. **So it does not need a logged-in user; it needs a
-  graphical session on the seat, and the GDM greeter is one** — and GDM
-  auto-login is OFF here, so the login-screen pass was a real one. The corollary
-  is the limit: a box with **no display manager running** offers nothing to
-  attach to, so this is no route to a headless server's console.
-- **Deliberately NOT a `tier_rustdesk`, and the reason is the tag.** The
-  `releases/download/nightly/...` URL is stable but its BYTES are replaced in
-  place; combine that with the `tier_gortex` precedent of untarring the pin
-  unconditionally and any provision run for any reason silently swaps the box's
-  remote-access daemon. Pinning the per-asset `digest` only trades silent drift
-  for break-on-every-upstream-rebuild. **Revisit when it lands in a stable
-  release, not before.**
-- **Both configs must be seeded, and `systemctl is-active` proves nothing.** The
-  service reads `/root/.config/rustdesk/RustDesk2.toml`, the tray reads the
-  user's; seeding one leaves the other on the public `rs-ny.rustdesk.com`. The
-  actual proof the options took effect is that RustDesk **rewrites its own
-  top-level `rendezvous_server` to `cyphy.kz:21116`** on restart. Seeding is
-  `hosts/g15/ubuntu/rustdesk-seed.sh` — a merge, never a clobber. The unattended
-  password is set in the tray, never by script: it lives in `RustDesk.toml` as an
-  encrypted per-install secret, which is why the seed script never touches that
-  file.
-- Live state: id **`1722388240`** against our own `cyphy.kz` hbbs
-  (`[keys_confirmed] cyphy = true`; peer map in
-  `docs/2026-08-01-nixos-harvest.md` §2). The server's public key had not rotated
-  since the NixOS tag — checked against the live `hbbs` container, not the tag.
-  **Direct IP access is OFF, and that is the default, not a regression:** nothing
-  listens on 21118, so a connect to `100.64.0.10` reaches nothing and it is not a
-  tailnet fault. Connect by ID.
-- **The rejected alternative, so it is not re-derived:** `gnome-remote-desktop`
-  50.2 is ALREADY installed on g15, ships a headless unit and `grdctl` sets
-  credentials non-interactively — Wayland-native unattended RDP with no
-  rendezvous server at all. Rejected only because RustDesk is one tool across
-  Windows/macOS/Linux/Android; it stays the fallback if the preview regresses.
 - **first seen:** 2026-09-11
 
 ## 398b5299 · contradiction · /home/me/machines/AGENTS.md
@@ -1042,91 +919,6 @@ Layout *inside each scope repository* — 12 tier dirs. The 26 directories direc
   stdin *and* keep the pipe managed — don't naively re-add the flag.
 - **first seen:** 2026-09-11
 
-## 219aad1c · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** `machines/AGENTS.md` *Tests* (auto-loaded every session)
-- **why:** the finding, the `-ExecutionPolicy Bypass` cause, and the whole nested
-  "multibyte brace rule guards nothing" subsection are already in AGENTS.md. Only the
-  `pwsh.exe`-first PATH-ordering fact is unique to the store.
-- **evidence:** project.md:2392-2434 · AGENTS.md:239-257
-- **bytes:** 2804 → 565
-- **replacement:**
-## "Environmental failure" was never a category — both reds were bugs (2026-09-02)
-
-The finding and both post-mortems now live in `AGENTS.md` (*Tests*: "Known
-environmental failure" is not a category, plus the measured retraction of the
-multibyte brace mechanism). Kept here is the one detail that is not there:
-
-- **On WSL, put `pwsh.exe` FIRST in any shell-out candidate list.** `for c in
-  pwsh powershell powershell.exe` always lands on Windows PowerShell **5.1**,
-  because only the `.exe` spellings are on PATH there; the Windows members run
-  PS 7. `pwsh.exe` under `WindowsApps` is a real binary (7.6.5), not a Store stub.
-- **first seen:** 2026-09-11
-
-## 4f3a0a16 · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** `machines/AGENTS.md` Windows-front-door paragraphs
-- **why:** four of the six bullets (`Write-Error` cannot guard, `$env:X=''` removes the
-  variable hence `-PlannedRoles`, `foreach` over `$null`, `Test-FleetMachine`) are
-  restated nearly verbatim in AGENTS.md. Three bullets have **no second source** and are
-  kept in full.
-- **evidence:** project.md:2435-2464 · AGENTS.md:387-411
-- **bytes:** 1915 → 935
-- **replacement:**
-## PowerShell provisioning traps (2026-09-02, closing roadmap P3)
-
-`Write-Error` cannot implement a guard, `$env:X = ''` REMOVES the variable (hence
-`-PlannedRoles` as a parameter, not an env var), and `foreach` over `$null`
-iterates zero times — all three are written up in `AGENTS.md`'s Windows
-front-door paragraphs. Three traps that are only here:
-
-- **Do not port the padded-substring match.** posix needs `case " $PLANNED " in
-  *" $role "*)` so `ssh` cannot match `ssh-server`. PowerShell's `-contains` is a
-  whole-element match on the array; the hazard does not arise and the padding
-  would be cargo.
-- **Defining a function in a `.psm1` and exporting it are separate acts.**
-  `Export-ModuleMember`'s backtick-continued list is easy to miss, and an
-  unexported guard simply never runs. The suite asserts the name reaches that line.
-- **`provision.ps1` runs end to end from WSL** via `pwsh.exe` against the real
-  Windows side, which makes the exit-code assertions real coverage rather than a
-  source grep. ~8s for a full dry run, ~1s for the unknown-machine arm.
-- **first seen:** 2026-09-11
-
-## 1335a42c · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** the code, which ships its own reasoning
-- **why:** both bugs are fixed and each fix carries its rationale in a load-bearing
-  comment — `provision/orca-serve.sh`:124-137 narrates the cache-key/extract-gate bug,
-  `justfile`:79-82 carries the `< /dev/null` fix. Keep the generalised rules, drop the
-  incident narrative about a **dead distro** (g15-wsl destroyed 2026-09-07).
-- **evidence:** project.md:2504-2553 · `provision/orca-serve.sh`:124-137 · `justfile`:79-82
-- **bytes:** 3592 → 1420
-- **replacement:**
-## Orca IDE on g15-wsl never upgraded — the cache key was the word "latest" (2026-09-07)
-
-Both bugs are fixed and each fix ships with its reasoning in the code —
-`provision/orca-serve.sh:124-137` for the upgrader, `justfile:79-82` for the
-gate's `< /dev/null`. What generalises past that one dead distro:
-
-- **`apt`'s `orca` package is the GNOME screen reader**, not Orca IDE, and
-  `which orca` under non-interactive ssh finds `/usr/bin/orca` FIRST because
-  `~/.local/bin` is not on that PATH. Orca IDE on Linux is only ever the AppImage
-  under `~/.local/opt/orca`. `orca --version` does not exist on this build — it
-  prints help — so the one truthful record of what is EXTRACTED is
-  `squashfs-root/orca-ide.desktop`'s `X-AppImage-Version`, compared with the
-  leading `v` stripped from BOTH sides.
-- **A cache key that never varies is a cache that never misses.** Naming the
-  download `…-${VER:-latest}` and gating on "the file exists" made the upgrader
-  run green while doing nothing, for nine days. Resolve the tag up front, name
-  the cache file by the resolved tag, download to `.part` (a truncated file at
-  the final name is a permanent cache hit — the same bug again), and gate the
-  extract on the extracted version, never on the directory existing.
-- **A test runner that hands each suite the loop's own stdin truncates itself.**
-  A suite that execs PowerShell reads that fd to EOF; the gate then printed
-  "all 32 suites passed" while skipping 17, and only on boxes where PowerShell is
-  on PATH. `just test`'s printed total is a floor, not the repo.
-- **first seen:** 2026-09-11
-
 ## f9d54642 · contradiction · /home/me/machines/.claude/memory/project.md
 
 - **action:** contradiction · **scope:** repo:machines
@@ -1147,39 +939,6 @@ gate's `< /dev/null`. What generalises past that one dead distro:
   с `max_ratio_act = 3` (Remove torrent AND files) qBittorrent снял 25 **уже
   скачанных** торрентов вместе с файлами. То есть ratio действует и на старые
   закачки; «влияет только на новые» было неверно.
-- **first seen:** 2026-09-11
-
-## 1fcf9087 · compress · /home/me/machines/.claude/memory/project.md
-
-- **action:** compress · **scope:** repo:machines
-- **why:** the section's own header bullet declares the "only copies" premise **closed**
-  (2026-09-10), and everything else describes the pre-wipe staging state of a machine
-  reinstalled 2026-09-07. Its closing bullet still calls `tier_docker` undecided, which
-  contradicts `provision/lib/tiers.sh`:278 and AGENTS.md. **Compress rather than delete:**
-  the Ventoy bullet is a **live obligation** (`archive-mirror.timer` fires 2026-10-01).
-- **evidence:** project.md:2590-2641 · `provision/lib/tiers.sh`:278 · AGENTS.md `tier_docker`
-- **bytes:** 3939 → 980
-- **replacement:**
-## g15 phase 1 done — where the only copies live (2026-09-07)
-
-**Closed. The wipe happened 2026-09-07 and the staging is fully unwound
-(2026-09-10):** `pgdata` deleted from the mirror by the owner's decision — the
-live `qaz-law-db-1` runs on g15 at `/data/qaz-code/pgdata` (126 G) and is
-rebuildable; `home-me` is back on g15 and off staging; `Music` (152 G) is on g15
-inside the restic profile `g513ie-maintenance`. The one-copy question was decided,
-not deferred — do not re-raise it. `tier_docker` is no longer "undecided": it
-exists (`provision/lib/tiers.sh`) and AGENTS.md documents it.
-
-Two things outlive the phase:
-
-- **The Ventoy drive is shared with latitude.** The same physical drive that
-  carried `ubuntu-26.04.1-desktop-amd64.iso` also holds latitude's `xs700`
-  archive-mirror partition, and `archive-mirror.timer` next fires
-  **2026-10-01 05:01** — return the drive before then. Secure Boot on g15 is
-  OFF, so Ventoy needs no MokManager enrolment.
-- **Why Ubuntu and not Debian:** asus-linux names a **6.19+ kernel floor**;
-  trixie ships 6.12, Ubuntu 26.04 ships 7.0 out of the box. Spec:
-  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`.
 - **first seen:** 2026-09-11
 
 ## 514c862d · generalise · /home/me/machines/.claude/memory/project.md
@@ -1281,18 +1040,6 @@ abandoned *two distros per host*, not the serve model; don't re-read either as
   staging-копия удалена; см. «The DB leg is CLOSED» ниже.
 - **first seen:** 2026-09-11
 
-## 79129a06 · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** project.md:3043-3050 (the later dated entry, same file)
-- **why:** this paragraph argues the 186 G `pgdata` staging leg is KEPT deliberately
-  because *"g15's roles are `base, ssh-server, agents, dotfiles, repos` — no
-  `backup-client`, so nothing about g15 is in restic at all"*. **Both halves are now
-  false** — g15 has the role and a repo, and the leg was closed and the copy deleted.
-- **evidence:** project.md:2789-2796 · superseded by :3043-3050 and :2815-2818 · `ls machines/backup/` → `base.yaml desktop-wsl g15 latitude …`
-- **bytes:** 611 → 0
-- **replacement:** (none — deletion)
-- **first seen:** 2026-09-11
-
 ## 754828b4 · compress · /home/me/machines/.claude/memory/project.md
 
 - **action:** compress · **scope:** repo:machines
@@ -1320,23 +1067,6 @@ abandoned *two distros per host*, not the serve model; don't re-read either as
   before believing the app is broken.**
 - **first seen:** 2026-09-11
 
-## 06b4c635 · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** project.md:3043-3050 (canonical) + `docs/fleet-roadmap.md`:952-960
-- **why:** **third copy** of the PGDATA-leg story, still framed as an open storage blocker
-  with superseded free-space arithmetic and the closure bolted on at the end. Collapse to
-  the settled decision plus the method facts that would otherwise be re-derived.
-- **evidence:** project.md:2828-2836 · :3043-3050 · `docs/fleet-roadmap.md`:952-960
-- **bytes:** 718 → 461
-- **replacement:**
-- **PGDATA is excluded, and since 2026-09-10 permanently — do not "fix" this by
-  adding the source.** The method was never the blocker and is proven on this
-  exact data: a cleanly stopped PGDATA copied physically (the container's
-  STOPSIGNAL is SIGINT = postgres fast shutdown, `me` is in `docker`, reading it
-  needs root at `999:0` mode 700). It is excluded because the DB is rebuildable
-  and its corpus (`~/my/qaz-code/laws`) is already a source here.
-- **first seen:** 2026-09-11
-
 ## 56099df2 · compress · /home/me/machines/.claude/memory/project.md
 
 - **action:** compress · **scope:** repo:machines
@@ -1351,44 +1081,6 @@ abandoned *two distros per host*, not the serve model; don't re-read either as
   82.012 GiB stored**, in **36:34** (≈44 MB/s end to end, not the 99 MB/s
   tailnet ceiling: the `laws` corpus is ~125k small files and per-file overhead
   dominates the music half). На диске **83 G**.
-- **first seen:** 2026-09-11
-
-## 0a184245 · dedupe · /home/me/machines/.claude/memory/project.md
-
-- **action:** dedupe · **scope:** repo:machines · **survives:** `machines/AGENTS.md` (the `tier_*` list + the latitude entry)
-- **why:** four bullets restate what AGENTS.md already documents — the 2026-08-03 flagship
-  gap, both posix profiles, two keys not four, masks no sleep target, the
-  `/proc/acpi/button/lid` gate, reload-not-restart. **AGENTS.md is the canonical home for
-  `tier_*` behaviour** (it carries every sibling tier in one list), so that copy survives;
-  memory keeps only what was measured on the boxes. The trailing "Suite green, 54 suites"
-  also violates AGENTS.md's own don't-write-suite-counts rule **and is already stale (55)**.
-- **evidence:** project.md:3153-3192 · AGENTS.md:300-313 and :685-697
-- **bytes:** 2887 → 1637
-- **replacement:**
-## Lid close no longer sleeps a mains-bound box — `tier_lid_ignore` (2026-09-08)
-
-What the tier is and why it exists is in `AGENTS.md` (the `tier_*` list, and the
-latitude entry). Only what was measured on the boxes is kept here.
-
-- **g15 shipped stock: `HandleLidSwitch=suspend`, `HandleLidSwitchExternalPower=suspend`**,
-  and logind's own config was the whole lever — `/etc/systemd/logind.conf.d/` did
-  not exist, GNOME's idle suspend is already `nothing` on AC and battery
-  (`org.gnome.settings-daemon.plugins.power sleep-inactive-*-type`), and
-  `systemd-inhibit --list` showed **no** `handle-lid-switch` block from gsd-power
-  (GNOME only takes that one with an external monitor attached). That negative is
-  the reusable part: do not re-investigate GNOME here.
-- `HandleLidSwitchDocked` and `IdleAction` are already `ignore` upstream
-  (`systemd-analyze cat-config systemd/logind.conf`, systemd 259 on g513ie / 257
-  on latitude), which is why the tier writes two keys and why deleting latitude's
-  hand-written `99-server.conf` changes nothing.
-- **Drop-ins merge in filename order, so read back the merged config, not the
-  file you just wrote.** `cat-config`'s LAST assignment is the effective one; the
-  tier warns by name about a competing drop-in, and latitude's `99-server.conf`
-  sorts after `99-fleet-lid.conf` and will keep nagging until P6 retires it.
-  Retire it AFTER latitude's next converge run, never before: `tiers.sh` is a
-  `_touches_driver` trigger, so that run comes on its own.
-- Both mutations bite: masking a sleep target, and dropping the `/proc/acpi/button/lid`
-  gate, each turn an assertion red.
 - **first seen:** 2026-09-11
 
 ## cd0c04cc · contradiction · /home/me/.claude/host-memory.md
@@ -1575,77 +1267,6 @@ Desktop and no Windows host on g15, and the general trap lives in global memory.
   `~/bin/wsl-loadwatch.sh` and the `.wslconfig` mitigation on `desktop` apply only
   to a WSL box. Treat heavy sync I/O as a real cost on any host, the freeze as
   WSL-specific.
-- **first seen:** 2026-09-11
-
-## b10ab39d · contradiction · /home/me/machines/.claude/memory/project.md
-
-- **action:** contradiction · **scope:** repo:machines
-- **why:** two false claims plus a duplicate. The `ConditionPathIsMountPoint` bullet ends
-  *«у mirror-refresh.service эта Condition всё ещё стоит»* — **untrue by the end of the
-  same day** (project.md:3559 and AGENTS.md:619-621 both say both mirror units are
-  Condition-free); the `install-docker-ordering.sh` add/remove bullet is verbatim in
-  AGENTS.md:586-599; and bullet 1 uses «24 reset'а за сутки» as a **live** reason,
-  contradicting the docks section above it.
-- **nothing is lost:** the compressed-out verify numbers (2075 files / 2041 inodes /
-  736 552 035 464 bytes) survive verbatim at project.md:3361-3367.
-- **evidence:** project.md:3431-3513 · AGENTS.md:586-599, 614-621
-- **bytes:** 9074 → 6019
-- **replacement:**
-## Архив 1970–2024 получил вторую копию — и почему не на 8 ТБ (2026-09-10)
-
-- **Комната была не той осью.** `/mnt/wd8` с 6.4 T свободного выглядел
-  очевидным приёмником для 663 GiB архива, и это худший выбор из доступных:
-  wd8 и источник `immich-2024` — два отсека ОДНОГО дока Ugreen (`usb4/4-2`),
-  один общий линк 5 Гбит; HGST на `4-1` имеет свой линк. Контроллер один
-  (10 Гбит) и он никогда не был ограничением. **Мерить топологию (`udevadm info
-  -q path -n sdX`) до выбора отсека, а не размер.** Довод «на 4-2 24 reset'а за
-  сутки» в этом выборе НЕ участвует: тот шторм кончился 17.08 — см. раздел про
-  доки.
-- Живая расстановка на 2026-09-10: `u4-1:0` spare320, `u4-1:1` HGST
-  (`/mnt/immich-2024-backup`), `u4-2:0` wd8, `u4-2:1` immich-2024,
-  `u3-2.4:0` immich-mirror в стопгап-корпусе NS1066.
-- **HGST освобождён под архив, потому что копия servarr была ДОКАЗАННО
-  избыточна**, а не потому что «прошло достаточно дней»: verify PASS на живом
-  стеке (цифры — в разделе про ServarrMedia) плюс qBittorrent уже перепроверил
-  все раздачи хешами против wd8. Выдержка по календарю стоила дороже, чем
-  давала: невосстановимые фото лежали в одной копии, пока единственный
-  подходящий отсек держала избыточная копия скачиваемой медиатеки.
-- Приёмник стал ext4 вместо exfat, и это сняло весь набор уступок:
-  `-aHAX` вместо `-rlt --no-perms --no-owner --no-group --modify-window=1`.
-  Восстановление больше не требует `chown`.
-- **`rollback` в `migrate-servarr-wd8.sh` теперь отказывается, если источник
-  пуст.** Старое тело направило бы `DATA_ROOT` на путь, который уже не точка
-  монтирования; docker создаёт отсутствующий bind-источник, стек поднялся бы на
-  пустом каталоге на `/`, и базы *arr свели бы библиотеку к нулю. Проверка —
-  «есть ли файлы», а не флаг: маркер пришлось бы обновлять тому, кто удалял
-  источник, а именно этот класс забывчивости здесь и ломается.
-- **`du -sb` НЕ считает `st_size` каталогов** — измерено на GNU coreutils 9.7
-  (latitude) и uutils 0.8.0 (desktop-wsl). Я утверждал обратное — что гейт
-  `archive-mirror.sh` на равенстве `du -sb` напечатал бы ложный `INCOMPLETE`, —
-  и это было неверно дважды: механизм не тот, а «доказательством» служило
-  сравнение недокопированного дерева с полным (каталог, в который ещё пишут, не
-  достиг конечного размера). **Механизм, который собираешься написать в
-  сообщении коммита, — это ровно тот момент, когда его надо померить.**
-- **Оси групп хардлинков в этом гейте нет НА ПРОВЕРЕННОЙ предпосылке** — в
-  дереве 0 файлов с `nlink>1` (2026-09-10 и обзор 2026-08-01). Скрипт теперь эту
-  предпосылку проверяет и кричит, если она перестанет держаться; тогда нужна
-  группировка, как в `migrate-servarr-wd8.sh phase_verify`.
-- **Асимметричное sudo снова.** `-verify` читал источник через `sudo find`, а
-  приёмник голым `find`: под каталогом, который не обойти, `find` недосчитывает
-  МОЛЧА и печатает MISMATCH на здоровой копии. Ровно та форма, что заставляла
-  самопроверку хаба звать живые restic-репозитории MISSING. Выживает потому, что
-  ловится только ручным прогоном — юнит работает от root.
-- **Нельзя править файл скрипта, пока его юнит работает**: bash дочитывает
-  скрипт с диска по ходу, а `git pull` может усечь тот же инод. Правильно —
-  остановить юнит (rsync возобновляемый, `--partial-dir` держит недокачанный
-  файл), подтянуть, запустить снова.
-- Метка ext4 обрезается до **16 байт** без ошибки, только с
-  `Warning: label too long` — `immich-2024-backup` стал `immich-2024-back`.
-  Живёт как `immich-2024-bak`.
-- **`just` на desktop-wsl нет, и ручной прогон сюит требует `</dev/null`** —
-  без него цикл проглатывает часть сюит (тест, читающий stdin, выедает остаток
-  подстановки процесса). Это НЕ дефект гейта: рецепт `test` уже делает
-  `bash "$t" < /dev/null`. Ловушку репозиторий уже знал; переоткрыл её я.
 - **first seen:** 2026-09-11
 
 ## d4622cef · compress · /home/me/machines/.claude/memory/project.md

@@ -2319,76 +2319,32 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
 
 ## "Environmental failure" was never a category — both reds were bugs (2026-09-02)
 
-- Two suites were carried for a month as *"the two known environmental
-  failures"*, repeated session after session as if it were a property of the
-  box. **Neither was environmental, and one was reporting code written the day
-  before.** The phrase is the finding: a red whose cause has never been read is
-  an unread bug report, not a baseline. This is the second time roadmap P4 has
-  had to say so.
-- `fleet-ssh-config-ps.test.sh` needed **`-ExecutionPolicy Bypass`**. Without it
-  the default policy refuses an unsigned `.ps1` and the run dies with a
-  `SecurityError`/`UnauthorizedAccess` *before the module is parsed* — which
-  reads as "PowerShell is broken on this box". **Every PowerShell invocation
-  from a test or script in this repo needs that flag**, process-scope, changes
-  nothing on the machine.
-- Its candidate loop was also wrong on WSL: `for c in pwsh powershell
-  powershell.exe` always landed on Windows PowerShell **5.1**, because only the
-  `.exe` spellings are on PATH there. Put `pwsh.exe` first and you get PS 7,
-  which is what the Windows members run. `pwsh.exe` under
-  `WindowsApps` is a real binary here (7.6.5), not a Store stub.
+The finding and both post-mortems now live in `AGENTS.md` (*Tests*: "Known
+environmental failure" is not a category, plus the measured retraction of the
+multibyte brace mechanism). Kept here is the one detail that is not there:
 
-### The multibyte brace rule guards nothing — the mechanism does not exist
-
-- `65aac22` (2026-08-01), `AGENTS.md` and roadmap P4 all asserted that under bash
-  5.x in a UTF-8 locale the bytes of `…` are *absorbed into the identifier*, so
-  `"$var…"` expands a variable named `var…` and `set -u` aborts. **Measured
-  2026-09-02: false, everywhere.** bash 5.3.9 / 5.2.37 / 5.2.15, under `C`,
-  `C.utf8` and `en_US.utf8`, as `bash -c` and as a real script file: exits 0,
-  prints correctly. Consistent with bash's identifier scan being ASCII-only in
-  every build, so **no locale could ever have changed it.**
-- Unbracing only that one line at HEAD leaves `provision-wsl.test.sh` green, and
-  the whole `65aac22^` tree — the "red" state the brace fix was credited with
-  greening — **passes today**. So it is not "a bash since fixed" either.
-  **What the original red actually was is unidentified.**
-- **The rule stays** and the scan still fails the gate: bracing costs two
-  characters, and an unexplained historical red argues for keeping a guard. What
-  changed is that the premise block NOTEs instead of `die`-ing. Do not write a
-  replacement mechanism there without measuring one.
-- The generalised lesson, and the reason this is worth the space: **a mechanism
-  can survive in a commit message, a roadmap item and AGENTS.md simultaneously
-  without anyone having run it.** The confidence of the prose was the only
-  evidence. If you are about to repeat a mechanism from a doc in a commit
-  message, that is the moment to measure it.
+- **On WSL, put `pwsh.exe` FIRST in any shell-out candidate list.** `for c in
+  pwsh powershell powershell.exe` always lands on Windows PowerShell **5.1**,
+  because only the `.exe` spellings are on PATH there; the Windows members run
+  PS 7. `pwsh.exe` under `WindowsApps` is a real binary (7.6.5), not a Store stub.
 
 ## PowerShell provisioning traps (2026-09-02, closing roadmap P3)
 
-- **`Write-Error` cannot implement a guard.** `provision.ps1` sets
-  `$ErrorActionPreference = 'Stop'`, so `Write-Error "…"; exit 2` **throws** and
-  the process dies with exit **1** before reaching the `exit`. It had been doing
-  that on the `no machine selected` arm. Use `[Console]::Error.WriteLine`, then
-  `exit`. `provision-ps-guards.test.sh` asserts no `Write-Error` comes back.
-- **`$env:X = ''` REMOVES the variable on Windows.** There is no "set but empty",
-  so the posix testing lever `MACHINES_PLANNED_ROLES=""` — *declare nothing*,
-  which is how `fleet-profile.test.sh` forces the failing arm — has no
-  equivalent in the environment. That is why the Windows guard is a
-  **parameter**, `-PlannedRoles @()`. Mirroring the env trick would have shipped
-  a guard whose failure mode nothing could exercise.
+`Write-Error` cannot implement a guard, `$env:X = ''` REMOVES the variable (hence
+`-PlannedRoles` as a parameter, not an env var), and `foreach` over `$null`
+iterates zero times — all three are written up in `AGENTS.md`'s Windows
+front-door paragraphs. Three traps that are only here:
+
 - **Do not port the padded-substring match.** posix needs `case " $PLANNED " in
   *" $role "*)` so `ssh` cannot match `ssh-server`. PowerShell's `-contains` is a
-  whole-element match on the array; the hazard does not arise, and the padding
+  whole-element match on the array; the hazard does not arise and the padding
   would be cargo.
-- **`foreach` over `$null` iterates zero times** — which is the whole unknown-
-  machine bug: `Get-FleetRoles` on a non-member returns `$null`, so
-  `-Machine typo` printed no roles and exited **0**. Guard before the loop
-  (`Test-FleetMachine`), never inside it.
 - **Defining a function in a `.psm1` and exporting it are separate acts.**
   `Export-ModuleMember`'s backtick-continued list is easy to miss, and an
-  unexported guard simply never runs. The suite asserts the name reaches that
-  line.
-- **`provision.ps1` runs end to end from WSL** via `pwsh.exe`, against the real
-  Windows side (`/c/Users/methe/.claude`), which makes the exit-code assertions
-  real coverage rather than a source grep. ~8s for a full dry run, ~1s for the
-  unknown-machine arm.
+  unexported guard simply never runs. The suite asserts the name reaches that line.
+- **`provision.ps1` runs end to end from WSL** via `pwsh.exe` against the real
+  Windows side, which makes the exit-code assertions real coverage rather than a
+  source grep. ~8s for a full dry run, ~1s for the unknown-machine arm.
 
 ## Servarr: удаление в *arr не освобождает место — держит qBittorrent (2026-09-07)
 
@@ -2431,53 +2387,27 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
 
 ## Orca IDE on g15-wsl never upgraded — the cache key was the word "latest" (2026-09-07)
 
-- **`apt`'s `orca` package is the GNOME screen reader** (`50.2-0ubuntu0.1`, a
-  python3 script at `/usr/bin/orca`), not Orca IDE. `apt upgrade` + `wsl
-  --shutdown` moves the Orca *runtime* version by exactly nothing. Orca IDE on
-  Linux is only ever the AppImage under `~/.local/opt/orca`, installed by
-  `provision/orca-serve.sh`. Note `which orca` under non-interactive ssh finds
-  `/usr/bin/orca` FIRST — `~/.local/bin` is not on that PATH — so even the
-  version probe reaches the screen reader unless you export the PATH yourself.
-- **`provision/orca-serve.sh` was a no-op upgrader on both of its gates**, and it
-  ran green while doing nothing (g15-wsl sat on 1.4.192 from 2026-08-29 while
-  upstream was on 1.4.197):
-  - the AppImage was cached as `orca-${ORCA_VERSION:-latest}.AppImage`, so with
-    the default the filename never changed and `[ -f "$AI" ]` hit forever;
-  - the extract gate keyed on `squashfs-root/AppRun` merely *existing*, so even
-    the documented escape hatch `ORCA_VERSION=x.y.z` downloaded the new AppImage
-    and then skipped unpacking it. Fixing only the cache key buys nothing.
-- **The one truthful record of what is EXTRACTED is
-  `squashfs-root/orca-ide.desktop`'s `X-AppImage-Version`.** `orca --version`
-  does not exist on this build — it prints the help text, which is what makes
-  "still reports outdated" easy to misattribute. Compare tags with the leading
-  `v` stripped from BOTH sides: upstream says `v1.4.197`, that file says
-  `1.4.192`, and a raw compare is either never equal (200+ MB every run) or
-  never unequal (never upgrades).
-- The fix resolves `latest` through the GitHub API up front, names the cache file
-  by the resolved tag, downloads to `.part` first (a truncated AppImage at the
-  final name would be a permanent cache hit — the same bug again), stops
-  `orca-serve` before swapping the tree it is exec'ing from, and **moves** the
-  old `squashfs-root` to `squashfs-root.prev-<ver>` instead of `rm`-ing it, so an
-  upstream layout change hitting the `cli/index.js not found` die still leaves a
-  runtime to restore. Verified 1.4.192 → 1.4.197, then a second run as a clean
-  no-op (no download, no extract, service not bounced).
-- **The repo gate silently skips suites, and the count it prints is not the
-  repo's count.** `just test` runs `while read t; … bash "$t" … done <
-  <(just _test-suites)`, which hands each suite the loop's own stdin. Measured
-  2026-09-07 on desktop-wsl: 49 `*.test.sh` files on disk, the loop **reached 32
-  and reported them all green**; with `< /dev/null` added to the `bash "$t"`
-  call it reaches **49, still 0 failures**.
-- **The consumer is `provision/tests/fleet-ssh-config-ps.test.sh`, and it is
-  isolated, not inferred.** The skip is a clean truncation, not scattered: that
-  suite sorts 32nd and everything from 33 (`fleet-ssh-tier.test.sh`) on is
-  missing contiguously. Proven directly — hand the suite a 4-line fd and the fd
-  is at EOF when it returns. Cause: it execs `powershell.exe`/`pwsh.exe`, which
-  reads its stdin to EOF, and the loop's stdin IS the suite list. So the gate
-  truncates on every box where PowerShell is on PATH — i.e. every WSL box, which
-  is where it is usually run — and prints "all 32 suites passed" while skipping
-  17. latitude has no PowerShell, which is why its count looked sane. Second
-  false-confidence failure for this number after the 2026-08-13 one, and the same
-  lesson: `just test`'s printed total is a floor, not the repo.
+Both bugs are fixed and each fix ships with its reasoning in the code —
+`provision/orca-serve.sh:124-137` for the upgrader, `justfile:79-82` for the
+gate's `< /dev/null`. What generalises past that one dead distro:
+
+- **`apt`'s `orca` package is the GNOME screen reader**, not Orca IDE, and
+  `which orca` under non-interactive ssh finds `/usr/bin/orca` FIRST because
+  `~/.local/bin` is not on that PATH. Orca IDE on Linux is only ever the AppImage
+  under `~/.local/opt/orca`. `orca --version` does not exist on this build — it
+  prints help — so the one truthful record of what is EXTRACTED is
+  `squashfs-root/orca-ide.desktop`'s `X-AppImage-Version`, compared with the
+  leading `v` stripped from BOTH sides.
+- **A cache key that never varies is a cache that never misses.** Naming the
+  download `…-${VER:-latest}` and gating on "the file exists" made the upgrader
+  run green while doing nothing, for nine days. Resolve the tag up front, name
+  the cache file by the resolved tag, download to `.part` (a truncated file at
+  the final name is a permanent cache hit — the same bug again), and gate the
+  extract on the extracted version, never on the directory existing.
+- **A test runner that hands each suite the loop's own stdin truncates itself.**
+  A suite that execs PowerShell reads that fd to EOF; the gate then printed
+  "all 32 suites passed" while skipping 17, and only on boxes where PowerShell is
+  on PATH. `just test`'s printed total is a floor, not the repo.
 
 ### qBittorrent: автоудаление включено 2026-09-07 — и у застрявшего импорта теперь таймер
 
@@ -2517,55 +2447,24 @@ abandoned *two distros per host*, not the serve model. Don't re-read either as
 
 ## g15 phase 1 done — where the only copies live (2026-09-07)
 
-- **Windows on g15 is staged for the wipe. Target is Ubuntu 26.04.1 LTS**, not
-  Debian 13 — changed by the owner on 2026-09-07 (he reads Debian as headless).
-  The technical argument that backs it: asus-linux names a **6.19+ kernel floor**
-  as the reason it does not support Debian-based distros, trixie ships 6.12, and
-  Ubuntu 26.04 ships 7.0 out of the box. Spec:
-  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md` (renamed —
-  the filename no longer names a distro).
-- **ЭТОТ ПУНКТ БОЛЬШЕ НЕ ВЕРЕН — закрыт 2026-09-10, все три «единственные копии»
-  разошлись.** `pgdata` (186 G) удалён с зеркала по решению владельца: живая база
-  `qaz-law-db-1` работает на g15 (`/data/qaz-code/pgdata`, 126 G, проверено
-  перед удалением) и пересобираема. `home-me` вернулся на g15 и со staging снят.
-  `Music` (152 G) лежит на g15 и входит в restic-профиль `g513ie-maintenance`.
-  Запрет «не поднимать вопрос повторно» относился к решению об одной копии в
-  сентябре и исполнен: вопрос закрыт, а не отложен. Ниже — как было.
-- **All three payloads are verified by manifest and these are the ONLY copies:**
-  - `latitude:/mnt/immich-mirror/g15-staging/pgdata` — 186G, 1297 entries.
-    qaz-law's postgres, physical copy, taken with the DB cleanly shut down.
-  - `latitude:/mnt/immich-mirror/g15-staging/home-me` — 18G, 341543 entries.
-  - `desktop:C:\Users\methe\g15-staging\Music` — 88.3G, 18377 entries.
-- **One copy of pgdata, by decision, not oversight.** Offered a free `cp -a` to
-  the internal NVMe behind `/mnt/immich` (655 GB free) and declined. It sits on
-  `/dev/sdd2`, the flaky dock. **Do not re-raise it as an open item** — but if
-  that dock starts resetting during the rebuild, say so immediately, because
-  there is nothing to fall back on.
-- **postgres is DOWN and stays down until phase 4.** `docker update
-  --restart=no qaz-law-db-1` was applied deliberately and is NOT undone: the
-  container dies with the disk. Do not "helpfully" restart it — a running PGDATA
-  invalidates the staged copy.
-- **Four writers on g15-wsl are stopped and stay stopped:** `orca-serve.service`
-  (the Orca headless runtime — this darkened the `g15-wsl` environment on `air`
-  and `desktop`, expected), plus the `dotfiles-sync`, `git-autofetch` and
-  `fleet-selfpull` timers. They are why the first `/home/me` pass missed by 20
-  lines; all three fired inside the transfer window.
-- **`fleet-selfpull.service` is `failed` on g15-wsl and that is pre-existing:**
-  four repos under `~/my` (`buton`, `embedthat`, `skep`, `vps`) have been dirty
-  for 65+ consecutive ticks, so it refuses to pull them and exits 1. Their
-  working trees ARE in the staged copy — rsync copies dirty files like any
-  other — so nothing is lost, but they will come back dirty.
-- **Install media verified:** `ubuntu-26.04.1-desktop-amd64.iso` on the Ventoy
-  drive's `Boot` partition, SHA256
-  `601e30fbf5d97759367c632e2c33630665039b7e2158fd068403da3ccf1bda1f`. **Secure
-  Boot on g15 is OFF**, so Ventoy needs no MokManager enrolment. The same
-  physical drive carries latitude's `xs700` archive-mirror partition;
-  `archive-mirror.timer` next fires 2026-10-01 05:01, so return it before then.
-- **Two gaps phase 4 will hit, both recorded in the spec's §4:** the provisioner
-  installs **neither docker nor a desktop toolchain**, and `linux.sh`'s closing
-  text explains that by pointing at "only a NixOS host" — none has existed since
-  2026-08-01. `dockerd` is what qaz-law needs to come back up. Undecided: by
-  hand as a phase-4 step, or a `tier_docker`.
+**Closed. The wipe happened 2026-09-07 and the staging is fully unwound
+(2026-09-10):** `pgdata` deleted from the mirror by the owner's decision — the
+live `qaz-law-db-1` runs on g15 at `/data/qaz-code/pgdata` (126 G) and is
+rebuildable; `home-me` is back on g15 and off staging; `Music` (152 G) is on g15
+inside the restic profile `g513ie-maintenance`. The one-copy question was decided,
+not deferred — do not re-raise it. `tier_docker` is no longer "undecided": it
+exists (`provision/lib/tiers.sh`) and AGENTS.md documents it.
+
+Two things outlive the phase:
+
+- **The Ventoy drive is shared with latitude.** The same physical drive that
+  carried `ubuntu-26.04.1-desktop-amd64.iso` also holds latitude's `xs700`
+  archive-mirror partition, and `archive-mirror.timer` next fires
+  **2026-10-01 05:01** — return the drive before then. Secure Boot on g15 is
+  OFF, so Ventoy needs no MokManager enrolment.
+- **Why Ubuntu and not Debian:** asus-linux names a **6.19+ kernel floor**;
+  trixie ships 6.12, Ubuntu 26.04 ships 7.0 out of the box. Spec:
+  `docs/superpowers/specs/2026-09-07-g15-linux-migration-design.md`.
 
 ## g15 phase 4 — what the Ubuntu box actually cost us (2026-09-07)
 
@@ -2714,15 +2613,6 @@ Freed 105 GB and pruned the dead fleet trust. What is worth keeping:
 - Headscale nodes 3 (`g15-retired`) and 9 (`g15-wsl`) deleted. Seven remain, all
   live; node 5 `ipheoryt12` is his phone, offline is normal.
 
-**`pgdata`'s 186 GB staging copy is KEPT, deliberately.** I called the staging
-"redundant" and that was wrong: the sources are wiped, so deleting a leg takes it
-from two copies to one, and **g15's roles are `base, ssh-server, agents,
-dotfiles, repos` — no `backup-client`, so nothing about g15 is in restic at all.**
-Dropping this leg would leave 184 GB of qaz-code database (`act_version` 104 GB +
-`act_version_chunk` 80 GB) as a single copy on one NVMe. The fix is to give g15
-the `backup-client` role and let restic take it, then drop the staging — not to
-keep the staging forever. His call; roadmap P6.
-
 ### A WSL-era shim survived the native reinstall and shadowed xdg-open (2026-09-08)
 
 - **Symptom:** Orca could not add a second Claude account — clicking it opened no
@@ -2753,15 +2643,13 @@ server. What a future session would otherwise re-derive:
   fleet to lose expensively. Plus four `.env` files, `buton/google-account.json`,
   `buton/harvester.db`, `telegrind/local/*.json`, and unpushed commits in the
   four repos that have been dirty for 65+ fleet-selfpull ticks.
-- **PGDATA is excluded and the reason is STORAGE, not method.** Do not "fix"
-  this by adding the source. Method is settled: a cleanly stopped PGDATA copied
-  physically is proven on this exact data (phase 1), the container's STOPSIGNAL
-  is SIGINT = postgres fast shutdown, and `me` is in `docker` so stop/start
-  needs no privilege. Reading it needs root (`999:0` mode 700). The blocker is
-  that `/mnt/spare320` has 164 G free against a ~130 G leg, i.e. under 12% left
-  with no room for prune. **CLOSED 2026-09-10: he decided the DB needs no backup
-  at all — it is rebuildable, and the corpus it is built from (`~/my/qaz-code/laws`)
-  is already a source here. The 186 G staging leg was deleted the same day.**
+- **PGDATA is excluded, and since 2026-09-10 permanently — do not "fix" this by
+  adding the source.** The method was never the blocker and is proven on this
+  exact data: a cleanly stopped PGDATA copied physically (the container's
+  STOPSIGNAL is SIGINT = postgres fast shutdown, `me` is in `docker`, reading it
+  needs root at `999:0` mode 700). It is excluded because the DB is rebuildable
+  and its corpus (`~/my/qaz-code/laws`) is already a source here.
+
 - **`schedule-permission: user_logged_on`, not `user`.** resticprofile's `user`
   means a ROOT-OWNED unit that merely runs as the user, so installing it needs
   sudo — and g15 has NO NOPASSWD sudo (`sudo -n` fails; latitude's works). The
@@ -3076,43 +2964,28 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
 
 ## Lid close no longer sleeps a mains-bound box — `tier_lid_ignore` (2026-09-08)
 
-- **g15 shipped stock: `HandleLidSwitch=suspend`, `HandleLidSwitchExternalPower=suspend`.**
-  Nothing else was in play — `/etc/systemd/logind.conf.d/` did not exist, GNOME's
-  idle suspend is already `nothing` on both AC and battery
+What the tier is and why it exists is in `AGENTS.md` (the `tier_*` list, and the
+latitude entry). Only what was measured on the boxes is kept here.
+
+- **g15 shipped stock: `HandleLidSwitch=suspend`, `HandleLidSwitchExternalPower=suspend`**,
+  and logind's own config was the whole lever — `/etc/systemd/logind.conf.d/` did
+  not exist, GNOME's idle suspend is already `nothing` on AC and battery
   (`org.gnome.settings-daemon.plugins.power sleep-inactive-*-type`), and
   `systemd-inhibit --list` showed **no** `handle-lid-switch` block from gsd-power
-  (GNOME only takes that one with an external monitor attached). So logind's own
-  config was the whole lever, and the lid was the only route to sleep.
-- **The gap it closed is the one the 2026-08-03 review called the flagship**
-  (`docs/2026-08-03-repo-review.md:320`): latitude's four `ignore` keys lived in a
-  **hand-written** `/etc/systemd/logind.conf.d/99-server.conf` that nothing in the
-  repo produced. A reinstall following the repo would have yielded a services host
-  that suspends when the lid shuts, with no error anywhere.
-- **Two keys, not four.** `HandleLidSwitchDocked` and `IdleAction` are `ignore` in
-  systemd already (`systemd-analyze cat-config systemd/logind.conf`, systemd 259
-  on g513ie), so the tier writes only the two that change behaviour. That is also
-  why deleting latitude's hand file changes nothing.
-- **It masks no sleep target, and that is the decision, not an omission.**
-  latitude additionally masks `sleep/suspend/hibernate.target` — correct for a
-  services host, wrong for a box someone sits at, where it would also kill the
-  GNOME suspend menu and a deliberate `systemctl suspend`. Lid policy is the
-  portable half; the masking stays host-local on latitude.
-- **Gate on the hardware, not the platform:** `/proc/acpi/button/lid` (LID0 on
-  both g513ie and latitude5520) is absent in a WSL distro and on the VPS, so those
-  are no-ops without a platform check to keep in sync.
-- **Reload logind, never restart it.** `CanReload=yes` on systemd 257 (latitude)
-  and 259 (g15); a restart is the one that can take a live graphical session with
-  it. The `ok` line reads the value back from `systemd-analyze cat-config`, whose
-  LAST assignment is the effective one — reading back the file the tier just wrote
-  proves nothing about precedence when another drop-in sorts after it.
-- **Drop-ins merge in filename order, so a competing file silently owns the key.**
-  The tier warns by name when another drop-in in that dir sets a lid key —
-  latitude has exactly one (`99-server.conf`, identical values, sorts after
-  `99-fleet-lid.conf`), which is how the warn will keep nagging until P6 retires
-  it. Retire it AFTER latitude's next converge run, never before: `tiers.sh` is a
+  (GNOME only takes that one with an external monitor attached). That negative is
+  the reusable part: do not re-investigate GNOME here.
+- `HandleLidSwitchDocked` and `IdleAction` are already `ignore` upstream
+  (`systemd-analyze cat-config systemd/logind.conf`, systemd 259 on g513ie / 257
+  on latitude), which is why the tier writes two keys and why deleting latitude's
+  hand-written `99-server.conf` changes nothing.
+- **Drop-ins merge in filename order, so read back the merged config, not the
+  file you just wrote.** `cat-config`'s LAST assignment is the effective one; the
+  tier warns by name about a competing drop-in, and latitude's `99-server.conf`
+  sorts after `99-fleet-lid.conf` and will keep nagging until P6 retires it.
+  Retire it AFTER latitude's next converge run, never before: `tiers.sh` is a
   `_touches_driver` trigger, so that run comes on its own.
-- Both mutations bite: masking a sleep target, and dropping the lid gate, each
-  turn an assertion red. Suite green, 54 suites.
+- Both mutations bite: masking a sleep target, and dropping the `/proc/acpi/button/lid`
+  gate, each turn an assertion red.
 
 ## `hub` is in Almaty — it cannot be a censorship-bypass exit node (2026-09-09)
 
@@ -3151,85 +3024,55 @@ Runbook — `docs/2026-09-08-8tb-acceptance-plan.md`, скрипт —
 
 ## RustDesk on g15: unattended Wayland works, greeter included — but only in a preview build (2026-09-10)
 
-- **The capability is real and it is upstream's own**, not a community hack:
-  RustDesk announced true unattended Wayland access — multi-monitor, and claiming
-  login-screen access after reboot — on 2026-08-14, for **x86_64 Debian/Ubuntu
-  only**, which is exactly g15. It is **NOT in stable 1.4.9**; it ships as a
-  separate preview build. Fedora/Arch are "planned next", stable "eventually".
-- **The DRM/KMS capture backend (discussion #15417) is a PROPOSAL, not a
-  release.** Two third-party writeups conflict about how this works — one
-  describes swapping GDM for an X11 LightDM greeter, which is a different
-  approach entirely. Trust `rustdesk.com/blog/unattended-remote-access-wayland`
-  over the blog posts; both third-party accounts were partly wrong.
-- **Installed here: `rustdesk-unattended-wayland` 1.5.0**, `apt install` of the
-  .deb from the `nightly` tag. Registered against our own `cyphy.kz` hbbs —
-  `[keys_confirmed] cyphy = true`, new id **`1722388240`** (peer map lives in
-  `docs/2026-08-01-nixos-harvest.md` §2).
-- **This is deliberately NOT a `tier_rustdesk`, and the reason is the tag.** The
-  asset URL is stable but its BYTES are replaced in place: the 1.5.0 asset was
-  rebuilt 2026-09-10 08:05, the 1.4.9 one on 2026-09-01. Combine a mutable
-  `releases/download/nightly/...` URL with the `tier_gortex` precedent of
-  untarring the pin unconditionally, and any provision run for any reason
-  silently swaps the box's remote-access daemon — the Orca `latest` cache-key
-  trap with a system service attached. Pinning the GitHub API's per-asset
-  `digest` instead only trades silent drift for break-on-every-upstream-rebuild.
-  **Revisit when it lands in a stable release, not before.**
-- **The mechanism — and the login-screen half is PROVEN on this box as of
-  2026-09-10, by reboot.** The packaged unit is `User=root`, but root captures
-  nothing itself: it `sudo -u <user> -- env …`s a `rustdesk --server` into each
-  graphical session on the seat, injecting that session's `WAYLAND_DISPLAY`,
-  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`. At boot the journal shows
-  **three** spawns within seven seconds of the unit starting — one as `me` with
-  only `DISPLAY=:1025` + `~/.Xauthority` and no Wayland socket, one as
-  **`gdm-greeter` (uid 60578)** carrying the greeter's own `wayland-0` and
-  `/run/user/60578` — and then, 28 s later when the user logged in, one as `me`
-  on `:0` / `wayland-0`. Afterwards only the last survives (`ps` shows a single
-  `--server`).
-- **So it does not need a logged-in user; it needs a graphical session on the
-  seat, and the GDM greeter is one.** That is the whole trick, and it is what
-  makes the earlier worry wrong — the concern was that "no `me` session exists at
-  the greeter", but RustDesk does not require a `me` session, it follows whatever
-  session owns the seat and swaps as that changes. The corollary is the real
-  limit to remember: a box with **no display manager running** offers nothing to
-  attach to, so this is not a route to a headless server's console.
-- **Identity and server survive the reboot** — id still `1722388240`,
-  `[keys_confirmed] cyphy = true`, `rendezvous_server = 'cyphy.kz:21116'`.
-  `/dev/uinput` needed no udev rule precisely because the service is root.
+- **Upstream's own capability, not a community hack** — announced 2026-08-14 for
+  **x86_64 Debian/Ubuntu only**, which is exactly g15. **NOT in stable 1.4.9**;
+  it ships as a separate preview build, installed here as
+  `rustdesk-unattended-wayland` 1.5.0 (.deb from the `nightly` tag). Trust
+  `rustdesk.com/blog/unattended-remote-access-wayland` over third-party
+  writeups — both found were partly wrong, and the DRM/KMS capture backend
+  (discussion #15417) is a PROPOSAL, not a release.
+- **The mechanism, proven across a reboot on this box.** The packaged unit is
+  `User=root`, but root captures nothing itself: it `sudo -u <user>`s a
+  `rustdesk --server` into each graphical session on the seat, injecting that
+  session's `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`.
+  At boot one of the spawns is **`gdm-greeter` (uid 60578)** carrying the
+  greeter's own `wayland-0`. **So it does not need a logged-in user; it needs a
+  graphical session on the seat, and the GDM greeter is one** — and GDM
+  auto-login is OFF here (every `AutomaticLogin*` key in `/etc/gdm3/custom.conf`
+  still commented out), so the login-screen pass was a real one. The corollary
+  is the limit: a box with **no display manager running** offers nothing to
+  attach to, so this is no route to a headless server's console.
+- **Deliberately NOT a `tier_rustdesk`, and the reason is the tag.** The
+  `releases/download/nightly/...` URL is stable but its BYTES are replaced in
+  place; combine that with the `tier_gortex` precedent of untarring the pin
+  unconditionally and any provision run for any reason silently swaps the box's
+  remote-access daemon. Pinning the per-asset `digest` only trades silent drift
+  for break-on-every-upstream-rebuild. **Revisit when it lands in a stable
+  release, not before.**
 - **Both configs must be seeded, and `systemctl is-active` proves nothing.** The
   service reads `/root/.config/rustdesk/RustDesk2.toml`, the tray reads the
   user's; seeding one leaves the other on the public `rs-ny.rustdesk.com`. The
   actual proof the options took effect is that RustDesk **rewrites its own
   top-level `rendezvous_server` to `cyphy.kz:21116`** on restart. Seeding is
-  `hosts/g15/ubuntu/rustdesk-seed.sh` — a merge, never a clobber, because
-  RustDesk owns those files at runtime.
-- **The server's public key had not rotated** in the year since the NixOS tag —
-  verified against the live `hbbs` container's `data/id_ed25519.pub` on hub.
-  Both `rustdesk-hbbs-1` and `rustdesk-hbbr-1` are up; 21115/21116/21117 answer
-  from the LAN. Check the live container rather than trusting the tag next time.
+  `hosts/g15/ubuntu/rustdesk-seed.sh` — a merge, never a clobber. The unattended
+  password is set in the tray, never by script: it lives in `RustDesk.toml` as an
+  encrypted per-install secret, which is why the seed script never touches that
+  file.
+- Live state: id **`1722388240`** against our own `cyphy.kz` hbbs
+  (`[keys_confirmed] cyphy = true`). **`/dev/uinput` needed no udev rule
+  precisely because the service is root.** Peer map in
+  `docs/2026-08-01-nixos-harvest.md` §2). The server's public key had not rotated
+  since the NixOS tag — checked against the live `hbbs` container's
+  `data/id_ed25519.pub` on hub, not against the tag.
+  **Direct IP access is OFF, and that is the default, not a regression:** nothing
+  listens on 21118, so a connect to `100.64.0.10` reaches nothing and it is not a
+  tailnet fault. Connect by ID.
 - **The rejected alternative, so it is not re-derived:** `gnome-remote-desktop`
   50.2 is ALREADY installed on g15, ships a `gnome-remote-desktop-headless.service`
-  and `grdctl` sets credentials non-interactively — Wayland-native unattended RDP
-  with no rendezvous server at all, and g15 is direct P2P at 3 ms. Rejected only
-  because RustDesk is one tool across Windows/macOS/Linux/Android. It stays the
-  fallback if the preview build regresses.
-- **Unattended password: SET 2026-09-10.** Done in the tray, not by a script —
-  it lives in `RustDesk.toml` as an encrypted per-install secret, which is why
-  `rustdesk-seed.sh` deliberately never touches that file.
-- **Direct IP access is OFF, and that is the default, not a regression.** Neither
-  config carries `direct-server`, so nothing listens on 21118 and a connect to
-  `100.64.0.10` reaches nothing — the failure looks like a tailnet problem and is
-  not one (`ss -tlnp` shows no RustDesk listener at all). Connect by **ID
-  `1722388240`** through our own hbbs, which needs no config change; enabling
-  direct IP means the tray toggle plus the same key in root's copy, and sudo here
-  has no NOPASSWD.
-- **Nothing is open on the client any more** (2026-09-10): installed, seeded at
-  our own hbbs, password set, and unattended access verified across a reboot
-  including from the login screen — a meaningful pass rather than a trivial one,
-  because **GDM auto-login is OFF here** (every `AutomaticLogin*` key in
-  `/etc/gdm3/custom.conf` is still commented out), so no pre-existing `me`
-  session was sitting there for the root service to borrow. What remains is not about this box — it is
-  whether the preview build ever reaches a stable release, which is the only
-  thing that unblocks a `tier_rustdesk`.
+  and `grdctl` sets
+  credentials non-interactively — Wayland-native unattended RDP with no
+  rendezvous server at all. Rejected only because RustDesk is one tool across
+  Windows/macOS/Linux/Android; it stays the fallback if the preview regresses.
 
 ## Доки роняет розетка, а не USB — и это два разных отказа (измерено 2026-09-10)
 
@@ -3357,60 +3200,36 @@ sudo на g15. Копии на `/mnt/spare320` не тронуты — снос�
 - **Комната была не той осью.** `/mnt/wd8` с 6.4 T свободного выглядел
   очевидным приёмником для 663 GiB архива, и это худший выбор из доступных:
   wd8 и источник `immich-2024` — два отсека ОДНОГО дока Ugreen (`usb4/4-2`),
-  один общий линк 5 Гбит, на том самом доке, что залогировал 24 reset'а за
-  сутки под нагрузкой. HGST на `4-1` имеет свой линк. Контроллер один (10 Гбит)
-  и он никогда не был ограничением. **Мерить топологию (`udevadm info -q path
-  -n sdX`) до выбора отсека, а не размер.**
+  один общий линк 5 Гбит; HGST на `4-1` имеет свой линк. Контроллер один
+  (10 Гбит) и он никогда не был ограничением. **Мерить топологию (`udevadm info
+  -q path -n sdX`) до выбора отсека, а не размер.** Довод «на 4-2 24 reset'а за
+  сутки» в этом выборе НЕ участвует: тот шторм кончился 17.08 — см. раздел про
+  доки.
 - Живая расстановка на 2026-09-10: `u4-1:0` spare320, `u4-1:1` HGST
   (`/mnt/immich-2024-backup`), `u4-2:0` wd8, `u4-2:1` immich-2024,
   `u3-2.4:0` immich-mirror в стопгап-корпусе NS1066.
 - **HGST освобождён под архив, потому что копия servarr была ДОКАЗАННО
   избыточна**, а не потому что «прошло достаточно дней»: verify PASS на живом
-  стеке (2075 файлов, 2041 инод, 736 552 035 464 реальных байт,
-  878 588 770 911 apparent, группы хардлинков связывают ровно те же файлы) плюс
-  qBittorrent уже перепроверил все раздачи хешами против wd8. Выдержка по
-  календарю стоила дороже, чем давала: невосстановимые фото лежали в одной
-  копии, пока единственный подходящий отсек держала избыточная копия
-  скачиваемой медиатеки.
+  стеке (цифры — в разделе про ServarrMedia) плюс qBittorrent уже перепроверил
+  все раздачи хешами против wd8. Выдержка по календарю стоила дороже, чем
+  давала: невосстановимые фото лежали в одной копии, пока единственный
+  подходящий отсек держала избыточная копия скачиваемой медиатеки.
 - Приёмник стал ext4 вместо exfat, и это сняло весь набор уступок:
   `-aHAX` вместо `-rlt --no-perms --no-owner --no-group --modify-window=1`.
   Восстановление больше не требует `chown`.
-- **`ConditionPathIsMountPoint` на ПРИЁМНИКЕ — тот же класс тихого успеха, что
-  гонка bind'ов у Docker.** Провалившаяся Condition не роняет юнит, она его
-  ПРОПУСКАЕТ и пишет `Result=success`. `archive-mirror.service` нёс её на оба
-  конца; убраны обе, потому что скрипт и так проверяет концы по UUID (строго
-  сильнее: mountpoint не отличит чужую ФС) и падает с FATAL. В тот же день
-  `/mnt/immich-mirror` простоял отмонтированным при живом диске, а
-  `mirror-refresh.timer` рапортовал успех — **у mirror-refresh.service эта
-  Condition всё ещё стоит.**
-- **`install-docker-ordering.sh` умел вводить точку в набор охраны и не умел
-  выводить.** Удаление пути из `MOUNTS` оставляло его каталог `chattr +i`
-  навсегда и молча, а единственный документированный откат (`-off`) заодно
-  срывает DNS-пин и рестартует dockerd — то есть роняет immich и postgres ради
-  разморозки одного каталога. Теперь `add` снимает `+i` с любого каталога
-  `/mnt/*`, которого в наборе нет: вывод точки — то же одно действие, что ввод.
-- **`rollback` в migrate-servarr-wd8.sh теперь отказывается, если источник
+- **`rollback` в `migrate-servarr-wd8.sh` теперь отказывается, если источник
   пуст.** Старое тело направило бы `DATA_ROOT` на путь, который уже не точка
   монтирования; docker создаёт отсутствующий bind-источник, стек поднялся бы на
-  пустом каталоге на `/`, и базы *arr свели бы библиотеку к нулю. Откат,
-  рапортующий успех, уничтожая то, что должен вернуть. Проверка — «есть ли
-  файлы», а не флаг: маркер пришлось бы обновлять тому, кто удалял источник, а
-  именно этот класс забывчивости здесь и ломается.
+  пустом каталоге на `/`, и базы *arr свели бы библиотеку к нулю. Проверка —
+  «есть ли файлы», а не флаг: маркер пришлось бы обновлять тому, кто удалял
+  источник, а именно этот класс забывчивости здесь и ломается.
 - **`du -sb` НЕ считает `st_size` каталогов** — измерено на GNU coreutils 9.7
-  (latitude) и uutils 0.8.0 (desktop-wsl): дерево из одного файла в 1000 байт в
-  двух вложенных каталогах, чьи собственные `st_size` дают 180, показывает
-  `du -sb` = 1000. Я утверждал обратное — что гейт `archive-mirror.sh` на
-  равенстве `du -sb` напечатал бы ложный `INCOMPLETE`, — и это было неверно
-  дважды: механизм не тот, а «доказательством» служило сравнение
-  недокопированного дерева (1634 каталога) с полным (2156). Каталог, в который
-  ещё пишут, не достиг конечного размера. Готовая копия дала каталоги
-  байт-в-байт те же с обеих сторон: 9 011 200 на 2156 каталогов. Старый гейт
-  прошёл бы. **Механизм, который собираешься написать в сообщении коммита, —
-  это ровно тот момент, когда его надо померить**; репозиторий это уже говорит
-  про себя, и я на этом попался.
-- Гейт оставлен в форме «файлы + сумма их размеров»: он не хуже и явно называет
-  то, что меряет, — но ценность того коммита в другом, в асимметрии sudo и в
-  проверке предпосылки про хардлинки.
+  (latitude) и uutils 0.8.0 (desktop-wsl). Я утверждал обратное — что гейт
+  `archive-mirror.sh` на равенстве `du -sb` напечатал бы ложный `INCOMPLETE`, —
+  и это было неверно дважды: механизм не тот, а «доказательством» служило
+  сравнение недокопированного дерева с полным (каталог, в который ещё пишут, не
+  достиг конечного размера). **Механизм, который собираешься написать в
+  сообщении коммита, — это ровно тот момент, когда его надо померить.**
 - **Оси групп хардлинков в этом гейте нет НА ПРОВЕРЕННОЙ предпосылке** — в
   дереве 0 файлов с `nlink>1` (2026-09-10 и обзор 2026-08-01). Скрипт теперь эту
   предпосылку проверяет и кричит, если она перестанет держаться; тогда нужна
@@ -3423,119 +3242,61 @@ sudo на g15. Копии на `/mnt/spare320` не тронуты — снос�
 - **Нельзя править файл скрипта, пока его юнит работает**: bash дочитывает
   скрипт с диска по ходу, а `git pull` может усечь тот же инод. Правильно —
   остановить юнит (rsync возобновляемый, `--partial-dir` держит недокачанный
-  файл), подтянуть, запустить снова. Остановка на 187 GiB из 663 обошлась в
-  минуту пересканирования.
+  файл), подтянуть, запустить снова.
 - Метка ext4 обрезается до **16 байт** без ошибки, только с
   `Warning: label too long` — `immich-2024-backup` стал `immich-2024-back`.
   Живёт как `immich-2024-bak`.
 - **`just` на desktop-wsl нет, и ручной прогон сюит требует `</dev/null`** —
-  мой цикл без него проглотил 19 из 52 (тест, читающий stdin, выедает остаток
+  без него цикл проглатывает часть сюит (тест, читающий stdin, выедает остаток
   подстановки процесса). Это НЕ дефект гейта: рецепт `test` уже делает
-  `bash "$t" < /dev/null`, и рядом стоит комментарий с той же меркой от
-  2026-09-07 («49 сюит на диске, 32 реально прогнано»). Ловушку репозиторий уже
-  знал; переоткрыл её я. Прочих отличий у рецепта нет — никаких `export`, так
-  что ручной цикл с редиректом равен гейту.
+  `bash "$t" < /dev/null`. Ловушку репозиторий уже знал; переоткрыл её я.
 
-## Гейт `findmnt --verify` был выключателем самой защиты (2026-09-10)
+## Гейт, который рапортует успех, ничего не сделав — общая форма (2026-09-10)
 
-- **`install-docker-ordering.sh` отказывался ставить свой кандидат fstab, если
-  `findmnt --verify` жаловался хоть на что-нибудь во ВСЁМ `/etc/fstab`.** А
-  жалуется он обычно на записи, которых скрипт не касается: отсутствующий
-  съёмный диск — это `[E] unreachable on boot required source`. Итог: **одна
-  устаревшая строка выключала защиту от гонки bind'ов Docker для всех остальных
-  монтирований**, и строку `/mnt/xs` пришлось закомментировать именно поэтому
-  (её собственный комментарий в fstab это и признавал). Гейт теперь сравнивает
-  кандидата с текущим файлом и отказывает только на том, что добавила его
-  правка; про уже существующие ошибки печатает note и продолжает.
-- **`findmnt --verify` из util-linux 2.41 СЕГФОЛТИТСЯ (rc 139) на любой записи
-  fstab короче трёх полей** — печатает `parse error at line N -- ignored` и
-  умирает; три поля обрабатываются нормально (rc 1). Поэтому `rc >= 2` остался
-  безусловным отказом: упавший процесс не выдаёт ни строки об ошибках, и
-  дифф-гейт сам по себе увидел бы «новых ошибок нет» и поставил бы ровно тот
-  файл, который его убил.
-- **У этого скрипта не было ни одного теста** — при том что он стоит между
-  Docker и автосозданием bind-источника на корне (два инцидента: servarr
-  03.08.2026, immich-2024 03.09.2026). Появился
-  `provision/tests/docker-ordering.test.sh`, 28 кейсов. Чтобы файл стал
-  сорсабельным, блок запуска ушёл в `main()` за `[ "${BASH_SOURCE[0]}" = "$0" ]`:
-  у `disk-acceptance.sh` тот же приём работает потому, что его `main` без
-  аргументов отказывается, а здесь дефолт без аргументов — сухой прогон, который
-  читает fstab, зовёт findmnt и бинд-монтирует `/`.
-- Сегфолт в тесте **подменён функцией-заглушкой**, а не воспроизведён: иначе
-  кейс отвалится на util-linux, где багу починят.
-- `fstab_patch` **переписывает строку в выровненные колонки**, поэтому `remove`
-  обратен `add` по полям, но не по байтам — и наивный diff `/etc/fstab` после
-  прогона показывает изменённой каждую охраняемую строку.
-- Мутационная проверка сюиты: снятие `rc>=2` — 4 падения, возврат гейта на весь
-  файл — 4, retirement-скан без пропуска членов набора — 2.
-- **Апостроф внутри `ssh box '…'` разрывает команду.** Питон-правку с
-  `connector's` в комментарии съело на середине, `assert` ушёл в bash. Скрипт
-  правок — через stdin: `ssh box 'sudo python3 -' < file.py`.
+Пять отказов одного класса за один день на latitude. Механизмы и итоговые
+правила лежат в `AGENTS.md` (*Key patterns*: `Condition*`/`Result=success`,
+гейт `findmnt --verify`, конвенция кодов 75/78, `.Mounts` вместо
+`.HostConfig.Binds`) — он грузится каждой сессией, здесь только то, чего там
+нет.
 
-## `Condition*` = «пропустить и отчитаться успехом», и это скрыло 90 минут (2026-09-10)
-
-- **Проваленное `ConditionPathIsMountPoint` не роняет юнит — оно его
-  ПРОПУСКАЕТ, и systemd пишет `Result=success`.** У `mirror-refresh.service`
-  условие стояло на обеих точках, «чтобы чисто пропускать, когда док
-  отключён». 10.09 в 16:30 `/mnt/immich-mirror` отвалился от шины — таймер
-  90 минут рапортовал успех, зеркало не писалось, нашлось глазами, не алертом.
-  **На приёмнике бэкапа условию не место вообще**: «цели нет» — это и есть
-  алерт. Оба зеркальных юнита теперь без `Condition*`.
+- **Форма, по которой их узнавать:** защита, чей отказ неотличим от «работы не
+  было». Проваленная `Condition*` → `Result=success`; гейт `findmnt --verify`,
+  выключавший сам себя из-за чужой строки в fstab; `rollback`, направляющий
+  `DATA_ROOT` на путь, который уже не точка монтирования (docker создаст пустой
+  bind-источник, и откат уничтожит то, что должен вернуть); `run-before` в
+  restic-профилях, проверяющий наличие объекта `config`, а не ПОЛНОТУ
+  репозитория; просто остановленный таймер, который в `systemctl --failed`
+  чист. Спрашивать надо «как выглядит этот гейт, когда он не сработал», а не
+  «что он проверяет».
 - **Обоснование в комментарии было ещё и фактически ложным.** `/mnt/immich` —
   это `/dev/nvme0n1p1`, второй ВНУТРЕННИЙ NVMe, никакого дока; «источник
   отключили» там не бывает в принципе. Комментарий пережил переезд ФС,
   на которой был написан.
-- **`findmnt -no SOURCE` доказывает только «что-то смонтировано».** Заменено на
-  проверку по UUID, как в `archive-mirror.sh`. Это не косметика:
-  `/mnt/immich-mirror` намеренно НЕ входит в `MOUNTS` (его никто не биндит в
-  docker), значит каталог не `chattr +i`, и между отсутствующим приёмником и
-  полутерабайтом, записанным в корень, стоит только этот гейт.
-- **Отсутствующее монтирование перемонтируем один раз, неверное — не трогаем.**
-  `nofail` действует только на загрузке, после дропа шины нужен явный `mount` —
-  ровно его отсутствие и стоило тех 90 минут. Но `mirror-refresh.sh`, в отличие
-  от `archive-mirror.sh`, **не делает `umount`**: `/mnt/immich` биндит docker, и
-  размонтировать живой бинд ради «починки» несовпадения хуже, чем отказаться.
-- **Два разных отказа не должны делить один код возврата.** `flock -n` при
-  занятом локе отдаёт **1** (проверено), и оба скрипта отдавали 1 на «не то
-  монтирование» — рядовая коллизия и пропавший диск бэкапа неразличимы в
-  `ExecMainStatus`. Конвенция на общем `/var/lock/latitude-mirror.lock`:
-  **75 = лок занят** (`flock -E 75`), **78 = монтирование не то**, остальное —
-  rsync'а. Числа связаны, меняются только парой.
-- Появилась `provision/tests/latitude-timer-units.test.sh` — текстовые
-  утверждения по .service и скриптам (поведение systemd и root'а тестом без
-  root не исполнить, но форму дефекта зафиксировать можно; обе формы уже
-  однажды прошли ревью). Мутации: 7 из 7 ловятся. Гейт: 54 сюиты, 0 падений.
-- Грабли самого теста: оба файла **описывают** в комментариях тот
-  `findmnt -no SOURCE`, который заменили, — утверждение «этой строки нет»
-  сначала запретило объяснять, зачем меняли. Комментарии режутся `sed` перед
-  проверкой. И `archive-mirror.sh` держит два присваивания в одной строке, так
-  что якорь `^…UUID=` на регистр не сработал.
-
-- **`.HostConfig.Binds` не показывает бинды immich — и именно этим ключом в
-  репозитории было записано, как пересобирать `MOUNTS`.** У `immich_server`
-  compose пишет тома в длинном синтаксисе, docker кладёт их только в `.Mounts`:
-  `docker inspect -f '{{json .HostConfig.Binds}}' immich_server` → **`null`**,
-  при 22 бинд-записях в `.Mounts`, из них 19 — погодовые каталоги под
-  `/mnt/immich-2024` (измерено 10.09.2026). То есть рецепт, записанный рядом с
-  массивом и в AGENTS.md, выполненный буквально, **не нашёл бы тот самый
-  монтпоинт, чьё отсутствие в массиве и вызвало инцидент 03.09.2026** (пять
-  дней ENOENT на фото 2007–2024). Список был верен, инструкция по его
-  восстановлению — нет; это опаснее, чем неверный список. Рабочая форма:
-  `docker inspect -f '{{range .Mounts}}{{.Type}} {{.Source}}{{println}}{{end}}'`
-  с фильтром по `bind`.
-- **Монтпоинт, в который биндится контейнер, не размонтируем никогда.**
-  `archive-mirror.sh` в `remount()` делал `umount` перед `mount` для ОБОИХ
-  концов — а источник `/mnt/immich-2024` как раз бинды и несёт. `umount`
-  связанного дерева обычно падает с EBUSY, но «обычно падает» — не гейт.
-  Теперь `remount` берёт третьим аргументом `yes|no`: приёмник (`no` биндов,
-  проверено) можно, источник — нет, там сразу FATAL 78. Я сам написал это
-  правило в `mirror-refresh.sh` и AGENTS.md и в том же коммите оставил соседний
-  скрипт его нарушающим; поймано на ревью, не тестом.
 - **Остаточный риск, названный явно:** самолечение приёмника даёт
   `Result=success`. Диск, отваливающийся каждую ночь, теперь перемонтируется и
   копируется — из «невидимо и сломано» стало «невидимо и работает». Единственный
-  след — строка `WARN … remounting once` в журнале. Настоящее лечение — перенос
-  зеркала в бэй Ugreen, когда освободится `spare320`.
+  след — строка `WARN … remounting once` в журнале. Настоящее лечение — увести
+  зеркало с этого порта (см. раздел про 480 Мбит).
+- **У `install-docker-ordering.sh` не было ни одного теста** — при том что он
+  стоит между Docker и автосозданием bind-источника на корне (два инцидента:
+  servarr 03.08.2026, immich-2024 03.09.2026). Чтобы файл стал сорсабельным,
+  блок запуска ушёл в `main()` за `[ "${BASH_SOURCE[0]}" = "$0" ]`.
+- Сегфолт `findmnt --verify` в тесте **подменён функцией-заглушкой**, а не
+  воспроизведён: иначе кейс отвалится на util-linux, где багу починят.
+- `fstab_patch` **переписывает строку в выровненные колонки**, поэтому `remove`
+  обратен `add` по полям, но не по байтам — и наивный diff `/etc/fstab` после
+  прогона показывает изменённой каждую охраняемую строку.
+- Грабли тестов на юниты: оба зеркальных скрипта **описывают** в комментариях
+  тот `findmnt -no SOURCE`, который заменили, — утверждение «этой строки нет»
+  сначала запретило объяснять, зачем меняли; комментарии режутся `sed` перед
+  проверкой. И `archive-mirror.sh` держит два присваивания в одной строке, так
+  что якорь `^…UUID=` на регистр не сработал.
+- Мутации: `docker-ordering.test.sh` — снятие `rc>=2` 4 падения, возврат гейта
+  на весь файл 4, retirement-скан без пропуска членов набора 2;
+  `latitude-timer-units.test.sh` — 7 из 7.
+- **Апостроф внутри `ssh box '…'` разрывает команду.** Питон-правку с
+  `connector's` в комментарии съело на середине, `assert` ушёл в bash. Скрипт
+  правок — через stdin: `ssh box 'sudo python3 -' < file.py`.
 
 ## Зеркало сидит на 480 Мбит из-за ОДНОГО порта хаба, а не из-за коробки (2026-09-10)
 
