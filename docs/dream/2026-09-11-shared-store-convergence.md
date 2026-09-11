@@ -81,8 +81,13 @@ conflicted there. Resolved by keeping both, then verified against an independent
   own branch had moved; `sync_push` would be rejected non-fast-forward and report
   "push failed (offline or auth) — retrying next tick" **forever, silently**. Step 1 is an
   at-that-box action or no action at all.
-- **The other four boxes converge on their own next sync tick** — they need no promote,
-  only the merge their timer already does. Re-run the check below to confirm.
+- **`g15`, `hub` and `latitude` converge on their own next sync tick** — no promote needed,
+  only the merge their timer already does, and the check below observes it via
+  `origin/<branch>`. `g15` is already there.
+- **`desktop-wsl` cannot be observed from here**, and it contributed the largest share of
+  what was promoted. It refuses SSH on 22 (answers on 2222) and is `dispatch:parent`, so
+  its convergence needs a check at that keyboard or through its Windows parent. Do not
+  read its absence from the drift list as proof — read it as unobserved.
 
 ```bash
 G="git --git-dir=$HOME/.dotfiles --work-tree=$HOME"
@@ -110,9 +115,24 @@ Work the 103-item queue (`queue.md`) with `/dream-apply` **after** the boxes con
 record the owner's decision above into `global.md` as part of it.
 
 **Any queue item carrying a verbatim complete replacement for `core.md`, `global.md`,
-`practices.md`, `tone.md` or `values.md` was authored against the pre-convergence file and
-is now stale.** `core.md` grew 3004 → 3385 B, `practices.md` +161 lines, `global.md` +19.
-Re-derive those replacements at apply time; do not paste them.
+`practices.md`, `tone.md`, `values.md` or `.claude/CLAUDE.md` was authored against the
+pre-convergence file and is now stale.** `core.md` grew 3004 → 3385 B, `practices.md`
++161 lines, `global.md` +19, `.claude/CLAUDE.md` +6 (the "a harness-level instruction wins
+for shell reads" paragraph — items `68f42627` and `0a184245` are filed against that file,
+and the run report's replacement text for `68f42627` predates it). Re-derive those
+replacements at apply time; do not paste them.
+
+### `core.md` is now 3385 B against a ~2 KB budget — check this at the next session start
+
+The budget in `~/.claude/CLAUDE.md` is a mechanism, not tidiness: `global-memory-load.sh`
+injects `core.md` verbatim, and Claude Code **persists a hook's stdout past ~3.5 KB and
+injects only a preview** — the failure that once turned a 142 KB `cat` into a 2 KB stub.
+The hook itself is fine (it emits all 3385 B, verified by grepping its output for
+`core.md`'s last line), but 3385 B is inside 200 bytes of the documented cliff and this
+session only ever observed the 3004 B version arriving intact. **At the next SessionStart,
+confirm the injected core block ends with the `tone.md holds the rest` bullet.** If it is
+truncated, every session on every box is loading a stub — shrinking `core.md` is then the
+first queue item to work, ahead of everything else.
 
 ## Also settled this session
 
