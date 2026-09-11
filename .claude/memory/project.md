@@ -461,11 +461,14 @@ global + per-host). One bullet per fact under a topical heading.
   non-socket subcommands work without sudo. This is why `tailscale-wsl.sh
   --enroll` mints via `sudo headscale preauthkeys create`.
 - Tailnet CGNAT range `100.64.0.0/10` (disjoint from AWG `10.0.0.0/24`; they
-  coexist on the same boxes). Nodes (live 2026-08-01): hub `100.64.0.1`,
-  latitude `.2`, server `.3`, desktop `.4`, ipheoryt `.5`, desktop-wsl `.6`,
-  air `.7` — read Headscale (`sudo headscale nodes list`), never infer the next
-  address from `fleet.json`. base_domain `gg.ez` (MagicDNS; renamed from
-  `fleet.mesh`).
+  coexist on the same boxes). Fleet members per `fleet.json` (2026-09-11): hub
+  `100.64.0.1`, desktop `.4`, air `.7`, latitude `.8`, g15 `.10`. Non-members
+  that are still real nodes: an iPhone, desktop-wsl `.6`, and the dead
+  `g15-retired` `.3` / `g15-wsl` `.9`. **Read Headscale
+  (`sudo headscale nodes list`), never infer an address from `fleet.json`** —
+  the list recorded here as "live 2026-08-01" (latitude `.2`, `server` `.3`) was
+  wrong on every Linux member by 2026-09-11. base_domain `gg.ez` (MagicDNS;
+  renamed from `fleet.mesh`).
 - Probe PASSED 2026-07-13 (spec/plan/results under machines
   `docs/superpowers/`): SSH + RustDesk over the tailnet work, and DERP fallback
   through our own relay is reliable. **Its other finding — "the fleet spans two
@@ -1532,72 +1535,47 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   pending removal. (The `agents/hosts/g614jv.md` this item referenced no longer
   exists either — per-host memory moved to `~/.claude/host-memory.md` 2026-07-28.)
 
-- **Per-box stale git-hook cleanup after the pre-commit removal (2026-07-18).**
-  Commit `2af7c5b` removed the git-hooks.nix pre-commit mechanism from `flake.nix`
-  + the committed `.envrc` (whose sole job was the persistent nix-direnv `.direnv/`
-  GC root keeping the hook's `/nix/store` closure alive against the weekly GC). The
-  installed `.git/hooks/pre-commit` AND `.git/hooks/pre-push` are UNTRACKED, so
-  their removal can't ride the commit. On any box that ran `nix develop`/direnv
-  against a machines clone, run once: `rm -f .git/hooks/pre-commit
-  .git/hooks/pre-push`. Otherwise once `.envrc` is gone the `.direnv/` root drops
-  on next `cd` → the next weekly `nix-collect-garbage` reaps the pinned tooling →
-  the stale hook fails to exec and **aborts every commit/push** on that box.
-  SCOPE CORRECTION: the hook only ever existed where `nix develop` ran — i.e. a
-  nix dev box, which in this fleet was only latitude5520. That box was cleaned, then
-  reinstalled as Debian, and the whole Nix tree was deleted 2026-08-01 — so this item
-  is CLOSED and cannot recur. `just fmt` / `just check` / `just shell` no longer
-  exist either; there is no Nix lint gate to restore. Shell linting is unenforced:
-  if that ever matters, `shellcheck` in `just test` is the shape to add.
+- **Pre-commit git hooks: CLOSED, cannot recur.** The `git-hooks.nix` mechanism
+  (`2af7c5b`) and the whole Nix tree are gone, and the only box that ever ran
+  `nix develop` was reinstalled. `just fmt` / `just check` / `just shell` no
+  longer exist; shell linting is unenforced — if that ever matters, `shellcheck`
+  in `just test` is the shape to add.
 
-- **VPS base-machine reproducibility (idea, NOT started — 2026-07-11).** Goal:
-  bring a fresh cloud VM back to the VPS baseline reproducibly. Blocked because
-  the provisioner's `base`, `ssh-server`, `backup-client` roles are UNIMPLEMENTED
-  — no executor files exist (only agents/dotfiles/mesh-hub/mesh-member/repos do).
-  So running `provision.sh --apply` on the VPS today does NOT provision the base:
-  base/ssh-server/backup-client print "not yet implemented (skipped)"; only
-  agents/dotfiles would actually run (mutating the live debian user's config —
-  don't). Scope when built: base machine only — services stay the `vps` repo's
-  `setup-*.sh` (awg server, caddy, rustdesk), secrets/data via restic + (unbuilt)
-  age/agenix. Open: distro (Debian vs Ubuntu 24.04 LTS — both apt-family, so the
-  `base` role can be written family-generic; low-stakes, deferrable).
+- **VPS base-machine reproducibility (idea, NOT started — 2026-07-11).** Bring a
+  fresh cloud VM back to the VPS baseline reproducibly. Still blocked on the
+  unimplemented `base` and `ssh-server` roles (roadmap P3) — `backup-client` got
+  its executor 2026-09-01, and the `mesh-hub`/`mesh-member` roles this item used
+  to name no longer exist. Scope when built: base machine only; services stay the
+  `vps` repo's `setup-*.sh` (awg server, caddy, rustdesk), secrets/data via
+  restic + (unbuilt) age/agenix. Open: Debian vs Ubuntu LTS — both apt-family, so
+  `base` can be written family-generic; deferrable.
 
 ## Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)
 
-Plan: `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`.
-Work branch: `worktree-fleet-migration-mac-primary`.
+Plan: `docs/superpowers/plans/2026-07-27-fleet-migration-mac-primary-latitude-server.md`
+(the `worktree-fleet-migration-mac-primary` work branch is gone). Settled: the
+Kingston NVMe went into a **Thunderbolt enclosure** — latitude has TB4
+(`00:0d.0` USB controller + `00:0d.2` NHI, Tiger Lake; `bolt` enabled) and no
+free M.2 2280 socket.
 
-- **Kingston NVMe attach method: THUNDERBOLT ENCLOSURE** — decided 2026-07-27
-  from `dmidecode -t slot` + `lspci -t` on latitude. No free M.2 2280 socket.
-- **`dmidecode -t slot` is NOT a reliable M.2 inventory on the Latitude 5520.**
-  It reports three PCIe slots and none of them is the NVMe: the live KIOXIA sits
-  at `00:1d.0` (bus 72) and appears in NO slot entry at all. What the three
-  entries really are: "PCI-Express 0 / x16 / In Use" = `00:1c.0` → bus 71 →
-  Realtek **card reader** (not x16, not the SSD); "PCI-Express 2 / x1 / In Use" =
-  `00:14.3` → **Wi-Fi AX201**; "PCI-Express 1 / x1 / Available" = `00:1c.5`, an
-  **empty x1 root port** = the WWAN slot. Always cross-check with
-  `lspci -t -v` — a slot's `Bus Address` maps it to the real device.
-  Corollary: absence from the slot table proves nothing, since the occupied SSD
-  socket is absent too. The decisive evidence is lane width — a second NVMe
-  needs its own root port and the only free one is x1, which Dell never wires
-  for an SSD.
-- **latitude has Thunderbolt 4** (`00:0d.0` USB controller + `00:0d.2` NHI,
-  Tiger Lake) and `bolt` is already enabled — so TB3/TB4 enclosure (~2.5-3 GB/s)
-  over USB 3.2 Gen2 (~1 GB/s) for the live Immich upload tier the DB reads
-  against. `00:07.0`/`00:07.1` with their large empty bus ranges are the TB PCIe
-  tunnels, not M.2 sockets.
-- **`dmidecode` is not installed on NixOS.** Run it as
-  `nix build --no-link --print-out-paths nixpkgs#dmidecode` then
-  `sudo <path>/bin/dmidecode …` — `sudo nix shell …` fails because sudo resets
-  PATH.
-- **2 TB staging drive:** *deferred* — decided 2026-07-27 not to decide yet. If
-  ultimately skipped, Task 12 uses the G→H shuffle fallback and there is no
-  off-site copy of the live upload tier until Task 19. Recorded so the residual
-  gap does not quietly become permanent.
-- **`air` tailnet address is `100.64.0.7`, not `.5`.** Live `headscale nodes
-  list` (2026-07-27): hub .1, latitude .2, server .3, desktop .4, **ipheoryt12
-  .5**, **desktop-ubuntu26 .6** (that node is `desktop-wsl` since 2026-08-01). The iPhone and the WSL host are real tailnet
-  nodes that never appear in `fleet.json` — always read Headscale, never infer
-  the next free address from the manifest.
+- **A DMI slot table omits the occupied socket, so absence proves nothing.** On
+  the Latitude 5520 `dmidecode -t slot` reports three PCIe slots and the live
+  KIOXIA (`00:1d.0`) is in none of them; the three are the Realtek card reader
+  (`00:1c.0`, billed as x16), the Wi-Fi AX201 (`00:14.3`) and an empty **x1**
+  WWAN port (`00:1c.5`). Cross-check every entry's `Bus Address` against
+  `lspci -t -v`, and decide on lane width — an SSD needs its own root port, and
+  an x1 one is never wired for one.
+- **The live photo tier still has no off-site copy, by decision.** The 2 TB
+  staging drive was deferred 2026-07-27 and never bought;
+  `backup/latitude/profiles.yaml`'s header now records the standing choice — the
+  libraries are protected by whole-filesystem rsync mirrors on the same box, not
+  by restic.
+- **Never infer a tailnet address from `fleet.json` — read Headscale.** The
+  manifest holds only fleet members (today latitude `.8`, air `.7`, desktop `.4`,
+  g15 `.10`, hub `.1`), while an iPhone and every self-declared WSL host are real
+  nodes that never appear in it. Addresses also move with a rename: the old
+  `server .3` node is `g15-retired` and g15 is `.10`. The 2026-07-27 list once
+  recorded here (latitude .2, server .3) is wrong on every Linux member now.
 - ~~**Per-host memory path is `agents/hosts/<detect.hostname>.md`**~~ —
   **removed 2026-07-28** along with the `tiers.test.sh` stub guard. bootstrap no
   longer seeds anything into the repo, so a new host cannot dirty the tree and
@@ -1615,23 +1593,19 @@ Work branch: `worktree-fleet-migration-mac-primary`.
   **returns 0** — an unlisted platform provisions nothing and reports success.
   `provision/tests/roles.test.sh` guards that. `fleet-dispatch.sh` already routes
   everything non-`windows` to plain ssh, so new POSIX platforms work there free.
-- **No `role_services` exists** (only `agents`, `dotfiles`, `repos`). Declaring an
-  unimplemented role in `fleet.json` is safe — `provision.sh:72-78` prints
-  "not yet implemented (skipped)" and continues.
-- **[HISTORY — the unit is DELETED, see `9b8d63c`; kept for the passphrase-key
-  lesson, which still binds]** latitude's `nix-repo-auto-pull` had been failing
-  silently (found 2026-07-28
-  while enrolling `air`). Every 5 min it logged `git@github.com: Permission denied
-  (publickey)` and the unit still **exits 0** — `systemctl` reports "Finished
-  successfully", so nothing surfaces outside `journalctl -u nix-repo-auto-pull`.
-  Cause: `/home/me/.ssh/id_ed25519` is **passphrase-encrypted** (`aes256-ctr` /
-  `bcrypt` in the private-key header). The key is correctly registered on GitHub
-  ("me@NixOS Latitude 5520", `…IBnl…`) and *interactive* pulls work because the
-  login shell has an ssh-agent — but a systemd service has no agent and no TTY.
-  Consequence: **latitude cannot self-heal.** It sat at `369bbf4` while the rest
-  of the fleet moved on, and no converge can fire because converge is triggered
-  by the pull. Unblock it with a manual `git -C ~/machines pull --ff-only` from a
-  shell that has the agent.
+- **A role with no executor is no longer safe to declare.** `provision.sh`
+  carries `PLANNED_ROLES` (`base ssh-server`): a declared-planned role prints
+  "no executor yet (declared)" and continues, but a role that is neither
+  implemented nor listed there prints `✗ … not declared in PLANNED_ROLES` and
+  makes `--apply` exit 1 (`provision.sh:103-117`; a dry run still exits 0).
+  Executors today: `agents`, `dotfiles`, `repos`, `backup-client`, `backup-hub`.
+- **[HISTORY — unit deleted in `9b8d63c`] A passphrase-encrypted key breaks
+  every systemd-run git pull, silently.** latitude's `nix-repo-auto-pull` logged
+  `Permission denied (publickey)` every 5 min and still exited 0, so it sat 100+
+  commits behind with `systemctl` reporting success: a service has no ssh-agent
+  and no TTY, while interactive pulls work. It could not self-heal, because
+  converge is triggered by the pull. Resolved by stripping the passphrase (see
+  the `id_ed25519` entry below). The lesson binds for any unattended puller.
 - **`provision/fleet-authorized-keys` was in neither converge predicate** (fixed
   `de07b77`). It is a real provisioning input on both tiers — `keyFiles` in
   `modules/system/ssh-server.nix:50` (nixos, baked at build time → needs a
@@ -1934,10 +1908,13 @@ for c in $(docker ps -q); do pid=$(docker inspect -f '{{.State.Pid}}' $c)
   `resticprofile-*` units meant; they were the only *loud* symptom, and they
   pointed at the wrong machine.
 - **`ConditionPathIsMountPoint=/mnt/immich-mirror` on `mirror-refresh.service`
-  did its job** — the 03:39 run logged "skipped, unmet condition check" instead
-  of rsyncing 254 G of immich into the root filesystem. Keep that condition on
-  any unit whose destination is a removable disk; it is the guard that turned a
-  disk outage into an inconvenience.
+  saved this run and was REMOVED anyway.** On 2026-08-23 the 03:39 run logged
+  "skipped, unmet condition check" instead of rsyncing 254 G of immich into the
+  root filesystem. But a skipped unit is `Result=success`, so on 2026-09-10 the
+  same mechanism reported success for 90 minutes while the destination dock was
+  gone and nothing was mirrored (`0d4444e`). Both mirror units are Condition-free
+  now and assert their mounts by UUID inside the script — **never gate a backup
+  DESTINATION on a `Condition*`.**
 - **The statusboard was right and was the only thing that noticed.** "unmounted"
   was the true state, not a display bug — do not go looking for a resolver bug
   (`f759459`, `96b3bb1`) before checking `findmnt` on the box.
