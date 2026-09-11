@@ -380,6 +380,34 @@ knowing about because they encode hardware traps the Nix versions got wrong:
   `provision/gortex-autoupdate.test.sh` (14 cases, all about what it can commit
   or push) and the single-writer assertions in `provision/tests/tiers.test.sh`.
 
+**The fleet has a SECOND single-writer job, and its siting does not follow from
+this one.** `fleet.json` now carries a root-level `"memory_publisher"` naming the
+one box that runs `memory-harvest` Phase B — the whole-corpus memory
+consolidation, which reads every machine's dotfiles branch from a single
+checkout and files one queue, so a second box filing the same queue duplicates
+every item. It is **g15**, not latitude, and picking latitude by analogy with
+`tier_gortex_autoupdate` above was the wrong inference: that is a systemd timer
+running a shell script, which a headless services host runs happily, while Phase
+B is an **agent session** needing Claude Code, a `machines` checkout and the
+dotfiles bare repo, on a box someone actually works at. Uptime was never the
+deciding axis either — latitude, desktop and g15 are all always on, and `air` is
+the only box that sleeps. So when a job must have exactly one writer, site it by
+what the job *is*, not by where the last single-writer job went.
+
+It is a **name** at the manifest root rather than a per-machine boolean, and
+that is the whole point: two flags can both be true, two names cannot, so
+"exactly one" is something the file cannot express otherwise and moving the
+publisher is editing one value. `fleet_memory_publisher()` in
+`provision/lib/fleet.sh` prints nothing when the key is absent, so the
+`[ "$(fleet_memory_publisher)" = "$(fleet_logical_name)" ]` gate every caller
+writes is false everywhere rather than accidentally true somewhere.
+`provision/tests/memory-publisher.test.sh` also fails if the name stops matching
+a real machine — a typo there means no box consolidates, and an empty queue
+reads exactly like "nothing to do". Note this is the first root-level key in
+`fleet.json` that is not a machine; anything parsing the manifest by iterating
+its top level has to skip it.
+<!-- src: machines 73a5334 | 2026-09-12 -->
+
 **Two roles have no executor at all**: `base` and `ssh-server`.
 `provision/roles/` holds `agents`, `dotfiles`, `repos` and — since 2026-09-01 —
 `backup-client` (`.sh` **and** `.ps1`) and `backup-hub`. For the remaining two

@@ -1,16 +1,14 @@
 {
   "last_refresh": {
-    "commit": "ac285c4",
-    "date": "2026-09-11",
-    "scope": "Fleet harvest: g15 (local, 14), desktop/g614jv (7), desktop-wsl (26) via wsl.exe through its Windows parent, air (14, brought back online mid-run). latitude has NO ~/.claude/projects directory — zero transcripts, by absence, not failure. Permanent gap 2026-07-24..~2026-08-11: the 30-day cleanupPeriodDays default deleted those transcripts before the value was raised to 90 on 2026-09-10. Track B diffed dd3d74b..HEAD (594 commits) at name level. Suite measured green: 55 suites, 0 failures. AIR ADDENDUM (same day, second pass): air was asleep on the first gather and reachable on the second — 14 sessions, 2026-07-31..08-31, 46 more rows. Its window predates most of the rest, so what survived dedup is machinery nobody revisited: the gortex-hook defects (no gortex PreToolUse hook ever ran on any Windows box until 2026-08-30, because windows.ps1 never installed the jq that gortex_merge_hooks is written in), the fleet-selfpull dirty-streak asymmetry between .sh and .ps1, and two security items parked for other boxes — latitude's restic repo backing up its own password file, and two live reusable unused Headscale pre-auth keys on hub. air went unreachable again before ~/pure could be re-probed, so the 'primary dev box' label is marked doubtful rather than corrected.",
-    "sessions_processed": 190,
+    "commit": "73a5334",
+    "date": "2026-09-12",
+    "sessions_processed": [
+      "40ef9ef4-d45c-480b-be1b-8c36137324ef",
+      "96a76e02-1793-4233-ac7d-48537a2760ab"
+    ],
     "tiers_touched": [
-      "AGENTS.md",
-      "docs/fleet-roadmap.md",
-      "hosts/g15/ubuntu/README.md",
       ".claude/memory/project.md",
-      "~/.claude/memory/global.md",
-      "~/.claude/host-memory.md"
+      "AGENTS.md"
     ]
   },
   "sessions": {
@@ -340,8 +338,8 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "b41f22f25b75751245fd7450dec1b14480fd5387",
-      "last_line": 594,
-      "last_ts": "2026-09-11T17:14:40.147Z"
+      "last_line": 1865,
+      "last_ts": "2026-09-11T19:55:23.784Z"
     },
     "413ff7f2-c9db-46d0-af39-c4684fdfcdf6": {
       "cwd": "/home/me/machines",
@@ -783,6 +781,13 @@
       "id_hash": "85df761288b7e46b8b2132dca0be5a46aafed49c",
       "last_line": 340,
       "last_ts": "2026-08-24T08:50:10.870Z"
+    },
+    "96a76e02-1793-4233-ac7d-48537a2760ab": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "aa480aafe5cad19f2efa29d1bdda9b44df6e4752",
+      "last_line": 157,
+      "last_ts": "2026-09-11T22:18:27.417Z"
     },
     "96d9a682-dbcd-4649-8fc4-a113d30f3e1a": {
       "cwd": "/home/me/machines",

@@ -1,7 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against b69d13b on 2026-09-11 (g15 + air + desktop + desktop-wsl;
-     latitude has no ~/.claude/projects at all). Entries carry their own dates. -->
+<!-- KB refreshed against 73a5334 on 2026-09-12 -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
@@ -3502,6 +3501,39 @@ UUID фс `726efd1f-7eb1-45d7-a09e-1e9467c6319f`, метка `wd8`, ext4 `-m 1`.
   to "get to" the shared copy — that deletes every host-local tracked file from
   `$HOME`, `~/.ssh/config` included.
   <!-- src: airdrome adae7fe | 2026-07-29 -->
+- **A repo's basename is NOT a safe `--match` fragment once repos nest.** The
+  skill's Step 0 says it is; measured on g15 2026-09-12 it is not. The depth-2
+  glob finds 67 repos on this box, and two of them are both called `codes`
+  (`~/kazakhstan-law/codes` and `~/split-test/codes`), so one `--match codes`
+  harvests both into whichever repo asked. Worse, `~/kazakhstan-law` is itself a
+  repo AND the parent of 27 nested per-region ones, so `--match kazakhstan-law`
+  is a substring of all 27 children's slugs and pulls every one of them in.
+  Qualify a nested repo with its parent directory (`kazakhstan-law-codes`,
+  `split-test-codes`) and keep the bare basename only for a repo that is unique
+  at depth 1. The failure is silent in both directions — over-matching looks
+  like a productive run, and the cross-matched facts land in the wrong repo's
+  `project.md`.
+  <!-- conflicts-with: "Slug matches: **the repo's basename is enough**." -->
+  <!-- src: machines 73a5334 | 2026-09-12 -->
+- **One batched gather covering every repo at once works, and a box this size
+  needs it.** The skill files N-fan-outs-for-N-repos as a known unoptimised
+  cost; at 67 repos that is 67 ssh fan-outs per nightly run. Passing every
+  repo's `--match` to a single `fleet-gather.sh` invocation against one union
+  state file does the whole box in one pass, and the digests partition by repo
+  afterwards from their own `# cwd:` header. Nothing in `distill.py` had to
+  change for it.
+  <!-- src: machines 73a5334 | 2026-09-12 -->
+- **The transcript filter is a directory-name substring glob, so a work repo's
+  sessions are never opened at all.** `distill.py` globs
+  `~/.claude/projects/*<match>*/*.jsonl` — a slug like
+  `-home-me-pure-backend-api` is not read on any box, and raw transcripts never
+  leave the machine they live on; only the distilled digests come back.
+  Demonstrated 2026-09-11: air holds nine `backend-api` / `claude-plugins` slugs
+  in the same directory and reported exactly the 14 `machines` sessions. The
+  same substring rule is what makes the collisions above possible, and it also
+  means a *worktree* whose path happens to contain the match word is harvested
+  regardless of which repo it belongs to.
+  <!-- src: machines 73a5334 | 2026-09-12 -->
 
 ## The fleet-ssh renderer and `provision/ssh-wsl.sh` (demoted from global.md 2026-09-11)
 
