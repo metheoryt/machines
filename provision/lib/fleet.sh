@@ -144,3 +144,19 @@ except Exception:
     fi
     fleet_detect
 }
+
+# fleet_memory_publisher: the ONE box that runs memory-harvest's Phase B, the
+# whole-corpus consolidation. It reads every machine's dotfiles branch from a
+# single checkout and files one shared queue, so a second box running it files a
+# duplicate of every item.
+#
+# A NAME at the manifest root, not a per-machine boolean — two booleans can be
+# true at once, two names cannot, so "exactly one publisher" is structural
+# rather than a rule someone has to remember. Moving the publisher is editing
+# the value; there is no way to express adding a second.
+#
+# Prints nothing when the key is absent, so `[ "$(fleet_memory_publisher)" = "$me" ]`
+# is false everywhere rather than true somewhere by accident.
+fleet_memory_publisher() {
+    jq -r '.memory_publisher // empty' "$(fleet_manifest_path)"
+}

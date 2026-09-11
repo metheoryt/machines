@@ -5,8 +5,9 @@ whole-corpus consolidation pass, whose brief is
 `agents/plugin/skills/memory-harvest/consolidate-phase.md`. It was the `/dream`
 skill until 2026-09-11 and `/memory-consolidate` for a day after that.
 
-It runs **once for the fleet, on one box** — the one `fleet.json` marks
-`"memory_publisher": true` (latitude). That box reads every machine's dotfiles
+It runs **once for the fleet, on one box** — the one `fleet.json` names in its
+root-level `"memory_publisher"` key (latitude). A name rather than a
+per-machine flag, so two boxes cannot both claim it. That box reads every machine's dotfiles
 branch out of the bare repo, so no ssh and nothing touched remotely; a second
 box running it would file a duplicate of every item, which is why the gate is a
 manifest key rather than a copy of the phase.

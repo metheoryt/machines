@@ -49,6 +49,11 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   (WSL hostname `g614jv`, native `ME-G614JV`), tailnet `100.64.0.4`. Its former
   NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
   `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
+  **The Windows side carries almost nothing — only `machines`.** Every working
+  repo on this machine lives inside `desktop-wsl`, deliberately: it is Linux on
+  ext4, which is where developing on them is less painful. So "on desktop" as a
+  place to find a repo means the distro, not the Windows profile, and anything
+  enumerating this box's repos has to go through the distro.
 - **g15 / g513ie** — ASUS ROG **G15** 2023 (model G513IE), Ryzen 7 4800H,
   31 GB, RTX 3050 Ti, **Ubuntu 26.04 resolute**, tailnet `100.64.0.10`. **Was
   `server` until 2026-08-27** — renamed because the word had stopped naming

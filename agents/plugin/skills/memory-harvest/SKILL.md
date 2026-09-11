@@ -10,8 +10,8 @@ One automation per machine, the same prompt on each. Called `/kb-refresh` until
 
 **Two phases.** Phase A harvests every repo on this box (Steps 0-8 below).
 Phase B consolidates the whole memory corpus and runs **only on the box
-`fleet.json` marks `"memory_publisher": true`** — latitude, the always-on box
-that is already this fleet's single writer for the gortex pin. Its brief is
+`fleet.json` names as `"memory_publisher"`** — latitude, the always-on box that
+is already this fleet's single writer for the gortex pin. Its brief is
 `consolidate-phase.md` beside this file.
 
 **Run every phase, and every repo, in a subagent.** `machines/.claude/memory/project.md`
@@ -326,15 +326,36 @@ proposed fact and one nobody ever applies.
 ## Phase B — consolidate (publisher box only)
 
 ```bash
-python3 -c "import json;print(json.load(open('fleet.json'))['machines'].get('<this box>',{}).get('memory_publisher',False))"
+source provision/lib/fleet.sh
+[ "$(fleet_memory_publisher)" = "$(fleet_logical_name)" ] || echo "not the publisher — skipping Phase B"
 ```
 
-False → skip it, and say so in one line. True → dispatch **one subagent** with
-`consolidate-phase.md` beside this file as its brief. It reads every machine's
-dotfiles branch out of the bare repo and files one queue; a second box running
-it duplicates every item, which is why the gate is a manifest key and not a
-copy of the phase. If the publisher should move, **move the key** — never add a
-second one.
+Not the publisher → skip it and say so in one line. Publisher → dispatch **one
+subagent** with `consolidate-phase.md` beside this file as its brief.
+
+The gate is a **name** at the manifest root (`"memory_publisher": "latitude"`),
+not a flag on each machine. Two flags can both be true; two names cannot, so
+"exactly one publisher" is structural rather than a rule someone has to
+remember. Moving the publisher is editing that one value — there is no way to
+express adding a second. Pinned by `provision/tests/memory-publisher.test.sh`,
+which also fails if the name stops matching a real machine: a typo there means
+nobody consolidates, and an empty queue reads exactly like "nothing to do".
+
+## One repo, two boxes
+
+A repo checked out on more than one box needs no owner and does not duplicate:
+the watermark lives in that repo's own `.claude/kb-harvest-state.json`, which is
+committed and therefore shared by git. Whichever box harvests first records the
+sessions it consumed; the second pulls that state and finds nothing new.
+Read-once is enforced across the fleet, not per box.
+
+What that does **not** survive is two boxes running before either has pushed —
+so **stagger the automations**, a couple of hours apart is enough.
+
+The repos are also not spread the way the machine list suggests: on the desktop
+machine every working repo lives inside the `desktop-wsl` distro (Linux, ext4)
+and the Windows side holds only `machines`, so the automation there belongs in
+the distro.
 
 ## Pushing, when N boxes commit nightly
 

@@ -1,9 +1,10 @@
 {
+  "_comment_memory_publisher": "The ONE box that runs memory-harvest Phase B. A name, not a per-machine flag: two flags can be true, two names cannot. Must match a key under machines.",
+  "memory_publisher": "latitude",
   "machines": {
     "latitude": {
       "platform": "debian",
       "profile": "server",
-      "memory_publisher": true,
       "tailnet": { "ip": "100.64.0.8" },
       "roles": ["base", "ssh-server", "agents", "dotfiles", "repos", "backup-hub", "backup-client"],
       "detect": { "hostname": "latitude5520" }

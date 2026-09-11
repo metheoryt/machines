@@ -31,7 +31,7 @@ and pull on the other machines to propagate.** (See *Updating* below.)
 > `memory-harvest` runs unattended, one automation per box, identical text
 > everywhere: it harvests every repo on that box, writes the repo-local facts
 > itself, and proposes anything aimed at shared fleet memory. On the one box
-> `fleet.json` marks `"memory_publisher": true` it also runs Phase B
+> `fleet.json` names in its root-level `"memory_publisher"` key it also runs Phase B
 > (`memory-harvest/consolidate-phase.md`), the whole-corpus consolidation that
 > must happen **once for the fleet** — it reads every machine's dotfiles branch
 > from that one checkout, so a second box running it duplicates every item.

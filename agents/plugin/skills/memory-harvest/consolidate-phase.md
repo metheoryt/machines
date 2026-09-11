@@ -1,7 +1,7 @@
 # Phase B — consolidate the whole memory corpus
 
 **Reference file for `memory-harvest`, not a skill.** Phase B runs only on the
-box `fleet.json` marks `"memory_publisher": true` (latitude), and only in a
+box `fleet.json` names as `"memory_publisher"` (latitude), and only in a
 **subagent**, so the corpus never enters the orchestrator's context. Everything
 below is that subagent's brief.
 
