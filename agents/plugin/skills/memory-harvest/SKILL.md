@@ -10,8 +10,7 @@ One automation per machine, the same prompt on each. Called `/kb-refresh` until
 
 **Two phases.** Phase A harvests every repo on this box (Steps 0-8 below).
 Phase B consolidates the whole memory corpus and runs **only on the box
-`fleet.json` names as `"memory_publisher"`** — latitude, the always-on box that
-is already this fleet's single writer for the gortex pin. Its brief is
+`fleet.json` names as `"memory_publisher"`** — g15. Its brief is
 `consolidate-phase.md` beside this file.
 
 **Run every phase, and every repo, in a subagent.** `machines/.claude/memory/project.md`
@@ -333,7 +332,15 @@ source provision/lib/fleet.sh
 Not the publisher → skip it and say so in one line. Publisher → dispatch **one
 subagent** with `consolidate-phase.md` beside this file as its brief.
 
-The gate is a **name** at the manifest root (`"memory_publisher": "latitude"`),
+The publisher is **g15**, and the reason is not uptime — latitude, desktop and
+g15 are all always on, and air is the only box that sleeps. It is that Phase B
+is an *agent session*: it needs Claude Code, a `machines` checkout and the
+dotfiles bare repo with every branch fetched, on a box someone actually works
+at. latitude is a services host with no development on it. Do not reason from
+`tier_gortex_autoupdate` being latitude-only — that is a timer running a shell
+script, which is a different requirement that happens to look like this one.
+
+The gate is a **name** at the manifest root (`"memory_publisher": "g15"`),
 not a flag on each machine. Two flags can both be true; two names cannot, so
 "exactly one publisher" is structural rather than a rule someone has to
 remember. Moving the publisher is editing that one value — there is no way to

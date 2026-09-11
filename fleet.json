@@ -1,6 +1,6 @@
 {
   "_comment_memory_publisher": "The ONE box that runs memory-harvest Phase B. A name, not a per-machine flag: two flags can be true, two names cannot. Must match a key under machines.",
-  "memory_publisher": "latitude",
+  "memory_publisher": "g15",
   "machines": {
     "latitude": {
       "platform": "debian",

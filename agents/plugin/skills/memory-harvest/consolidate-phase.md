@@ -1,7 +1,7 @@
 # Phase B — consolidate the whole memory corpus
 
 **Reference file for `memory-harvest`, not a skill.** Phase B runs only on the
-box `fleet.json` names as `"memory_publisher"` (latitude), and only in a
+box `fleet.json` names as `"memory_publisher"` (g15), and only in a
 **subagent**, so the corpus never enters the orchestrator's context. Everything
 below is that subagent's brief.
 
@@ -65,6 +65,14 @@ D=~/machines/agents/plugin/skills/lib/consolidate.sh
 # of every item the first one filed tonight. A stale checkout silently defeats
 # it: `status` reports `new` for an item that is already open on origin.
 git -C ~/machines pull --ff-only || echo 'PULL FAILED — say so in the report and do not push at Step 8'
+
+# Fetch the dotfiles refs too. Every cross-box finding below reads
+# `origin/<branch>`, so stale refs do not error — they answer the wrong
+# question, quietly: a branch that has moved reads as unchanged, and the
+# "branch bigger than main" check then misses exactly the unpromoted memory it
+# exists to find.
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME fetch --all --prune \
+  || echo 'DOTFILES FETCH FAILED — the cross-box findings below are stale; say so'
 
 bash "$D" paths
 

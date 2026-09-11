@@ -6,7 +6,8 @@ whole-corpus consolidation pass, whose brief is
 skill until 2026-09-11 and `/memory-consolidate` for a day after that.
 
 It runs **once for the fleet, on one box** — the one `fleet.json` names in its
-root-level `"memory_publisher"` key (latitude). A name rather than a
+root-level `"memory_publisher"` key (g15 — it needs Claude Code and someone
+working at the box, which a services host has not got). A name rather than a
 per-machine flag, so two boxes cannot both claim it. That box reads every machine's dotfiles
 branch out of the bare repo, so no ssh and nothing touched remotely; a second
 box running it would file a duplicate of every item, which is why the gate is a
