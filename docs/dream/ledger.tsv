@@ -57,3 +57,10 @@ b10ab39d	applied	2026-09-11	project.md 3325-3408: dropped the false 'Condition �
 f48622f0	applied	2026-09-11	project.md 2920-2929: void standing order removed, system_identifier method kept, 1027->825 B; corrected its cross-reference from ниже to выше	/home/me/machines/.claude/memory/project.md	СНЯТ 2026-09-10
 d4622cef	applied	2026-09-11	project.md 3154-3197: narrative compressed to four rules, 4175->3619 B	/home/me/machines/.claude/memory/project.md	## Оба restic-репозитория на 8 ТБ
 dca1d781	applied	2026-09-11	project.md 3349-3401: session narrative and the AGENTS.md-duplicate sysctl.d rule dropped, 5681->4185 B	/home/me/machines/.claude/memory/project.md	## 280 строк защиты от зависания
+4b32b623	applied	2026-09-11	project.md 3113-3121: two standing orders rewritten as satisfied, 1006->1101 B	/home/me/machines/.claude/memory/project.md	исправлен в тот же день
+f9d54642	applied	2026-09-11	project.md 2333-2337: falsified ratio conclusion corrected in place, 568->612 B	/home/me/machines/.claude/memory/project.md	Ограничителем был не ratio
+78e36627	applied	2026-09-11	fixed AGENTS.md instead of filing a TODO in project.md: :701-703 rewritten with the power-drop class and the real topology; also corrected the stale /mnt/xs destination and flaky-dock wording at :533	/home/me/machines/AGENTS.md	two different failures that must
+398b5299	applied	2026-09-11	AGENTS.md: all four stale halves rewritten against provision.sh:117, fleet.json, and ls hosts/desktop/windows	/home/me/machines/AGENTS.md	fails `--apply` with rc=1 unless it is named in
+93ec8377	applied	2026-09-11	AGENTS.md: g15's roles list now carries backup-client, matching fleet.json and the paragraph 20 lines below	/home/me/machines/AGENTS.md	dotfiles, repos, backup-client` — its own
+e05f4c1e	applied	2026-09-11	AGENTS.md: dropped the two live totals (recipe count, 55 suites); per-suite case counts kept as a different class	/home/me/machines/AGENTS.md	For the count itself, trust
+d20809a1	rejected	2026-09-11	premise died this session: fdaea448 merged away the project.md section it names as the fuller survivor, so AGENTS.md now holds the fuller copy and the dedupe runs backwards		

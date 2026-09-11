@@ -50,7 +50,8 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   anything: latitude holds the services role, and `server` is ALSO the `linux.sh`
   profile latitude runs, so one token meant two things in one manifest. **Back in
   `fleet.json` since 2026-08-27** as the **personal-projects host**, roles `base,
-  ssh-server, agents, dotfiles, repos` — its own `~/.claude` is the point, so a
+  ssh-server, agents, dotfiles, repos, backup-client` — its own `~/.claude` is
+  the point, so a
   personal Claude account needs no Orca profile juggling. The 2026-08-01
   decommission (`docs/fleet-roadmap.md` P2) is history; what it did is not undone
   — `hosts/server/` stays deleted and Forgejo stays wiped (inspection found zero
@@ -135,9 +136,9 @@ explicitly and records a failure rather than advancing `converged-rev`.
 ## Common Commands
 
 All commands run from repo root. `just --list` is the full menu — ask it rather
-than trusting a number written here. It said "16 recipes" until 2026-08-30, by
-which point there were 21; the count moves whenever anyone adds a recipe, which
-is the same trap this file already documents for the suite count below. What is
+than trusting a number written here. It said "16 recipes" long after that stopped
+being true; the count moves whenever anyone adds a recipe, which is the same trap
+this file already documents for the suite count below. What is
 worth recording is the shape, not the size: the menu shrank hard when the NixOS
 tree went, because 28 of the old recipes were `nixos-rebuild` / `nix-store`
 wrappers.
@@ -227,14 +228,14 @@ Don't write the suite count into prose — it moved three times on 2026-08-03
 alone, and a stale count in a doc is how "27 suites" and "28 suites" ended up in
 this same file. `just test` prints the count it actually ran; that is the number.
 
-**The suite is GREEN as of 2026-09-11, 55 suites, 0 failures** — and this line
-has now recorded 54, 52, 54 and 55 in nine days while at most two suites were
-ever added or removed, so most of that movement is miscounting, not the repo
-changing. There is no way to reconcile it after the fact, which is the whole
+**The suite was GREEN, 0 failures, as of 2026-09-11** — the count that used to
+stand here recorded four different values in nine days while at most two suites
+were ever added or removed, so most of that movement was miscounting, not the
+repo changing. There is no way to reconcile it after the fact, which is the whole
 argument three paragraphs up for not writing counts into prose. Keep the
 paragraph anyway: green-or-red is the only validation the repo has since the Nix
-gate went, and a red suite gives no signal at all. Trust the number `just test`
-prints in front of you over this one.
+gate went, and a red suite gives no signal at all. For the count itself, trust
+only what `just test` prints in front of you.
 
 **"Known environmental failure" is not a category — it is an unread bug report.**
 Two suites carried that label for a month (`expansion-multibyte.test.sh` and
@@ -430,17 +431,18 @@ the fastest one in the fleet. **"Expected and accepted" is how a stale
 measurement survives** — if you catch a relayed pair, measure it before
 accepting it.
 
-**The one genuine exception is `g15-wsl`, and it is a WSL property rather than a
-network one**: `tailscale ping` says `direct connection not established`, DERP,
-3.3 MB/s. It runs in NAT networking mode, so tailscale cannot punch through to
-another NATed peer. `desktop-wsl` has no such problem because its `.wslconfig`
-sets `networkingMode=mirrored` and it therefore holds a real LAN address. Do not
-"fix" g15-wsl by copying that setting: mirrored also exposes the Windows
-Tailscale adapter inside the distro, and g15 has both a Windows node
-(`100.64.0.3`) and a distro node (`100.64.0.9`) to fight over routes — the
-warning is written out in desktop's own `.wslconfig`. Two routes that work
-today: reach the distro through its Windows host's sshd over the LAN (44 MB/s),
-or have the distro push outbound to a LAN peer, which NAT permits.
+**The one genuine exception was `g15-wsl`, destroyed 2026-09-07 — but the
+property outlives the distro and applies to any NATed WSL2 distro.** A distro in
+NAT networking mode cannot punch through to another NATed peer, so `tailscale
+ping` reported `direct connection not established` and the pair sat on DERP at
+3.3 MB/s. `desktop-wsl` has no such problem: its `.wslconfig` sets
+`networkingMode=mirrored`, so it holds a real LAN address. **Do not reach for
+mirrored as the fix** — it also exposes the Windows Tailscale adapter inside the
+distro, and a box with both a Windows tailnet node and a distro node then has two
+routes to fight over (the warning is written out in desktop's own `.wslconfig`).
+Two routes that do work from a NATed distro: reach it through its Windows host's
+sshd over the LAN (44 MB/s), or have it push outbound to a LAN peer, which NAT
+permits.
 
 Self-declared WSL hosts are first-class fleet hosts that never appear in
 `fleet.json`: each carries a gitignored `fleet.local.json`
@@ -457,9 +459,9 @@ parent — not through a `fleet.json` entry either way. The shared dispatch prim
 `fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and kb-refresh's
 `fleet-gather.sh`; it also handles the Windows-native members by dispatching
 through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
-`fleet.json` — which since 2026-08-27 means `desktop` **and** `g15` again (`g15`
-was out of the manifest between 2026-08-01 and 2026-08-27, when `desktop` was the
-only one).
+`fleet.json` — which means **`desktop` and only `desktop`**. `g15` was a Windows
+member from 2026-08-27 until the 2026-09-07 reinstall; its manifest platform is
+`debian` now, so it is dispatched as a posix member like any other.
 
 **A WSL distro cannot ssh to its own Windows host** (proven 2026-08-30: from
 `desktop-wsl`, `desktop.gg.ez:22` times out, while the same address answers
@@ -530,10 +532,14 @@ are not re-derivable from the code.
 - `mirror-refresh.sh` — `/mnt/immich` → `/mnt/immich-mirror`. Why live PGDATA is
   excluded (an rsync of a running postgres dir is a torn copy that *looks* like a
   backup), why `-H` is mandatory, why `--delete` is off.
-- `archive-mirror.sh` — the closed 1970–2024 archive → `/mnt/xs`. Records the
-  exfat verification (no hardlinks, no illegal filenames, exfat's size ceiling is
-  far above FAT32's remembered 4 GiB), why the *source* dock is the flaky one, and
-  why `--partial-dir` rather than `--append-verify`.
+- `archive-mirror.sh` — the closed 1970–2024 archive → **`/mnt/immich-2024-backup`**
+  (the HGST; it was `/mnt/xs` until that stick left the box 2026-09-09, and the
+  header records why). Destination is ext4 now, so the exfat concessions are
+  history — kept in the header because the exfat verification itself (no
+  hardlinks, no illegal filenames, exfat's ceiling far above FAT32's remembered
+  4 GiB) is what proved them unnecessary. Also records why the *source* dock was
+  the flaky one through July–August, and why `--partial-dir` rather than
+  `--append-verify`.
 - `install-timers.sh` + `systemd/` — installs both as system timers. It **copies**
   units into `/etc/systemd/system` rather than symlinking, so a `git pull` cannot
   change what root runs on a timer without review.
@@ -543,7 +549,9 @@ are not re-derivable from the code.
   `MOUNTS` array is a live-derived fact, not a preference: see the bind-source
   race in *Key patterns* below.
 
-`hosts/desktop/windows/` carries install/reinstall + backup scripts.
+`hosts/desktop/windows/` carries `install.ps1`, the reinstall runbook and
+`winget-packages.json` — **no backup or restore script** (see *Repository
+Overview*: both were deleted 2026-07-31).
 (`hosts/server/` was deleted with the decommission — git history has it.)
 
 ### Key patterns
@@ -552,7 +560,9 @@ are not re-derivable from the code.
   `linux.sh` / `macos.sh`. Both drivers run the same tier bodies; only the driver
   path differs.
 - **Roles are declared in `fleet.json`** and executed by `provision/roles/<role>.{sh,ps1}`.
-  A role with no executor degrades to a printed plan rather than failing.
+  A role with no executor fails `--apply` with rc=1 unless it is named in
+  `provision.sh`'s `PLANNED_ROLES`; a dry run prints the same warning and still
+  exits 0, because a preview writes nothing.
 - **Mount every external drive by UUID, never by `/dev/sdX`.** Every letter
   reshuffles across a reboot on latitude (five external USB devices plus a card
   reader race to enumerate) and one enclosure reports a fake serial. Only one of
@@ -698,9 +708,20 @@ survived the Debian reinstall.
 - Battery charge window 80–85% via `/usr/local/bin/charge-upto` +
   `/etc/default/charge-upto`, installed by `tier_battery_limit`. A laptop held at
   100% on AC 24/7 swells its cell, which is the whole point.
-- Five external USB drives on two docks. The dock carrying `immich-2024` and
-  `immich-mirror` is the flaky one — it logged 24 `usb 4-2: reset` events in one
-  day under load. Guard by UUID and expect mid-run drops.
+- Five external USB drives on two docks, and **two different failures that must
+  not be conflated.** `disconnect` on BOTH docks in the same second is mains —
+  eight such events 2026-07-29..09-10, the docks' cheap 12 V bricks dying on a
+  dip the laptop's own battery rides through (`ACPI: AC Adapter (off-line)`
+  fired exactly once in that window, and not at a drop). This is the one that
+  recurs; a UPS on the dock bricks closes the class, spreading copies across
+  docks does not — the wall takes both at once. `reset` on ONE dock under load
+  is link or enclosure: 25 of them on `4-2` in the 31.07→02.08 storm, whence
+  `UDMA_CRC_Error_Count` 144 on `sdf`. **That storm has not recurred since
+  17.08** — 16 TB through 4-2 in 26 h with zero CRC and zero resets — so do not
+  read "4-2 is the flaky dock" as a standing property. Guard by UUID and expect
+  mid-run drops either way. Topology as of 2026-09-10: `u4-1` spare320 +
+  `/mnt/immich-2024-backup`, `u4-2` wd8 + immich-2024, `u3-2.4` immich-mirror in
+  the NS1066 stopgap.
 - No Docker prune timer. 18 images / ~15 GB, only 3% reclaimable, so the gap is
   currently free. If one is ever added it **must never gain `--volumes`**: three
   of the seven volumes are live immich/postgres data.
