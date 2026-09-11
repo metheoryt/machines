@@ -267,9 +267,11 @@ global + per-host). One bullet per fact under a topical heading.
   distro in the path, so every WSL distro on the same Windows box shares one
   key identity — the key is named after the fleet member matched via
   `fleet.json` `detect.hostname`, not the distro.
-- SSH hub/jump-host detection is implemented twice — in `modules/home/ssh.nix`
-  and independently (jq) in `provision/ssh-wsl.sh` for the WSL leaf's config —
-  so any hub-rule change must be applied in both places or the WSL leaf drifts.
+- SSH config generation is implemented twice — `ssh_wsl_render_config`
+  (`provision/ssh-wsl.sh`, jq) and `Render-FleetSshConfig` (`lib/Fleet.psm1`,
+  PowerShell) — so any hub/jump-host or `HostName` rule change must land in both
+  or one platform drifts (see the 2026-09-08 `SKIP unreachable` section below).
+  The third implementation, `modules/home/ssh.nix`, went with the Nix tree.
 - Every fleet machine's OS hostname differs from its SSH alias by design
   (`latitude5520`↔`latitude`, `g614jv`↔`desktop`, `g513ie`↔`server`), so
   "is this host me?" can't be decided by comparing `hostname` to an alias
@@ -290,12 +292,6 @@ global + per-host). One bullet per fact under a topical heading.
   stays `27608` (a VPS, no laptop model). Headscale already enforces node-name
   uniqueness, so no SSH/tailnet change was needed; verified no `detect.hostname`
   drift vs reality.
-- `modules/home/ssh.nix` materializes `~/.ssh/config` as a real `me`-owned
-  `0600` file (not an HM store symlink) via two `home.activation` phases
-  (`sshConfigUnmaterialize` before `checkLinkTargets`, `sshConfigMaterialize`
-  after `linkGeneration`, `install -m600`) — OpenSSH strict-checks config
-  ownership and a root-owned store symlink reads as `nobody` inside Orca's
-  namespace, breaking all ssh. (Verified still present.)
 - Firewall rules in `provision/windows.ps1` must be written to converge
   (remove-then-recreate), not create-if-absent — re-running against a host
   with a stale-scoped rule would otherwise leave the old scope in place.
@@ -373,11 +369,15 @@ global + per-host). One bullet per fact under a topical heading.
   `cmd /c`** — MSYS path conversion rewrites the lone `/c` into a path, cmd never
   sees the switch and drops to an interactive prompt, emitting bogus
   `'…' is not recognized` errors unrelated to the real failure.
-- **Orca `serve` on WSL was REMOVED (2026-07-21).** Orca now runs on the Windows
-  host and opens the WSL project directly; the per-distro `orca serve` runtime,
-  its systemd unit, the `~/.local/bin/orca` CLI shim, and `provision/orca-serve.sh`
-  are all gone. `provision/tailscale-wsl.sh` (tailnet identity) + `ssh-wsl.sh`
-  (fleet SSH) stay — the WSL box is still a first-class tailnet/SSH node.
+- **Orca `serve` on WSL is not how Orca runs any more (2026-07-21).** Orca runs
+  on the Windows host and opens the WSL project directly; the per-distro `orca
+  serve` runtime, its systemd unit and the `~/.local/bin/orca` CLI shim are gone.
+  **`provision/orca-serve.sh` is NOT gone** — it still ships, and must not
+  autostart where Orca runs natively (g15): a headless `serve` holds Electron's
+  one-instance-per-userData lock and the desktop app cannot open at all. It gates
+  on WSL since `63472aa`. `provision/tailscale-wsl.sh` (tailnet identity) +
+  `ssh-wsl.sh` (fleet SSH) stay — the WSL box is still a first-class
+  tailnet/SSH node.
 - **RENAMED 2026-08-01: everything called `desktop-ubuntu26` or `Ubuntu-26.04` is
   now `desktop-wsl`.** The WSL distro (registry `DistributionName`), the tailnet
   node/MagicDNS name, and the dotfiles branch were all renamed together. Entries
@@ -554,7 +554,10 @@ global + per-host). One bullet per fact under a topical heading.
   + `dotfiles` + `repos` (dotfiles = the private bare repo, see the dotfiles
   bullets below; on NixOS `agents` is a home-manager no-op but `dotfiles` and
   `repos` both run).
-  `base`/`ssh-server`/`backup-client` remain UNIMPLEMENTED stubs (see Pending).
+  `base`/`ssh-server` remain UNIMPLEMENTED and are named in `provision.sh`'s
+  `PLANNED_ROLES`, so an undeclared role with no executor now fails `--apply`;
+  `backup-client` (`.sh` + `.ps1`) and `backup-hub` got real executors
+  2026-09-01.
   Secrets (age/agenix) designed, not built.
 - RustDesk is self-hosted on the VPS (hbbs/hbbr, `cyphy.kz`), seeded via
   `modules/home/rustdesk-config.nix` (server key + known-peer IDs, no
@@ -1106,24 +1109,19 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   `md5sum` of the private file (`aa9d26646442` = the live ED25519, `006d1b05cef6` =
   the retired RSA) — `ssh-keygen -lf -` does **not** read stdin, so pipe-to-
   fingerprint silently returns nothing and every key looks "ENCRYPTED_OR_UNREADABLE".
-- **`backup.ps1` copies desktop's SSH private keys on purpose, and that rationale is
-  now obsolete.** It was written by Claude for the July clean reinstall, *before the
-  fleet key exchange existed* — restoring the old private key was how outbound access
-  survived a wipe. It no longer needs to: `provision/fleet-authorized-keys` is a
-  **tracked repo file that already carries desktop's pubkey** `fFZUwTp9…`, so a fresh
-  install can `ssh-keygen`, replace that one line, push, and every fleet box picks the
-  new key up through its own provisioning (`windows.ps1:252-268` writes it into
-  `administrators_authorized_keys`). The capture points: **`backup.ps1:119`**
-  (`Copy-Item "C:\Users\methe\.ssh\*"` → `secrets\`), the **generic dotfile sweep at
-  `backup.ps1:144`** (`.ssh` is a `.*` dir and is not in the `$blocklist`, so it
-  lands in `home\.ssh`), the **WSL tar at `backup.ps1:105`** (`.ssh .gnupg
-  .gitconfig` per distro), and **`backup.ps1:228`** (`netsh wlan export profile
-  key=clear` → cleartext PSKs). `restore.ps1:139` restores `.ssh` from **`home\.ssh`,
-  not from `secrets\`** — so line 119's loose copy is redundant even for restore.
-  The script's stated reason is "GPG keys are unrecoverable", which is legitimate in
-  principle but did not apply: the captured `.gnupg` had a **32-byte empty
-  `pubring.kbx`**. `backup.ps1:278` also advises making the second copy of `secrets`
-  "off this SSD (server / **email**)" — emailing private keys.
+- **Backing up desktop's SSH private keys was `backup.ps1`'s design, and both the
+  script and its rationale are gone** (deleted 2026-07-31, `1080828`). The
+  rationale died first: `provision/fleet-authorized-keys` is a tracked repo file
+  already carrying desktop's pubkey `fFZUwTp9…`, so a fresh install can
+  `ssh-keygen`, replace that one line, push, and every fleet box picks the new
+  key up through its own provisioning (`windows.ps1` writes it into
+  `administrators_authorized_keys`). What a replacement script must NOT
+  re-introduce: a `.ssh` copy into `secrets\`, a generic dotfile sweep that
+  treats `.ssh` as just another `.*` dir, a per-distro WSL tar of
+  `.ssh .gnupg .gitconfig`, `netsh wlan export profile key=clear` (cleartext
+  PSKs), or advice to keep the second copy of `secrets` off-SSD **by email**.
+  "GPG keys are unrecoverable" was the stated reason and did not apply — the
+  captured `.gnupg` held a 32-byte empty `pubring.kbx`.
 - **Do not back up SSH private keys at all.** Correct recovery is regenerate +
   re-authorize (one minute); every copy is pure added exposure. Decision 2026-07-31:
   **not rotating** `fFZU…` despite four plaintext copies — the drives never left the
@@ -1262,15 +1260,13 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   TWO symlinks per USB device here (`-usb-` and `-usbv3-`), so scanning it only looks
   deterministic. The port path and LUN are physical; the BUS index is xHCI enumeration
   order, which is why the map renames a derived tag instead of hand-writing paths.
-  latitude's storage, as mapped 2026-08-01: **two identical UGREEN CM198 docks** —
-  dual-bay 2.5"/3.5" SATA-to-USB3, externally powered, each ONE bridge with two LUNs —
-  are `dockA0`/`dockA1` (`u4-1:0`, sdb; bay 1 empty) and `dockB0`/`dockB1` (`u4-2:0`
-  sdc, `u4-2:1` sdd). `usbcXS` (`u2-2:0`, the portable XS2000) is a USB-C port with no
-  adapter; `hubSATA` (`u2-1.4:0`, sdg) is the other USB-C port into a PD hub into a
-  SATA-USB3 adapter, so the hub is 2-1 and the adapter sits on its port 4. A dock bridge
-  reports only POPULATED LUNs — nothing appears at `u4-1:1` until a disk goes in — which
-  is the opposite of the card reader (`u2-1.3:0/1`, on the same hub), whose two slots
-  exist as 0B nodes with no card in them.
+  A dock bridge reports only POPULATED LUNs — nothing appears at `u4-1:1` until a
+  disk goes in — the opposite of a card reader, whose slots exist as 0B nodes with
+  no card in them. **The live inventory (which bay holds which drive and mount)
+  lives in `disks.latitude5520.conf` itself and is re-measured there; do not copy
+  it back into this file.** The copy that used to sit here was the 2026-08-01
+  layout and was wrong on four counts by 2026-09-10 (XS2000 gone, card reader
+  gone, dockA1 populated, an ns1066 slot added).
 - **An sd letter is NOT an identity — never cache anything keyed by one** (2026-08-19).
   The kernel hands out `sd?` lowest-free, so unplugging a dock frees its letters and the
   next plug gives the SAME letter to a DIFFERENT disk: on latitude `sdd` was the
@@ -1354,23 +1350,19 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   interactive-probing trap. To measure btop's layout use a sized pty
   (`tmux new-session -d -x <cols> -y <rows>` then `capture-pane -p`), which ends
   when the session does.
-- Orca IDE is `modules/home/orca-bin.nix`, wrapping the upstream Linux
-  AppImage with `appimageTools.wrapType2`; `just update-orca`
-  (`scripts/update-orca.sh`, wired into `just update`/`just upgrade`) bumps its
-  `version`+hash. (`zed-bin.nix`/`pycharm-bin.nix` were removed 2026-07-21 — see
-  the editors bullet below.)
 - `/cyphy:kb-refresh` (`agents/plugin/skills/kb-refresh/`) mines per-machine
   Claude Code transcripts into this repo's memory tiers: `distill.py` reduces
   JSONL to `[USER]/[ASSISTANT]/[BASH]/[EDIT]` digests, a git-tracked watermark
   (line-offset + identity-hash, seeded fleet-wide) guarantees read-once, and
   `fleet-gather.sh` distills in-place on other fleet boxes and copies back
   only digests (via `cat`/`tar`, never raw transcripts).
-  - `fleet-gather.sh` harvests the **Windows** fleet members (desktop=g614jv,
-    server=methe-server): it dispatches on `fleet.json` `platform`, bash-wraps
-    every remote command (Windows ssh lands in PowerShell), pushes `distill.py`
-    and transports state/digests over `cat`/`tar` (no rsync), distills both the
-    Windows-profile and WSL projects roots, and stamps digests with the fleet
-    `detect.hostname`. Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
+  - Its Windows arm dispatches on `fleet.json` `platform: windows`, and
+    **`desktop` is the only such member** (g15 is `debian` since 2026-09-07;
+    `server` has not existed since 2026-08-27). It bash-wraps every remote command
+    (Windows ssh lands in PowerShell), pushes `distill.py`, transports
+    state/digests over `cat`/`tar` (no rsync), distills both the Windows-profile
+    and WSL projects roots, and stamps digests with the fleet `detect.hostname`.
+    Design: `docs/superpowers/specs/2026-07-19-fleet-gather-windows-design.md`.
   - Operational gotchas (invocation paths, digest pruning, self-exclusion, slug
     reuse, the Lane 1/Lane 2 write targets): *## kb-refresh / fleet-gather.sh
     gotchas* below — demoted out of `global.md` 2026-09-11, where 10.2 KB about
@@ -1412,13 +1404,11 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   `modules/home/claude.nix` but is now inert; `host_id()` survives in
   `bootstrap.sh` only as the canonical hostname-sanitization spec that
   `provision/lib/fleet.sh` and friends cite by name.
-- `justfile`'s `switch`/`test`/`boot` recipes depend on a `_check-machines-link`
-  guard that fails loud if the repo's expected symlink location is dangling —
-  added after repo-rename events silently broke agent-config linking.
-- `update-{rustdesk,orca,gortex}.sh` resolve their target `.nix` path relative
-  to their own dir under `scripts/` (the `zed`/`pycharm` updaters were deleted
-  2026-07-21); a new updater needs the correct extra `../` to reach repo root,
-  or it breaks `just update`/`just upgrade` silently (`sed: no such file`).
+- The `.nix`-era updaters are gone (`orca-bin.nix`, `scripts/update-orca.sh`,
+  `scripts/update-rustdesk.sh`, `just update`/`just upgrade`) — they wrote only
+  into `modules/home/*-bin.nix` and nothing else read those files.
+  `scripts/update-gortex.sh` is the only survivor: it bumps
+  `provision/gortex.version`, the pin `tier_gortex` installs.
 - `hosts/desktop/windows/winget-packages.json` is a full `winget export` snapshot
   of that laptop's installed state; `hosts/server/windows/winget-packages.json`
   is a hand-curated minimal server set — maintained differently, don't
@@ -1488,60 +1478,16 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
 - **Orca auto-injects hook wiring into `agents/settings.json` on launch** (SHARED
   tier — committing it pushes fleet-wide) and re-injects on the next launch.
   Prefer NOT to commit it.
-- **Orca profiles are harvested OUT to $HOME by default (2026-08-01).** The live
-  account dir works — Orca picks up the account and its sessions from it — so the
-  default is to leave it alone and rsync it out:
-  `agents/orca-profile-harvest.sh` copies each account to `~/.claude-profiles/<name>`
-  with ARCHIVE semantics (no `--delete`; a vanished transcript survives in the
-  copy), excluding the regenerable trees (`plugins/` alone is 18MB of the live
-  26MB; the payload is ~5MB of transcripts). The copy keeps the curated set as
-  symlinks, so it is a usable profile —
-  `CLAUDE_CONFIG_DIR=~/.claude-profiles/pure claude` reads old sessions outside
-  Orca. Pairing is recorded in `.orca-source` and keyed on the account's own
-  `accountUuid`, falling back to the Orca dir id — deleting an account and
-  signing back in mints a NEW `<orca-profile-id>`, so id-only pairing would
-  refuse the re-login as a stranger and `--restore` would write into the dead
-  dir and still print ✓. A hand-rename sticks either way. Runs at the end of
-  every personal bootstrap; `--restore <name>` copies back, follows the account
-  if its dir moved (`--to` overrides), and refuses into a live profile.
-  Read-only w.r.t. Orca — no symlink in its tree, nothing to migrate, no
-  coupling to its layout. Trade: the copy is a snapshot. The snapshot itself
-  cannot be lost to a re-auth: with no `--delete`, a blank or missing source
-  copies nothing and removes nothing — only `--mirror` propagates deletions.
-- **Relocating the profile is the stronger alternative (2026-08-01).** Orca
-  runs Claude Code against `~/.local/share/orca/claude-accounts/<orca-id>/auth` — a
-  dir it owns, keyed by an Orca-internal id, holding all transcripts/sessions
-  (26MB here — 18MB of it regenerable `plugins/`; ~5MB is transcripts, and the
-  525MB figure quoted earlier was `~/.claude`'s own history, not this dir) and
-  reachable by no `.claude-<postfix>` convention (basename is
-  `auth`). `agents/orca-profile-link.sh` moves it to `~/.claude-profiles/<name>`
-  and leaves a symlink, so the profile outlives the account dir: Orca re-creating
-  it now costs THE LINK, not the data, and `--relink` folds the fresh auth state
-  in and restores it (also run automatically before each sync). It refuses to
-  relocate a profile with a live session (`CLAUDE_CONFIG_DIR` + a `/proc` sweep);
-  `--relink` skips rather than aborts, since it runs unattended after every pull.
-  `~/.claude-profiles/` is its own namespace so `bootstrap.sh`'s secondary-profile
-  registry cannot claim it. Population is separate: `agents/orca-profile-sync.sh`
-  symlinks the **live** `~/.claude` content into each account dir — not the repo
-  baseline, because an Orca profile also needs the machine-local parts the repo
-  never carries (`gortex install` output, plugin state). It **fills gaps only**: a
-  real file in the destination is never overwritten, since gortex regenerates
-  `commands/`/`agents/`/`gortex-*` skills per profile and the account copy is often
-  NEWER than the primary's. `settings.json` is a jq deep-merge (primary wins,
-  target extras survive, permission arrays unioned), never a symlink. Runs at the
-  end of every personal `bootstrap.sh`; `just agent-sync-orca` on demand. The
-  mirror set is an allowlist and reports any unrecognised top-level path in the
-  primary so layout drift is visible rather than silent. `PROFILE_FILES` +
-  `PROFILE_DIRS` ARE the curated "what belongs in every profile" list — edit those
-  two to change it. The sync follows the link to the real profile and finds a
-  migrated profile by its `.orca-account` marker even when the link is broken.
 - **Never bootstrap an Orca account dir as a secondary profile (2026-08-01).** Its
   POSTFIX resolves to `auth`, so the fallback deployed the tracked baseline over
   the mirror. `git-hooks/_refresh-claude-config` did exactly that after every
   pull/checkout by passing the shell's inherited `CLAUDE_CONFIG_DIR` through —
   one `git stash` round-trip re-seeded a live account's `settings.json` and moved
   the merged file to `.bootstrap-bak`. Fixed at both ends: the hook runs bootstrap
-  under `env -u CLAUDE_CONFIG_DIR`, and bootstrap redirects an Orca dir to the mirror.
+  under `env -u CLAUDE_CONFIG_DIR`, and bootstrap **REFUSES** an Orca account dir
+  outright — `agents/bootstrap.sh`:152, exit 3. It used to redirect to the
+  `~/.claude-profiles` mirror; the three `orca-profile-*.sh` scripts behind that
+  mirror were deleted 2026-09-09 and Orca's own account switcher replaced them.
 - **Codex was retired fleet-wide 2026-08-01.** `agents/codex/`, bootstrap's
   `IS_PERSONAL` Codex block, the `agent_clis codex` installer arm and
   `pkgs`-level `codex` are all gone; `~/.codex` (627MB, almost entirely vendored
@@ -1604,15 +1550,6 @@ move innocent before anything was reverted. Last good backup **2026-08-27 10:15*
   `setup-*.sh` (awg server, caddy, rustdesk), secrets/data via restic + (unbuilt)
   age/agenix. Open: distro (Debian vs Ubuntu 24.04 LTS — both apt-family, so the
   `base` role can be written family-generic; low-stakes, deferrable).
-
-- **Drop `pylspFixOverlay` from `flake.nix` once python-lsp/python-lsp-server
-  PR #715 merges and ships in a nixpkgs release.** The overlay builds
-  python-lsp-server from our fork commit (`metheoryt/python-lsp-server @
-  e4ee218`, version `1.14.1.dev0+pr715`) to carry the fix for the
-  `pylsp_definitions` crash on positionless definitions (`d.line is None` →
-  `TypeError`), which gortex hit constantly. Added 2026-07-09. When nixpkgs
-  ships pylsp with the fix, delete the overlay block + its entry in the
-  `overlays` list and revert to stock. Track: https://github.com/python-lsp/python-lsp-server/pull/715
 
 ## Fleet migration 2026-07 (MacBook primary, latitude → server, retire G15)
 
@@ -2986,10 +2923,6 @@ not a step anyone missed.
     command of the pipeline, which succeeds on empty input, so the mode column
     printed empty instead of `n/a`. Both reproduced before fixing, both covered.
     Replaced by a guarded `charge_mode()` helper.
-  - **The installed `/usr/local/bin/charge-upto` is still the buggy copy** — the
-    tier writes it, so the fix reaches the box only on the next privileged run.
-    Harmless (one stderr line, cosmetic mode column), but it is why the journal
-    still shows the error until then.
   - **A nested function in a tier broke five unrelated assertions at once.**
     `tiers.test.sh` extracted tier bodies with `awk '/^tier_x\(\)/,/^}/'`, which
     stops at the first column-0 `}` — `charge_mode`'s. The fix is in the test

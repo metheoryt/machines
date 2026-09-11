@@ -145,62 +145,6 @@ The only durable fact in the three bullets is the offsite gap.
 
 - **first seen:** 2026-09-11
 
-## 507991fd · compress · /home/me/machines/.claude/memory/project.md
-
-- **action:** compress · **scope:** repo:machines
-- **target:** `/home/me/machines/.claude/memory/project.md` · **anchor:** `SSH key hygiene (audited 2026-07-31)` (L1088, 8935 B)
-- **why:** eighteen lines of line-number forensics (`backup.ps1:119/144/105/228`,
-  `restore.ps1:139`) on two scripts deleted 2026-07-31 (`1080828`). Nothing can be
-  checked against them any more. The durable parts are *why* key backup is
-  unnecessary and *which capture shapes must never return* — both kept below.
-- **evidence:** project.md:1109-1126 · `1080828` deleted both scripts
-- **bytes:** 1477 → 890
-- **replacement:**
-- **Backing up desktop's SSH private keys was `backup.ps1`'s design, and both the
-  script and its rationale are gone** (deleted 2026-07-31, `1080828`). The
-  rationale died first: `provision/fleet-authorized-keys` is a tracked file
-  already carrying desktop's pubkey `fFZUwTp9…`, so a fresh install can
-  `ssh-keygen`, replace that one line, push, and every fleet box picks the new key
-  up through its own provisioning (`windows.ps1` writes it into
-  `administrators_authorized_keys`). What a replacement script must NOT
-  re-introduce: a `.ssh` copy into `secrets\`, a generic dotfile sweep that treats
-  `.ssh` as just another `.*` dir, a per-distro WSL tar of `.ssh .gnupg
-  .gitconfig`, or `netsh wlan export profile key=clear` (cleartext PSKs). "GPG
-  keys are unrecoverable" was the stated reason and did not apply — the captured
-  `.gnupg` held a 32-byte empty `pubring.kbx`.
-- **first seen:** 2026-09-11
-
-## 33fcd037 · compress · /home/me/machines/.claude/memory/project.md
-
-- **action:** compress · **scope:** repo:machines
-- **target:** `/home/me/machines/.claude/memory/project.md` · **anchor:** `Repo tooling & scripts` (L1204, 26839 B)
-- **why:** half the bullet is a point-in-time disk inventory (2026-08-01) that
-  duplicates `provision/statusboard/disks.latitude5520.conf` and is now wrong on
-  four counts — XS2000 gone, card reader gone, dockA1 populated, ns1066 slot added
-  (the conf was re-measured 2026-09-10). The *mechanism* is the durable half; the
-  inventory belongs only in the conf, which is read in the room.
-- **evidence:** project.md:1255-1273 · `provision/statusboard/disks.latitude5520.conf`
-- **bytes:** 1601 → 1325
-- **replacement:**
-- **The disk block names BAYS, not `sdX`** (2026-08-01). Kernel letters are handed
-  out in discovery order and name nothing physical, which is useless in front of
-  five identical 2.5" spinners in three docks. Two layers: `sb_bay_tag_parse`
-  derives a tag from `readlink -f /sys/block/<d>/device` — `u<bus>-<port>:<lun>`
-  for USB, the controller name for NVMe — and a per-host map
-  (`provision/statusboard/disks.<hostname>.conf`, `STATUSBOARD_DISKMAP` overrides)
-  renames tags to what the docks are called in the room. Derived from
-  `/sys/block/*/device`, never `/dev/disk/by-path`: that tree has TWO symlinks per
-  USB device here (`-usb-` and `-usbv3-`), so scanning it only looks
-  deterministic. The port path and LUN are physical; the BUS index is xHCI
-  enumeration order, which is why the map renames a derived tag instead of
-  hand-writing paths. A dock bridge reports only POPULATED LUNs — nothing appears
-  at `u4-1:1` until a disk goes in — the opposite of a card reader, whose slots
-  exist as 0B nodes with no card in them. **The live inventory (which bay holds
-  which drive and mount) lives in `disks.latitude5520.conf` itself and is
-  re-measured there; do not copy it back into this file.** The copy that used to
-  sit here was the 2026-08-01 layout and was wrong on four counts by 2026-09-10.
-- **first seen:** 2026-09-11
-
 ## 0631997a · dedupe · /home/me/machines/.claude/memory/project.md
 
 - **action:** dedupe · **scope:** repo:machines
@@ -344,17 +288,6 @@ unimplemented, when it got an executor 2026-09-01. Only `base` and `ssh-server` 
   its executor 2026-09-01. Scope when built: base machine only; services stay the
   `vps` repo's `setup-*.sh`. Open: Debian vs Ubuntu LTS — both apt-family, so
   `base` can be family-generic; deferrable.
-- **first seen:** 2026-09-11
-
-## 51850c83 · delete · /home/me/machines/.claude/memory/project.md
-
-- **action:** delete · **scope:** repo:machines
-- **why:** the follow-up is to drop an overlay from `flake.nix` when an upstream PR
-  ships in nixpkgs. `flake.nix` and every overlay were deleted with the NixOS tree
-  and no fleet box runs Nix — nothing can ever act on it.
-- **evidence:** project.md:1604-1610 · `ls flake.nix` → No such file · `f3d63b2 feat!: delete the NixOS tree; rehome its two live inputs`
-- **bytes:** 615 → 0
-- **replacement:** (none — deletion)
 - **first seen:** 2026-09-11
 
 ## 8e41cba2 · demote · /home/me/.claude/memory/global.md
@@ -1611,17 +1544,6 @@ abandoned *two distros per host*, not the serve model; don't re-read either as
   не прочёл бы файл v18. **Стоявший здесь запрет «удалять пока нельзя, сначала
   лег в restic» СНЯТ 2026-09-10** — БД признана перестраиваемой, лега не будет,
   staging-копия удалена; см. «The DB leg is CLOSED» ниже.
-- **first seen:** 2026-09-11
-
-## cad90941 · delete · /home/me/machines/.claude/memory/project.md
-
-- **action:** delete · **scope:** repo:machines
-- **why:** the bullet says the installed `/usr/local/bin/charge-upto` is still the pre-fix
-  copy and the journal still shows the stderr leak **until the next privileged run**.
-  That run has happened.
-- **evidence:** project.md:2985-2989 · `ls -l /usr/local/bin/charge-upto` → `-rwxr-xr-x 1 root root 5274 Sep 11 00:54` · `grep -n charge_mode /usr/local/bin/charge-upto` → `46:charge_mode() {` / `101:    "$(charge_mode "$b")" \`
-- **bytes:** 358 → 0
-- **replacement:** (none — deletion)
 - **first seen:** 2026-09-11
 
 ## 79129a06 · dedupe · /home/me/machines/.claude/memory/project.md
