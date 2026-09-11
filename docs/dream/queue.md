@@ -1908,3 +1908,41 @@ Desktop and no Windows host on g15, and the general trap lives in global memory.
   report both numbers and never call a file-byte overage "urgent" without the injected
   number beside it.
 - **first seen:** 2026-09-11
+
+## 06ccc498 · skill · /home/me/machines/agents/plugin/skills/dream/SKILL.md
+
+- **action:** skill · **scope:** repo:machines
+- **target:** `agents/plugin/skills/dream/SKILL.md`
+- **anchor:** `Step 2 — Re-verify before writing`
+- **why:** filed FROM a run, per Step 2b's own requirement — see
+  `runs/2026-09-11.md` and the 2026-09-11 `/dream-apply` session. An item names the
+  site where it found an error, **not every site carrying that error**, and applying
+  it as written leaves the store still contradicting itself. Three times in one
+  session:
+  - `51df5bf5` — dock A/B swapped against `disks.latitude5520.conf`. Item named
+    2 sites; there were **3** (the serial↔port pair, the "worst offender" port, and
+    the `/dev/disk/by-id` bullet). The missed one names which physical box carries
+    immich-2024.
+  - `031261e5` — a wrong tailnet address table. Item named 1 site; there were **2**,
+    both saying latitude `.2` and `server .3` when the manifest has latitude `.8`,
+    g15 `.10` and no `server`.
+  - `2ae4f3c7` — a `gh pr edit` duplicate. Item said 2 copies; there were **3**, and
+    the third carried two facts the survivor lacked.
+- **evidence:** ledger rows `51df5bf5`, `031261e5`, `2ae4f3c7`, `d402ad05` (the
+  third gh copy, filed in-session because no item covered it)
+- **bytes:** +~450 in SKILL.md
+- **proposed addition to Step 2 (a human picks the wording):**
+  **An item names one site; the error may live at several.** Before applying a
+  correction, grep the WHOLE store for the fact being corrected — the serial, the
+  address, the filename, the claim — and fix or cut every occurrence in the same
+  edit. A half-applied correction is worse than none: the store still contradicts
+  itself, and the next reader has no way to tell which half is current. This cost
+  nothing to catch and would have shipped three self-contradicting stores.
+  Corollary for a `dedupe`: the item's copy count is a lower bound, never the count.
+- **also fixed this session, no item needed:** `dream.sh decide` cut from the item
+  header to the next `/^## /`, but an item's replacement text IS a memory-store
+  section and routinely contains `##` headings — so the cut stopped there and left
+  the item's tail in the queue as orphan text. 92 such lines from 7 decided items.
+  Fixed in `484971c` with three regression assertions; the ` · ` separator is
+  deliberately out of the new pattern because `·` is two bytes in UTF-8.
+- **first seen:** 2026-09-11
