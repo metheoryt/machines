@@ -4,6 +4,13 @@ Written by `/memory-harvest`, applied by `/memory-review`. **Append-only from th
 side**: a run never rewrites or reorders an existing item, so notes added by
 hand survive. An item leaves this file only through `consolidate.sh decide`.
 
+**Machine names in items written before 2026-09-12 are pre-rename.** `desktop`
+is `g16` and `desktop-wsl` is `g16-wsl` (machines `c04dc49`), and the dotfiles
+remotes moved with them (`origin/g16`, `origin/g16-wsl`). The `apply on:` lines
+have been updated; quoted evidence, literal paths (`backup/desktop-wsl/`,
+`hosts/desktop/`) and the WSL distro's Windows registration name — still
+`desktop-wsl`, deliberately — are left as written.
+
 ## 0c1fdb6a · harvest · /home/me/machines/.claude/memory/project.md
 
 - **action:** harvest
@@ -30,7 +37,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -60,7 +67,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -88,7 +95,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -119,7 +126,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -150,7 +157,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -177,7 +184,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 - **action:** demote
 - **scope:** shared → repo (employer). **THE WHOLE `Pure …` CLUSTER IS 22.9 KB = 18% of a
   store loaded in EVERY session on EVERY box, including the VPS.**
-- **apply on:** **air** or **desktop-wsl** — `~/pure/backend-api` is ABSENT on g15
+- **apply on:** **air** or **g16-wsl** — `~/pure/backend-api` is ABSENT on g15
   (`repo_groups: ["my"]`), so no Pure demote is applicable here.
 - **BLOCKER, read before applying any of these:** `pure/backend-api/.claude/memory/project.md`
   is tracked on **`origin/desktop-wsl` only, not on `main`**
@@ -206,7 +213,7 @@ hand survive. An item leaves this file only through `consolidate.sh decide`.
 ## 61aee193 · demote · /home/me/.claude/CLAUDE.md
 
 - **action:** demote · **scope:** shared → repo (employer) + global.md
-- **apply on:** **air** or **desktop-wsl** (the boxes with the work checkout) — not g15
+- **apply on:** **air** or **g16-wsl** (the boxes with the work checkout) — not g15
 - **why:** work-repo Sentry / `pure-connectors` token placement sits in the file loaded in
   EVERY session on EVERY box — **including `hub` and `latitude`, which have no work repos
   at all**. The general mechanism it rests on is already in `global.md` in more detail
@@ -224,7 +231,7 @@ tools. Anything recorded
 
 ## 6c10ae40 · untracked · /home/me/.claude/memory/personality/values.md
 
-- **action:** untracked · **scope:** host (desktop) · **apply on:** **desktop** — not this box
+- **action:** untracked · **scope:** host (desktop) · **apply on:** **g16** — not this box
 - **why:** **`desktop` is the only fleet box with NO personality facets tracked at all.**
   Its dotfiles branch carries `.claude/CLAUDE.md`, `CLAUDE.md`, `host-memory.md` and — as
   **mode-120000 symlinks into the WSL distro** — `core.md` and `global.md`. There are no
@@ -658,7 +665,7 @@ strands every session it had recorded.
 - **id-inputs:** `/home/me/.claude/memory/personality/practices.md` # `(branch: desktop-wsl)` # `promote` # `practices.md:branch-vs-mergebase-ae03a7d`
 - **action:** promote
 - **scope:** shared — three fleet-wide stores
-- **apply on:** **desktop-wsl** — NOT this box. `/memory-review` on g15 must refuse it.
+- **apply on:** **g16-wsl** — NOT this box. `/memory-review` on g15 must refuse it.
   A push to another box's branch strands that box's next sync as a conflict
   (*The write boundary*, consolidate-phase.md:237-252).
 - **target:** `/home/me/.claude/memory/personality/practices.md`
