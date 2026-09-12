@@ -569,6 +569,10 @@ macplan hub >/dev/null 2>&1 && die "macos hub profile should be rejected" \
 adbody="$(awk '/^tier_apt_dev\(\)/,/^}/' "$TIERS")"
 bdbody="$(awk '/^tier_brew_dev\(\)/,/^}/' "$TIERS")"
 has "$(code "$adbody")" '^ *for p in .*\bjust\b' "apt dev layer installs just"
+# npm, not nodejs: on Debian/Ubuntu `npx` belongs to the npm package, and npx is
+# what tier_orca_skills needs. nodejs alone leaves that tier warning on every box
+# this layer just provisioned.
+has "$(code "$adbody")" '^ *for p in .*\bnpm\b' "apt dev layer installs npm (npx lives there, not in nodejs)"
 has "$(code "$bdbody")" '^ *for p in .*\bjust\b' "brew dev layer installs just"
 
 # tiers.sh must stay sourceable without running anything, from the darwin side

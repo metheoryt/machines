@@ -283,10 +283,23 @@ them blocks L1.
 
 ## Risks
 
-- **npx in desktop-wsl is Windows' node** (`/mnt/c/Program Files/nodejs/npx`),
-  reached over interop — measured again 2026-09-12, no Linux node in the distro.
-  It works, it is slow, and it writes through the 9P boundary. If the tier is
-  painful there, install a Linux node in the distro rather than skipping the tier.
+- **npx is unreachable in desktop-wsl from any non-interactive run — measured
+  2026-09-12 by running the finished tier there over ssh, and it warn-and-skips.**
+  The earlier note said npx is Windows' node at `/mnt/c/Program Files/nodejs/npx`
+  reached over interop: slow but working. That was an interactive session. Over
+  sshd the distro's `PATH` is Linux-only — no Windows path is appended — so the
+  Windows node is invisible even though interop is enabled and the binaries are
+  there, and the distro has no Linux node at all. A converge, a `/ship` or any
+  provisioning run therefore reaches the tier's `no npx` warn on the one box the
+  tier most needs to fix.
+
+  The fix is a Linux node in the distro, and it is now in the layer that runs
+  first: **`tier_apt_dev` installs `npm` beside `nodejs`**. On Debian/Ubuntu they
+  are separate packages and `/usr/bin/npx` belongs to `npm` (`dpkg -S` on g15) —
+  so `nodejs` alone, which is what that loop had, could never have satisfied this
+  tier. Same shape as `just` earlier the same day: a tier whose own prerequisite
+  nothing installed. `apt_dev` is second in the workstation list and `orca_skills`
+  eleventh, so one run does both.
 - **Two target boxes, and reproducibility is still the stronger argument than
   fan-out.** g15 has been reinstalled once already; the point of a tier over a
   written-down command is that the next reinstall does not depend on anyone

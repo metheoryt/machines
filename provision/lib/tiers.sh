@@ -160,7 +160,17 @@ tier_apt_dev() {
   # attributes, so it needs just >= 1.27 — every apt box in the fleet is well
   # past that (trixie 1.40, resolute 1.45), which is why this is a plain package
   # and not a curl installer like starship/uv below.
-  for p in fish direnv git-delta bat nodejs just; do
+  #
+  # `npm` rides beside `nodejs` because on Debian/Ubuntu it is a SEPARATE package
+  # and it is the one that ships `npx` — `/usr/bin/npx` belongs to npm, not to
+  # nodejs (dpkg -S on g15, 2026-09-12). Without it tier_orca_skills below hits
+  # its no-npx warn on every box this layer just provisioned, which is the same
+  # shape as `just`: a tier whose own prerequisite nothing installs. Measured on
+  # desktop-wsl the same day, over ssh: no node, no npx, and no Windows path on
+  # PATH either — sshd does not inherit the interop PATH, so the Windows node at
+  # /mnt/c/Program Files/nodejs is unreachable from every non-interactive run.
+  # A Linux node in the distro is the fix, not a reach across the 9P boundary.
+  for p in fish direnv git-delta bat nodejs npm just; do
     if $SUDO apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1; then
       ok "$p"
     else
