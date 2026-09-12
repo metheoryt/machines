@@ -1,0 +1,7 @@
+[Unit]
+Description=Collect fleet backup freshness rows
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/me/machines/hosts/latitude/debian/backup-status.sh

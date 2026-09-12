@@ -85,6 +85,19 @@ done
 defined role_backup_client
 defined role_backup_hub
 
+# ── backup-offsite (executor first; NO fleet.json entry yet) ─────────────────
+# THE MANIFEST ENTRY IS DELIBERATELY DEFERRED to the trip that installs the
+# village box — no machine declares this role today, so nothing runs it. Said
+# plainly because this file used to claim it "landed with its fleet.json entry",
+# which was never true, and a comment asserting something untrue is a failure
+# this repo has already paid for more than once.
+#
+# THE ASSERTION IS THAT IT IS DEFINED. backup-offsite is NOT in PLANNED_ROLES and
+# must never be added to it: the whole point of that list is to declare a gap
+# loudly, and this role has its executor in place ahead of the manifest, which
+# is the opposite of a gap.
+defined role_backup_offsite
+
 # latitude is the machine that carries both. debian is its platform.
 not_skipped "role_backup_client(debian)" "$(role_backup_client dry-run debian latitude 2>&1)"
 not_skipped "role_backup_hub(debian)"    "$(role_backup_hub    dry-run debian latitude 2>&1)"

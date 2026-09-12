@@ -2257,3 +2257,75 @@ be touched, and nobody on site can touch it.
   wall-clock time (Task 4 Step 4) and the post-cutover delta (Task 12 Step 3).
   Both are recorded in commit messages because every later capacity and
   bandwidth question depends on them.
+
+---
+
+## Execution state — 2026-09-12
+
+Tasks 3, 5, 6, 8 and 9 were executed on branch `offsite-backup` (base `9f75571`). Everything else
+is outstanding: it needs a drive that has not been bought, a mini-PC that has not been bought, or
+the trip.
+
+| Task | State | Commits |
+|---|---|---|
+| 1 — retire spare320, free dockA0 | outstanding | — |
+| 2 — buy and accept the 8 TB drive | outstanding (**critical path**) | — |
+| 3 — the keyless integrity sweep | done | `4a0e496`, `16fbf73` |
+| 4 — the `photos` profile and the seed backup | outstanding (needs the drive) | — |
+| 5 — the collector | done | `c189dea`, `d246cc4` |
+| 6 — `sb_backup_alerts` on the status board | done | `df79960` |
+| 7 — buy the mini-PC | outstanding | — |
+| 8 — the `backup-offsite` role executor | done | `4ab67e6`, `a9eec8d` |
+| 9 — the box's own health | done | `e228ac1`, `f1ab79b` |
+| 10 — fleet integration | **deferred to the trip**, see below | — |
+| 11–14 | outstanding (the trip and after) | — |
+| final review fixes | done | `1ef3ee8`, `5f52399`, `9be49b5`, `26e9693` |
+
+### Decisions taken during execution that change later tasks
+
+- **Task 10 is deferred to the trip, not skipped.** `fleet.json` is a `_touches_driver` trigger in
+  `converge.sh`, so landing the `offsite` member now reprovisions the whole fleet for a box that
+  will not answer for weeks, and every `/ship` and memory-harvest run prints `SKIP unreachable`
+  while every generated `~/.ssh/config` carries a dead `Host` block. Correction 4's ordering
+  constraint is satisfied a fortiori: the executor landed in Task 8, so the manifest entry can be
+  added at any later moment without `--apply` exiting 1.
+- **The plan's own text contradicted itself on shell hygiene.** It puts `set -uo pipefail` and
+  `export PATH=…` at the top of `restic-pack-verify.sh` AND requires the suite to source that file.
+  Sourceability won: both lines live inside the executed branch in every sourced script on this
+  branch (`restic-pack-verify.sh`, `backup-status.sh`, `offsite-selfcheck.sh`). Keep that shape in
+  anything Tasks 11–14 add.
+- **The `photos` row in `backup-jobs.latitude5520.conf` is commented out** until Task 4 seeds the
+  repository. `/mnt/vault` does not exist, so the collector's `repo` probe would emit `bad` and the
+  board would carry a standing red alert for weeks. **Task 4 must uncomment it.** The `offsite`
+  status row is likewise commented out and belongs to Task 13.
+- **`install-rest-server.sh` refuses to install on an unverified checksum** (exit 79) rather than
+  warning and continuing as the plan's draft did. The real `SHA256SUMS` value for rest-server
+  0.14.0 linux_amd64 is committed and was verified against the published release.
+- **`offsite-verify.service` keeps no logic in `ExecStart`.** An inline `bash -c` there had
+  unescaped `%s`, which systemd expands as its own specifier before the shell runs; the sweep wrote
+  `{"ts":/bin/bash,"rc":/bin/bash,"bad":/bin/bash}` and every outcome read alike. The logic lives in
+  `hosts/offsite/debian/offsite-verify.sh`. Do not move anything back inline.
+- **Exit codes now in use on the offsite host**, so a later task does not reuse one:
+  `restic-pack-verify.sh` 0/1/2/4/5 · `offsite-selfcheck.sh` 0/1 (a boolean verdict, no map) ·
+  `install-rest-server.sh` 0/1/2/3/78/79 · `install-timers.sh` 0/20/21/22/23.
+- The README's credential-guessing check greps for **401, not 403** — rest-server 0.14.0's
+  `handlers.go` contains no 403 at all, so the original check would have read zero forever.
+
+### Two known holes, parked deliberately — Task 11 owns the first
+
+1. **The sweep's `files_max` high-water mark lives only in `verify.json`, the file whose loss it
+   exists to survive.** Lose part of the pack set AND lose or corrupt `verify.json`, and the
+   watermark resets to the survivors, so the box reports healthy. `rc=4` still catches whole-
+   directory loss, and it takes two coincident faults — but **Task 11 should give the watermark an
+   independent home on the disk**, which is the first moment there is a real disk to put it on.
+2. A rows file that exists, is fresh, but is zero-byte or unreadable leaves the status strip
+   silently green for one 15-minute tick: `backup-status.sh`'s write is not atomic. It self-heals
+   on the next tick.
+
+### Deployment is a separate, deliberate act
+
+Nothing on this branch has been deployed. In particular `hosts/latitude/debian/install-timers.sh`
+now carries `backup-status.{service,timer}`, so the collector goes live the next time that shared
+installer runs on latitude **for any reason at all** — a mirror-timer tweak would do it. Deploy it
+on purpose, watch a full day of real `late`/`stale` behaviour, then leave it. Task 3's live
+read-only proof against `/mnt/wd8/restic/latitude` belongs to that same deployment step.

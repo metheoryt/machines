@@ -1,0 +1,18 @@
+[Unit]
+Description=Village box hourly selfcheck (mount, SMART, snapshot age, last sweep)
+Documentation=file:/home/me/machines/hosts/offsite/debian/offsite-selfcheck.sh
+# Deliberately NO Requires=/After=mnt-vault.mount, unlike offsite-verify.service.
+# An absent vault is exactly what check 1 exists to catch — gating this unit on
+# the mount would turn "vault gone" into "no status.json update at all", which
+# latitude's puller reads as a stale/unknown file rather than the vault-missing
+# detail this script would otherwise report. Same reasoning as
+# restic-hub-selfcheck.service's own header.
+
+[Service]
+Type=oneshot
+# smartctl needs root; without it check 3 reads empty output and silently
+# passes, which is worse than not checking at all.
+User=root
+EnvironmentFile=-/etc/default/offsite
+ExecStart=/home/me/machines/hosts/offsite/debian/offsite-selfcheck.sh
+TimeoutStartSec=5m
