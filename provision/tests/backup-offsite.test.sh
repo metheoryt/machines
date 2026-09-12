@@ -149,6 +149,56 @@ out_json="$(cat "$OSC_DIR/state/status.json" 2>/dev/null)"
 has "$out_json" '"ok":true' 'osc_main: a healthy tree writes ok:true'
 has "$out_json" '"detail":""' 'osc_main: a healthy tree writes an empty detail'
 
+# ── drive temperature (attr 194): the box may sit in an unheated room ────────
+# A veranda swinging -5..+25 C was a live proposal on 2026-09-12. The drive's
+# operating floor is 0 C, and the box that auto-restarts after a power cut is
+# exactly the one that will spin a cold-soaked platter unattended. These pin
+# that the number reaches status.json and that BOTH ends of the range are their
+# own note — a cold box must not read the same as a silent one.
+osc_smart_with_temp() {
+    smartctl() {
+        case "$1" in
+            -H) echo "SMART overall-health self-assessment test result: PASSED" ;;
+            -A) printf '194 Temperature_Celsius 0x0022 100 100 000 Old_age Always - %s\n' "$OSC_FAKE_TEMP" ;;
+        esac
+    }
+}
+osc_run_temp() {
+    OSC_FAKE_TEMP=$1; osc_smart_with_temp
+    VAULT="$OSC_DIR/vault" VAULT_UUID="FAKE-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null
+    cat "$OSC_DIR/state/status.json" 2>/dev/null
+}
+
+out_json="$(osc_run_temp 31)"
+has "$out_json" '"drive_temp_c":"31"' 'osc_main: a readable temperature reaches status.json'
+has "$out_json" '"ok":true'           'osc_main: 31 C is healthy'
+
+# The threshold sits ABOVE the 0 C datasheet floor deliberately: a warning that
+# fires only once the drive is already out of spec buys none of the lead time
+# that is the whole reason this is an HDD. 0 C must trip it.
+out_json="$(osc_run_temp 0)"
+has "$out_json" '"ok":false'                    'osc_main: a drive at 0 C is not healthy'
+has "$out_json" 'below the 5C operating floor'  'osc_main: a cold drive says so by name'
+out_json="$(osc_run_temp 6)"
+has "$out_json" '"ok":true'                     'osc_main: 6 C is inside the margin and healthy'
+
+out_json="$(osc_run_temp 58)"
+has "$out_json" '"ok":false'          'osc_main: 58 C is over the ceiling'
+has "$out_json" 'above the 55C'       'osc_main: an overheating drive says so by name'
+
+# An unreported temperature must stay empty, never become a healthy-looking 0 —
+# same rule as osc_is_num: an absent reading is not a zero.
+smartctl() {
+    case "$1" in
+        -H) echo "SMART overall-health self-assessment test result: PASSED" ;;
+        -A) : ;;
+    esac
+}
+VAULT="$OSC_DIR/vault" VAULT_UUID="FAKE-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null
+out_json="$(cat "$OSC_DIR/state/status.json" 2>/dev/null)"
+has "$out_json" '"drive_temp_c":""' 'osc_main: a drive reporting no temperature writes empty, not 0'
+has "$out_json" '"ok":true'         'osc_main: an absent temperature is not itself a fault'
+
 # Unhealthy: wrong UUID and no sweep state at all.
 rm -f "$OSC_DIR/state/verify.json"
 VAULT="$OSC_DIR/vault" VAULT_UUID="WRONG-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null

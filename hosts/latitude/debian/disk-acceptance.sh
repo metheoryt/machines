@@ -52,10 +52,27 @@
 # SATA port anywhere to cross-check a drive that stays silent.
 #
 # badblocks notes that cost hours if you learn them the hard way:
-#   * `-b 4096` is mandatory. The default 1024-byte block puts 8 TB at 7.8e9
-#     blocks, past badblocks' 2^32 ceiling, and it aborts.
-#   * `-c 4096` (16 MiB per pass) — the default 64-block buffer starves a USB
-#     bridge and adds hours.
+#   * The block size is DERIVED, never hard-coded. badblocks counts blocks in a
+#     32-bit value, so each block size has a capacity ceiling: the 1024-byte
+#     default puts 8 TB at 7.8e9 blocks and aborts, and `-b 4096` — which was
+#     hard-coded here until 2026-09-12 — tops out at 2^32 x 4096 = 17.59 TB
+#     decimal. An 18 TB drive is 4.395e9 blocks against a 4.295e9 ceiling, so
+#     the script REFUSED the whole 18 TB+ tier while the shop's return window
+#     ran. `bb_blocksize_for` now doubles from 4096 until the count fits
+#     (8192 reaches 35 TB), and never goes below 4096, because a block size has
+#     to be a multiple of the drive's physical sector and 4Kn parts exist.
+#     Measured 2026-09-12 on e2fsprogs here: -b 8192 and -b 16384 both run
+#     clean. Confirm on the actual disk before trusting it on a real platter.
+#   * `-c` is a count of BLOCKS, not bytes, so it stops being a constant once
+#     the block size moves, and the two invariants disagree. The original
+#     `-c 4096` was picked against "the default 64-block buffer starves a USB
+#     bridge", which is an argument about BLOCK COUNT; it was also described as
+#     "16 MiB per pass", which is BYTES. `bb_bufcount` holds the BYTES constant,
+#     so -b 8192 halves the block count to 2048. That choice is deliberate — a
+#     BOT bridge is fed by transfer size — but only the 4096/4096 pair was ever
+#     measured on these docks, and at -b 4096 bb_bufcount still returns exactly
+#     that, so nothing below 17.59 TB changes. If an 18 TB pass turns out slow,
+#     holding the block count at 4096 instead (32 MiB) is the other knob.
 #   * It is NOT resumable. Run it detached (--detach puts it under systemd-run);
 #     a dead ssh session takes the whole pass with it.
 #   * A mid-run death is a BUS suspect first. Check `journalctl -k` for usb
@@ -87,6 +104,23 @@ smart_attr(){ smart_num "$(smart_raw "$1" "$2")"; }
 # badblocks block count at a given block size, and the 2^32 ceiling.
 bb_blocks(){ echo $(( ${1:-0} / ${2:-4096} )); }
 bb_blocksize_ok(){ [ "$(bb_blocks "$1" "$2")" -lt 4294967296 ]; }
+
+# bb_blocksize_for <bytes>: the smallest block size >= 4096 whose block count
+# clears the 2^32 ceiling. Never returns less than 4096 (physical-sector
+# alignment), and gives up past 1 MiB rather than inventing a size no drive
+# would honour -- see the header note.
+bb_blocksize_for(){
+  local bs=4096
+  while ! bb_blocksize_ok "$1" "$bs"; do
+    bs=$(( bs * 2 ))
+    [ "$bs" -gt 1048576 ] && return 1
+  done
+  echo "$bs"
+}
+
+# bb_bufcount <blocksize>: -c in blocks, holding the buffer at 16 MiB. At 4096
+# this is the 4096 that used to be hard-coded, so nothing changes below 17.59 TB.
+bb_bufcount(){ echo $(( 16777216 / ${1:-4096} )); }
 
 # Hours to write+read <bytes> at <MB/s> measured on the OUTER tracks. A CMR
 # spindle falls to roughly half that rate at the inner tracks, so the honest
@@ -298,7 +332,7 @@ phase_identity(){
 }
 
 phase_surface(){
-  local dev=$1 want_serial=$2 go=$3 detach=$4 sd ev bytes reasons dtype
+  local dev=$1 want_serial=$2 go=$3 detach=$4 sd ev bytes reasons dtype bs bc
   sd=$(sd_of "$dev")
   ev="$EVIDENCE_ROOT/${want_serial:-$sd}"
   mkdir -p "$ev"
@@ -319,11 +353,18 @@ phase_surface(){
   fi
 
   bytes=$(sudo blockdev --getsize64 "$dev")
-  bb_blocksize_ok "$bytes" 4096 || { say "FATAL $bytes bytes exceeds badblocks' 2^32 blocks even at -b 4096"; exit 1; }
+  bs=$(bb_blocksize_for "$bytes") \
+    || { say "FATAL $bytes bytes exceeds badblocks' 2^32 blocks at every block size up to 1 MiB"; exit 1; }
+  bc=$(bb_bufcount "$bs")
+  # `if`, not `[ ... ] && say`: a falsy last command in this repo has already
+  # made a green hand-run report Failed under systemd (see AGENTS.md).
+  if [ "$bs" -ne 4096 ]; then
+    say "NOTE using -b $bs (not 4096): $bytes bytes needs it to clear badblocks' 2^32 block ceiling"
+  fi
 
   if [ "$go" != go ]; then
     say "DRY RUN — interlock passed, target is safe to destroy. Nothing written."
-    say "would run: badblocks -b 4096 -c 4096 -w -t random -s -v -o $ev/badblocks.badlist $dev"
+    say "would run: badblocks -b $bs -c $bc -w -t random -s -v -o $ev/badblocks.badlist $dev"
     say "budget ~$(eta_hours "$bytes" 150) h (write+read, inner-track factor applied). Add -go to start."
     return 0
   fi
@@ -338,7 +379,7 @@ phase_surface(){
   date -Is > "$ev/surface-started"
   say "surface pass on $dev ($bytes bytes) — one random-pattern write + verify read"
   say "watch: tail -f $ev/badblocks.log ; journalctl -fu disk-accept-$sd"
-  sudo badblocks -b 4096 -c 4096 -w -t random -s -v -o "$ev/badblocks.badlist" "$dev" \
+  sudo badblocks -b "$bs" -c "$bc" -w -t random -s -v -o "$ev/badblocks.badlist" "$dev" \
     > "$ev/badblocks.log" 2>&1
   local rc=$?
   date -Is > "$ev/surface-finished"

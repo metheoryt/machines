@@ -63,6 +63,20 @@ bb_blocksize_ok "$B8" 1024 && bad "8 TB must NOT fit badblocks' default -b 1024"
 bb_blocksize_ok "$B8" 4096 && pass "8 TB fits at -b 4096" || bad "8 TB should fit at -b 4096"
 eq "$(bb_blocks "$B8" 4096)" 1953506646 "bb_blocks at 4096"
 
+# The block size is DERIVED, and 4096 caps at 2^32 x 4096 = 17.59 TB decimal.
+# An 18 TB drive overflows it, which made the script refuse the whole 18 TB+
+# tier. These four pin the boundary in both directions.
+B18=18000207937536
+B24=24000277254144
+eq "$(bb_blocksize_for "$B8")"  4096 "8 TB still picks 4096 — nothing changes below the ceiling"
+eq "$(bb_blocksize_for "$B18")" 8192 "18 TB overflows 4096 and steps to 8192"
+eq "$(bb_blocksize_for "$B24")" 8192 "24 TB still fits at 8192 (ceiling 35 TB)"
+bb_blocksize_ok "$B18" 4096 && bad "18 TB must NOT fit at -b 4096" || pass "18 TB exceeds the 2^32 ceiling at -b 4096"
+
+# -c is a count of BLOCKS, so it has to track the block size or the buffer moves.
+eq "$(bb_bufcount 4096)" 4096 "bb_bufcount at 4096 is the value that used to be hard-coded"
+eq "$(bb_bufcount 8192)" 2048 "bb_bufcount halves at 8192, holding the buffer at 16 MiB"
+
 # ── ETA carries the inner-track factor, or it under-promises ─────────────────
 # 8 TB at 150 MB/s is 14.8 h one way; write+read is 29.6 h; x1.4 for the inner
 # tracks is ~41 h. A bare 2x would promise ~30 h and be wrong by half a day.
@@ -135,7 +149,8 @@ n=$(unsafe_reasons /dev/sdb "" JD100ACC2V5ZVK gpt ext4 /mnt/immich-2024-backup U
 # ── source-text assertions: what the phases may and may not do ──────────────
 src="$(cat "$SCRIPT")"
 code="$(printf '%s\n' "$src" | sed 's/[[:space:]]*#.*$//')"
-has   "$code" 'badblocks -b 4096 -c 4096 -w -t random' "the surface pass pins -b 4096 (the ceiling) and -c 4096 (the BOT bridge)"
+has   "$code" 'badblocks -b "$bs" -c "$bc" -w -t random' "the surface pass DERIVES -b and -c rather than hard-coding them"
+hasnt "$code" 'badblocks -b 4096' "no hard-coded -b 4096 survives — it silently capped acceptance at 17.59 TB"
 hasnt "$code" 'badblocks -w /dev' "badblocks is never invoked on a literal /dev path"
 # The gate must precede the write in file order — a destructive command placed
 # above its own interlock would still pass every unit test above.
