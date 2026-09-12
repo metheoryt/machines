@@ -1,6 +1,6 @@
 # Orca integration — design
 
-**Date:** 2026-09-12 · **Status:** L1 implemented; L2 and L3 open · **Branch:** `orca-integration`
+**Date:** 2026-09-12 · **Status:** L1 and L2 implemented; L3 open · **Branch:** `orca-integration`
 
 Orca (the IDE + its agent runtime) is installed by hand on this fleet, and the
 four skills that make it usable from an agent session were installed by hand
@@ -222,7 +222,9 @@ change — the same worktree bug — but the filed number is wrong.
 
 ## L2 — routing rules
 
-Two short additions, no new mechanism:
+Two short additions, no new mechanism. **Implemented 2026-09-12**, and writing it
+turned up a measurement the rule had been missing — see *What the shim changed*
+below.
 
 - **`AGENTS.md`, under *Key patterns*:** the `orca-ide` rule with its
   measurement, because a script in this repo calling bare `orca` is the failure
@@ -235,6 +237,50 @@ Two short additions, no new mechanism:
   and the plain Agent tool when none of the above is involved. Plus air's role as
   a client to the g15 and desktop runtimes (`orca environment` / `orca host`),
   which is why its skill set matters as much as the hosts'.
+
+### What the shim changed
+
+The rule was written as "bare `orca` is the screen reader". Measured on g15
+while landing L2, it is two facts, and the second is the load-bearing one:
+
+1. The screen reader is now **removed** here (state `rc`, `/usr/bin/orca` gone).
+   `ubuntu-desktop` only *Recommends* it, so nothing broke. But `rc` is not
+   absence: a release upgrade or one `--install-recommends` restores it, so
+   "the name is free" is not a property the repo may rely on.
+2. **The `orca` that works is Orca's own session shim** —
+   `~/.config/orca/linux-orca-cli-shim/orca` execs
+   `~/.cache/orca/appimage/launcher/orca-ide`. It appears in no shell rc; over
+   plain ssh to g15 the PATH holds neither `orca` nor `orca-ide`. So it exists
+   only inside an Orca-spawned session, points into `~/.cache`, and is rewritten
+   on update — an install artifact, not an interface.
+
+Together those say the same thing L1's resolver already did, but for a stronger
+reason: the working name is absent wherever provisioning actually runs, and the
+name that IS present there is the wrong program. `provision/linux.sh:233`
+(`export PATH="$HOME/.local/bin:$PATH"`) is what makes `orca-ide` resolvable
+under the driver at all — deleting it makes `tier_orca_skills` info-skip on
+every box, silently.
+
+Also settled in passing: `ORCA_CLI_COMMAND` is unset on g15 even under
+`TERM_PROGRAM=Orca` — reproduced a second time on 2026-09-12, so the decision
+not to resolve the CLI through it stands on two measurements.
+
+### Where each half landed
+
+- `AGENTS.md` *Key patterns*, placed next to the existing "a non-interactive ssh
+  PATH excludes `/usr/sbin`" bullet — the same failure shape, and the pair reads
+  as one lesson.
+- `~/.claude/memory/global.md`, folded into *Orca IDE — workspace model & CLI*:
+  the four skills and how they install, skills-follow-the-runtime, and a pointer
+  to the skills' own descriptions instead of a routing table that would go stale
+  against them.
+- `~/.claude/host-memory.md`, *g15 local tooling*: the `rc` package, the shim
+  path, the ssh PATH measurement, and that all four skills are present here.
+
+**Air's half is unverified.** The claim that air is a client to the g15 and
+desktop runtimes comes from the design, not from a probe — air has been
+unreachable since 2026-09-11. It is written into memory as an assertion with
+that caveat attached, not as an installed state.
 
 ## L3 — workflows onto Orca (outline; planned separately)
 

@@ -728,6 +728,25 @@ Overview*: both were deleted 2026-07-31). `hosts/desktop/wsl/` carries the
 - **A non-interactive ssh PATH on Debian excludes `/usr/sbin` and `/sbin`.**
   Scripts that call `findmnt`, `blkid` or `smartctl` must
   `export PATH=/usr/sbin:/sbin:/usr/bin:/bin`.
+- **Never call bare `orca` from anything in this repo — the CLI is `orca-ide`.**
+  Two measurements on g15 2026-09-12, and they point the same way. (1) `orca` is
+  ALSO the GNOME screen reader, which `ubuntu-desktop` *Recommends*: a mutation
+  run of the skills suite invoked it and started a talking desktop mid-test. The
+  package is `rc` (removed, config kept) on g15 now, so "not found" is not a
+  stable property — one release upgrade or one
+  `apt install --install-recommends ubuntu-desktop` brings it back, and nothing
+  in this repo would notice. (2) The `orca` that DOES work is a shim **Orca
+  injects into its own session env** —
+  `~/.config/orca/linux-orca-cli-shim/orca` execs
+  `~/.cache/orca/appimage/launcher/orca-ide`. It is in no shell rc, so over
+  plain ssh the PATH holds neither `orca` nor `orca-ide`; it is Orca's install
+  artifact pointing into `~/.cache`, rewritten on update, and not a name this
+  repo may depend on. So `_orca_cli()` in `tiers.sh` tries `orca-ide` then
+  `orca-cli` and never the bare name, and
+  `provision/tests/orca-skills-tier.test.sh` puts a bare `orca` on PATH beside
+  them and asserts nothing ever invokes it. It resolves under the driver only
+  because `provision/linux.sh:233` exports `~/.local/bin` onto PATH — delete
+  that line and `tier_orca_skills` silently info-skips on every box.
 
 ## Hardware Context
 
