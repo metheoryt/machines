@@ -24,8 +24,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNIT_SRC="$HERE/systemd"
 UNIT_DST=/etc/systemd/system
 UNITS=(mirror-refresh.service mirror-refresh.timer archive-mirror.service archive-mirror.timer
-       restic-hub-selfcheck.service restic-hub-selfcheck.timer)
-TIMERS=(mirror-refresh.timer archive-mirror.timer restic-hub-selfcheck.timer)
+       restic-hub-selfcheck.service restic-hub-selfcheck.timer
+       backup-status.service backup-status.timer)
+TIMERS=(mirror-refresh.timer archive-mirror.timer restic-hub-selfcheck.timer backup-status.timer)
 
 MODE=show
 case "${1:-}" in
@@ -39,7 +40,7 @@ say(){ echo "[install-timers] $*"; }
 
 # The scripts the units call must exist, or we would enable a timer that fails
 # every fire. Check before touching systemd, not after.
-for s in mirror-refresh.sh archive-mirror.sh restic-hub-selfcheck.sh; do
+for s in mirror-refresh.sh archive-mirror.sh restic-hub-selfcheck.sh backup-status.sh; do
   [ -x "$HERE/$s" ] || { say "FATAL $HERE/$s missing or not executable"; exit 1; }
 done
 for u in "${UNITS[@]}"; do

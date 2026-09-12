@@ -1,0 +1,19 @@
+[Unit]
+Description=Keyless SHA-256 integrity sweep of the offsite repositories
+Documentation=file:/home/me/machines/hosts/offsite/debian/offsite-verify.sh
+After=mnt-vault.mount
+Requires=mnt-vault.mount
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/offsite
+# Nice and idle-class: this reads a terabyte and must never contend with an
+# incoming backup. It has all week.
+Nice=19
+IOSchedulingClass=idle
+# A real script, not an inline `bash -c` blob — see offsite-verify.sh's own
+# header for why: ExecStart= is specifier-expanded by SYSTEMD before bash ever
+# runs, so an unescaped `%s` in an inline blob's printf format is silently
+# replaced with the unit's own shell path, not run as a shell format spec.
+ExecStart=/home/me/machines/hosts/offsite/debian/offsite-verify.sh
+TimeoutStartSec=6h

@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly offsite integrity sweep
+
+[Timer]
+OnCalendar=Sun 13:00
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

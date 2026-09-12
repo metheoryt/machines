@@ -1051,6 +1051,55 @@ has "$DA" 'warn:old_thing created'     'severity: a created-but-never-started co
 hasnt "$DA" 'immich_server'            'severity: a healthy container is not an alert'
 eq "$(sb_docker_alerts '')" ''         'severity: no containers, no alerts'
 
+# ── Severity policy (sb_backup_alerts) ────────────────────────────────────────
+# Takes one argument for the same reason the two above do: this is a judgement
+# about what is worth waking someone for, and a judgement that reads a dozen
+# globals cannot be tested.
+#
+# `stale` outranks `late` the way `missing` outranks `offline` on the fleet
+# strip: one missed run is a schedule that slipped, two is a backup that has
+# stopped. `bad` is the repo itself — gone, empty, or a box reporting a failed
+# integrity sweep — and that never degrades to a warning.
+BA="$(sb_backup_alerts "$(printf '%s\n' \
+  'latitude|3600|86400|ok|' \
+  'photos|90000|86400|late|' \
+  'g614jv|200000|86400|stale|' \
+  'g513ie||86400|bad|no snapshots' \
+  'offsite|1800|7200|bad|sweep found 3 bad packs')")"
+has "$BA" 'warn:photos late'                     'severity: one missed run is a warning'
+has "$BA" 'bad:g614jv stale'                     'severity: two missed runs is a failure'
+has "$BA" 'bad:g513ie no snapshots'              'severity: an empty repo is bad, with its reason'
+has "$BA" 'bad:offsite sweep found 3 bad packs'  'severity: a fresh row can still be bad'
+hasnt "$BA" 'latitude'                           'severity: a fresh backup is not an alert'
+eq "$(sb_backup_alerts '')" ''                   'severity: no backup rows, no alerts'
+# An unreadable age must not read as healthy: silence is the failure this catches.
+has "$(sb_backup_alerts 'x||86400|unknown|')" 'warn:x age unknown' \
+  'severity: an unreadable age is a warning, never silence'
+
+# ── The collector's own liveness (sb_backup_rows_alert) ──────────────────────
+# Every row above is a judgement about a BACKUP. This one is a judgement about
+# the thing that writes the rows. The board used to read
+# /var/lib/fleet-backup/rows with `[ -r ... ] && cat` and no mtime check at all,
+# so a stopped or masked backup-status.timer left the last good rows frozen and
+# the strip painted them green forever — and a stopped timer raises no failed
+# unit, so SB_FAILED had nothing to say either.
+eq "$(sb_backup_rows_alert no '' 1800)" '' \
+  'rows: a box that has never had a collector is silent, not amber forever'
+eq "$(sb_backup_rows_alert yes 600 1800)" '' \
+  'rows: a fresh rows file is not an alert'
+eq "$(sb_backup_rows_alert yes 1800 1800)" '' \
+  'rows: one period exactly is still fine'
+has "$(sb_backup_rows_alert yes 2400 1800)" 'warn:backup rows stale' \
+  'rows: one missed collection is a warning'
+has "$(sb_backup_rows_alert yes 90000 1800)" 'bad:backup collector stopped' \
+  'rows: a collector that stopped is a failure, not a warning'
+has "$(sb_backup_rows_alert yes 90000 1800)" ' 1d' \
+  'rows: the alert carries how long it has been stopped'
+has "$(sb_backup_rows_alert yes '' 1800)" 'warn:backup rows unreadable' \
+  'rows: a rows file whose mtime cannot be read is its own state, never silence'
+has "$(sb_backup_rows_alert yes abc 1800)" 'warn:backup rows unreadable' \
+  'rows: a non-numeric age is unreadable, never zero'
+
 # ── Page tabs ─────────────────────────────────────────────────────────────────
 # The VISIBLE width must not depend on which page is active — only the colour moves —
 # or the alert text beside the tabs shifts every time the board rotates.
