@@ -66,6 +66,31 @@ has "$out" 'offsite||7200|unknown|' 'an absent status file yields an unknown row
 hasnt "$out" '|bad|' 'an absent status file is never reported as bad'
 rm -rf /tmp/bs-test-jobs.$$ /tmp/bs-test-state.$$
 
+# ── the offsite status.json <-> backup-status.sh reader contract (Task 9) ────
+# backup-status.sh's `status` kind greps LITERALLY for "ok" then optional
+# whitespace, a colon, optional whitespace, then true, and pulls `detail` with
+# a specific sed. Pin both directions here so the two scripts cannot drift
+# apart silently again.
+ok_json="/tmp/bs-test-status-ok.$$.json"
+bad_json="/tmp/bs-test-status-bad.$$.json"
+printf '{"ts":1,"ok":true,"detail":""}' > "$ok_json"
+printf '{"ts":1,"ok":false,"detail":"vault not mounted (got '"'"'nothing'"'"')"}' > "$bad_json"
+
+if grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$ok_json"; then
+    pass 'reader ok-grep matches "ok":true'
+else
+    fail 'reader ok-grep matches "ok":true'
+fi
+if grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$bad_json"; then
+    fail 'reader ok-grep does not match "ok":false'
+else
+    pass 'reader ok-grep does not match "ok":false'
+fi
+eq "$(sed -n 's/.*"detail"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$bad_json" | head -1)" \
+   "vault not mounted (got 'nothing')" \
+   'reader detail-sed extracts the detail string verbatim'
+rm -f "$ok_json" "$bad_json"
+
 # Every suite in this repo prints ALL PASS and exits nonzero on failure — that is
 # what `just test` reads. Keep this block LAST in the file; later tasks append
 # above it.

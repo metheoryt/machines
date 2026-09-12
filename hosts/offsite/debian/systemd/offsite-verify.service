@@ -1,0 +1,23 @@
+[Unit]
+Description=Keyless SHA-256 integrity sweep of the offsite repositories
+Documentation=file:/home/me/machines/hosts/latitude/debian/restic-pack-verify.sh
+After=mnt-vault.mount
+Requires=mnt-vault.mount
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/offsite
+# Nice and idle-class: this reads a terabyte and must never contend with an
+# incoming backup. It has all week.
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/bin/bash -c '\
+  set -o pipefail; \
+  out=$(/home/me/machines/hosts/latitude/debian/restic-pack-verify.sh \
+        /mnt/vault/restic/latitude --baseline /var/lib/offsite/baseline.sha); rc=$?; \
+  bad=$(printf "%s" "$out" | sed -n "s/.*bad=\\([0-9]*\\).*/\\1/p" | tail -1); \
+  mkdir -p /var/lib/offsite; \
+  printf "{\\"ts\\":%s,\\"rc\\":%s,\\"bad\\":%s}\\n" "$(date +%%s)" "$rc" "$${bad:-0}" \
+    > /var/lib/offsite/verify.json; \
+  printf "%s\\n" "$out"; exit $rc'
+TimeoutStartSec=6h
