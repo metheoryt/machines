@@ -215,10 +215,14 @@ suite's own header:
   mutation-2 assertion was passing for the wrong reason. The shim builds its
   record with `printf '\037%s'` instead.
 
-**`just test` from a linked worktree is 3 reds, not 2.** `fleet-profile`,
-`expansion-multibyte` and `agents/tests/bootstrap` all fail there and all pass in
-the main checkout; roadmap P6 records the count as 2. Not a property of this
-change — the same worktree bug — but the filed number is wrong.
+**`just test` from a linked worktree is 2 reds, and roadmap P6 is right.**
+`fleet-profile` and `agents/tests/bootstrap` fail there and pass in the main
+checkout. This section claimed a third — `expansion-multibyte` — and filed P6's
+count as wrong. It was not: that suite was reporting a **real** unbraced `$var`
+before a multibyte char in this very tier, and it was called an artifact because
+the count was read and the rows were not. Exactly the failure AGENTS.md names:
+"known environmental failure" is an unread bug report. Fixed in `d1e81cb`, and
+the main checkout is green on all 59.
 
 ## L2 — routing rules
 
@@ -277,10 +281,27 @@ not to resolve the CLI through it stands on two measurements.
 - `~/.claude/host-memory.md`, *g15 local tooling*: the `rc` package, the shim
   path, the ssh PATH measurement, and that all four skills are present here.
 
-**Air's half is unverified.** The claim that air is a client to the g15 and
-desktop runtimes comes from the design, not from a probe — air has been
-unreachable since 2026-09-11. It is written into memory as an assertion with
-that caveat attached, not as an installed state.
+**Air was measured after all, and it contradicts the darwin skip's stated
+reason.** It answered the fleet pull on 2026-09-12, an hour after this section
+was written claiming it could not be reached. What it holds:
+
+- `/Applications/Orca.app` — it runs Orca natively, it is not only a client.
+- `~/.local/bin/orca` — it HAS an Orca CLI, under the **bare name**. That name
+  is safe on macOS (no screen reader called `orca`) and is precisely the name
+  the Linux resolver refuses. `npx` is present too (`/opt/homebrew/bin/npx`).
+- **2 of the 4 skills**: `find-skills` and `orchestration`, both correctly
+  double-landed (real dir under `~/.agents/skills/`, relative symlink from
+  `~/.claude/skills/`). `computer-use` and `orca-cli` are absent.
+
+So the darwin skip is a **decision, not a capability gap** — the tier's message
+said "no Orca CLI on PATH there", which is false, and is corrected. And air is
+drifted in exactly the way L1 exists to prevent, which is the argument for
+reopening the skip:
+
+> **Open:** teach `_orca_cli()` a darwin branch that accepts the bare `orca`,
+> and drop the skip. The collision that forbids the bare name is Linux-only, so
+> the rule and the exception are both defensible — but it is new behaviour, new
+> test cases and a live run on air, so it is not folded in here.
 
 ## L3 — workflows onto Orca (outline; planned separately)
 

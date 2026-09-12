@@ -1323,7 +1323,13 @@ tier_orca_skills() {
   local -a bundled_add=() bundled_upd=() extra_add=() extra_upd=() args=()
 
   if _is_darwin; then
-    info "Orca skills: air is installed by hand (no Orca CLI on PATH there) — skipped"
+    # Measured on air 2026-09-12: it HAS an Orca CLI, at ~/.local/bin/orca —
+    # the bare name, which is safe on macOS (no screen-reader collision) and is
+    # exactly the name this tier refuses to use on Linux. npx is there too
+    # (/opt/homebrew/bin/npx). So the skip is a decision, not a capability gap,
+    # and it leaves air drifted: 2 of the 4 skills present that day
+    # (find-skills, orchestration), computer-use and orca-cli absent.
+    info "Orca skills: darwin is hand-managed — skipped (see the note above)"
     return 0
   fi
 
