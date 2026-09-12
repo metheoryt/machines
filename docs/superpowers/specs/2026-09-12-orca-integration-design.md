@@ -231,6 +231,17 @@ Approved in principle, specified after L1 and L2 land:
    a file the app owns, and writing it on every provision run is worse than
    pasting a line once.
 
+   **Second measurement, same day, and it raises the stakes: that state is not
+   even host-local in practice.** Deleting the `machines` project from Orca on
+   desktop removed g15's registration too — `orca repo list` went from 7 to 6 and
+   `project setups` lost the row entirely, on a box that was not touched.
+   Projects are keyed by git remote (`github:metheoryt/machines`) while setups
+   carry a `hostId`, so one delete reaches every host's setup. Re-adding with
+   `orca repo add --path …` restores the repo but comes back with
+   `scripts: {setup: "", archive: ""}` — the hook wiring is lost with it and has
+   to be pasted again by hand. Worth reporting upstream as its own bug: removing
+   a project on one host should not delete another host's setup silently.
+
 Each of the three needs its own measurement pass before it is written; none of
 them blocks L1.
 
