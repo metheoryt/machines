@@ -1,0 +1,1353 @@
+{
+  "last_refresh": {
+    "commit": "73a5334",
+    "date": "2026-09-12",
+    "sessions_processed": [
+      "40ef9ef4-d45c-480b-be1b-8c36137324ef",
+      "96a76e02-1793-4233-ac7d-48537a2760ab"
+    ],
+    "tiers_touched": [
+      ".claude/memory/project.md",
+      "AGENTS.md"
+    ]
+  },
+  "sessions": {
+    "0010cc89-1a9c-4229-b37d-fbb4a859c4a9": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f04a8a356666cdff54d4f136e7da4ad325919c2f",
+      "last_line": 572,
+      "last_ts": "2026-07-07T22:27:58.090Z"
+    },
+    "001c2c09-4d96-4a81-a357-37219cdcae05": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-worktrees",
+      "host": "latitude5520",
+      "id_hash": "ca7d438e12596dc70908f32fc60bd4f596ef0223",
+      "last_line": 829,
+      "last_ts": "2026-07-20T12:07:50.601Z"
+    },
+    "019af167-2dc5-4a25-9880-279837ab89a3": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f8ebe37812c7383621dbe41cfb7e249a760a8349",
+      "last_line": 502,
+      "last_ts": "2026-07-08T00:44:46.377Z"
+    },
+    "053eba11-3b58-45f2-87cc-ae6deab37edd": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "4738eb11ebaccd5be809c80974799e358d305086",
+      "last_line": 279,
+      "last_ts": "2026-09-08T05:13:59.755Z"
+    },
+    "05b345b4-5ca1-40a9-a146-ba98a03cb826": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0f603b410347f286ee0f6c9c528dc8590511c8f3",
+      "last_line": 323,
+      "last_ts": "2026-07-15T11:20:43.352Z"
+    },
+    "05b54716-8ace-4624-aefa-2419be1caa53": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "c3fae58d5f1738826fc7a27f02896badd628f79b",
+      "last_line": 20,
+      "last_ts": "2026-08-02T07:56:51.560Z"
+    },
+    "06b9c866-7900-429c-893f-1dc3b25d5070": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "7b12ccd040a854f339afd52fddc8af0d39a893e8",
+      "last_line": 12,
+      "last_ts": "2026-07-17T16:39:00.045Z"
+    },
+    "0841a872-769c-4948-ab5c-cd309f8803a4": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "b809312e3f09d5fb7fa6a770f5727629bbf418f9",
+      "last_line": 360,
+      "last_ts": "2026-09-11T10:40:29.591Z"
+    },
+    "0c30deed-3e70-40cf-b821-8acc30c510d4": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "bc55fad7085d226bfe65faeac830747080767f78",
+      "last_line": 12,
+      "last_ts": "2026-07-15T11:24:03.778Z"
+    },
+    "0cbc6377-f9ab-48f6-bd11-d430b9bb35ac": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "0ea227910804562076cd646f72358e84b0caa656",
+      "last_line": 27,
+      "last_ts": "2026-07-14T18:12:35.136Z"
+    },
+    "0e43a5b9-cb84-475c-bcc3-d39e3d6fa643": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "f4574049f17753a25e163531fbad7a3dcae4c413",
+      "last_line": 888,
+      "last_ts": "2026-09-07T08:07:12.426Z"
+    },
+    "0e66b99d-07b3-4207-8a6a-a4bc4974d2ed": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "3e16d0c9563d6c6a70f125ed92dec6c2e1dfb3ea",
+      "last_line": 52,
+      "last_ts": "2026-07-18T08:26:14.065Z"
+    },
+    "1082bdf4-1076-4f1e-a20b-79f0bc45aa18": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "0a66e3cc94be5dbbeb8d4a2b7ffd901856a8d917",
+      "last_line": 150,
+      "last_ts": "2026-08-30T15:27:25.840Z"
+    },
+    "108e5f34-7423-4871-828e-392f4f2563db": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "86d67c5eb7455ff154517e0674be49631385226a",
+      "last_line": 333,
+      "last_ts": "2026-07-15T16:36:22.496Z"
+    },
+    "12792336-5e6f-45e1-a264-b9f1e8340411": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f799db836eb17b26463b999972864b4f9da32ea6",
+      "last_line": 1079,
+      "last_ts": "2026-07-08T22:36:27.813Z"
+    },
+    "1417daa4-de31-4d25-b43b-cbb931821382": {
+      "cwd": "/home/me/orca/workspaces/machines/git-worktree-orca-setup",
+      "host": "latitude5520",
+      "id_hash": "66b6d170170a9ea1090ef95ab7759e680fd57039",
+      "last_line": 1051,
+      "last_ts": "2026-07-18T15:07:53.623Z"
+    },
+    "154981fa-38d2-44bd-a66e-0a7f680fc97f": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "ae5eb20e8a58a282e39f8e032342a345f42d6ed2",
+      "last_line": 218,
+      "last_ts": "2026-08-11T21:42:31.825Z"
+    },
+    "1c32a4fa-aa84-4681-b911-13f82e00cf95": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "33864f05519517c96fc07613f793341d19c3ee7b",
+      "last_line": 412,
+      "last_ts": "2026-07-07T23:07:42.038Z"
+    },
+    "1c965f0b-9d29-4d5c-8df0-a46520173a4c": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "0710a878b37c54c9d3cca31062a9ad1a1c750eed",
+      "last_line": 1757,
+      "last_ts": "2026-08-30T14:28:41.298Z"
+    },
+    "1f023324-7a54-4a2a-83c3-2c38b6eaf69a": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "9a4d5041768383625c1cbfc582f2263698907f91",
+      "last_line": 54,
+      "last_ts": "2026-07-23T20:51:09.383Z"
+    },
+    "1f85e506-5144-47ec-9879-b2e6e9aa4024": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "4c99d299b19f8efe02ad69b6ab9515e790d5b46d",
+      "last_line": 1999,
+      "last_ts": "2026-09-10T20:21:11.821Z"
+    },
+    "20023ba9-de26-4f91-84b5-afad4f5582e9": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "050e8a7d7de1d37e24f0f379a150a03819b9ed2a",
+      "last_line": 86,
+      "last_ts": "2026-07-09T16:51:17.977Z"
+    },
+    "207311cb-721f-4471-ac4e-d2531996e5c6": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "9107f60fb6eefeca178fa78667ba49a581ff90bf",
+      "last_line": 1970,
+      "last_ts": "2026-07-24T01:49:58.061Z"
+    },
+    "23bbd86b-54ec-4598-8111-19fe22f5df99": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "424e519e60dfeb47450df025ca1767fa267b2f89",
+      "last_line": 842,
+      "last_ts": "2026-07-06T17:15:09.945Z"
+    },
+    "246d2392-b9c2-40a3-bb47-1510e803e4ea": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "0be95dd89668aca4d68dfb81f9bf95f81d5e9e33",
+      "last_line": 843,
+      "last_ts": "2026-09-10T13:25:30.498Z"
+    },
+    "246e30e4-de47-44fd-8a0c-5ce253b0231e": {
+      "cwd": "/Users/me/orca/workspaces/machines/machines-cleanup",
+      "host": "air",
+      "id_hash": "853d1f263c453b8b3207d58261a636d355c5d75e",
+      "last_line": 436,
+      "last_ts": "2026-08-02T08:46:08.230Z"
+    },
+    "26b432ce-7024-4011-8415-425a484feaa8": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "0bdc725b17261e09c8cff4a64028560012c7f2d8",
+      "last_line": 4984,
+      "last_ts": "2026-08-31T09:58:27.858Z"
+    },
+    "26c0c0e3-e9e9-48cf-bf45-3b417796e2cb": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "5ebc0d281a08795115ac931a20a3e97a6a407617",
+      "last_line": 547,
+      "last_ts": "2026-07-17T14:42:06.689Z"
+    },
+    "2866652c-607a-4c04-84a6-32e08043b186": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "9a6f0c75c1844861b4d4cd068101df5eefd80999",
+      "last_line": 1010,
+      "last_ts": "2026-08-01T02:55:26.774Z"
+    },
+    "28878173-7885-4cff-a001-403996d7cefa": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "2a01944f4bc83d137fdb8b06cf9e03b007d87502",
+      "last_line": 80,
+      "last_ts": "2026-07-06T15:19:57.126Z"
+    },
+    "295b2400-b6b6-4156-9e7d-355af6d8627e": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "92ec3fcad3956914064da1fc02256bf1d03a8e01",
+      "last_line": 622,
+      "last_ts": "2026-07-13T11:51:53.754Z"
+    },
+    "2b024340-80a7-40cd-9c68-e803dd5b8329": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "d3a8b4a8377c5653f5223ca750f66a50e45b89ed",
+      "last_line": 19,
+      "last_ts": "2026-07-16T20:43:06.067Z"
+    },
+    "2c9011f6-5636-4bc5-9201-41789e849764": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "c80057b672330335e31f92cce03f15cff8313c41",
+      "last_line": 5118,
+      "last_ts": "2026-09-10T20:14:03.061Z"
+    },
+    "2caeba31-b0ed-4746-a12c-7683ccf9cfb1": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "7d46dcbc0576051935d2e81bad7e69c8202af2ef",
+      "last_line": 236,
+      "last_ts": "2026-07-15T17:34:10.629Z"
+    },
+    "313324af-8476-4b64-b818-6a290d5ec027": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "c9ae971aca94f41584b7a415de8cd45f7a179b79",
+      "last_line": 245,
+      "last_ts": "2026-08-03T17:49:10.736Z"
+    },
+    "32e132a7-1fc5-467c-90ef-233abb0f82ff": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "ee507e930bcedc923643415beec7bda001eb0aba",
+      "last_line": 43,
+      "last_ts": "2026-07-14T16:57:04.450Z"
+    },
+    "3362309e-374b-4b84-b26e-4ece4ea13aa4": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "6c5124672396d0463ba574c9453bffc1a3dc8d10",
+      "last_line": 9660,
+      "last_ts": "2026-08-01T17:32:42.448Z"
+    },
+    "343d9ad3-9075-42a8-a69f-2cb6883b265d": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "c85af4e768db3785009ecc49018262ae037e6f2b",
+      "last_line": 1081,
+      "last_ts": "2026-07-07T18:14:58.519Z"
+    },
+    "34a6324f-642f-44e0-b674-53413a0b9478": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "e8bca709157f6f0ba03b77ec00c4ec99a858489e",
+      "last_line": 50,
+      "last_ts": "2026-07-18T08:25:41.402Z"
+    },
+    "34c853f5-31da-468b-92a3-406d2341c811": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "226e120fd7d171774333cced601cd7d44390eefa",
+      "last_line": 191,
+      "last_ts": "2026-08-31T19:01:10.312Z"
+    },
+    "36b474ac-4d7a-42b8-8e07-7064c6fb3714": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b63a94cf03c62b25c6f2cb8dc7b3b90400f2c3f2",
+      "last_line": 78,
+      "last_ts": "2026-07-08T19:26:15.757Z"
+    },
+    "37016424-4def-4121-8594-cdc1f3169eb4": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "2104724221b81d5ae30b83348921d5be8b7674d3",
+      "last_line": 83,
+      "last_ts": "2026-08-11T14:14:12.521Z"
+    },
+    "3963c8ea-ef5b-4d6c-9140-0a0b0140b8b0": {
+      "cwd": "/home/me/orca/workspaces/machines/ssh-over-fleet",
+      "host": "latitude5520",
+      "id_hash": "175251c79597990f213c7c44468c9ca98d822e01",
+      "last_line": 497,
+      "last_ts": "2026-07-17T18:40:08.730Z"
+    },
+    "3aff55e1-78de-41ce-a96d-ddc452c67518": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "20317d17f31edaf8693ebce281f1289142db08e0",
+      "last_line": 555,
+      "last_ts": "2026-09-08T16:50:59.132Z"
+    },
+    "3eb5bd43-5290-4b54-abb9-f3240f1ee948": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "50960cffe393f222756dc3ef19b169f6b4a234d4",
+      "last_line": 170,
+      "last_ts": "2026-07-20T13:26:05.962Z"
+    },
+    "3f7986b8-447d-4a3d-9a0f-f630685c4756": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "369f2aa4cca098ab6bd3261216f251787ab8ca96",
+      "last_line": 311,
+      "last_ts": "2026-07-06T19:06:09.766Z"
+    },
+    "40ef9ef4-d45c-480b-be1b-8c36137324ef": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "b41f22f25b75751245fd7450dec1b14480fd5387",
+      "last_line": 1865,
+      "last_ts": "2026-09-11T19:55:23.784Z"
+    },
+    "413ff7f2-c9db-46d0-af39-c4684fdfcdf6": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "07df22e5aae085c47f0d3cb61bd76780a5587c26",
+      "last_line": 51,
+      "last_ts": "2026-07-21T10:33:52.356Z"
+    },
+    "4160f434-6a56-423a-8ae2-dce35d12454d": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "b6cb144006cd40328d0be05790c9cb996e88e374",
+      "last_line": 28,
+      "last_ts": "2026-07-14T17:06:36.613Z"
+    },
+    "431c838f-417a-4af1-ae05-3aa94033dcf3": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g513ie",
+      "id_hash": "f210a4aae81ebdcb55e0ac3e6ac0dec2707db51a",
+      "last_line": 553,
+      "last_ts": "2026-07-19T22:52:57.309Z"
+    },
+    "449b3607-9f62-44de-ab09-25d0e6e2d634": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "2f52cd90cb98fd62f78ee4a254d22753d17f71d8",
+      "last_line": 18,
+      "last_ts": "2026-08-19T15:36:40.561Z"
+    },
+    "469d7366-09de-4849-ba3f-3bc0dcc19ede": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "46eda639d8e048e8b551d39f21aa78c2f88513bb",
+      "last_line": 289,
+      "last_ts": "2026-08-01T03:31:19.775Z"
+    },
+    "47704878-dc21-42a5-b069-561d7b80c9ad": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "f7fa00bff1ef3f9ca4b1a32e6bd373847586cc04",
+      "last_line": 49,
+      "last_ts": "2026-07-20T17:47:04.003Z"
+    },
+    "4968b77e-543a-4cbe-97b2-1a4affc194ad": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "9ec367d183ca2d858c7c5215a9a4d1d3dd3e9c02",
+      "last_line": 1119,
+      "last_ts": "2026-07-13T17:47:23.005Z"
+    },
+    "49c91349-628b-49ac-8f31-7e68500a88f3": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f2652c58bd0da3c7009673a75eb2c5ab8918940d",
+      "last_line": 643,
+      "last_ts": "2026-07-24T01:53:46.961Z"
+    },
+    "4aa768a0-b2b8-4625-9e00-6a501283ea0c": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "8e91740119d21604f6735641ca135e196eea224f",
+      "last_line": 380,
+      "last_ts": "2026-09-10T16:25:24.465Z"
+    },
+    "4b330491-b4ca-4731-934c-97ef50516f79": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d6bfa2e7e7ed3c85d139bdaf409300349119d233",
+      "last_line": 776,
+      "last_ts": "2026-07-07T21:54:25.324Z"
+    },
+    "4d393ddf-3a6e-49a3-8864-9a5dca2233cf": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "16e9ec3c6ca1fd3b6a2bf4bcb1458e6ffee70e29",
+      "last_line": 1205,
+      "last_ts": "2026-07-19T16:07:42.465Z"
+    },
+    "4e37fff7-f0d2-4967-97af-ac5754566c39": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0d65edb8d85662ff8885e2655806f4d41020a02f",
+      "last_line": 214,
+      "last_ts": "2026-07-14T18:12:06.416Z"
+    },
+    "4e9cdecf-eef1-405c-8630-ca49ef993fca": {
+      "cwd": null,
+      "host": "g614jv",
+      "id_hash": "bdc021efdf8eff2537ad92a3908493a6863cb92f",
+      "last_line": 2,
+      "last_ts": null
+    },
+    "4ec7d2f1-e438-4179-afd3-f1d712208d6e": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "2474b7b6c35d1eb90e0e18ae3f4cebdae24286df",
+      "last_line": 49,
+      "last_ts": "2026-07-13T15:19:29.909Z"
+    },
+    "51664786-9699-4a50-a9e1-bf1486b6c75a": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "788d91502ec55b4cd93c38aca2b3855f7808f3a8",
+      "last_line": 377,
+      "last_ts": "2026-08-13T11:19:56.016Z"
+    },
+    "544aa6bb-64a7-4514-8bc0-b7718d897c39": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "71068a4e346c217f640b1b26ea8f92f9236230ca",
+      "last_line": 102,
+      "last_ts": "2026-07-07T18:33:51.282Z"
+    },
+    "568d85ae-86e5-4a9f-879b-5b948572685a": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "72c830e4ceffdf5605a8c211df6134f9efc73d42",
+      "last_line": 40,
+      "last_ts": "2026-07-06T17:20:50.546Z"
+    },
+    "56f10424-564d-4297-98e1-9f908ae23ba7": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-setup-script-hint",
+      "host": "latitude5520",
+      "id_hash": "d2417e5de79ba9b09157f05b9b501595f0ae2bfb",
+      "last_line": 892,
+      "last_ts": "2026-07-19T21:18:46.560Z"
+    },
+    "584d9248-c110-48db-98cc-9127f44be44a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d01b53699044c1429d942628b5ea25b431e2fb76",
+      "last_line": 26,
+      "last_ts": "2026-07-15T17:31:57.978Z"
+    },
+    "5a8a0d3a-71cf-4064-b80f-ce8490c35845": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "945becb37c4af7be96b4dc149e248ecbb20c95df",
+      "last_line": 311,
+      "last_ts": "2026-07-05T18:55:07.552Z"
+    },
+    "5b845924-905e-446d-8b45-7839b4a0a36c": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "f77461c633bc0639383e8c898e002224a5730de1",
+      "last_line": 1298,
+      "last_ts": "2026-09-11T01:43:50.774Z"
+    },
+    "5d80aed3-cbe2-4817-958a-83a4aa4f1281": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "37747b381a68cd53a1417332294580886beb52bf",
+      "last_line": 580,
+      "last_ts": "2026-07-15T19:54:32.336Z"
+    },
+    "5f2c5b91-a65b-49ab-bb6d-2410fcb35c58": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b99e99dfbfa8da1a4a570da98be3d961a633d081",
+      "last_line": 34,
+      "last_ts": "2026-07-21T09:55:38.239Z"
+    },
+    "5f807bd8-1fab-46d2-84a5-63b6de6a4e1b": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "b54235ba872a75db520c41754070a9605add9bfc",
+      "last_line": 60,
+      "last_ts": "2026-07-17T16:44:52.881Z"
+    },
+    "613767b9-8534-4b5c-ad12-9f757aed019d": {
+      "cwd": "/home/me/orca/workspaces/machines/fix-orca-stale-workspaces",
+      "host": "latitude5520",
+      "id_hash": "3558061cc5c28c074aae40cd69e12389a91cba2f",
+      "last_line": 471,
+      "last_ts": "2026-07-22T16:26:42.962Z"
+    },
+    "621ca828-0889-406c-9632-1047ba55bdab": {
+      "cwd": "/home/me/orca/workspaces/machines/WSL-tailscale-setup",
+      "host": "latitude5520",
+      "id_hash": "dadc731a8df99a6066b593f5f80912681c675f01",
+      "last_line": 1893,
+      "last_ts": "2026-07-17T16:37:39.461Z"
+    },
+    "62c471ab-2527-41d4-b24a-3ca2cfc8e6b5": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "ff81aaa38c8e8608b87aed83452dfaff65d06836",
+      "last_line": 89,
+      "last_ts": "2026-07-20T20:57:13.390Z"
+    },
+    "64735ef3-fabb-411f-91a3-720b25a6dfcf": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "757dd986aadb68e98b351f257fe39a878edfbaaf",
+      "last_line": 509,
+      "last_ts": "2026-07-07T13:49:09.927Z"
+    },
+    "6693e418-db12-4d91-9787-f707e82886a8": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "0f04a1d4cad0231a1d1c00fe247ca083f66d9f3a",
+      "last_line": 1052,
+      "last_ts": "2026-07-15T11:23:09.945Z"
+    },
+    "671b9676-2542-41c0-ba21-9a3149e9f322": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "18b57f30606316bcf7010545486c49bcf8065e0c",
+      "last_line": 54,
+      "last_ts": "2026-07-05T17:33:50.170Z"
+    },
+    "691b6ce3-c50a-4508-bdc7-c2587aca5d7e": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "fdc0c608e638d0ce6c1105720f5386f011e97e75",
+      "last_line": 68,
+      "last_ts": "2026-07-05T18:22:33.886Z"
+    },
+    "6bd0058b-7d9f-4baa-bd1b-594ad28ba4f5": {
+      "cwd": "/Users/me/orca/workspaces/machines/machines-cleanup",
+      "host": "air",
+      "id_hash": "8cd4fbc125af2f8a2a613ac3b1c067708cd04ee6",
+      "last_line": 349,
+      "last_ts": "2026-08-02T07:36:36.028Z"
+    },
+    "6ddfd3b8-8c8d-4fd6-abf0-82dcb764b5e6": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "abb67be405adb334a49cc80d29ea7318e791c919",
+      "last_line": 69,
+      "last_ts": "2026-07-08T21:03:18.313Z"
+    },
+    "6eaa727d-81a5-48b8-a1d0-76b3ece36f76": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "1a1f7db51293dd0e11be9dcf5b7df21d1ab70d2a",
+      "last_line": 11,
+      "last_ts": "2026-07-09T10:30:36.108Z"
+    },
+    "6eeceba8-bc74-435e-9bfc-28aaf7259b99": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "4cec648585c6e7e11fd0b95e094270f7f6d15a77",
+      "last_line": 887,
+      "last_ts": "2026-07-21T11:03:46.989Z"
+    },
+    "6ef60dd7-e3de-4761-826b-d23a7f2861a9": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d4380b71031117481f70200cecc7c55038511825",
+      "last_line": 21,
+      "last_ts": "2026-07-14T18:21:55.118Z"
+    },
+    "6f633445-7ae8-40bc-a5a1-332a560a4161": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "08e6d12b07e3e4bef27ab3a592601ae41962f161",
+      "last_line": 434,
+      "last_ts": "2026-07-06T11:43:51.901Z"
+    },
+    "6feb8365-c0f7-44fd-aa57-9740cf0525d7": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "bf5cf862c138a06b1f85f57baf49e625a68594c7",
+      "last_line": 35,
+      "last_ts": "2026-07-05T21:08:39.640Z"
+    },
+    "7191118a-0c2d-4aa9-8572-3269e427cf48": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "6cdf31fa162b08ec59fca801caf302a769f3e75e",
+      "last_line": 2187,
+      "last_ts": "2026-09-11T17:12:38.357Z"
+    },
+    "736d8526-95b0-42ef-985c-25f3478041a4": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "25d814a9ea8036281235607fa48b0eaee10172c3",
+      "last_line": 37,
+      "last_ts": "2026-07-21T09:47:59.558Z"
+    },
+    "74b7dcd5-aa0e-459d-85d2-01288acf3f04": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "86a281f40364047b76bd505d12ecbcad07117cfe",
+      "last_line": 20,
+      "last_ts": "2026-08-12T09:45:32.064Z"
+    },
+    "75dc6633-befe-4be1-8c62-5d0bec6989a5": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "2df885cb03ab5ae590457bb43d60836aebaba51d",
+      "last_line": 1071,
+      "last_ts": "2026-09-09T04:41:11.851Z"
+    },
+    "7637cf4d-a9f8-46cf-bac9-a81b53936a01": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "873dadbc5b8c02c58e0b90eed9d390c7e63d6692",
+      "last_line": 66,
+      "last_ts": "2026-07-20T19:00:51.905Z"
+    },
+    "77518c17-8e2c-4e25-8eb2-157b3d643dfa": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "f167600732403821b1c2b1e0011b499c2655d658",
+      "last_line": 58,
+      "last_ts": "2026-07-07T17:22:49.885Z"
+    },
+    "7b9e836f-992a-4794-91ab-7830f53962dd": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "5aec8cba347ff2a8e29695ac7733c003bb0de2af",
+      "last_line": 15,
+      "last_ts": "2026-08-24T08:51:51.865Z"
+    },
+    "7c349288-4e86-4514-aee4-10fdc8e11076": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "16a0c4dce32970e3dfa25a5ddf66fae8f0b6297f",
+      "last_line": 40,
+      "last_ts": "2026-07-20T13:32:07.911Z"
+    },
+    "814ffea6-314b-4463-91d0-6cc02172ab96": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "cc146650de9a19e06a34a4f1eb52d375d4e2d211",
+      "last_line": 26,
+      "last_ts": "2026-07-17T11:03:37.737Z"
+    },
+    "826d73d2-6cde-44b2-8ab9-f90c89658e8c": {
+      "cwd": "/home/me/orca/workspaces/machines/caveman",
+      "host": "latitude5520",
+      "id_hash": "53b525d30f7135bf8c19c13d2c4525ce57dabb1e",
+      "last_line": 360,
+      "last_ts": "2026-07-24T01:55:11.568Z"
+    },
+    "83095302-4347-41d7-a1d4-e0c912f5b108": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "e64ec27854676c3ae1d7090cb2b5025c0bd79266",
+      "last_line": 48,
+      "last_ts": "2026-07-07T21:21:50.743Z"
+    },
+    "831a290a-aba2-4ef0-a8b7-7b6e77d73294": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "a4e6894411751d123bc232d8f269220d0420761f",
+      "last_line": 19,
+      "last_ts": "2026-09-09T08:03:54.906Z"
+    },
+    "850e7bc6-bac8-4a88-a3c2-68b494b3e1f7": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "02c3f16d02cf0be88bdbe27dc81effb65f32b42a",
+      "last_line": 180,
+      "last_ts": "2026-07-15T10:19:42.654Z"
+    },
+    "8716ef72-37c1-491a-a39e-fbc72c0b3ff2": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "cb93d40d036bb1178ea910974088e9c3837acc3a",
+      "last_line": 505,
+      "last_ts": "2026-09-09T17:07:14.903Z"
+    },
+    "892ce1c5-fcd6-4705-bbf6-032333852763": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f4bf7a1f0d511306534f813a1454c2ec4656e97b",
+      "last_line": 26,
+      "last_ts": "2026-07-15T10:19:49.995Z"
+    },
+    "8c14685f-8c92-4ffb-95c6-7b5d58990499": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "d83af186f21eb63982f41b5c3736dc50ec236e60",
+      "last_line": 825,
+      "last_ts": "2026-08-25T08:46:21.231Z"
+    },
+    "8c3a3abe-3576-41c0-8554-a0b435f5137e": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "9b3edd5d04cb2876aedaf3992b71ec57a2922905",
+      "last_line": 141,
+      "last_ts": "2026-07-14T09:15:26.287Z"
+    },
+    "8c4a3511-0d5f-4e4d-9084-69f3d263dce4": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d686925146f6de763847622960cfdfd7aad0a343",
+      "last_line": 239,
+      "last_ts": "2026-07-14T09:22:28.379Z"
+    },
+    "8c866a7f-4dd5-4198-b6b3-8e12ce900f4c": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "c7ee295f44d7fec81f62274420926c1acd6582d3",
+      "last_line": 893,
+      "last_ts": "2026-07-19T19:34:39.357Z"
+    },
+    "8f0e270d-a046-47c8-9b51-62a180922a53": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "b0812c3db1f605f2292c0b11e65d88d360e49cae",
+      "last_line": 47,
+      "last_ts": "2026-07-07T13:15:34.607Z"
+    },
+    "91f69ddb-cd10-4338-8265-b413c6f6de1c": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "160f5edb0cb392f20343a32a37f1ed2c2d434fa5",
+      "last_line": 34,
+      "last_ts": "2026-08-24T07:09:17.029Z"
+    },
+    "925b7887-33a4-4fb0-82ee-bb4cd1c71f2c": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c17a7d6fbdf993834706c08d4d1f6855877932e9",
+      "last_line": 109,
+      "last_ts": "2026-07-15T18:47:15.422Z"
+    },
+    "9267d3f5-1158-471e-94a2-1f184c13205e": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c11746be769e00b179c11242c6c2796d9770ed5c",
+      "last_line": 12,
+      "last_ts": "2026-07-07T21:21:53.947Z"
+    },
+    "94a6aabd-6c43-4097-89cc-befae4513d69": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "9b8fd24d8ce69eeb53797ec6fd9d0dcf6dcfbe43",
+      "last_line": 308,
+      "last_ts": "2026-08-16T15:38:01.816Z"
+    },
+    "957a3618-6b3a-4e67-ad24-140ce102791a": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "85df761288b7e46b8b2132dca0be5a46aafed49c",
+      "last_line": 340,
+      "last_ts": "2026-08-24T08:50:10.870Z"
+    },
+    "96a76e02-1793-4233-ac7d-48537a2760ab": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "aa480aafe5cad19f2efa29d1bdda9b44df6e4752",
+      "last_line": 157,
+      "last_ts": "2026-09-11T22:18:27.417Z"
+    },
+    "96d9a682-dbcd-4649-8fc4-a113d30f3e1a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "d91e44016dc6473fbcf2c57ab62f1aeeb73a9c5f",
+      "last_line": 142,
+      "last_ts": "2026-07-15T21:57:04.301Z"
+    },
+    "9762d15e-075f-4c45-a863-c4db842ceb34": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "9361d7bc7029e1c83acbfa7ed6db699925d57b89",
+      "last_line": 54,
+      "last_ts": "2026-07-17T14:42:29.205Z"
+    },
+    "97b1a797-8e7b-4b31-a530-40b81f5f2e19": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "7342f4ca711abf88ecfd2992f764bae0fab6f3ec",
+      "last_line": 18,
+      "last_ts": "2026-07-16T18:17:45.672Z"
+    },
+    "9806f570-daa3-4e12-af24-63e732df0dcd": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "1f85c2838e55381856795f9d015579bba12dbc6d",
+      "last_line": 5,
+      "last_ts": "2026-07-06T17:18:05.480Z"
+    },
+    "9a4a2c0e-65fb-49eb-a7f9-301984ba0e55": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "e9d5d0849decadc05848503f9d9ad575a6161118",
+      "last_line": 128,
+      "last_ts": "2026-07-06T20:44:53.665Z"
+    },
+    "9be70f7a-c981-48be-97c3-eb2467c68018": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "067ea811e8ad9e4894cb5dfb55368ce4b408d8e3",
+      "last_line": 262,
+      "last_ts": "2026-07-05T17:08:27.033Z"
+    },
+    "9c14cf98-8a95-4f9c-842d-a81d253ea0da": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "b72b50498b3f537f8c1417a688b9c16faeef6d6c",
+      "last_line": 708,
+      "last_ts": "2026-08-29T14:20:22.200Z"
+    },
+    "9ddbac91-550b-41ee-b63c-a1402574d600": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "65727050d7b414cd83f895c6d5ec26067bdc7fc1",
+      "last_line": 22,
+      "last_ts": "2026-07-10T21:11:30.330Z"
+    },
+    "9f8843ff-3d15-434a-b3f0-0f66aba311cb": {
+      "cwd": "/tmp/claude-1000/-home-me-machines/8c14685f-8c92-4ffb-95c6-7b5d58990499/scratchpad/rrtest",
+      "host": "desktop-wsl",
+      "id_hash": "0fb92d9711e8a0ba993fcce503fa9043950dc58a",
+      "last_line": 34,
+      "last_ts": "2026-08-24T14:31:03.702Z"
+    },
+    "9fc6b575-e141-40ef-b472-6da25ce88169": {
+      "cwd": "/home/me/orca/workspaces/machines/refresh-kb",
+      "host": "latitude5520",
+      "id_hash": "72cd67a975123a1b9124e2944896f0b73828d967",
+      "last_line": 673,
+      "last_ts": "2026-07-19T19:20:56.368Z"
+    },
+    "a0240c6d-c9a6-429b-8fc1-2c62c84f1de2": {
+      "cwd": "/home/me/orca/workspaces/machines/caveman",
+      "host": "latitude5520",
+      "id_hash": "3818d3fb0c8ff08e0c5db0afb01df265682e144e",
+      "last_line": 32,
+      "last_ts": "2026-07-24T00:49:21.764Z"
+    },
+    "a2287911-468e-4783-9fcf-1900dc4b639b": {
+      "cwd": "/home/me/orca/workspaces/machines/update-nix-linux-kernel",
+      "host": "latitude5520",
+      "id_hash": "4b9a5c1a406c6b032fb72f4214da864bea649c13",
+      "last_line": 293,
+      "last_ts": "2026-07-19T12:36:28.415Z"
+    },
+    "a2e1aba7-750f-44ec-acf1-6e57a544562c": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "1b56b0daa42c8d393a02351872e03dfe9b0f6d5e",
+      "last_line": 521,
+      "last_ts": "2026-07-31T18:49:09.219Z"
+    },
+    "a6d0caf7-8165-481a-a54d-b1f5e6184478": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "2009a65a960656850e701904150d5cd5de0bb435",
+      "last_line": 181,
+      "last_ts": "2026-07-07T13:29:12.661Z"
+    },
+    "ab11ea7f-4619-454e-abce-25133a99d3ac": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "f177857fb01958db57104658262cc80f85e56352",
+      "last_line": 477,
+      "last_ts": "2026-07-07T15:33:36.536Z"
+    },
+    "ae9c9474-3cea-4ad5-acf5-503317916575": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "c55debb1897da2702604084cb3b29e617b53e8b5",
+      "last_line": 893,
+      "last_ts": "2026-07-06T15:21:51.338Z"
+    },
+    "af31005d-4dcd-48bd-9e7f-fba79f619290": {
+      "cwd": "C:\\Users\\methe\\orca\\workspaces\\machines\\server-machines-sync-main",
+      "host": "g513ie",
+      "id_hash": "747c86b647c0555cf8e0be1734269b656a91b48f",
+      "last_line": 36,
+      "last_ts": "2026-07-19T20:46:20.089Z"
+    },
+    "b177acd3-f8d3-4d73-a316-58b3e59433a5": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "5ebce725205a92912d7cf9aac812afcde1fa6a1d",
+      "last_line": 603,
+      "last_ts": "2026-09-10T15:52:25.399Z"
+    },
+    "b226a898-82a3-4b76-b9af-cbf6809fee8a": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "abee00858d638b991529e7ad60a66e29c2c08140",
+      "last_line": 33,
+      "last_ts": "2026-08-11T22:05:51.314Z"
+    },
+    "b420690b-22a5-4fca-a0ef-cee7080f6676": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "63ff30ecea0074114d768c6c11d39603e78be21f",
+      "last_line": 321,
+      "last_ts": "2026-07-07T17:20:35.442Z"
+    },
+    "b439a8de-c8fa-4cf3-89ad-313602e456fc": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "44d4ab5ca9183eff45dafa09bd22b8841c9324f6",
+      "last_line": 519,
+      "last_ts": "2026-08-19T16:14:29.390Z"
+    },
+    "b47e8f6a-568d-45d6-a48e-b028534fb308": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "e3dd70c46ca55846eb25a34cc22fa0b4361e62b4",
+      "last_line": 299,
+      "last_ts": "2026-07-08T19:17:53.686Z"
+    },
+    "b79a2f46-0ad0-4d39-a786-1d71d5998b96": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "23f05ef24a4b8ebea74f622bfbca68f7beb85539",
+      "last_line": 107,
+      "last_ts": "2026-09-07T08:57:37.530Z"
+    },
+    "b838ec2d-9117-467a-ac8c-7c04510c0489": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "b9acd227a8b0d236f7eff42a51bbce5d437da152",
+      "last_line": 1669,
+      "last_ts": "2026-09-11T02:56:54.808Z"
+    },
+    "b84f243e-06e2-45ee-a07c-06ee631d0909": {
+      "cwd": "/home/me/orca/workspaces/machines/git-worktree-orca-setup",
+      "host": "latitude5520",
+      "id_hash": "46145db9ed90f28cac1106015c1625ece79d1e30",
+      "last_line": 447,
+      "last_ts": "2026-07-18T09:03:23.497Z"
+    },
+    "b984b7ee-4815-4431-b9d5-62c3267af56e": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "98a1c13b2b44fa7a8d5f172702f1def55c50bb11",
+      "last_line": 459,
+      "last_ts": "2026-07-05T23:08:35.491Z"
+    },
+    "ba2002ea-d123-4587-a129-164a6f3d6d5e": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "912d7896f970a9778755248807a5594f9383c8f5",
+      "last_line": 6527,
+      "last_ts": "2026-09-03T15:45:57.700Z"
+    },
+    "ba3f389d-bbe0-482b-8ef7-50db15224a85": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "6eb2c0ffa94ea709c0ec0f10534934f4963107a2",
+      "last_line": 12,
+      "last_ts": "2026-07-08T17:09:43.593Z"
+    },
+    "bd0b20f0-5499-4ed4-8024-06a635aa312b": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "11c1e19a5b84a81ff8a5d626dd23d58b5f9d49f2",
+      "last_line": 32,
+      "last_ts": "2026-08-04T13:19:21.736Z"
+    },
+    "bd412c96-7936-4559-b085-dffd0c029252": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "64e1814f9a00ede0fcbbd12642535b3949087d23",
+      "last_line": 110,
+      "last_ts": "2026-07-15T22:03:36.776Z"
+    },
+    "bf7a3ca7-5b88-42ce-9a52-f13ecbb886d5": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "c15b9486f2372a25500d455a5ca2044ccee5052a",
+      "last_line": 437,
+      "last_ts": "2026-07-19T08:43:24.739Z"
+    },
+    "bfca311f-22cc-4347-8648-08b9cb98bc43": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "fc9ae4d985300b8217b221987b74adae6c7e7c8a",
+      "last_line": 22,
+      "last_ts": "2026-08-01T03:03:13.725Z"
+    },
+    "bffaeb01-a2a7-4482-a930-072a350f4d5d": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "91f4b69b1fc437e22a3524de7d81843e8e10ef9b",
+      "last_line": 893,
+      "last_ts": "2026-07-07T09:10:42.435Z"
+    },
+    "c3b9d28f-f225-4660-a13d-b237610a7219": {
+      "cwd": "/home/me/gh/machines",
+      "host": "latitude5520",
+      "id_hash": "01b58ddc56a2876126ed1610376bfab2bcb74b93",
+      "last_line": 25,
+      "last_ts": "2026-07-05T18:56:41.421Z"
+    },
+    "c3c430cb-263b-4099-adf3-250109f6acaa": {
+      "cwd": "/home/me/orca/workspaces/machines/test",
+      "host": "desktop-ubuntu26",
+      "id_hash": "591cac75baf7274b3339cb8064c09e81b4b19576",
+      "last_line": 16,
+      "last_ts": "2026-07-19T16:59:36.664Z"
+    },
+    "c557a872-589b-4e60-ab42-29912ad36ec4": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "e5e349bad1ea5ed59723735d49a5527900257064",
+      "last_line": 2283,
+      "last_ts": "2026-09-09T15:31:58.785Z"
+    },
+    "c58a025a-b506-4770-8842-186f692e8327": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-hosts-ui-research",
+      "host": "latitude5520",
+      "id_hash": "28f9c2f9c5e4e97a86bcc5c8315ac7c3e68746c1",
+      "last_line": 85,
+      "last_ts": "2026-07-18T09:50:35.331Z"
+    },
+    "c78e09c5-5117-46b4-bd95-ab1df8eb9299": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "15ddb666b71fbd7c8e8a9ebbf10780ee6d77a2c4",
+      "last_line": 122,
+      "last_ts": "2026-07-15T21:13:58.892Z"
+    },
+    "c9782663-c19c-4331-84eb-c1ab9c3e0dd9": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "7712e60a4c5c37b898bf2782f3b1f1cb7a3f7e62",
+      "last_line": 55,
+      "last_ts": "2026-07-07T21:28:10.999Z"
+    },
+    "c9c35df1-7add-428e-aa72-57841df28af6": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "8d220e09afc9dbe8490933c80e865a5a838e995b",
+      "last_line": 19,
+      "last_ts": "2026-09-08T16:05:17.144Z"
+    },
+    "cab62c08-fef0-42b3-adf5-e121fb5a8047": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "8bfbd70f5316d8a8d1b01211c59f0e43f31916b2",
+      "last_line": 14,
+      "last_ts": "2026-07-15T22:04:14.052Z"
+    },
+    "cb783c52-88ca-4a39-b894-3fc587dec801": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "d30fb8025b2941bd455142c891a77e8617fd0f4a",
+      "last_line": 190,
+      "last_ts": "2026-08-13T17:06:20.170Z"
+    },
+    "cccbd71f-7112-49d1-b00b-4775f333a348": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "93d5f789dbbe00f99a598a419eb0774050be2fc1",
+      "last_line": 425,
+      "last_ts": "2026-07-08T18:12:19.267Z"
+    },
+    "cce75f46-d118-45ac-9280-db3bcd913e58": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "09a9e9d01599281235abb7056ce2a2fe90cb1570",
+      "last_line": 918,
+      "last_ts": "2026-07-14T19:15:14.841Z"
+    },
+    "cecc365e-10ff-45f4-bccc-35c8ea3dcb3e": {
+      "cwd": "/home/me/orca/workspaces/machines/orca-session-management",
+      "host": "latitude5520",
+      "id_hash": "b4353eb824814a2d61ff0500ddca9d946ba07fa1",
+      "last_line": 79,
+      "last_ts": "2026-07-19T13:23:41.775Z"
+    },
+    "cf0464a2-7229-47f2-9dbf-d163f8edcdd8": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "ae7d4d8eedaf7266a358b8860f12de9f7b24a3e1",
+      "last_line": 617,
+      "last_ts": "2026-08-11T21:07:34.731Z"
+    },
+    "cf565343-e067-4e1f-8e48-b5087893f218": {
+      "cwd": "C:\\Users\\methe\\orca\\workspaces\\machines\\sync-main",
+      "host": "g513ie",
+      "id_hash": "63dad9af5c3f9cd6522ac1b0dee5d76a3fbbb56e",
+      "last_line": 33,
+      "last_ts": "2026-07-19T19:37:59.139Z"
+    },
+    "cfd6e12c-98d2-4ffa-9213-258e7e9b5f4d": {
+      "cwd": "/home/me/orca/workspaces/machines/ssh-over-fleet",
+      "host": "latitude5520",
+      "id_hash": "09af587291ea963d51b92c0e09b2e3e7fddb401e",
+      "last_line": 152,
+      "last_ts": "2026-07-18T08:12:51.939Z"
+    },
+    "d07916ff-c1da-45d9-a6e5-5db2ff022289": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "a9c1b43e8d8ebe01e2c2ca763e2910a3f6c717bb",
+      "last_line": 246,
+      "last_ts": "2026-07-14T18:17:44.693Z"
+    },
+    "d2606824-0501-43f6-a110-c8e5be624f0a": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "69565865419a891fc4c71541a73b41bf56c1647b",
+      "last_line": 167,
+      "last_ts": "2026-07-13T13:01:36.916Z"
+    },
+    "d2993749-ff3b-43b5-91a4-608f4c5bc2f2": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "a7b20b054f5892ff510634872d240fb19070ab2d",
+      "last_line": 178,
+      "last_ts": "2026-09-02T13:50:00.322Z"
+    },
+    "d2c354f5-dccb-496e-ae10-9df775aaec07": {
+      "cwd": "/home/me/orca/workspaces/machines/test-worktree-setup-script",
+      "host": "latitude5520",
+      "id_hash": "8db38161d44863b8a6116efea9620c8226b0095b",
+      "last_line": 51,
+      "last_ts": "2026-07-18T08:03:05.712Z"
+    },
+    "d3709f19-4986-4280-bbae-9322fd4c04fa": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "25535240120af35df872c4646f9f1415d541cba7",
+      "last_line": 245,
+      "last_ts": "2026-07-08T17:09:23.844Z"
+    },
+    "d459b28b-b35d-43f7-9693-ad5abf85f049": {
+      "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
+      "host": "latitude5520",
+      "id_hash": "2c03dfec9fc1a9f7c7ca15131b12c37d0fec8f2b",
+      "last_line": 34,
+      "last_ts": "2026-07-16T20:44:17.181Z"
+    },
+    "d48db917-d276-41b0-983d-792a91de8b79": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "a8b1363713e45752679822a98a157067d7755075",
+      "last_line": 32,
+      "last_ts": "2026-07-16T18:11:05.102Z"
+    },
+    "d4934cfe-654b-4361-9d31-06062481c895": {
+      "cwd": "/mnt/c/Users/methe/machines",
+      "host": "desktop-ubuntu26",
+      "id_hash": "c0abd98ff51bfbbdd25039d86ce336e16053bc18",
+      "last_line": 272,
+      "last_ts": "2026-07-20T20:30:34.594Z"
+    },
+    "d6c47e87-28f2-43a3-900d-c3e6b91e3de9": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "7f5715d4bed0e25430f2d16b7d73509e4c145993",
+      "last_line": 40,
+      "last_ts": "2026-09-10T19:53:39.736Z"
+    },
+    "d730f2b8-9d2d-42d2-853b-2ce33b93e100": {
+      "cwd": "/tmp/claude-1000/-home-me-machines/8c14685f-8c92-4ffb-95c6-7b5d58990499/scratchpad/rrtest",
+      "host": "desktop-wsl",
+      "id_hash": "6f53362f79258310831451b50ea283344b9824c2",
+      "last_line": 22,
+      "last_ts": "2026-08-24T14:34:32.889Z"
+    },
+    "d795f925-b7b9-441b-bd21-81fbc8a9b930": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "b5f17b24160615e6f0314f7a62cdab1365ed53b8",
+      "last_line": 7713,
+      "last_ts": "2026-09-10T13:18:35.894Z"
+    },
+    "d88f47e0-08b5-4f56-b57e-736387bd37f3": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "8d9b72ecc90ccbb15683d1ae9b9b65f6d43b23c0",
+      "last_line": 308,
+      "last_ts": "2026-08-04T13:19:12.247Z"
+    },
+    "d9ef38ed-64f3-452a-82f9-075915321abd": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g513ie",
+      "id_hash": "e0a2041234d41ae4b0602498e04ba51740860eb5",
+      "last_line": 50,
+      "last_ts": "2026-07-19T19:43:07.349Z"
+    },
+    "dc3e7e73-f226-4856-ac95-d6ad8f07d827": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "50313630eb41259fd4a7d71e14c9f183a1071d3b",
+      "last_line": 10,
+      "last_ts": "2026-07-06T15:29:04.463Z"
+    },
+    "de483aa9-8f6f-4bd1-b247-50e21439e658": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "c6a3cd3c30aedaf77f8f22b8b0654e6d3f683ce0",
+      "last_line": 120,
+      "last_ts": "2026-07-09T10:27:34.951Z"
+    },
+    "e11c158c-62c4-4316-8987-320b17b6bda9": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "f62a8f20f897321f3ee16f67c2409b95f004f05f",
+      "last_line": 27,
+      "last_ts": "2026-08-29T10:51:38.349Z"
+    },
+    "e2e251e4-0a5c-43d6-8a23-3adebc02ffbd": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "ea071ae7f27c6956c53d92b6cada9ab273d51c04",
+      "last_line": 458,
+      "last_ts": "2026-08-04T21:40:54.004Z"
+    },
+    "e6f78b16-e578-4b5f-b1f8-7a4425f90923": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "319f1f36feae5638ab548bf20c93b2eefc919a5a",
+      "last_line": 64,
+      "last_ts": "2026-07-14T18:16:43.089Z"
+    },
+    "e76270ea-6739-413a-be55-3623d7f19ecb": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "3e2906932e4a16970ce1b8dccc8ae938814898bd",
+      "last_line": 328,
+      "last_ts": "2026-08-17T14:01:50.151Z"
+    },
+    "e7c42e32-8273-4ce5-bdee-3c7dcdf5b586": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "783cf0c04c19feb06840b2ae18f9307780fc58b5",
+      "last_line": 1078,
+      "last_ts": "2026-08-24T07:32:39.799Z"
+    },
+    "e99f5266-28a6-4fbf-bdd3-2dba4545a419": {
+      "cwd": "/home/me/orca/workspaces/machines/fix-orca-stale-workspaces",
+      "host": "latitude5520",
+      "id_hash": "fd0071ca4016fe0bab6881d0e3e299b6bebeaa0a",
+      "last_line": 466,
+      "last_ts": "2026-07-21T14:57:22.773Z"
+    },
+    "eddb2751-71aa-44ae-aaad-c7ddf4b33382": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "dc3c99f3057a5cf26fced92ce24d7e78f0973169",
+      "last_line": 106,
+      "last_ts": "2026-07-15T21:01:31.114Z"
+    },
+    "ee592b68-8935-495a-831b-e737431cfe5f": {
+      "cwd": "C:\\Users\\methe\\GitHub\\machines",
+      "host": "g614jv",
+      "id_hash": "a1d9483c21f3afe2b16ade48f113b064a7509f9a",
+      "last_line": 214,
+      "last_ts": "2026-07-05T19:58:48.723Z"
+    },
+    "efe61ca7-8e3c-4ab4-84ca-e59010c2e760": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "0d8e82b6eafea08da08cc48a6abacd71766e9d13",
+      "last_line": 418,
+      "last_ts": "2026-07-10T23:46:01.795Z"
+    },
+    "f02f0e98-4ed2-4fc0-8fbe-7e70c6f29fc6": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "5675c4a635393cab1f5d771f5c5034e05f8e8f8d",
+      "last_line": 41,
+      "last_ts": "2026-08-29T10:52:36.118Z"
+    },
+    "f0f32919-7e4e-4b81-8b7d-ed871aeacc7b": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "56dcbde9fa026bf9ab1f8409254067c98ac8a4d6",
+      "last_line": 50,
+      "last_ts": "2026-07-07T16:13:32.928Z"
+    },
+    "f18ebe4d-71de-4bc6-9e93-de8560c14d1d": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "35a9ae08894fbe61f57158d4f3c006180eb57b4e",
+      "last_line": 141,
+      "last_ts": "2026-07-07T18:18:39.503Z"
+    },
+    "f2585392-3cc8-47c9-9bac-03d74d68ed0d": {
+      "cwd": "/home/me/machines",
+      "host": "desktop-wsl",
+      "id_hash": "14d4e7a227b86753666a068014c0cab9d55fc456",
+      "last_line": 654,
+      "last_ts": "2026-09-07T16:10:01.197Z"
+    },
+    "f4d2b041-c8f3-4a4c-b5c7-a84912203992": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "099f8c162cee8255ecc0527c17df0c48b9dbaa81",
+      "last_line": 30,
+      "last_ts": "2026-07-15T21:15:56.555Z"
+    },
+    "f7c370bd-1c2a-4b64-921f-23866e2a8779": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "g614jv",
+      "id_hash": "14ece2ea798e14aed1f733877303e8d55cb7f3a6",
+      "last_line": 328,
+      "last_ts": "2026-07-07T23:40:46.441Z"
+    },
+    "fda4b9b8-36bd-4d8e-8de8-6a7049e34564": {
+      "cwd": "C:\\Users\\methe\\machines",
+      "host": "methe-server",
+      "id_hash": "9b3e5b62902816c86ecc2e8a50121a54244b5dc1",
+      "last_line": 918,
+      "last_ts": "2026-07-15T16:54:54.004Z"
+    },
+    "fe94a2d5-59e6-41dd-91f1-8170973cad18": {
+      "cwd": "/home/me/machines",
+      "host": "latitude5520",
+      "id_hash": "bf27b397046437903f4bdc3142390adab23575c2",
+      "last_line": 159,
+      "last_ts": "2026-07-07T17:22:16.514Z"
+    }
+  }
+}

@@ -89,3 +89,23 @@ host:desktop | add | **UNVERIFIED, and worth one check: Docker Desktop's "start 
 - Orca's project/`hookSettings` model, the `tiers.sh` call contract, the
   `npx`-is-in-`npm` finding and the memory-machinery facts went to Lane 1 for the
   same reason: they are `machines`-repo facts, not fleet-wide preferences.
+
+---
+
+# /cyphy:memory-review decision — 2026-09-12 (applied on g15)
+
+Every row decided. 9 applied, 3 carried.
+
+APPLIED -> ~/.claude/memory/global.md (5): single-writer siting rule; name-vs-boolean
+invariant; PreCompact cannot give the model a turn; Orca skill symlink is two-sided;
+Orca voice mode parakeet-v3.
+APPLIED -> ~/.claude/memory/personality/practices.md (1): a test for a hazard must not
+be able to trigger the hazard.
+APPLIED -> ~/.claude/host-memory.md (3): g15 is the memory_publisher; 67-repo discovery
++ nested kazakhstan-law + `codes` basename collision; Orca CLI refuses a foreign symlink
+and ~/.local/bin holds no orca command.
+
+CARRIED to g16-wsl (NOT rejections — that box's host-memory.md is on its own dotfiles
+branch and is not writable from here) (3): the bitmagnet DHT crawler stack; the 04:00
+automation ordering against the 06:00 restic backup; the UNVERIFIED Docker Desktop
+login-scoped-startup claim. Apply these in a /memory-review run on g16-wsl.
