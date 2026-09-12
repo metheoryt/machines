@@ -4436,3 +4436,38 @@ beside the other latitude facts.
   state — сотни МБ в день» описывает одного фотографа и как плановый вход
   недействительна. Подключение родственника **не является событием посева**:
   immich заливает с телефона по вайфаю, в течение дней, поэтому всплеска нет.
+
+## Two boxes ran /memory-review on one queue — Step 0 cannot see it (2026-09-12)
+
+- **It happened.** g15 and g16-wsl both held `/memory-review` sessions against
+  `docs/memory-consolidate/queue.md` on 2026-09-12 evening. Five items
+  (`eac9e0fb`, `884ce6fa`, `119eea90`, `8dd3022d`/`a6f70ff5`, `34ccf2ed`) were
+  worked twice, and the two boxes reached **opposite** decisions on the
+  `8dd3022d` / `a6f70ff5` pair. Nothing was lost — g16-wsl yielded, reset
+  `machines` to `origin/main` and proved its `global.md` byte-identical to
+  main's before committing — but that was luck plus a late check, not a gate.
+- **Why the gate missed it.** The skill's Step 0 dirty-check is entirely
+  **local**: `git -C ~/machines status --porcelain` and the dotfiles equivalent.
+  Both were clean on g16-wsl while g15 had already pushed six review commits and
+  a `global.md` promote. A clean local tree says nothing about another box.
+- **The check that would have caught it, in Step 0, before reading the queue:**
+  ```sh
+  git -C ~/machines fetch --quiet origin
+  git -C ~/machines log --oneline HEAD..origin/main -- docs/memory-consolidate
+  ```
+  Non-empty means another box is working the queue — merge first, then re-count
+  open items. A `memory-review:` commit within the last hour means a session is
+  probably still live; ask before starting.
+- **The deeper reason it is not just a stale-checkout problem.** The queue is
+  shared repo state with no lock, while `fleet.json`'s `memory_publisher` names
+  exactly one box for Phase B *generation* and says nothing about who *applies*.
+  Applying is what mutates the shared stores, so it is the half that needs the
+  single writer. Either give `/memory-review` the same one-name gate, or make
+  the queue lockable; a fetch check only narrows the window.
+- **The one thing a non-publisher box contributes that the publisher cannot** is
+  its own `host-memory.md`. g15 rejected `8dd3022d` as unapplicable and landed
+  `a6f70ff5`'s fleet-wide claim instead — which is **wrong**: it says
+  `~/.claude-profiles/` is "gone fleet-wide … no box had the directory", and it
+  is on g16-wsl with credentials in it. A box-local fact asserted fleet-wide
+  from a box that cannot see the box in question. See g16-wsl `host-memory.md`
+  under `## Orca`.
