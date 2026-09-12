@@ -63,6 +63,22 @@ which is the whole reason `offsite-selfcheck.sh` and `offsite-verify.sh` (via
   copy is in Almaty; re-seeding this box's copy of it is a trip, not an `rm`.
   Record which pack(s) `restic-pack-verify.sh` named as `BAD` and treat the
   disk as suspect until it can be re-imaged from Almaty in person.
+- **`detail` says `config and keys/* not judged (no baseline.sha on this
+  box)`.** `/var/lib/offsite/baseline.sha` was never copied here. Until it is,
+  `config` and `keys/*` — the two things in the repository that are NOT named
+  by the hash of their own bytes — go unjudged on every sweep. Generate it in
+  Almaty against the canonical repository and copy it to
+  `/var/lib/offsite/baseline.sha`; the next sweep records `baseline: ok` and
+  the note stops. This used to be silent: `restic-pack-verify.sh` printed a
+  NOTE, nothing scraped the NOTE, and `verify.json` recorded `rc:0 bad:0`, so
+  the one thing an operator can forget at install time was the one thing
+  invisible afterwards.
+- **`detail` says `sweep coverage dropped` or `repository directory missing`.**
+  The repository is `--append-only` and nothing here prunes or forgets, so the
+  count of content-addressed files only ever goes UP. A drop, or an absent
+  `data/` `index/` `snapshots/`, is lost data or a half-mounted disk — never
+  routine. Treat it exactly like bad packs above: nothing is deleted here, the
+  canonical copy is in Almaty, and re-seeding is a trip.
 - **The sweep has not run in three weeks, or has never run
   (`offsite-verify.timer` failed or was never installed).** A stopped weekly
   job is exactly the silence this whole design exists to catch —
@@ -79,10 +95,20 @@ which is the whole reason `offsite-selfcheck.sh` and `offsite-verify.sh` (via
   finishes (a long self-test runs for hours; do not wait for it on-site) —
   the hourly selfcheck only reads the already-cached SMART attributes and
   overall health, it does not trigger a self-test itself.
-- `journalctl -u rest-server --since '3 months ago' | grep -c 403` — a
+- `journalctl -u rest-server --since '3 months ago' | grep -cE '" 401 '` — a
   nonzero, growing count is someone on that LAN guessing at the htpasswd
   credential; `--private-repos` and `--append-only` limit the damage a
   successful guess could do, but a rising count is still worth knowing about.
+
+  **401, not 403, and do not "restore" the other number.** Checked against
+  rest-server v0.14.0's own `handlers.go` on 2026-09-12: `http.StatusForbidden`
+  does not appear in that file at all. Both the failure modes worth counting
+  return **401** — bad or missing HTTP Basic credentials, and a
+  `--private-repos` cross-user denial (`folderPath[0] != username`). A
+  `grep -c 403` here would have read zero forever, which is itself a check
+  reporting success having done nothing. The `" 401 ` pattern is anchored on the
+  status field of the combined log format (`… "GET /… HTTP/1.1" 401 0`), which
+  `--log -` in the unit turns on, so it cannot match a path or a byte count.
 
 ## Files
 
@@ -93,8 +119,12 @@ which is the whole reason `offsite-selfcheck.sh` and `offsite-verify.sh` (via
 - `systemd/offsite-selfcheck.{service,timer}` — runs the above hourly.
 - `offsite-verify.sh` — weekly sweep script. Calls
   `hosts/latitude/debian/restic-pack-verify.sh` against
-  `/mnt/vault/restic/latitude` and writes `/var/lib/offsite/verify.json`,
-  which the selfcheck reads. A real script file, not an inline unit blob —
+  `/mnt/vault/restic/latitude` and writes `/var/lib/offsite/verify.json`
+  atomically (temp file + rename — a `>` redirect that dies mid-write leaves a
+  truncated file for a reader 900 km away), which the selfcheck reads. It
+  records `ts`/`rc`/`bad` plus `files`, `bytes`, `unreadable`, `files_max`,
+  `missing` and `baseline`: a verdict with no COVERAGE behind it cannot tell
+  one file hashed from four hundred thousand. A real script file, not an inline unit blob —
   `ExecStart=` is specifier-expanded by systemd itself, and an inline `%s` in
   a printf format there is silently replaced with the unit's own shell path
   rather than run as a shell format spec (see the script's own header).
