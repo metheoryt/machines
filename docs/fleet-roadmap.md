@@ -523,11 +523,34 @@ Nix ever returns. Leave them.
 
 ## P3 — latitude's SSH story has no generator.
 
-- [ ] **`tier_fleet_ssh` is darwin-only.** With `modules/home/ssh.nix` dead,
-  nothing generates latitude's outbound `~/.ssh/config`. It is unmanaged and
-  drifting. The failure mode is silent rather than loud: latitude has **no
-  GitHub account block at all**, so a `cyphy671` repo cloned there would fall
-  back to default identity resolution and quietly offer the wrong key.
+- [ ] **`tier_fleet_ssh` is darwin-only, and that is now the fleet's one
+  reachability hole.** With `modules/home/ssh.nix` dead, nothing renders the
+  outbound fleet `Host` blocks on any Debian box. `linux.sh` runs `ssh_accounts`
+  and `ssh_trust` but never `fleet_ssh`, and `tiers.test.sh:466` PINS that
+  ("linux does not run tier_fleet_ssh") — the assertion is deliberate and its
+  stated reason, that NixOS generated the file instead, died with the flake.
+
+  **Measured 2026-09-12, on both boxes:** latitude's and g15's `~/.ssh/config`
+  are 444 bytes — the `machines-bootstrap ssh accounts` span and nothing else.
+  So from either box `ssh g16` has no `Host` block, falls through to the default
+  identity and the wrong user, and fails; only `air` (darwin, so it DOES run the
+  tier) and the two boxes that render their own (`g16` via `windows.ps1`,
+  `g16-wsl` via `ssh-wsl.sh`) can reach fleet members by name. This did not
+  start with the 2026-09-12 rename — the same hole existed under the name
+  `desktop` — but the rename is what made it visible, and `fd_probe`/`fd_run`
+  from a Debian box run straight into it.
+
+  **Hand-writing the block does not stick**, which is the part worth knowing
+  before anyone tries: `fleet-selfpull.timer` fires every ~10 min, a changed
+  `fleet.json` is a `_touches_driver` trigger in `converge.sh`, and the
+  reprovision rewrites `~/.ssh/config` from `tier_ssh_accounts` alone. Measured
+  the same day — a hand-merged block on g15 was gone inside one timer interval.
+  The fix is to put `fleet_ssh` in the posix tier lists (and flip that
+  assertion), not to write the file.
+
+  The original entry's stated failure mode is **out of date**: it claimed
+  latitude has "no GitHub account block at all". It has all three — `linux.sh`
+  gained `ssh_accounts` since. What it lacks is the fleet half.
 - [ ] **The `ssh-server` role has no executor**, and neither does `base` —
   `provision/roles/` holds `agents`, `dotfiles`, `repos` and, since 2026-09-01,
   `backup-client` (`.sh` + `.ps1`) and `backup-hub`. (Corrected 2026-08-05: they
