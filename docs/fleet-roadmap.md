@@ -523,11 +523,48 @@ Nix ever returns. Leave them.
 
 ## P3 — latitude's SSH story has no generator.
 
-- [ ] **`tier_fleet_ssh` is darwin-only.** With `modules/home/ssh.nix` dead,
-  nothing generates latitude's outbound `~/.ssh/config`. It is unmanaged and
-  drifting. The failure mode is silent rather than loud: latitude has **no
-  GitHub account block at all**, so a `cyphy671` repo cloned there would fall
-  back to default identity resolution and quietly offer the wrong key.
+- [ ] **`tier_fleet_ssh` is darwin-only, and that is now the fleet's one
+  reachability hole.** With `modules/home/ssh.nix` dead, nothing renders the
+  outbound fleet `Host` blocks on any Debian box. `linux.sh` runs `ssh_accounts`
+  and `ssh_trust` but never `fleet_ssh`, and `tiers.test.sh:466` PINS that
+  ("linux does not run tier_fleet_ssh") — the assertion is deliberate and its
+  stated reason, that NixOS generated the file instead, died with the flake.
+
+  **Measured 2026-09-12, on both boxes:** latitude's and g15's `~/.ssh/config`
+  are 444 bytes — the `machines-bootstrap ssh accounts` span and nothing else.
+  So from either box `ssh g16` has no `Host` block, falls through to the default
+  identity and the wrong user, and fails; only `air` (darwin, so it DOES run the
+  tier) and the two boxes that render their own (`g16` via `windows.ps1`,
+  `g16-wsl` via `ssh-wsl.sh`) can reach fleet members by name. This did not
+  start with the 2026-09-12 rename — the same hole existed under the name
+  `desktop` — but the rename is what made it visible, and `fd_probe`/`fd_run`
+  from a Debian box run straight into it.
+
+  **Hand-writing the block does not stick**, which is the part worth knowing
+  before anyone tries: `fleet-selfpull.timer` fires every ~10 min, a changed
+  `fleet.json` is a `_touches_driver` trigger in `converge.sh`, and the
+  reprovision rewrites `~/.ssh/config` from `tier_ssh_accounts` alone. Measured
+  the same day — a hand-merged block on g15 was gone inside one timer interval.
+  **And the fix is NOT just adding `fleet_ssh` to the posix tier lists.** That
+  tier mints `~/.ssh/id_fleet` when it is absent and prints ENROLLMENT NEEDED —
+  latitude has no `id_fleet` at all (measured the same day), so enabling the
+  tier there and on g15 creates two new keys that must be appended to
+  `provision/fleet-authorized-keys`, committed and pulled everywhere before
+  either box can reach anything. **Until that enrolment lands the rendered block
+  is strictly WORSE than no block**, because its `IdentityFile ~/.ssh/id_fleet`
+  overrides the `id_ed25519` these boxes actually use — proven both ways on
+  2026-09-12: a hand-rendered stanza got `Permission denied`, while
+  `ssh -i ~/.ssh/id_ed25519 methe@100.64.0.4` from the same box answered
+  `g614jv`. The block was the cause, not the name.
+
+  So it is one of two jobs, not a tier-list edit: parameterize the renderer's
+  IdentityFile (the Windows renderer already does — `fleet-ssh-config.ps1`'s
+  header calls it "one deliberate divergence" and takes it as a parameter), or
+  enrol two new fleet keys in the same change that enables the tier.
+
+  The original entry's stated failure mode is **out of date**: it claimed
+  latitude has "no GitHub account block at all". It has all three — `linux.sh`
+  gained `ssh_accounts` since. What it lacks is the fleet half.
 - [ ] **The `ssh-server` role has no executor**, and neither does `base` —
   `provision/roles/` holds `agents`, `dotfiles`, `repos` and, since 2026-09-01,
   `backup-client` (`.sh` + `.ps1`) and `backup-hub`. (Corrected 2026-08-05: they

@@ -69,7 +69,16 @@ osc_main() {
     local VAULT_UUID="${VAULT_UUID:?set VAULT_UUID}"
     local STATE="${OFFSITE_STATE:-/var/lib/offsite}"
     local REPO_DIR="$VAULT/restic/latitude"
-    local now ok detail actual pct dev health id raw newest snap_age
+    # The datasheet floor is 0 C (WD Red: 0..70; many drives specify 5) and the
+    # conservative ceiling 55. These defaults sit INSIDE that range on purpose:
+    # a threshold set exactly at the floor only fires once the drive is already
+    # out of spec, and the entire argument for choosing an HDD here is that it
+    # warns weeks ahead. 5 C leaves that margin; 0 C would not have fired at all
+    # at a reading of 0, which is how the suite caught this. Overridable from
+    # /etc/default/offsite for a box in a different room.
+    local TEMP_MIN_C="${OFFSITE_TEMP_MIN_C:-5}"
+    local TEMP_MAX_C="${OFFSITE_TEMP_MAX_C:-55}"
+    local now ok detail actual pct dev health id raw newest snap_age temp
     local sweep_ts sweep_bad sweep_rc sweep_files sweep_max sweep_unread
     local sweep_missing sweep_baseline tmpf
     now="$(date +%s)"
@@ -105,6 +114,22 @@ osc_main() {
             raw="$(smartctl -A "$dev" 2>/dev/null | awk -v i="$id" '$1==i { print $10; exit }')"
             [ -n "$raw" ] && [ "${raw%%[^0-9]*}" -gt 0 ] 2>/dev/null && note "SMART attr $id = $raw"
         done
+
+        # Attribute 194 is reported, not just flagged, because this box may end
+        # up somewhere with no climate control at all — a veranda swinging
+        # -5..+25 C over the year was on the table on 2026-09-12. The drive's
+        # operating floor is 0 C (WD Red: 0..70; many drives specify 5), and the
+        # danger is not the running box, which heats itself, but a COLD START:
+        # "restore on AC power loss" is what the whole unattended design rests
+        # on, and it is precisely what makes the box spin a cold-soaked platter
+        # by itself, 900 km from anyone. A number on the status page is what
+        # turns "the location is probably fine" into something measured.
+        temp="$(smartctl -A "$dev" 2>/dev/null | awk '$1==194 { print $10; exit }')"
+        temp="${temp%%[^0-9]*}"
+        if [ -n "$temp" ]; then
+            [ "$temp" -lt "$TEMP_MIN_C" ] 2>/dev/null && note "drive ${temp}C is below the ${TEMP_MIN_C}C operating floor"
+            [ "$temp" -gt "$TEMP_MAX_C" ] 2>/dev/null && note "drive ${temp}C is above the ${TEMP_MAX_C}C ceiling"
+        fi
     fi
 
     # 4. Newest snapshot. Age only — no restic binary, no password.
@@ -189,7 +214,7 @@ osc_main() {
     mkdir -p "$STATE"
     tmpf="$STATE/.status.json.$$"
     if cat > "$tmpf" <<EOF
-{"ts":$now,"ok":$ok,"detail":"$(osc_json_escape "$detail")","snapshot_age":"${snap_age}","vault_pct":"${pct}","sweep_ts":"${sweep_ts}","sweep_bad":"${sweep_bad}","sweep_rc":"${sweep_rc}","sweep_files":"${sweep_files}","sweep_files_max":"${sweep_max}","sweep_unreadable":"${sweep_unread}","sweep_baseline":"$(osc_json_escape "$sweep_baseline")"}
+{"ts":$now,"ok":$ok,"detail":"$(osc_json_escape "$detail")","snapshot_age":"${snap_age}","vault_pct":"${pct}","drive_temp_c":"${temp}","sweep_ts":"${sweep_ts}","sweep_bad":"${sweep_bad}","sweep_rc":"${sweep_rc}","sweep_files":"${sweep_files}","sweep_files_max":"${sweep_max}","sweep_unreadable":"${sweep_unread}","sweep_baseline":"$(osc_json_escape "$sweep_baseline")"}
 EOF
     then
         mv -f "$tmpf" "$STATE/status.json"

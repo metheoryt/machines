@@ -1,6 +1,6 @@
 # Rename `desktop` → `g16` (and `desktop-wsl` → `g16-wsl`)
 
-Decided 2026-09-12. Status: **repo half DONE**, live moves tracked below.
+Decided 2026-09-12. Status: **DONE** — repo and live moves both.
 Written before a context compact — everything below was measured in that
 session, so do not re-derive it.
 
@@ -108,3 +108,49 @@ and check exit codes, not `ALL PASS` strings. Green on 2026-09-12: 37 suites.
   (refuses while the Orca UI is up).
 - The "wsl memory harvest" automation (weekly Sa 14:20, `/cyphy:memory-harvest`
   in `machines`) was deleted by the user, who is restoring it himself.
+
+## What was actually done, 2026-09-12
+
+Repo (`c04dc49`): `fleet.json` key, `hosts/desktop/` -> `hosts/g16/`,
+`backup/desktop-wsl/` -> `backup/g16-wsl/` plus every cross-reference,
+`fleet-authorized-keys` (both comments + a header that now lists two renames),
+AGENTS.md / README.md / provision README / the live roadmap, the `irm ... | iex`
+bootstrap URL in `install.ps1` and the runbook paths it names, a both-arms
+assertion in `fleet-profile.test.sh`, and a preamble in `.claude/memory/project.md`
+instead of a sweep. Gate: 59 suites, 0 failures.
+
+Live:
+
+- Headscale node 4 `desktop` -> `g16`, node 6 `desktop-wsl` -> `g16-wsl`.
+  Node 6's *Hostname* stays `desktop-ubuntu26` — that is the distro's OS
+  hostname, a layer this rename does not touch.
+- dotfiles: branches renamed local+origin on both checkouts (`desktop` -> `g16`
+  on the Windows side, `desktop-wsl` -> `g16-wsl` in the distro), both
+  `~/.local/state/dotfiles-sync/branch` files updated, `sync_guard` verified
+  rc=0. `origin/desktop` and `origin/desktop-wsl` deleted only after proving
+  `rev-parse` equality with the new refs. Two stale LOCAL refs (`server`,
+  `desktop`, both at `d298774`) deleted after proving `merge-base --is-ancestor`
+  against `origin/g15` / `origin/g16` — redundancy proven, not assumed.
+  `origin/server` and `origin/g15-wsl` turned out to be already gone from the
+  remote; what the earlier session saw were stale remote-tracking refs.
+- `fleet.local.json` rewritten through `fleet-local.sh` (nickname `g16-wsl`,
+  parent `g16`); `fd_local_parent` -> `g16` and `fd_probe g16 windows` takes the
+  interop branch.
+- restic schedule reinstalled: the unit's `WorkingDirectory` now names
+  `backup/g16-wsl`, timer still armed for 06:00.
+- `~/.ssh/config` fleet block re-rendered on `g16` (PowerShell renderer, after
+  pulling that checkout) and inside `g16-wsl`. latitude/g15/hub could NOT be
+  fixed — see the P3 finding below.
+- `provision.sh --machine g16` exits 0, `--machine desktop` exits 2.
+
+## What this rename UNCOVERED (not caused): P3's ssh gap
+
+No Debian box renders fleet `Host` blocks at all — `tier_fleet_ssh` is
+darwin-only and `tiers.test.sh` pins that. latitude's and g15's `~/.ssh/config`
+are 444 bytes, account blocks only. Hand-writing the block does not survive:
+`fleet-selfpull.timer` + a changed `fleet.json` reprovisions the box within one
+timer interval and rewrites the file from `tier_ssh_accounts` alone (measured —
+a hand-merged block on g15 was gone inside ten minutes). Written up in
+`docs/fleet-roadmap.md` P3, first item, which was also corrected: its claim that
+latitude has no GitHub account block is out of date.
+
