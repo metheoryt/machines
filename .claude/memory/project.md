@@ -4226,3 +4226,25 @@ revisited since.
   one and hidden the other. Where embeddings do belong is over the raw transcripts
   — hundreds of sessions, no headings, not enumerable.
   <!-- src: machines 3816d27 | 2026-09-12 -->
+
+## Claude Code is not installed on latitude (2026-09-12)
+
+Routed here rather than to a `host:latitude` store. The proposal targeted
+latitude's own `~/.claude/host-memory.md`; that file exists on the `latitude`
+branch, but **nothing on that box would ever read it** — which is precisely the
+fact below. A carry item that can only be applied by running an agent on the box
+that has no agent is self-defeating, so it lands in the repo store instead,
+beside the other latitude facts.
+
+- **Claude Code is not installed on latitude, and the subscription login is
+  interactive — it has to be done by hand, once, at that box.** Node 20 is
+  present. The agent *wrappers* arrive on their own because latitude carries the
+  `agents` role and `bootstrap.sh` deploys the plugin and skills there, so the
+  tree looks provisioned while the CLI is absent. This matters for anything that
+  would spawn `claude -p` on the services host — telegrind production runs there,
+  and the Claude meta layer designed in
+  `telegrind/docs/superpowers/specs/2026-09-11-claude-meta-layer-design.md` would
+  need the CLI on that box.
+- **Consequence for `/cyphy:memory-review`: latitude can never be a carry
+  target.** Any harvested row aimed at a `host:latitude` store has to come here
+  instead. Source: telegrind session `c4185692`, filed 2026-09-12.
