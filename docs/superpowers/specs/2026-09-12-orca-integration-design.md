@@ -191,6 +191,22 @@ Approved in principle, specified after L1 and L2 land:
 3. **More automations, but only where an agent is genuinely required** — the
    existing memory harvest is the model. A job that a shell script can do stays a
    systemd timer, for the runtime-availability reason in *Non-goals*.
+4. **Orca's per-repo Setup/Archive hooks must wire themselves for a NEW repo.**
+   Today `/orca-setup` scaffolds the committed `.orca/worktree-setup.sh` and then
+   PRINTS a one-liner for the user to paste into Orca's per-repo settings, by
+   design — the skill refuses to write `orca-data.json`. Measured on g15
+   2026-09-12: 6 of 7 registered repos carry
+   `hookSettings.scripts = {setup: "wt-setup", archive: "wt-teardown"}` and
+   `/home/me/my/DeMarket` carries `{"", ""}` — so the manual step is already the
+   drift source, exactly like the skills set in L1. Blocker to measure first:
+   **the CLI has no writer for that field.** `orca repo …` exposes `add`, `show`,
+   `list`, `set-base-ref`, `search-refs` and nothing that sets `hookSettings`, so
+   the options are (a) ask upstream for `orca repo set-hooks`, (b) extend the
+   `orca-repair` precedent — it already edits `orca-data.json` behind an
+   Orca-closed guard with a backup — or (c) a default that applies to every repo
+   rather than per-repo settings, if Orca grows one. (a) first: (b) is surgery on
+   a file the app owns, and writing it on every provision run is worse than
+   pasting a line once.
 
 Each of the three needs its own measurement pass before it is written; none of
 them blocks L1.
@@ -212,11 +228,23 @@ them blocks L1.
 
 ## Follow-ups this decision opens (not in L1)
 
-- **`provision/orca-serve.sh`'s `serve` half is now dead intent.** Orca must not
-  live inside WSL; the desktop box runs it Windows-native and switches into the
-  distro itself. The `desktop` mode (AppImage, g15) stays. Decide whether to
-  delete the serve mode and its unit, or keep it as a documented escape hatch —
-  and remove the leftover `orca-ide` from desktop-wsl either way.
+- **DELETE `provision/orca-serve.sh`'s `serve` half** (decided 2026-09-12 — no
+  need for a headless Orca while the desktop box runs it Windows-native and
+  switches into the distro itself). The `desktop` mode (AppImage, g15) stays, so
+  the script survives; what goes is the systemd unit + linger, the
+  `--appimage-extract` path, `orca_want_autostart`, and the `serve` arm of
+  `orca_install_mode` — with their cases in `provision/orca-serve.test.sh`.
+  `orca_cli_name()` goes too: with WSL out, the only Linux box is g15, where
+  `/usr/bin/orca` exists and Orca's own installer already owns `orca-ide`.
+  Separately: remove the leftover `orca-ide` from desktop-wsl, and disable the
+  unit there if it is still enabled.
+- **Windows gets its own skills path, and it is the same two commands.** Orca's
+  Settings UI on desktop shows `npx skills add …` verbatim, so the Windows
+  install is the npx form with no Orca CLI involved. Shape it as a
+  `provision/windows.ps1` step (or a `Roles`-side helper), not as a port of the
+  posix tier — and it needs one measurement first: whether node/npx is on that
+  box at all, and whether the skills CLI writes the same two stores under
+  `%USERPROFILE%`.
 - **`tier_agents_config`'s comment still says bootstrap mirrors config into an
   Orca-managed account profile.** That mechanism was deleted 2026-09-09 and
   bootstrap now refuses such a dir (exit 3); profiles are managed in Orca itself.
