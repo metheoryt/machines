@@ -88,11 +88,35 @@ c84614b2	applied	2026-09-11	qaz-code project.md: Windows-portability section com
 6045d1e8	applied	2026-09-11	qaz-code project.md: the WSL2 VM freeze generalised to the host-independent DB-write-bound cost; the freeze marked WSL-specific	/home/me/my/qaz-code/.claude/memory/project.md	Treat heavy sync I/O as a real cost on any host
 f552b204	applied	2026-09-11	qaz-code project.md: compose-project-name bullet cut (CLAUDE.md:12-14 carries it next to the command); the 2026-09-11 push-main standing instruction deliberately kept	/home/me/my/qaz-code/CLAUDE.md	Compose project name is `qaz-law`
 aed78e2f	applied	2026-09-11	origin/g15-wsl deleted (ancestor of main, 0 unique commits, no host-memory); ~/CLAUDE.md amended and re-promoted with the hash-check rule	/home/me/CLAUDE.md	a blob-hash check found nothing on it that
-f7082e6e	applied	2026-09-11	dream SKILL.md Step 6: id is now a four-tuple with the evidence line range, plus a fixed anchor table for ###/whole-file/branch/fleet findings	/home/me/machines/agents/plugin/skills/dream/SKILL.md	The id is a four-tuple, and the discriminator is not optional
-35ce7179	applied	2026-09-11	dream SKILL.md Step 3b: states the blob-hash check instead of two examples that had both gone stale; cites desktop-wsl's 58 KB store as the live case	/home/me/machines/agents/plugin/skills/dream/SKILL.md	State the check,
-e9310fe2	applied	2026-09-11	dream SKILL.md Step 5: core.md budget measures injected bytes via the loader; the 3.4 KB harness cap and the 2 KB style budget stated separately	/home/me/machines/agents/plugin/skills/dream/SKILL.md	measure the INJECTED bytes, not the file bytes
-06ccc498	applied	2026-09-11	dream-apply SKILL.md Step 2 (NOT dream's, as filed): an item names one site, the error may live at several; a dedupe count is a lower bound	/home/me/machines/agents/plugin/skills/dream-apply/SKILL.md	An item names one site; the error may live at several
+f7082e6e	applied	2026-09-11	dream SKILL.md Step 6: id is now a four-tuple with the evidence line range, plus a fixed anchor table for ###/whole-file/branch/fleet findings	/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md	The id is a four-tuple, and the discriminator is not optional
+35ce7179	applied	2026-09-11	dream SKILL.md Step 3b: states the blob-hash check instead of two examples that had both gone stale; cites desktop-wsl's 58 KB store as the live case	/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md	State the check
+e9310fe2	applied	2026-09-11	dream SKILL.md Step 5: core.md budget measures injected bytes via the loader; the 3.4 KB harness cap and the 2 KB style budget stated separately	/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md	measure the INJECTED bytes, not the file bytes
+06ccc498	applied	2026-09-11	dream-apply SKILL.md Step 2 (NOT dream's, as filed): an item names one site, the error may live at several; a dedupe count is a lower bound	/home/me/machines/agents/plugin/skills/memory-review/SKILL.md	An item names one site; the error may live at several
 98c3201a	applied	2026-09-11	card-processing archived (owner); section cut from global.md 2177->760 B instead of demoted into a repo nobody opens — the AES-ECB attribution guard kept	/home/me/.claude/memory/global.md	was the project head's decision, not his
 d5f4b69f	applied	2026-09-12	four-tuple id now reaches the tool; item's own ${4:-} patch was wrong (rehashed all 168 ids), applied an if/else instead and migrated the 63 anchor#disc ids	agents/plugin/skills/lib/consolidate.sh	if [ -n "${4:-}" ]; then
 94fc81c8	rejected	2026-09-12	invented anchor; refiled correctly as fe27f639		
 1939af4c	rejected	2026-09-12	invented anchor; refiled correctly as 03b60232		
+d0971e33	applied	2026-09-12	already on origin/main — blob identical; landed by a prior promote	/home/me/.claude/memory/global.md	UDMA_CRC_Error_Count) is cumulative and never resets
+4fb02c63	applied	2026-09-12	already on origin/main — habits.md blob identical; landed by a prior promote	/home/me/.claude/memory/personality/habits.md	Isolation before editing
+03829ac8	applied	2026-09-12	Fleet SSH: g15 is bash, not fish or PowerShell; renderer is tier_ssh_fleet; desktop renamed g16	/home/me/.claude/memory/global.md	g15` is neither fish nor
+eac9e0fb	applied	2026-09-12	deleted the NixOS-only Orca shell-command bullet (362 B); no Nix host in the fleet	/home/me/.claude/memory/global.md	npx skills add
+a6f70ff5	applied	2026-09-12	~/.claude-profiles is gone fleet-wide; kept only the g16 migration-tarball pointer	/home/me/.claude/memory/global.md	gone fleet-wide
+34ccf2ed	applied	2026-09-12	multi-account narration compressed to the surviving wrapper-script mechanism	/home/me/.claude/memory/global.md	Per-machine Claude accounts, not Orca multi-account
+e9f60c10	applied	2026-09-12	MCP config-scope and gortex-track bullets moved to ## Harness behavior (empirical)	/home/me/.claude/memory/global.md	Same trap as `settings.local.json` at the config-dir root
+884ce6fa	applied	2026-09-12	gortex-align commits .mcp.json, not a .gortex.yaml	/home/me/.claude/memory/global.md	commits the `.mcp.json`
+119eea90	applied	2026-09-12	Orca CLI is per-runtime: Windows on g16, native orca-ide on g15	/home/me/.claude/memory/global.md	linux-orca-cli-shim
+aae87b79	applied	2026-09-12	heading renamed to ## Repo layout (posix boxes); repo_groups + platform allowlist named	/home/me/.claude/memory/global.md	Repo layout (posix boxes)
+ba9f6cc5	applied	2026-09-12	the two gortex-init spray copies merged into the dedicated bullet	/home/me/.claude/memory/global.md	Never run it bare
+766db309	applied	2026-09-12	deleted the lossy harvested copy of the WSL docker-probe rule (310 B)	/home/me/.claude/memory/global.md	command -v docker` succeeding proves nothing
+6d1ad247	applied	2026-09-12	deleted the lossy harvested copy of the login-shell rule (190 B) after the survivor was corrected	/home/me/.claude/memory/global.md	remote login shell differs by box
+ee4f64e0	applied	2026-09-12	deleted the subsumed detached-script copy (134 B)	/home/me/.claude/memory/global.md	NEVER edit a shell script while it is running
+4bc5d940	applied	2026-09-12	the two half-copies of the rsync itemize rule merged; the harvested half deleted	/home/me/.claude/memory/global.md	THIRD flag column
+5c651504	applied	2026-09-12	dotfiles ancestry + absolute-pathspec bullets moved under ## Shared memory stores; the broken cross-ref now points at them	/home/me/.claude/memory/global.md	is the `/dotfiles-promote` bullet below
+63d81ceb	applied	2026-09-12	## Harvested 2026-09-11 folded into 6 topical headings + 4 new ones (restic, bulk data, docker traps, SMART); no fact lost	/home/me/.claude/memory/global.md	## Docker traps that pass silently
+a8f45a4a	applied	2026-09-12	caveman config fact moved tone.md -> global.md ## Harness behavior	/home/me/.claude/memory/global.md	caveman plugin is OFF fleet-wide
+b08cb236	applied	2026-09-12	gortex freshness mechanism moved practices.md -> global.md ## Gortex; the opinion stays	/home/me/.claude/memory/global.md	Index freshness — how to check it
+4be18f13	applied	2026-09-12	per-platform-fixture rule given its own ## heading in practices.md	/home/me/.claude/memory/personality/practices.md	A test that only ever sees one platform
+9b955990	applied	2026-09-12	the 2 KB style budget no longer derives from the 3.5 KB hook cap; both stated with their own measurement	/home/me/.claude/CLAUDE.md	TWO limits, measured on two different numbers
+e70e98cb	applied	2026-09-12	stale 135-commit count replaced by the measurement command; the only-copy fact kept	/home/me/CLAUDE.md	Do not trust a commit count written
+a3e1b01f	applied	2026-09-12	g15-wsl recorded as a deleted remote with a surviving local ref, not as history to keep	/home/me/.claude/host-memory.md	not a fleet branch any more
+8dd3022d	rejected	2026-09-12	superseded by a6f70ff5 + 34ccf2ed, applied on g15 2026-09-12; its two passages no longer exist		
