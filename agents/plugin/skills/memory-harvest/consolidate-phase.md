@@ -60,11 +60,25 @@ this skill exists to remove.
 ```bash
 D=~/machines/agents/plugin/skills/lib/consolidate.sh
 
-# Pull FIRST. The queue is shared across every box that runs /memory-harvest, and
-# suppression is the only thing standing between a second box and a duplicate
-# of every item the first one filed tonight. A stale checkout silently defeats
-# it: `status` reports `new` for an item that is already open on origin.
-git -C ~/machines pull --ff-only || echo 'PULL FAILED — say so in the report and do not push at Step 8'
+# FETCH first, never pull. The queue is shared across every box that runs
+# /memory-harvest, and suppression is the only thing standing between a second
+# box and a duplicate of every item the first one filed tonight — a stale view
+# silently defeats it: `status` reports `new` for an item already open on
+# origin. But `pull` rewrites this checkout and moves HEAD under whoever else is
+# working in it, printing nothing. Fetch, then check suppression against a
+# read-only copy of origin's queue.
+git -C ~/machines fetch origin main --quiet \
+  || echo 'FETCH FAILED — suppression is checked against a stale queue; say so in the report'
+
+# CONSOLIDATE_ROOT is the seam: point it at scratch holding origin/main's queue
+# and ledger, and `status` answers for the SHARED head without a worktree and
+# without a single write to ~/machines. Appends still go to the local queue.
+RO=$(mktemp -d)
+git -C ~/machines show origin/main:docs/memory-consolidate/queue.md  > "$RO/queue.md"  2>/dev/null || : > "$RO/queue.md"
+git -C ~/machines show origin/main:docs/memory-consolidate/ledger.tsv > "$RO/ledger.tsv" 2>/dev/null || : > "$RO/ledger.tsv"
+# suppression check for every candidate id:
+#   CONSOLIDATE_ROOT="$RO" bash "$D" status <id>    # new | open | decided
+# An id that is `new` locally but `open` on origin is a duplicate — do not file it.
 
 # Fetch the dotfiles refs too. Every cross-box finding below reads
 # `origin/<branch>`, so stale refs do not error — they answer the wrong
@@ -85,7 +99,9 @@ git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --porcelain -- \
 ```
 
 If `~/machines` is not a clean checkout on `main`, still run — but say so in the
-report and do not commit; leave the queue as an uncommitted change.
+report and do not commit; leave the queue as an uncommitted change. A dirty tree
+here is the normal case now, not an anomaly: somebody else is working in this
+checkout, which is precisely why nothing above moves HEAD.
 
 The 10-minute `dotfiles-sync` timer can merge `origin/main` into a store while
 this run is reading it. That is harmless to the Step 8 check — a merge commits,
@@ -484,9 +500,20 @@ leave the change in place for a human to look at — do not "clean up" by
 reverting, because the edit may be the only record of what went wrong.
 
 ```bash
-git -C ~/machines add docs/memory-consolidate
-git -C ~/machines commit -m "dream: <N> items, <date>"
+# This run creates files git has never seen (runs/<date>.md, a first ledger).
+# `--only` FAILS on an unknown pathspec, so mark them intent-to-add first.
+git -C ~/machines add -N docs/memory-consolidate
+git -C ~/machines commit --only docs/memory-consolidate -m "dream: <N> items, <date>"
+git -C ~/machines show --stat --oneline HEAD      # must list ONLY docs/memory-consolidate/*
 ```
+
+`--only` is load-bearing, not style. `git add <path>` followed by a bare
+`git commit -m` commits the whole **index** — including whatever another agent
+in this shared checkout had staged — under a `dream:` message. `--only` commits
+those paths straight from the work-tree and leaves the rest of the index alone
+(measured 2026-09-12). The `show --stat` is the proof; put its file list in the
+report, and if it is wider than `docs/memory-consolidate/`, say so as the first
+line instead of pushing.
 
 The `machines` repo only, and only `docs/memory-consolidate`. Never `/dotfiles-promote`,
 never a dotfiles commit — this skill has no business writing to `$HOME`.
@@ -500,14 +527,20 @@ git -C ~/machines log --oneline origin/main..HEAD
 Every line must start with `dream:`. If anything else is there, an unattended
 push would carry someone's half-finished work to `origin` — skip the push, say
 so in the report, and leave it for an attended session. Otherwise
-`git -C ~/machines push origin HEAD:main`. Unpushed is not "safe": a queue that
+`git -C ~/machines push origin HEAD:main`. **A push rejected as non-fast-forward
+is not a reason to pull**: this checkout is shared, so leave the commit local,
+name it in the report, and let an attended session rebase it. Unpushed is not "safe": a queue that
 only exists on one disk is the thing this repo exists to prevent.
 
 ## Never
 
 - Edit any memory store, any `CLAUDE.md`, or `kb-harvest-state.json`.
 - Run `memory-harvest`, `fleet-gather.sh` or `distill.py`.
-- Run `/dotfiles-promote`, or any `git push`.
+- Run `/dotfiles-promote`.
+- Run `git pull`, `git checkout` or `git merge` in `~/machines` — fetch only.
+- Run `git commit` without `--only <paths>`.
+- Run any `git push` other than the guarded Step 8 one (`origin HEAD:main`,
+  after the `dream:`-only check). That check IS the licence; nothing else is.
 - Rewrite or reorder an existing queue item — a human may have annotated it.
 - File an item without evidence a reader can check without re-running the pass.
 

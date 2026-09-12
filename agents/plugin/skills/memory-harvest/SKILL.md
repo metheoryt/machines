@@ -8,7 +8,7 @@ description: Use for the unattended memory pass on this box — one automation p
 One automation per machine, the same prompt on each. Called `/kb-refresh` until
 2026-09-11, and `/repo-harvest` for one day after that.
 
-**Two phases.** Phase A harvests every repo on this box (Steps 0-8 below).
+**Two phases.** Phase A harvests every repo on this box (Steps 0-9 below).
 Phase B consolidates the whole memory corpus and runs **only on the box
 `fleet.json` names as `"memory_publisher"`** — g15. Its brief is
 `consolidate-phase.md` beside this file.
@@ -54,6 +54,8 @@ a fact withheld is a fact it can never generalise from.
 - Transcripts under `~/.claude/projects/**` are READ-ONLY, append-only.
 - Read-once: never re-distill a line already recorded in the watermark.
 - **Never write a Lane 2 target.** Propose it; `/memory-review` writes.
+- **Never `git commit -m` without a pathspec, and never `git pull`, in a repo
+  you are harvesting.** Both reach past this run into somebody else's work.
 - Never delete or rewrite an existing bullet anywhere. Append, and mark the
   conflict.
 - Digests are scratch and never live inside a repo.
@@ -64,6 +66,37 @@ a fact withheld is a fact it can never generalise from.
 **deny** posture and blocks the file tools on indexed source; an unattended
 `claude -p` has nobody to negotiate with when it fires. Same clause
 `/memory-harvest` carries, for the same reason.
+
+## The main checkout is shared — write beside it, land in one commit
+
+Every repo harvested here is somebody's working checkout, and a run lasts
+minutes to hours. Two things a long run does to a checkout are invisible to the
+agent doing them and loud to everyone else:
+
+- **An in-place append to `project.md` / `CLAUDE.md` leaves that store dirty for
+  the whole run.** Another agent reads a half-written file, or sweeps it into
+  its own commit.
+- **`git commit -m` with no pathspec commits the INDEX, not your files.**
+  Anything another agent staged while you worked lands in the harvest commit
+  under a `harvest:` message. Measured 2026-09-12: a decoy staged before
+  `git commit --only <path>` stays staged and out of the commit; a bare
+  `git commit -m` takes it.
+
+So **Lane 1 accumulates in a staging file** beside the Lane 2 proposal —
+`"$repo/.claude/harvest/lane1-<YYYY-MM-DD>.md"` — and the real stores are
+touched only in Step 8, in one short block ending in a pathspec commit. The
+window where a store is dirty is seconds, not the length of the run.
+
+**Every commit in this skill is `git commit --only <paths> -m …`.** A path git
+has never seen makes `--only` fail outright (`pathspec … did not match any
+file(s) known to git`), so a file created this run — a first `project.md`, a
+new `runs/` entry — needs `git add -N <path>` first: intent-to-add, no content
+staged, and `--only` then reaches it.
+
+**Never move HEAD in a checkout you do not own.** No `git pull`, no
+`git checkout`, no `git merge` while the tree carries someone else's work — a
+branch moving under a running agent prints no error at all. See *Pushing* below
+for what replaces the pull.
 
 ## Step 0 — Pick the repos
 
@@ -101,7 +134,7 @@ Two narrower rules were considered and rejected, because both fail by
 Over-covering is cheap: a repo with no new transcripts and no drift yields
 nothing and costs one empty pass.
 
-Then dispatch **one subagent per repo**, each running Steps 1-7 for its repo and
+Then dispatch **one subagent per repo**, each running Steps 1-8 for its repo and
 returning a summary. For each repo:
 
 - `repo=<path>`; provenance base = `git -C "$repo" rev-parse HEAD`.
@@ -122,6 +155,12 @@ returning a summary. For each repo:
   mkdir -p "$repo/.claude/harvest"
   cp "$repo/.claude/kb-harvest-state.json" \
      "$repo/.claude/harvest/state-before.json" 2>/dev/null || true
+  ```
+- **Open the Lane 1 staging file** in the same directory. Nothing is appended to
+  a real store before Step 8:
+  ```bash
+  lane1="$repo/.claude/harvest/lane1-$(date +%F).md"
+  : >> "$lane1"
   ```
 
 **Known cost, not yet optimised:** one full fleet gather per repo, so N repos
@@ -188,6 +227,14 @@ gitignore `.claude/` wholesale, and there that command silently does nothing.
 On any abort path that ends without a commit, put the backup back before
 exiting, and say so in the report.
 
+**Staging widens that window on purpose, so it must be reported.** A run that
+dies between the gather and Step 8 leaves the facts in
+`.claude/harvest/lane1-<date>.md` — not lost, but sitting in a directory most
+repos gitignore, which nobody opens unless told to. On an abort: restore
+`state-before.json` **and** name the staging file and its row count in the
+report. The restored watermark is what lets the next run re-derive those facts;
+the staging file is the fallback for when the transcripts have already expired.
+
 ## Step 2 — Track A map (subagent fan-out)
 - Batch the digests written to `<scratch>/kb-digests/*.md` into groups of
   ~15 files per batch.
@@ -236,7 +283,8 @@ exiting, and say so in the report.
 Classify each surviving row by its target file, using the Tier reference below.
 There is no approval step in between — the lane *is* the decision.
 
-- `project` / `claude-md` / `docs` → **Lane 1**. Write it.
+- `project` / `claude-md` / `docs` → **Lane 1**. Stage it (Step 6), land it
+  (Step 8).
 - `global` / `personality` / `host:<name>` → **Lane 2**. Propose it.
 
 Two rows that look alike land in different lanes when one is about this repo
@@ -249,45 +297,35 @@ Per-host files are branch-scoped in the dotfiles bare repo, so another
 machine's is readable from here but not writable:
 `git --git-dir=$HOME/.dotfiles --work-tree=$HOME show origin/<branch>:.claude/host-memory.md`.
 
-## Step 6 — Lane 1: write, stamp, commit
+## Step 6 — Lane 1: draft into the staging file
 
-- Append the Lane 1 rows to their targets, under the right existing heading,
-  matching that file's voice and bullet style. Do not restructure headings, do
-  not rewrite neighbouring bullets.
-- Tag each appended bullet with its provenance so `/memory-harvest` can
-  weigh and trace it:
-  `<!-- src: <repo> <short-sha> | <YYYY-MM-DD> -->`
-- If `$repo/.claude/memory/project.md` does not exist and a row targets it,
-  create it (same behaviour as the `project-memory-check.sh` SessionStart
-  hook, which offers this in every repo that lacks one).
+Write every Lane 1 row into `"$lane1"`, **in final form** — the exact bullet
+text, the heading it belongs under, and the target file. Not notes to yourself:
+Step 8 pastes these, and an agent that has to re-think a row while a store is
+dirty is exactly the long window this avoids.
+
+```markdown
+## <absolute target file>
+### <the ## or ### heading it appends under>
+- <the bullet, in that file's voice and bullet style>
+  <!-- src: <repo> <short-sha> | <YYYY-MM-DD> -->
+```
+
+- Tag every bullet with that provenance comment so `/memory-review` can weigh
+  and trace it.
+- Do not restructure headings and do not rewrite neighbouring bullets — Lane 1
+  is append-only.
 - **Never write**: task progress, PR numbers, commit SHAs, "fixed X", "phase N
   done", file counts, suite counts — anything stale within a week. This repo
   has burned itself on written-down counts three times.
-- Update the state file's `last_refresh` to `{commit: <HEAD from Step 0>,
-  date: <today>, tiers_touched: [...], sessions_processed: [...]}`,
-  **merge-preserving**: read the JSON, set only that key, leave `sessions`
-  (owned by `distill.py`) untouched.
-- Stamp `project.md` with exactly one provenance line, replacing any previous:
-  `<!-- KB refreshed against <sha> on <YYYY-MM-DD> -->`
-- Commit the changed Lane 1 files **and the state file, in one commit**. That
-  is not tidiness: a watermark committed without the facts it consumed is the
-  one-way loss above.
 
-  ```
-  git -C "$repo" add <lane-1 files> .claude/kb-harvest-state.json
-  git -C "$repo" commit -m "harvest: <n> facts against <short-sha>"
-  ```
-
-  If `.claude/` is gitignored in that repo, commit nothing there and end the
-  report with the exact `dotfiles add` two-step needed to track the state file
-  and the proposal (`$HOME/CLAUDE.md`, *Adding a tracked file*) — saying
-  plainly that they are unprotected until someone runs it.
-
-  Do not push from an unattended run unless the repo is a personal fleet-sync
-  repo and `/ship` applies; `/ship` refuses work repos (`thepureapp/` origin),
-  which keep the PR flow.
+Nothing outside `.claude/harvest/` has been touched yet. If the run dies here,
+see *Recovery*.
 
 ## Step 7 — Lane 2: file the proposal, write nothing
+
+Both staging files live side by side and neither has touched a store yet. This
+one is written before Step 8 lands anything.
 
 Write `"$repo/.claude/harvest/shared-proposal-<YYYY-MM-DD>.md"`. One row per
 line:
@@ -300,16 +338,67 @@ tier | add|edit|delete | the fact, as the exact text to paste | target file | so
 behind them may have expired before anyone reads it, so a row that says "see
 the session" is a row that is already lost. Group by tier, as Step 4 does.
 
-Then stop. The dotfiles repo is not touched by this skill at all — not a write,
-not a commit, not a `dotfiles add`.
+The dotfiles repo is not touched by this skill at all — not a write, not a
+commit, not a `dotfiles add`.
 
-## Step 8 — Report
+## Step 8 — Land Lane 1: one block, one commit
+
+This is the **only** step that touches a real store, and it is deliberately the
+last one before the report. Run it without pausing for anything else: the
+checkout is dirty from the first append until the commit lands.
+
+1. Append each staged block to its target file, verbatim from `"$lane1"`.
+   If `$repo/.claude/memory/project.md` does not exist and a row targets it,
+   create it (same behaviour as the `project-memory-check.sh` SessionStart
+   hook, which offers this in every repo that lacks one) — a created file needs
+   the `add -N` below or the commit cannot reach it.
+2. Stamp `project.md` with exactly one provenance line, replacing any previous:
+   `<!-- KB refreshed against <sha> on <YYYY-MM-DD> -->`
+3. Update the state file's `last_refresh` to `{commit: <HEAD from Step 0>,
+   date: <today>, tiers_touched: [...], sessions_processed: [...]}`,
+   **merge-preserving**: read the JSON, set only that key, leave `sessions`
+   (owned by `distill.py`) untouched.
+4. Commit the changed Lane 1 files **and the state file, in one commit**. That
+   is not tidiness: a watermark committed without the facts it consumed is the
+   one-way loss above.
+
+   ```bash
+   # intent-to-add ONLY for paths this run created; harmless on existing ones
+   git -C "$repo" add -N <files created this run>
+   git -C "$repo" commit --only <lane-1 files> .claude/kb-harvest-state.json \
+     -m "harvest: <n> facts against <short-sha>"
+   ```
+
+   `--only` is load-bearing, not style: it commits those paths from the
+   work-tree and ignores the index, so whatever another agent had staged in this
+   checkout stays staged and stays out of the harvest commit. Verify it with
+   `git -C "$repo" show --stat --oneline HEAD` — the file list must be exactly
+   what you passed, and report it.
+
+5. Then delete the staging file — it has served its purpose and a stale
+   `lane1-<date>.md` reads on the next run as unlanded work:
+   `rm -f "$lane1"`. Keep it (and say so) only if step 4 did not commit.
+
+If `.claude/` is gitignored in that repo, commit nothing there and end the
+report with the exact `dotfiles add` two-step needed to track the state file and
+the proposal (`$HOME/CLAUDE.md`, *Adding a tracked file*) — saying plainly that
+they are unprotected until someone runs it.
+
+Do not push from an unattended run unless the repo is a personal fleet-sync repo
+and `/ship` applies; `/ship` refuses work repos (`thepureapp/` origin), which
+keep the PR flow.
+
+## Step 9 — Report
 
 Per repo: `sessions_seen` / `sessions_with_new` / `digests_written`, the slug
 directories matched, Lane 1 rows written and to which files, Lane 2 rows
-proposed and where the proposal was written, the commit sha, and any
-`conflicts-with` markers left behind. Then the box total, and **the pending
-`/memory-review` runs by name** — that line is the only thing between a
+proposed and where the proposal was written, the commit sha **and the file list
+`git show --stat` printed for it**, whether the fetch ff-merged or fell back to
+`--merge-from`, and any `conflicts-with` markers left behind. A commit whose
+file list is wider than the paths you passed is the index leak this skill's
+`--only` exists to prevent — say so rather than moving on.
+
+Then the box total, and **the pending `/memory-review` runs by name** — that line is the only thing between a
 proposed fact and one nobody ever applies.
 
 ## Tier reference
@@ -366,8 +455,35 @@ the distro.
 
 ## Pushing, when N boxes commit nightly
 
-Pull `--ff-only` before Phase A and do not push on a failed pull. Every box
-harvests into its own checkout of the same repos, so pushes collide by design:
-rebase onto the remote head and push again, **never force**, and if it still
-fails leave the commit local and say so loudly in the report. A stranded local
-commit is recoverable; a forced push over another box's harvest is not.
+**Fetch before Phase A; merge only into a checkout nobody else is using.** The
+pull was there to pick up other boxes' committed watermarks so read-once holds
+fleet-wide — but a `pull` rewrites the work-tree and moves HEAD under whoever
+else is in that checkout, with no error printed. Get the same watermark without
+touching the checkout:
+
+```bash
+git -C "$repo" fetch --quiet || echo "FETCH FAILED — read-once is local-only this run; say so"
+
+# ff-merge ONLY if the tree is clean, i.e. nobody else is mid-edit here
+if [ -z "$(git -C "$repo" status --porcelain)" ]; then
+  git -C "$repo" merge --ff-only @{u} 2>/dev/null || true
+else
+  # someone is working here: read the remote watermark instead of moving HEAD
+  git -C "$repo" show "@{u}:.claude/kb-harvest-state.json" > "$repo/.claude/harvest/state-remote.json" 2>/dev/null \
+    && python3 agents/plugin/skills/memory-harvest/distill.py \
+         --state "$repo/.claude/kb-harvest-state.json" \
+         --merge-from "$repo/.claude/harvest/state-remote.json"
+fi
+```
+
+`--merge-from` merges only the `sessions` map, which is the whole of read-once;
+the local `last_refresh` is untouched. A repo whose `.claude/` is gitignored has
+no remote watermark either way — that is the same local-only case as a failed
+fetch, and reporting it is the point.
+
+Pushes still collide by design, since every box harvests the same repos: rebase
+onto the remote head and push again, **never force**, and if it still fails
+leave the commit local and say so loudly in the report. A stranded local commit
+is recoverable; a forced push over another box's harvest is not. **Do not
+resolve a rejected push by pulling in a shared checkout** — rebase the one
+commit in a scratch worktree, or leave it.
