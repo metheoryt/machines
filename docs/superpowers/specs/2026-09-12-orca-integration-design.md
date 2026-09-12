@@ -25,18 +25,25 @@ These five facts drive every decision below. Re-measure before contradicting one
    installed by Orca's own CliInstaller). Note `provision/orca-serve.sh`'s
    `orca_cli_name()` would pick a third name, `orca-cli`, which **does not exist
    on g15** — Orca's installer got there first.
-2. **Orca lives on three boxes, and only three.** g15 (native desktop AppImage),
-   desktop-wsl (`orca-ide` present) and air (GUI app; see 4). latitude has node
-   but no npx; hub has no node at all. A fleet-wide install is not the shape.
+2. **Orca belongs on TWO boxes, and one of them is Windows.** g15 (native Linux
+   desktop AppImage) and desktop — where Orca runs **Windows-native** and reaches
+   the WSL distro through its own environment switching, so nothing about Orca
+   needs to exist inside WSL. `orca-ide` IS present on desktop-wsl today; that is
+   leftover from the `serve` era and is to be removed, not provisioned (decided
+   2026-09-12). air runs the GUI app and is **hand-managed by decision** (see 4).
+   latitude has node but no npx; hub has no node at all. A fleet-wide install is
+   not the shape — and the posix tier below has exactly ONE target box, g15.
 3. **The skill set has already drifted.** g15 has all four
    (`computer-use`, `orca-cli`, `orchestration`, `find-skills`); **air has only
    `orchestration` in `~/.claude/skills` and `find-skills` + `orchestration` in
    `~/.agents/skills`** — the box used as the client that proxies to the g15 and
    desktop runtimes is the most incomplete one.
 4. **air has no Orca CLI on `PATH` at all**, not even under `zsh -lc`. npx is
-   there (`/opt/homebrew/bin/npx`). So the macOS path needs its own CLI
-   resolution, and `provision/orca-serve.sh` — AppImage, Linux/WSL, `serve`
-   units — cannot be where this lives.
+   there (`/opt/homebrew/bin/npx`). Resolving a CLI there means guessing at an
+   app-bundle path on a box that is usually asleep, for one machine — so **air is
+   installed by hand and the tier is Linux-only** (decided 2026-09-12). What
+   stands regardless: `provision/orca-serve.sh` — AppImage, `serve` units —
+   cannot be where this lives.
 5. **The four skills come from two sources, and `--all` is wrong.**
    `npx skills list --global` reports `computer-use`, `orca-cli`,
    `orchestration` as `stablyai/orca` and `find-skills` as `vercel-labs/skills`.
@@ -63,8 +70,9 @@ These five facts drive every decision below. Re-measure before contradicting one
 
 ## L1 — `tier_orca_skills`
 
-A new best-effort tier in `provision/lib/tiers.sh`, in the PORTABLE class: one
-body, an `_is_darwin` branch only inside CLI resolution.
+A new best-effort tier in `provision/lib/tiers.sh`. **Not PORTABLE — Linux-only
+by decision**: its single target is g15, air is hand-managed, and the remaining
+Orca box is Windows-native (measurement 2). On Darwin it skips with a message.
 
 **Resolution.** A small pure function, `_orca_cli()`, prints the executable or
 nothing:
@@ -72,10 +80,9 @@ nothing:
 - Linux: `orca-ide` only. **Never bare `orca`** — measurement 1. If a future box
   has `orca-cli` (what `orca-serve.sh` would install where `/usr/bin/orca`
   exists), accept it as a second candidate; still never `orca`.
-- Darwin: `orca-ide`, then `orca` (no screen-reader collision on macOS), then the
-  app bundle's own CLI path if Orca.app is installed but nothing is on `PATH` —
-  the exact bundle path is an implementation-time lookup on air, and if none is
-  found the tier skips rather than guessing.
+- Darwin: no branch at all. air is hand-managed (measurement 4), so `_is_darwin`
+  is a skip-with-a-message, not a second resolver. If air ever joins, add the
+  branch then — with a measured bundle path, not a guessed one.
 
 **Gates, all skip-with-a-message, never fail:**
 
@@ -128,7 +135,8 @@ Missing on either side → re-run the add for that skill; present on both →
 `skills update`.
 
 **Wiring.** INSERTED after `"agent_clis claude"` in the `workstation` tier list of
-both `provision/linux.sh` and `provision/macos.sh` — not appended, which would
+`provision/linux.sh` — **not `macos.sh`**, air being hand-managed — and not
+appended, which would
 land it after `dotfiles`, whose own comment in `linux.sh` records that it stays
 LAST (the bare-repo checkout is refused when an untracked file occupies a tracked
 path). After `agents_config` and `agent_clis` because the
@@ -148,7 +156,7 @@ fails with a correctly-resolved CLI and exit 0: the constructed argv must carry
 `--agent claude-code,universal` as ONE comma-joined value (a split back into two
 `--agent` flags installs the universal store only), and **resolution must never
 return bare `orca` on Linux even when `/usr/bin/orca` exists**. Plus: CLI
-resolution prefers `orca-ide`; darwin branch accepts `orca`; no
+resolution prefers `orca-ide`; darwin → skip rc 0; no
 CLI → skip rc 0; no npx → warn rc 0; desired-vs-present diff yields add for
 missing and update for present; the desired list contains exactly the four names
 and none of the Linear/emulator bundle.
@@ -189,14 +197,29 @@ them blocks L1.
 
 ## Risks
 
-- **npx on desktop-wsl is Windows' node** (`/mnt/c/Program Files/nodejs/npx`),
-  reached over interop. It works, but it is slow and it writes through the 9P
-  boundary. If the tier is painful there, install a Linux node in the distro
-  rather than skipping the tier.
+- **One target box makes the tier's value reproducibility, not fan-out.** g15 has
+  been reinstalled once already; the argument for a tier over a written-down
+  command is that the next reinstall does not depend on anyone reading the doc.
+  If that is not worth a tier, the fallback is a line in the g15 runbook — but
+  then nothing re-asserts the set.
 - **`vercel-labs/skills` is a third-party source.** It is already installed and
   in use; the spec only makes the existing choice reproducible. If that
   dependency is unwanted, drop `find-skills` from the desired set — nothing else
   in the design depends on it.
-- **air is asleep most of the time.** The tier only runs when the box is
-  provisioned, so air's drift is fixed on its next `just provision-mac air`, not
-  automatically.
+- **air's drift is not fixed by this spec at all.** It is installed by hand, so
+  its four skills stay a manual step (`npx --yes skills add …`, the same two
+  commands) whenever it drifts.
+
+## Follow-ups this decision opens (not in L1)
+
+- **`provision/orca-serve.sh`'s `serve` half is now dead intent.** Orca must not
+  live inside WSL; the desktop box runs it Windows-native and switches into the
+  distro itself. The `desktop` mode (AppImage, g15) stays. Decide whether to
+  delete the serve mode and its unit, or keep it as a documented escape hatch —
+  and remove the leftover `orca-ide` from desktop-wsl either way.
+- **`tier_agents_config`'s comment still says bootstrap mirrors config into an
+  Orca-managed account profile.** That mechanism was deleted 2026-09-09 and
+  bootstrap now refuses such a dir (exit 3); profiles are managed in Orca itself.
+  Fixed in this branch.
+- **Windows-native Orca on desktop has no skills path here.** The posix tier
+  cannot reach it; whether `provision/windows.ps1` should grow one is unasked.

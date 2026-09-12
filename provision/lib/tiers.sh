@@ -1131,8 +1131,10 @@ tier_brew_cask() {
 }
 
 # ── CORE 2: agent config (Claude Code) — the crown jewels ─────────────────────
-# agents/bootstrap.sh symlinks the version-controlled config into ~/.claude (and
-# mirrors it into any Orca-managed account profile). It only needs git + python3
+# agents/bootstrap.sh symlinks the version-controlled config into ~/.claude. It no
+# longer mirrors into an Orca account profile — that machinery went 2026-09-09 and
+# bootstrap now REFUSES such a dir (exit 3); Orca manages its own profiles. It
+# only needs git + python3
 # (both installed above) and has no Nix-only assumptions, so it works verbatim
 # here. env -u CLAUDE_CONFIG_DIR forces the personal profile (mirrors
 # `just agent-bootstrap`).
