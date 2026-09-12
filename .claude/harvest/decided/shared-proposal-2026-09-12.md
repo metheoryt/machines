@@ -163,3 +163,36 @@ host:g16 | add | **`just` is not installed inside `g16-wsl`**, so the `machines`
   `practices.md` were not merging with `origin/main` on both checkouts on this
   box. That is current-state incident rather than a durable mechanism, so no row
   was filed for it — but nothing else is tracking it either.
+
+---
+
+## Decided by /memory-review, 2026-09-12
+
+Every row above has an outcome below. Promoted to dotfiles `main` where the
+destination is a shared store; `host-memory.md` and the Pure repo store are
+deliberately branch-local (see dotfiles `34f580b` for the Pure un-share).
+
+- row 1: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Fleet scripting conventions]
+- row 2: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Fleet scripting conventions]
+- row 3: **refused here — carry to g15**. Another box's dotfiles branch; its own sync timer writes it live. Still open.
+- row 4: **refused here — carry to g15**. Another box's dotfiles branch; its own sync timer writes it live. Still open.
+- row 5: **applied** → ~/.claude/memory/personality/practices.md  [Hazard tests]
+- row 6: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Harness behavior (empirical)]
+- row 7: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Orca IDE — tooling footguns]
+- row 8: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Orca IDE — tooling footguns]
+- row 9: **refused here — carry to g15**. Another box's dotfiles branch; its own sync timer writes it live. Still open.
+- row 10: **applied** → ~/.claude/host-memory.md  (g16-wsl branch — not promoted, host-local by design)  [Bitmagnet / Docker Desktop]
+- row 11: **applied** → ~/.claude/host-memory.md  (g16-wsl branch — not promoted, host-local by design)  [Bitmagnet / Docker Desktop]
+- row 12: **applied** → ~/.claude/host-memory.md  (g16-wsl branch — not promoted, host-local by design)  [Bitmagnet / Docker Desktop]
+- row 13: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Git & bash footguns]
+- row 14: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Memory stores]
+- row 15: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Fleet SSH reachability]
+- row 16: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Git & bash footguns]
+- row 17: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Git & bash footguns]
+- row 18: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Memory stores]
+- row 19: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Домашний канал / сеть]
+- row 20: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Домашний канал / сеть]
+- row 21: **rejected** — medium confidence; Starlink IPv4 claim not re-verified and the Starlink option is closed on price anyway
+- row 22: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Retail / hardware buying in KZ]
+- row 23: **applied** → ~/.claude/memory/global.md  (## Harvest 2026-09-12 — fleet transcripts, 8 repos)  [Retail / hardware buying in KZ]
+- row 24: **applied** → ~/.claude/host-memory.md  (g16-wsl branch — not promoted, host-local by design)  [Tooling on this box]
