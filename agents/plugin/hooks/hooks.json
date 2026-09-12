@@ -24,6 +24,25 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-workflow.sh\""
           }
         ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/compact-note-restore.sh\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/compact-note-save.sh\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
