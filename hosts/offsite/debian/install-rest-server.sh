@@ -27,6 +27,16 @@
 # is checked unconditionally: empty (a placeholder never filled in) refuses before
 # any network call, and a mismatch refuses just as hard, on its own exit code so it
 # is never confused with any other failure this script can hit.
+#
+# EXIT CODES — two failures must never share one status (AGENTS.md):
+#   0  success
+#   2  not running as root
+#   3  operator has not created $DATA/.htpasswd yet (a separate, later
+#      precondition from "not root" — distinct fix, so distinct code)
+#   78 $VAULT is not mounted as VAULT_UUID
+#   79 rest-server checksum unverifiable — empty pin or an actual mismatch;
+#      one failure class (an unverified binary), correctly one code
+#   1  service failed to reach active after install
 set -euo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
@@ -78,7 +88,7 @@ if [ ! -f "$DATA/.htpasswd" ]; then
     echo "  htpasswd -B -c $DATA/.htpasswd latitude" >&2
     echo "The username MUST be 'latitude': --private-repos maps a username to a" >&2
     echo "TOP-LEVEL directory, so the repo is $DATA/latitude/." >&2
-    exit 2
+    exit 3
 fi
 chown restic:restic "$DATA/.htpasswd"; chmod 600 "$DATA/.htpasswd"
 
