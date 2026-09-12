@@ -710,6 +710,42 @@ be diffed against a remembered failure count.
 
 ## P6 — Housekeeping.
 
+**No tier installs `just`, and it is the repo's only validation gate
+(2026-09-12):**
+
+- [ ] **Add `just` to the workstation dev layer** — `tier_apt_dev`'s package list
+  beside `gh`/`uv`, and `tier_brew_dev` on darwin. Measured 2026-09-12: g15 has
+  `~/.local/bin/just` 1.58.0 **installed by hand**, desktop-wsl has none at all,
+  and desktop's Windows profile has the winget build. So on the distro where
+  every working repo of that box lives, `just test` cannot run — and `just test`
+  is the whole validation surface of this repo since the Nix gate went (P4).
+  A gate nobody can run is the same class of problem as a gate that reports a
+  count it did not reach.
+
+  Found while deciding which runtime should own the `machines` project in Orca
+  on desktop. That question is settled — **WSL** — but the first reason written
+  here for it was wrong, and the real one is narrower. `just test` on the Windows
+  checkout exits 1 with `could not find \`cygpath\` executable to translate
+  recipe \`test\` shebang interpreter path`: every recipe body is a
+  `#!/usr/bin/env bash` shebang recipe, and just needs `cygpath` (Git for
+  Windows' `usr\bin`, absent from PATH there) to translate it. So the gate is a
+  PATH entry away from *starting* on Windows — what stays unmeasured is whether
+  bash suites written for Linux paths would then pass under Git Bash. WSL runs
+  them natively, which is the whole argument. The Windows checkout stays the
+  place `windows.ps1` / `install.ps1` RUN, reached by `git pull`, never the place
+  they are edited.
+
+- [ ] **The gate cannot be run in full from a linked git worktree** — 2 of 57
+  suites fail there and pass in the canonical checkout (measured 2026-09-12 on
+  g15). Both failures trace to one deliberate guard: `agents/bootstrap.sh`
+  refuses to run from a linked worktree, because the symlinks it would create in
+  the live profile die with that copy. `agents/tests/bootstrap.test.sh` drives
+  bootstrap directly, and `provision/tests/fleet-profile.test.sh` reaches it
+  through `role_agents`'s dry run. The guard is right; the gate should not be
+  collateral. Options: have the two suites set `MACHINES_BOOTSTRAP_ALLOW_COPY=1`
+  against a temp HOME, or teach them to assert the refusal when they are in a
+  worktree. Matters more now that worktree-first is the working rule.
+
 **Two one-line bugs found during g15 phase 4 (2026-09-07), both deliberately
 left for their own change rather than fixed mid-migration:**
 

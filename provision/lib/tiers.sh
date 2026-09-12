@@ -151,7 +151,16 @@ tier_apt_dev() {
   have fdfind && ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
 
   # apt extras — present in most repos, but tolerate absence.
-  for p in fish direnv git-delta bat nodejs; do
+  #
+  # `just` is here because it is THIS repo's validation gate (`just test`), and
+  # nothing installed it anywhere: measured 2026-09-12, g15 had 1.58.0 dropped
+  # into ~/.local/bin by hand, desktop-wsl had none at all, and only desktop's
+  # Windows profile had a package (winget). A gate that is absent on the box
+  # where the work happens is not a gate. The justfile uses [group]/[doc]
+  # attributes, so it needs just >= 1.27 — every apt box in the fleet is well
+  # past that (trixie 1.40, resolute 1.45), which is why this is a plain package
+  # and not a curl installer like starship/uv below.
+  for p in fish direnv git-delta bat nodejs just; do
     if $SUDO apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1; then
       ok "$p"
     else
@@ -1061,11 +1070,13 @@ tier_brew_min() {
 #     (caveman's SessionStart hook did exactly that on air, 2026-08-01).
 #     Best-effort, not CORE: a missing node degrades a plugin, it does not
 #     break a provision.
+#   • `just` mirrors the same addition in tier_apt_dev — see the comment there
+#     for why the repo's own gate had no installer anywhere until 2026-09-12.
 tier_brew_dev() {
   have brew || { warn "Homebrew not found — skipping the dev brew layer"; return 0; }
   info "Installing dev packages (brew)…"
   local p
-  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh node; do
+  for p in ripgrep fd fzf tmux fish direnv git-delta bat starship uv gh node just; do
     if brew list --formula "$p" >/dev/null 2>&1; then
       ok "$p already installed"
     elif brew install "$p" >/dev/null 2>&1; then
