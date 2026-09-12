@@ -53,7 +53,18 @@ osc_main() {
     dev="$(findmnt -no SOURCE "$VAULT" 2>/dev/null | sed 's/[0-9]*$//')"
     if [ -n "$dev" ]; then
         health="$(smartctl -H "$dev" 2>/dev/null | sed -n 's/.*overall-health.*: *//p')"
-        case "$health" in PASSED | OK | '') : ;; *) note "SMART $health" ;; esac
+        # Empty output — a missing smartctl, a device that refuses the query,
+        # a permission error, anything that produces no matching line — must
+        # never fall into the same silent branch as an explicit PASSED/OK. A
+        # tool that could not be read is its own state, distinct from both
+        # healthy and failing: this is the same failure class as fix round
+        # 1/5's finding 1, where an unreadable result was silently read as
+        # fine instead of flagged.
+        case "$health" in
+            PASSED | OK) : ;;
+            '') note "SMART health unreadable (no output from smartctl)" ;;
+            *) note "SMART $health" ;;
+        esac
         for id in 5 197 198; do
             raw="$(smartctl -A "$dev" 2>/dev/null | awk -v i="$id" '$1==i { print $10; exit }')"
             [ -n "$raw" ] && [ "${raw%%[^0-9]*}" -gt 0 ] 2>/dev/null && note "SMART attr $id = $raw"

@@ -16,6 +16,18 @@
 # a missing file is not fatal to the unit — it is fatal to offsite-selfcheck.sh
 # itself, via VAULT_UUID:?). -go requires VAULT_UUID in the environment so the
 # file this script writes is never a guess.
+#
+# EXIT CODES — four distinct failure modes, each its own code, chosen to not
+# repeat a meaning install-rest-server.sh already gives a code ON THIS SAME
+# HOST (0 success, 1 service failed to reach active, 2 not root, 3 htpasswd
+# missing, 78 vault wrong UUID, 79 checksum unverifiable):
+#   0  success
+#   20 usage — an unrecognised flag
+#   21 a required script (offsite-selfcheck.sh, offsite-verify.sh, or the
+#      referenced restic-pack-verify.sh) is missing or not executable
+#   22 a unit file is missing from systemd/
+#   23 VAULT_UUID is unset for -go — a distinct precondition from all of the
+#      above, so it gets its own code rather than folding into "usage"
 set -uo pipefail
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
@@ -31,18 +43,20 @@ case "${1:-}" in
   -go)  MODE=go ;;
   -off) MODE=off ;;
   ""|-n) MODE=show ;;
-  *) echo "usage: $0 [-n|-go|-off]"; exit 2 ;;
+  *) echo "usage: $0 [-n|-go|-off]"; exit 20 ;;
 esac
 
 say(){ echo "[install-timers] $*"; }
 
-# The script the units call must exist, or we would enable a timer that fails
+# The scripts the units call must exist, or we would enable a timer that fails
 # every fire. Check before touching systemd, not after.
-[ -x "$HERE/offsite-selfcheck.sh" ] || { say "FATAL $HERE/offsite-selfcheck.sh missing or not executable"; exit 1; }
+for s in offsite-selfcheck.sh offsite-verify.sh; do
+  [ -x "$HERE/$s" ] || { say "FATAL $HERE/$s missing or not executable"; exit 21; }
+done
 [ -x /home/me/machines/hosts/latitude/debian/restic-pack-verify.sh ] ||
-  { say "FATAL restic-pack-verify.sh missing or not executable (referenced, not copied)"; exit 1; }
+  { say "FATAL restic-pack-verify.sh missing or not executable (referenced, not copied)"; exit 21; }
 for u in "${UNITS[@]}"; do
-  [ -f "$UNIT_SRC/$u" ] || { say "FATAL $UNIT_SRC/$u missing"; exit 1; }
+  [ -f "$UNIT_SRC/$u" ] || { say "FATAL $UNIT_SRC/$u missing"; exit 22; }
 done
 
 if [ "$MODE" = off ]; then
@@ -54,9 +68,13 @@ if [ "$MODE" = off ]; then
 fi
 
 if [ "$MODE" = go ]; then
-  # Distinct precondition, distinct exit — a missing VAULT_UUID at install time
-  # is not "not root" and not "unit file missing".
-  VAULT_UUID="${VAULT_UUID:?set VAULT_UUID to the vault disk UUID}"
+  # Distinct precondition, distinct exit (23) — a missing VAULT_UUID at
+  # install time is not "not root" (install-rest-server.sh's 2), not "usage"
+  # (this script's own 20), and not "unit file missing" (22).
+  if [ -z "${VAULT_UUID:-}" ]; then
+    say "FATAL set VAULT_UUID to the vault disk UUID"
+    exit 23
+  fi
   say "writing $DEFAULT_FILE"
   printf 'VAULT_UUID=%s\n' "$VAULT_UUID" | sudo tee "$DEFAULT_FILE" >/dev/null
   sudo chmod 644 "$DEFAULT_FILE"

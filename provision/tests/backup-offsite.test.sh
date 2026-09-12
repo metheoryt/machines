@@ -91,6 +91,72 @@ eq "$(sed -n 's/.*"detail"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$bad_jso
    'reader detail-sed extracts the detail string verbatim'
 rm -f "$ok_json" "$bad_json"
 
+# ── osc_main (offsite-selfcheck.sh), driven for real (fix round 1/5, finding 4) ─
+# The three assertions above pin backup-status.sh's regexes against hand-typed
+# JSON — never against a status file the script itself produced. That gap is
+# exactly why finding 1 (the %-specifier bug in offsite-verify.service) reached
+# review: nothing exercised the real emitter. Source the script and shim
+# findmnt/smartctl/df as shell functions — bash resolves an unqualified command
+# name to a function before it searches PATH, so these stand in for the real
+# tools with no disk and no root required.
+export OFFSITE_SELFCHECK_LIB_ONLY=1
+# shellcheck source=hosts/offsite/debian/offsite-selfcheck.sh
+source "$REPO/hosts/offsite/debian/offsite-selfcheck.sh"
+
+OSC_DIR=/tmp/osc-test.$$
+rm -rf "$OSC_DIR"
+mkdir -p "$OSC_DIR/vault/restic/latitude/snapshots" "$OSC_DIR/state"
+: > "$OSC_DIR/vault/restic/latitude/config"
+echo snap > "$OSC_DIR/vault/restic/latitude/snapshots/snap1"
+
+# Healthy: matching UUID, smartctl PASSED, a fresh clean sweep.
+findmnt() {
+    case "$*" in
+        *"-no UUID"*)   echo "FAKE-UUID" ;;
+        *"-no SOURCE"*) echo "/dev/fakedisk1" ;;
+    esac
+}
+smartctl() {
+    case "$1" in
+        -H) echo "SMART overall-health self-assessment test result: PASSED" ;;
+        -A) : ;;
+    esac
+}
+df() { echo "10%"; }
+printf '{"ts":%s,"rc":0,"bad":0}\n' "$(date +%s)" > "$OSC_DIR/state/verify.json"
+VAULT="$OSC_DIR/vault" VAULT_UUID="FAKE-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null
+rc=$?
+eq "$rc" 0 'osc_main: a healthy synthetic tree exits 0'
+out_json="$(cat "$OSC_DIR/state/status.json" 2>/dev/null)"
+has "$out_json" '"ok":true' 'osc_main: a healthy tree writes ok:true'
+has "$out_json" '"detail":""' 'osc_main: a healthy tree writes an empty detail'
+
+# Unhealthy: wrong UUID and no sweep state at all.
+rm -f "$OSC_DIR/state/verify.json"
+VAULT="$OSC_DIR/vault" VAULT_UUID="WRONG-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null
+rc=$?
+eq "$rc" 1 'osc_main: a mismatched UUID with no sweep state exits 1'
+out_json="$(cat "$OSC_DIR/state/status.json" 2>/dev/null)"
+has "$out_json" '"ok":false' 'osc_main: a mismatched UUID writes ok:false'
+has "$out_json" "vault not mounted" 'osc_main: detail names the vault mismatch'
+has "$out_json" 'sweep has never run' 'osc_main: an absent verify.json is flagged'
+
+# SMART unreadable: correct mount, fresh sweep, but smartctl produces no
+# output at all for -H (a missing binary, a refused query, or no permission
+# all look like this) — finding 3: this must read as its own note, never as
+# a silent pass alongside PASSED/OK.
+smartctl() { :; }
+printf '{"ts":%s,"rc":0,"bad":0}\n' "$(date +%s)" > "$OSC_DIR/state/verify.json"
+VAULT="$OSC_DIR/vault" VAULT_UUID="FAKE-UUID" OFFSITE_STATE="$OSC_DIR/state" osc_main >/dev/null
+rc=$?
+eq "$rc" 1 'osc_main: an unreadable SMART result alone exits 1'
+out_json="$(cat "$OSC_DIR/state/status.json" 2>/dev/null)"
+has "$out_json" '"ok":false' 'osc_main: an unreadable SMART result writes ok:false'
+has "$out_json" 'SMART health unreadable' 'osc_main: empty smartctl output is its own note, never a silent pass'
+
+unset -f findmnt smartctl df
+rm -rf "$OSC_DIR"
+
 # Every suite in this repo prints ALL PASS and exits nonzero on failure — that is
 # what `just test` reads. Keep this block LAST in the file; later tasks append
 # above it.

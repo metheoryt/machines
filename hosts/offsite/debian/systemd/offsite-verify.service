@@ -1,6 +1,6 @@
 [Unit]
 Description=Keyless SHA-256 integrity sweep of the offsite repositories
-Documentation=file:/home/me/machines/hosts/latitude/debian/restic-pack-verify.sh
+Documentation=file:/home/me/machines/hosts/offsite/debian/offsite-verify.sh
 After=mnt-vault.mount
 Requires=mnt-vault.mount
 
@@ -11,13 +11,9 @@ EnvironmentFile=-/etc/default/offsite
 # incoming backup. It has all week.
 Nice=19
 IOSchedulingClass=idle
-ExecStart=/bin/bash -c '\
-  set -o pipefail; \
-  out=$(/home/me/machines/hosts/latitude/debian/restic-pack-verify.sh \
-        /mnt/vault/restic/latitude --baseline /var/lib/offsite/baseline.sha); rc=$?; \
-  bad=$(printf "%s" "$out" | sed -n "s/.*bad=\\([0-9]*\\).*/\\1/p" | tail -1); \
-  mkdir -p /var/lib/offsite; \
-  printf "{\\"ts\\":%s,\\"rc\\":%s,\\"bad\\":%s}\\n" "$(date +%%s)" "$rc" "$${bad:-0}" \
-    > /var/lib/offsite/verify.json; \
-  printf "%s\\n" "$out"; exit $rc'
+# A real script, not an inline `bash -c` blob — see offsite-verify.sh's own
+# header for why: ExecStart= is specifier-expanded by SYSTEMD before bash ever
+# runs, so an unescaped `%s` in an inline blob's printf format is silently
+# replaced with the unit's own shell path, not run as a shell format spec.
+ExecStart=/home/me/machines/hosts/offsite/debian/offsite-verify.sh
 TimeoutStartSec=6h

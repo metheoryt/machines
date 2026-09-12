@@ -91,10 +91,14 @@ which is the whole reason `offsite-selfcheck.sh` and `offsite-verify.sh` (via
   `/var/lib/offsite/status.json` (`{"ok":true|false,"detail":"...",...}` —
   the exact contract `backup-status.sh` on latitude reads).
 - `systemd/offsite-selfcheck.{service,timer}` — runs the above hourly.
-- `systemd/offsite-verify.{service,timer}` — weekly. Calls
+- `offsite-verify.sh` — weekly sweep script. Calls
   `hosts/latitude/debian/restic-pack-verify.sh` against
   `/mnt/vault/restic/latitude` and writes `/var/lib/offsite/verify.json`,
-  which the selfcheck reads.
+  which the selfcheck reads. A real script file, not an inline unit blob —
+  `ExecStart=` is specifier-expanded by systemd itself, and an inline `%s` in
+  a printf format there is silently replaced with the unit's own shell path
+  rather than run as a shell format spec (see the script's own header).
+- `systemd/offsite-verify.{service,timer}` — weekly, runs the above.
 - `install-timers.sh` — copies (never symlinks) the four units into
   `/etc/systemd/system` and writes `/etc/default/offsite` with `VAULT_UUID`.
   `VAULT_UUID=<uuid> ./install-timers.sh -go` to install.
