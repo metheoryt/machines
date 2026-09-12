@@ -543,6 +543,14 @@ eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
 macplan hub >/dev/null 2>&1 && die "macos hub profile should be rejected" \
   || pass "macos rejects the hub profile"
 
+# `just` is the repo's validation gate and no tier installed it until 2026-09-12
+# (g15 had it by hand, desktop-wsl not at all). Both dev layers must carry it, or
+# the box where the work happens cannot run the suite that gates the work.
+adbody="$(awk '/^tier_apt_dev\(\)/,/^}/' "$TIERS")"
+bdbody="$(awk '/^tier_brew_dev\(\)/,/^}/' "$TIERS")"
+has "$(code "$adbody")" '^ *for p in .*\bjust\b' "apt dev layer installs just"
+has "$(code "$bdbody")" '^ *for p in .*\bjust\b' "brew dev layer installs just"
+
 # tiers.sh must stay sourceable without running anything, from the darwin side
 # too (the driver sources it only after its preconditions pass).
 has "$(TIERS_LIB_ONLY=1 bash -c 'source "$1"; echo SOURCED-OK' _ "$TIERS" 2>&1)" \
