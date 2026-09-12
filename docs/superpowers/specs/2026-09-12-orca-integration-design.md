@@ -89,12 +89,22 @@ nothing:
 
 ```sh
 "$ORCA" skills install --skill computer-use --skill orca-cli --skill orchestration \
-    --agent claude-code --agent universal
+    --agent claude-code,universal
 npx --yes skills add vercel-labs/skills --skill find-skills --global \
     --agent claude-code --agent universal -y
 ```
 
-`--agent` is explicit on purpose: Orca's own help warns that without it the
+**`--agent` takes ONE comma-separated value, and repeating the flag is
+last-wins — measured on g15 2026-09-12 with `--dry-run`.**
+`--agent claude-code --agent universal` resolves to
+`npx … --global --agent universal -y`: `claude-code` is dropped, silently, rc 0.
+That installs into `~/.agents/skills` with **no link in `~/.claude/skills`** —
+precisely the drift state on air that this tier exists to close, manufactured by
+the tier itself. `--agent claude-code,universal` resolves to both. The wrapper is
+the only layer with this behaviour: the raw `npx skills add` form below takes the
+repeated flag, which is how all four skills came to be dual-store on g15.
+
+`--agent` is explicit at all on purpose: Orca's own help warns that without it the
 skills CLI installs into every agent it knows about and litters the host with
 config directories for agents it does not have. `claude-code` + `universal`
 (`~/.agents/skills`) is what this box already has, and `universal` is what makes
@@ -117,18 +127,28 @@ a session cannot see it — the precise drift class this tier exists to close.
 Missing on either side → re-run the add for that skill; present on both →
 `skills update`.
 
-**Wiring.** Appended to the `workstation` tier list in both `provision/linux.sh`
-and `provision/macos.sh`, placed **after `agents_config` and `agent_clis`** — the
+**Wiring.** INSERTED after `"agent_clis claude"` in the `workstation` tier list of
+both `provision/linux.sh` and `provision/macos.sh` — not appended, which would
+land it after `dotfiles`, whose own comment in `linux.sh` records that it stays
+LAST (the bare-repo checkout is refused when an untracked file occupies a tracked
+path). After `agents_config` and `agent_clis` because the
 skills CLI detects install targets by looking for agent config directories, so
 `~/.claude` must exist first. Not in the `server` or `hub` lists: neither box has
 Orca and neither should grow it. `provision/orca-serve.sh` calls the tier at the
-end of its own install so a fresh Orca box is complete in one run.
+end of its own install so a fresh Orca box is complete in one run — and that call
+site must set the globals `tiers.sh` declares in its header (`REPO SUDO PRIV
+WARNINGS APT_UPDATED`). orca-serve.sh sets `SUDO` only and its own `warn()` never
+touches `WARNINGS`, so under `set -u` the first warn inside a tier body aborts the
+script.
 
 **Tests** — `provision/tests/orca-skills-tier.test.sh`, modelled on
 `docker-tier.test.sh`: pure decisions only, no network, `TIERS_LIB_ONLY=1`.
-Cases: CLI resolution prefers `orca-ide`; **resolution never returns bare `orca`
-on Linux even when `/usr/bin/orca` exists** (the mutation that matters — it must
-fail if someone "simplifies" the resolver); darwin branch accepts `orca`; no
+Cases — **two mutations matter, and the second is the worse one**, because it
+fails with a correctly-resolved CLI and exit 0: the constructed argv must carry
+`--agent claude-code,universal` as ONE comma-joined value (a split back into two
+`--agent` flags installs the universal store only), and **resolution must never
+return bare `orca` on Linux even when `/usr/bin/orca` exists**. Plus: CLI
+resolution prefers `orca-ide`; darwin branch accepts `orca`; no
 CLI → skip rc 0; no npx → warn rc 0; desired-vs-present diff yields add for
 missing and update for present; the desired list contains exactly the four names
 and none of the Linear/emulator bundle.
