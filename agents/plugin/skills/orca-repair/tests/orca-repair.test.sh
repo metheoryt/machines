@@ -4,7 +4,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 python3 - "$HERE/.." <<'PY'
-import importlib.util, sys, os
+import importlib.util, json, sys, os
 skill_dir = sys.argv[1]
 spec = importlib.util.spec_from_file_location("orca_repair", os.path.join(skill_dir, "orca-repair.py"))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
@@ -129,6 +129,98 @@ with tempfile.TemporaryDirectory() as td:
               m.orca_config_dir() == empty)
     finally:
         m._CONFIG_DIR_CANDIDATES = saved
+
+# Real recents are keyed `runtime:<envId>|<repoId>::<path>`; the live registry
+# prints the bare `<repoId>::<path>`. The fixture above uses bare ids on both
+# sides and so never exercised the mismatch — on desktop-wsl 2026-09-12 every one
+# of a reachable environment's recents was flagged stale while every one was live.
+PFX = "runtime:env-live|"
+data5 = {"workspaceSessionsByHostId": {LIVE: {
+    "lastVisitedAtByWorktreeId": {PFX + VALID: 1, PFX + STALE: 2}}}}
+plan5 = m.plan_repair(data5, {"env-live"}, {"env-live": {VALID}}, match=())
+check("prefix: registry_id strips the runtime:<env>| prefix", m.registry_id(PFX + VALID) == VALID)
+check("prefix: a bare id is left alone", m.registry_id(VALID) == VALID)
+check("prefix: prefixed LIVE recent is NOT flagged",
+      PFX + VALID not in set(plan5["ghosts_by_runtime"].get(LIVE, [])))
+check("prefix: prefixed STALE recent IS flagged",
+      set(plan5["ghosts_by_runtime"].get(LIVE, [])) == {PFX + STALE})
+
+# --data selects a STORE. This is the 2026-09-12 desktop-wsl bug: --data moved the
+# data path while ENV_FILE/RUNTIME_FILE stayed on a retired second store whose
+# orca-environments.json did not exist, so gather_env_ids() returned {} and every
+# LIVE environment was reported as an orphaned block — one --apply from deleting
+# two working environments' state. A guard that reported success while doing the
+# wrong thing gets pinned.
+with tempfile.TemporaryDirectory() as td:
+    stale = os.path.join(td, "stale-store"); real = os.path.join(td, "real-store")
+    for d in (stale, real):
+        pathlib.Path(d, "profiles", "local-default").mkdir(parents=True)
+        pathlib.Path(d, "profiles", "local-default", "orca-data.json").write_text("{}")
+    pathlib.Path(real, "orca-environments.json").write_text(
+        json.dumps({"environments": [{"id": "env-live"}]}))
+    real_data = os.path.join(real, "profiles", "local-default", "orca-data.json")
+    check("config dir: --data's store is derived from the data path",
+          m.config_dir_for_data(real_data) == real)
+    saved_cfg, saved_env, saved_rt = m.CONFIG_DIR, m.ENV_FILE, m.RUNTIME_FILE
+    try:
+        m.set_config_dir(stale)
+        m.set_config_dir(m.config_dir_for_data(real_data))
+        check("config dir: set_config_dir moves ENV_FILE with it",
+              m.ENV_FILE == os.path.join(real, "orca-environments.json"))
+        check("config dir: set_config_dir moves RUNTIME_FILE with it",
+              m.RUNTIME_FILE == os.path.join(real, "orca-runtime.json"))
+        check("config dir: env ids come from the selected store, not the other one",
+              m.gather_env_ids() == {"env-live"})
+        # The failure itself: the stale store's (absent) registry orphans a live env.
+        m.set_config_dir(stale)
+        check("regression: wrong store reports a LIVE env as orphaned",
+              m.plan_repair({"workspaceSessionsByHostId": {"runtime:env-live": {
+                  "lastVisitedAtByWorktreeId": {"repoA::/x": 1}}}},
+                  m.gather_env_ids(), {}, match=())["orphaned_runtimes"] == ["runtime:env-live"])
+    finally:
+        m.CONFIG_DIR, m.ENV_FILE, m.RUNTIME_FILE = saved_cfg, saved_env, saved_rt
+
+# A cross-OS store (Windows profile reached from WSL over /mnt/c) carries a pid
+# this box's /proc cannot judge — and a coincidental match would "confirm" it
+# either way. Liveness there is the runtime file's existence, failing CLOSED.
+if os.path.isdir("/proc"):
+    check("foreign: a /mnt/<drive> store is foreign",
+          m.store_is_foreign("/mnt/c/Users/x/AppData/Roaming/orca") is True)
+    check("foreign: a native store is not foreign",
+          m.store_is_foreign(os.path.expanduser("~/.config/orca")) is False)
+    with tempfile.TemporaryDirectory() as td:
+        saved_cfg, saved_env, saved_rt = m.CONFIG_DIR, m.ENV_FILE, m.RUNTIME_FILE
+        saved_foreign = m.store_is_foreign
+        try:
+            m.set_config_dir(td)
+            m.store_is_foreign = lambda config_dir=None: True
+            check("foreign: no runtime file => not running", m.orca_running() is None)
+            pathlib.Path(td, "orca-runtime.json").write_text(json.dumps({"pid": 999999}))
+            check("foreign: runtime file present => treated as the live UI (fails closed)",
+                  m.orca_running() == (999999, "ide"))
+            check("foreign: and that blocks --apply", m.apply_should_block(m.orca_running()) is True)
+        finally:
+            m.store_is_foreign = saved_foreign
+            m.CONFIG_DIR, m.ENV_FILE, m.RUNTIME_FILE = saved_cfg, saved_env, saved_rt
+
+# The CLI is orca-ide / orca-cli, NEVER the bare name: `orca` is also the GNOME
+# screen reader. Put a bare `orca` on PATH beside a working one and assert it is
+# never chosen — same assertion provision/tests/orca-skills-tier.test.sh makes.
+with tempfile.TemporaryDirectory() as td:
+    for n in ("orca", "orca-ide"):
+        f = pathlib.Path(td, n); f.write_text("#!/bin/sh\nexit 0\n"); f.chmod(0o755)
+    saved_path, saved_cfg = os.environ["PATH"], m.CONFIG_DIR
+    try:
+        os.environ["PATH"] = td
+        m.CONFIG_DIR = td  # a shim named `orca` sits here too — still must lose
+        pathlib.Path(td, "linux-orca-cli-shim").mkdir()
+        shim = pathlib.Path(td, "linux-orca-cli-shim", "orca")
+        shim.write_text("#!/bin/sh\nexit 0\n"); shim.chmod(0o755)
+        picked = m.find_orca_bin()
+        check("cli: picks orca-ide", os.path.basename(picked) == "orca-ide")
+        check("cli: never the bare `orca` on PATH", picked != os.path.join(td, "orca"))
+    finally:
+        os.environ["PATH"] = saved_path; m.CONFIG_DIR = saved_cfg
 
 # The process table must be readable on this box whichever way it is obtained
 # (/proc on Linux, `ps` on macOS) — an empty table means the guard is blind.

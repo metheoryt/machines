@@ -74,6 +74,19 @@ worktree also still exists and is abandoned, remove it separately with
 
 ## Notes
 
+- **A box can hold TWO stores, and then `--data` is mandatory** (desktop-wsl,
+  2026-09-12): a retired WSL `~/.config/orca` sits beside the live Windows profile
+  under `/mnt/c/Users/<user>/AppData/Roaming/orca`, and candidate order picks the
+  retired one. `--data` now selects the whole store — the environment registry and
+  the runtime marker move with it. It did not before, and the stale dir had no
+  `orca-environments.json` at all, so every LIVE environment read as an orphaned
+  block: one `--apply` from deleting two working environments' state.
+- **A cross-OS store cannot be checked against the process table.** Its
+  `orca-runtime.json` holds a *Windows* pid, meaningless in this box's `/proc` and
+  able to collide with an unrelated Linux pid. There the script fails CLOSED: the
+  runtime file's existence alone means "assume the UI owns the file". If Orca is
+  genuinely closed, that file is crash debris — delete it and re-run.
+- **The CLI is `orca-ide`, never the bare `orca`** (also the GNOME screen reader).
 - **Paths are resolved per platform** (2026-07-29): `~/.config/orca` on Linux/WSL,
   `~/Library/Application Support/orca` on macOS, `~/AppData/Roaming/orca` on
   Windows — whichever actually holds `profiles/local-default/orca-data.json` wins.
@@ -82,6 +95,7 @@ worktree also still exists and is abandoned, remove it separately with
   could not see a live UI and would have written the file under it.
 - `orca-data.json` is per-machine (not synced), so run this on whichever machine
   shows the ghosts. The default profile path is resolved per platform (see above);
-  pass `--data <path>` for another profile.
+  pass `--data <path>` for another profile — or for another STORE on a box that
+  has two (see above); the flag moves the env registry and runtime marker with it.
 - Backups are written next to the file as `orca-data.json.bak.orca-repair.<ts>`.
 - Detection/prune logic is unit-tested: `bash tests/orca-repair.test.sh`.

@@ -33,7 +33,7 @@ Usage:
   # then FULLY QUIT the Orca IDE and, from a NON-Orca terminal:
   python3 orca-repair.py --apply         # prune (writes; backs up first)
 """
-import argparse, glob, json, os, shutil, subprocess, sys, time
+import argparse, glob, json, os, re, shutil, subprocess, sys, time
 
 # Orca's config dir is platform-dependent. Hardcoding the Linux path made every
 # read on macOS silently miss (DEFAULT_DATA pointed at a file that does not exist),
@@ -61,6 +61,45 @@ CONFIG_DIR = orca_config_dir()
 DEFAULT_DATA = os.path.join(CONFIG_DIR, "profiles", "local-default", "orca-data.json")
 ENV_FILE = os.path.join(CONFIG_DIR, "orca-environments.json")
 RUNTIME_FILE = os.path.join(CONFIG_DIR, "orca-runtime.json")
+
+
+def config_dir_for_data(data_path):
+    """<cfg>/profiles/local-default/orca-data.json -> <cfg>."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(data_path))))
+
+
+def set_config_dir(d):
+    """Re-point every config-dir-derived path at `d`.
+
+    THE WHOLE FILE MUST AGREE ON ONE STORE. --data used to move only the data
+    path while ENV_FILE and RUNTIME_FILE stayed on whatever orca_config_dir()
+    picked, and on a box with TWO stores (a retired WSL ~/.config/orca beside the
+    live Windows profile reached over /mnt/c) that is not a cosmetic mismatch:
+    the stale dir had no orca-environments.json at all, so gather_env_ids()
+    returned the empty set and EVERY live environment read as an orphaned block —
+    a --apply would have deleted the state of two working environments. Measured
+    on desktop-wsl 2026-09-12.
+    """
+    global CONFIG_DIR, ENV_FILE, RUNTIME_FILE
+    CONFIG_DIR = d
+    ENV_FILE = os.path.join(d, "orca-environments.json")
+    RUNTIME_FILE = os.path.join(d, "orca-runtime.json")
+
+
+_FOREIGN_MOUNT = re.compile(r"^/mnt/[a-z]/", re.I)
+
+
+def store_is_foreign(config_dir=None):
+    """True when the store belongs to an OS whose process table we cannot read.
+
+    The case that exists: a Windows Orca profile reached from WSL over
+    /mnt/<drive>. Its orca-runtime.json holds a WINDOWS pid, which means nothing
+    in this box's /proc — and worse, can COLLIDE with an unrelated Linux pid and
+    be "confirmed" alive or dead at random. So liveness there must not be decided
+    by the process table at all; see orca_running().
+    """
+    d = os.path.abspath(config_dir or CONFIG_DIR)
+    return os.path.isdir("/proc") and bool(_FOREIGN_MOUNT.match(d))
 
 
 def _pid_alive(pid):
@@ -172,6 +211,17 @@ def orca_running():
     launched from an Orca session.
     """
     self_pid = os.getpid()
+    if store_is_foreign():
+        # Cross-OS store: no process check is possible or safe (see
+        # store_is_foreign). Fail CLOSED on the only honest signal there is —
+        # Orca removes orca-runtime.json on a clean quit, so its presence means
+        # "assume the UI owns the file". A file left behind by a crash is the
+        # false positive; deleting it is the documented escape.
+        try:
+            pid = json.load(open(RUNTIME_FILE)).get("pid")
+        except Exception:
+            return None
+        return (pid, "ide")
     daemon = None  # remember a daemon but keep looking for the UI, which wins
     try:
         rt = json.load(open(RUNTIME_FILE))
@@ -223,6 +273,20 @@ def recent_ids(block):
     return set((block.get("lastVisitedAtByWorktreeId") or {}).keys())
 
 
+def registry_id(wt):
+    """A recent's worktree id as the LIVE REGISTRY spells it.
+
+    Orca keys its recents `runtime:<envId>|<repoId>::<path>`, while
+    `worktree list --environment` prints the bare `<repoId>::<path>`. Comparing
+    the two forms verbatim makes EVERY recent of a reachable environment look
+    stale: measured on desktop-wsl 2026-09-12, all three of g15-ubuntu's recents
+    were flagged and all three were live in the registry. The unit fixture used
+    bare ids, so nothing caught it — this detector was 100% false-positive on real
+    data, and --apply would have wiped the entire recent list it was pointed at.
+    """
+    return wt.split("|", 1)[1] if wt.startswith("runtime:") and "|" in wt else wt
+
+
 def plan_repair(data, env_ids, live_by_env, match=()):
     """Compute what to prune. Pure: no I/O, no live queries.
 
@@ -241,7 +305,8 @@ def plan_repair(data, env_ids, live_by_env, match=()):
         flagged = set()
         rids = recent_ids(block)
         if eid in live_by_env:
-            flagged |= {wt for wt in rids if wt not in live_by_env[eid]}
+            registered = {registry_id(x) for x in live_by_env[eid]}
+            flagged |= {wt for wt in rids if registry_id(wt) not in registered}
         if match:
             flagged |= {wt for wt in rids if any(m in wt for m in match)}
         if flagged:
@@ -326,8 +391,17 @@ def gather_live_by_env(env_ids, orca_bin):
 
 
 def find_orca_bin():
-    for c in (os.path.expanduser("~/.config/orca/linux-orca-cli-shim/orca"),
-              shutil_which("orca")):
+    """The Orca CLI, NEVER the bare name `orca`.
+
+    `orca` is also the GNOME screen reader (ubuntu-desktop Recommends it), so a
+    PATH lookup of that name can start a talking desktop instead of querying the
+    worktree registry. The repo-wide rule and _orca_cli() in provision/lib/tiers.sh
+    agree: orca-ide, then orca-cli. The config-dir shim is a last resort and is
+    taken from the RESOLVED config dir — the hardcoded ~/.config/orca copy is a
+    retired-install artifact on a two-store box and shadowed the working binary.
+    """
+    for c in (shutil_which("orca-ide"), shutil_which("orca-cli"),
+              os.path.join(CONFIG_DIR, "linux-orca-cli-shim", "orca")):
         if c and os.path.exists(c):
             return c
     return None
@@ -348,11 +422,23 @@ def main():
     if not os.path.exists(args.data):
         print(f"✗ not found: {args.data}"); sys.exit(1)
 
+    # --data selects a STORE, not just a file: the environment registry and the
+    # runtime marker must come from the same dir or detection reads another
+    # Orca's world (see set_config_dir).
+    set_config_dir(config_dir_for_data(args.data))
+    print(f"store: {CONFIG_DIR}"
+          + ("  (foreign — liveness from orca-runtime.json only)\n" if store_is_foreign() else "\n"))
+
     info = orca_running()
     if args.apply and apply_should_block(info):
         print(f"✗ Orca IDE is running (pid {info[0]}). Fully quit it (app Quit, not\n"
               f"  kill-a-child — Electron respawns children), then re-run --apply from a\n"
               f"  non-Orca terminal. (Scan without --apply is safe while it's open.)")
+        if store_is_foreign():
+            print(f"  This is a cross-OS store, so that pid was NOT verified against a\n"
+                  f"  process table — it is what {RUNTIME_FILE}\n"
+                  f"  claims. If Orca is genuinely closed, that file is crash debris: delete\n"
+                  f"  it and re-run.")
         sys.exit(1)
     if args.apply and info and info[1] == "daemon":
         # Daemon-only: the UI (sole writer of orca-data.json) is down, so writing
