@@ -2775,3 +2775,572 @@ this run's whole night in it, uncommitted; a concurrent session's `git add -A` o
 report.
 ```
 - **first seen:** 2026-09-12
+
+## 57039cfc · skill · /home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md
+
+- **id-inputs:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md` # `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` # `skill` # `consolidate-phase.md:328-349`
+- **action:** skill
+- **scope:** repo:machines — the Phase B brief itself
+- **apply on:** g15
+- **target:** `/home/me/machines/agents/plugin/skills/memory-harvest/consolidate-phase.md`
+- **anchor:** `Step 5 — Standing checks (every run, regardless of what pass 1/2 found)` (L290, 3440 B)
+- **why:** Phase A's `SKILL.md:49` says a `<!-- conflicts-with: "…" -->` marker
+  **"is a work item for `/memory-harvest`, which owns deletion, merging and
+  generalisation across the whole corpus."** This brief never mentions the string
+  `conflicts-with` anywhere — no scan step, no standing check, no taxonomy note.
+  So Phase A writes the markers and nothing drains them. They are a to-do list
+  with no reader.
+- **evidence — the run that hit it:** `runs/2026-09-12.md` (the 04:31 run, 20068 B)
+  contains the string `conflicts-with` **zero times** while markers were already
+  live in the corpus (`grep -c conflicts-with docs/memory-consolidate/runs/2026-09-12.md`
+  → 0; the oldest surviving marker, `project.md:3519`, was written by `7a610ba`,
+  Phase A of that same night). Live count on 2026-09-12 after this morning's
+  Phase A: **19 markers** — `machines/AGENTS.md` 2, `machines/.claude/memory/project.md`
+  11, `my/telegrind/.claude/memory/project.md` 4, `my/telegrind/CLAUDE.md` 2. Of
+  those, exactly **two** are covered by an open queue item (`project.md:3519` by
+  `60604a4f`, `project.md:4189` by `a216a4c2`) and both were reached by accident,
+  through the store text rather than through the marker.
+- **second, sharper half — a marker can be WRONG and nothing checks it.**
+  `project.md:3487` quotes *"`git -C ~/machines pull --ff-only` … can abort on a
+  clean tree"* but sits at the end of an unrelated sub-bullet about writing
+  another box's host memory; the quoted bullet (L3393-3399) carries its own
+  resolution and **no text between L3400 and L3486 mentions `ff-only` or
+  `fast-forward` at all** (`grep -n 'ff-only\|fast-forward'` on the store:
+  nearest other hits L2841 and L3459, neither contradicting). A reviewer sent
+  there finds nothing to decide. Phase A knows this class exists — `c66abc2`
+  ("point the mirror conflicts-with markers at the real text") repaired two
+  Russian markers the same morning — but it repaired only the two it was looking
+  at, and no later pass re-checks.
+- **replacement — append as a new bullet at the end of `## Step 5`, after
+  *"A store nobody reads"*:**
+```
+- **Drain the `conflicts-with` markers — they are Phase A's queue into this one.**
+  Phase A never resolves a contradiction, it appends the new fact and marks the
+  old text (`SKILL.md`: *"That marker is a work item for `/memory-harvest`"*).
+  Nothing else reads them, so an undrained marker is a decision nobody will ever
+  take.
+
+  ```bash
+  grep -rn 'conflicts-with:' $(bash "$D" scan | cut -f1) $(bash "$D" instructions | cut -f1)
+  ```
+
+  For each, resolve the quoted text to where it still lives — **normalise
+  whitespace first**, because a store wraps prose and an exact substring match
+  reports a false orphan (measured 2026-09-12: 11 of 19 markers looked orphaned
+  under a literal `grep -F`, 2 under a whitespace-normalised one). Then:
+  - quote resolves inside the corpus -> file one `contradiction` (or `delete`,
+    when the new text verifiably supersedes), anchored on the section holding
+    the **stale** text, discriminated by its line range.
+  - quote resolves only to a file outside `scan`/`instructions` (a `README.md`,
+    a spec) -> **not this phase's population**; say so in the report and file
+    nothing.
+  - quote resolves nowhere near the marker and nothing in the enclosing section
+    contradicts it -> the marker itself is the defect; file it so a human can
+    delete or move it.
+  A marker already covered by an open item is suppressed like any other
+  candidate — check the queue by TEXT, not only by id: the marker's anchor is
+  the stale text's section, which is rarely the section an existing item names.
+```
+- **bytes:** 3440 -> ~5100 in Step 5 (+1660)
+- **first seen:** 2026-09-12
+
+## 15635b46 · promote · /home/me/.claude/memory/core.md
+
+- **id-inputs:** `/home/me/.claude/memory/core.md` # `(branch: g15)` # `promote` # `core.md:55-57`
+- **action:** promote
+- **scope:** shared — `core.md` is injected VERBATIM into every session on every box
+- **apply on:** g15  <- this box; `/dotfiles-promote` here, nowhere else
+- **target:** `/home/me/.claude/memory/core.md`
+- **anchor:** `(branch: g15)`
+- **why:** the owner's own rule, written into `core.md` on this box at 08:19
+  today, **exists on no other machine**. `core.md` is the one store injected in
+  full in every session, so a non-negotiable that lives on one branch is enforced
+  on one box and silently absent on the other four. This is not the
+  already-rejected "branch is bigger than main" class: it is a merge-base line
+  diff, the stricter test `a216a4c2` proposes as the standard.
+- **evidence (merge-base, not size):**
+  `merge-base origin/main origin/g15` = `21abe71`.
+  `LC_ALL=C diff <(dotfiles show origin/main:.claude/memory/core.md) <(dotfiles show origin/g15:.claude/memory/core.md) | grep -c '^>'` -> **3 lines**,
+  and they are exactly `core.md:55-57`:
+  *"**Никогда не редактировать код в main checkout.** Любая правка — в git
+  worktree или Orca workspace; в основном чекауте может идти чужая работа (и шла,
+  2026-09-12). Его правило, 2026-09-12. Подробнее -> personality/habits.md."*
+  Sizes: `origin/main` 3330 B, `origin/g15` 3664 B, `origin/latitude` / `origin/hub`
+  3330 B (at main), `origin/desktop-wsl` 3385 B, `origin/air` 3004 B. Introduced by
+  dotfiles commit `01565f1` (2026-09-12 08:19, g15 branch only).
+- **paired with `4fb02c63`** — the bullet ends *"Подробнее -> personality/habits.md"*,
+  and that `habits.md` section is unpromoted on the same branch. Promote both in
+  one `/dotfiles-promote` run or `core.md` fleet-wide points at a section four
+  boxes do not have.
+- **budget check before promoting (both numbers, per Step 5):** file bytes
+  **3664**, injected bytes **2942**
+  (`bash ~/machines/agents/plugin/hooks/global-memory-load.sh ~/.claude core | wc -c`).
+  The ~3.4 KB harness cap binds the injected number -> ~540 B of headroom, not
+  urgent. The ~2 KB style budget binds the file number -> over, and open item
+  `9b955990` already rules that "inside the cap and over the budget is the
+  current state and a normal one". **No `compress` is proposed here**; this
+  promote adds 334 B to four other boxes and that is inside the cap on all of
+  them (largest other branch copy: `desktop-wsl` 3385 B).
+- **bytes:** +334 B on `origin/main` and therefore on air, desktop, desktop-wsl,
+  hub, latitude
+- **replacement:** (none — a promote of the existing text verbatim)
+- **first seen:** 2026-09-12
+
+## 4fb02c63 · promote · /home/me/.claude/memory/personality/habits.md
+
+- **id-inputs:** `/home/me/.claude/memory/personality/habits.md` # `(branch: g15)` # `promote` # `habits.md:98-109`
+- **action:** promote
+- **scope:** shared — a `personality/` facet, byte-identical everywhere by design
+- **apply on:** g15  <- this box
+- **target:** `/home/me/.claude/memory/personality/habits.md`
+- **anchor:** `(branch: g15)`
+- **why:** the full write-up behind the `core.md` rule in `15635b46` — a whole
+  `## Isolation before editing (his rule, 2026-09-12)` section — is on `origin/g15`
+  and on no other branch. A `personality/` facet that differs per box is the
+  failure mode the shared set exists to prevent, and here the divergent half is
+  a rule the owner stated explicitly plus the incident that produced it.
+- **evidence (merge-base, not size):**
+  `merge-base origin/main origin/g15` = `21abe71`.
+  `LC_ALL=C diff <(dotfiles show origin/main:.claude/memory/personality/habits.md) <(dotfiles show origin/g15:…) | grep -c '^>'` -> **13 lines** = `habits.md:97-109`,
+  the whole section:
+  *"## Isolation before editing (his rule, 2026-09-12) — **Основной чекаут
+  репозитория — только для чтения.** … 2026-09-12 я сделал `git checkout` ветки
+  прямо в `~/machines` ради двух правок спеки; пока я работал, в `offsite-backup`
+  приехали чужие коммиты, и ветка под ногами уехала. Никакой ошибки не
+  напечаталось. … `git worktree add <scratchpad>/<name> <branch>` -> правки ->
+  коммит -> `git worktree remove`."*
+  Sizes: `origin/main` 5875 B, `origin/g15` 6903 B, `origin/hub` / `origin/latitude`
+  5875 B, `origin/desktop-wsl` 5821 B, `origin/air` 4781 B. Introduced by dotfiles
+  commit `01565f1` (2026-09-12 08:19, g15 branch only).
+- **corroborated independently, which is why it is worth the fleet:** the same
+  collision is recorded from the other side in `machines/docs/memory-consolidate/runs/2026-09-12.md`
+  — three concurrent `claude --dangerously-skip-permissions` sessions writing
+  `~/machines` at once, caught only because Phase B's Step 8 happened to look
+  (queue item `effa9c8c`).
+- **paired with `15635b46`** — promote both together; `core.md` points here.
+- **bytes:** +1028 B on `origin/main` and therefore on air, desktop, desktop-wsl,
+  hub, latitude. `habits.md` is indexed, not injected, so this costs no
+  per-session context.
+- **replacement:** (none — a promote of the existing text verbatim)
+- **first seen:** 2026-09-12
+
+## 3b43d4ba · contradiction · /home/me/machines/AGENTS.md
+
+- **id-inputs:** `/home/me/machines/AGENTS.md` # `Common Commands` # `contradiction` # `AGENTS.md:226`
+- **action:** contradiction
+- **scope:** repo:machines — an **auto-loaded instruction file**, so this is a standing context error for every session in this repo
+- **apply on:** g15
+- **target:** `/home/me/machines/AGENTS.md`
+- **anchor:** `Common Commands` (L164, 7548 B) — the finding is the code comment at L226, under the `### Tests` sub-heading
+- **why:** the file now asserts both halves of a mechanism. L226 tells a reader
+  `roles.test.sh` "prints ALL PASS, nonzero on failure"; L287-295, added this
+  morning, says **"`roles.test.sh` does not reliably print `ALL PASS`, and
+  neither does every other suite… A loop that greps for that string undercounts
+  failures — check each suite's exit code."** A reader who trusts the comment
+  writes a green-looking loop that hides reds. Per this same file's own rule —
+  *"If you catch this file asserting two incompatible things, the contradiction
+  is the bug; do not pick the half that suits the task"* — the pair is filed, not
+  resolved here.
+- **evidence:** `AGENTS.md:226` (inside the `### Tests` fenced block) vs
+  `AGENTS.md:287-295` + its marker `AGENTS.md:296`
+  (`<!-- conflicts-with: "bash provision/tests/roles.test.sh      # prints ALL PASS, nonzero on failure" -->`,
+  `<!-- src: machines 3816d27 | 2026-09-12 -->`). The correction is the newer and
+  the measured one; the comment is the survivor only if someone re-measures it.
+- **what a human decides:** keep the comment and delete the correction (only if
+  `ALL PASS` is re-measured as reliable), or fix the comment. The cheap fix, if
+  the correction stands:
+- **replacement — replaces `AGENTS.md:226` verbatim:**
+```
+bash provision/tests/roles.test.sh      # check the EXIT CODE, not the output
+```
+  and the correcting paragraph at L287-295 then loses its `conflicts-with`
+  marker, since the text it names is gone.
+- **bytes:** 74 -> 72, and −~600 B if the now-redundant correction paragraph is
+  folded down to one line. Net roughly neutral; the value is not bytes.
+- **first seen:** 2026-09-12
+
+## 8335998d · contradiction · /home/me/machines/AGENTS.md
+
+- **id-inputs:** `/home/me/machines/AGENTS.md` # `Architecture` # `contradiction` # `AGENTS.md:629-632`
+- **action:** contradiction
+- **scope:** repo:machines — an **auto-loaded instruction file**
+- **apply on:** g15
+- **target:** `/home/me/machines/AGENTS.md`
+- **anchor:** `Architecture` (L299, 40176 B) — the finding is under the `**`hosts/latitude/debian/`**` block, the `install-timers.sh` bullet at L629-632
+- **does not overlap open item `fe27f639`**, whose range is the
+  `restic-hub-selfcheck.sh` bullet (filed as `AGENTS.md:594-598`, now shifted by
+  this morning's +118 lines) and whose action is `delete`.
+- **why:** L629 writes a **count in prose** — "installs all **three** as system
+  timers" — and L659-667, added this morning, states the opposite rule for the
+  statusboard in the same block: **"The unit list is the script's own
+  `UNITS`/`TIMERS` arrays… read those, never a count written in prose."** This
+  file has already been burned twice by exactly this (its own *Tests* section
+  records "16 recipes" and the "28 suites" that reached 30 of 40), and it tells
+  the reader so three separate times. A hard-coded three is the same bug one
+  paragraph away from the rule forbidding it.
+- **evidence:** `AGENTS.md:629-632` — *"`install-timers.sh` + `systemd/` — installs
+  all **three** as system timers (`mirror-refresh`, `archive-mirror`,
+  `restic-hub-selfcheck`)"* vs `AGENTS.md:659-667` + its marker at `AGENTS.md:668`
+  (`<!-- conflicts-with: "`install-timers.sh` + `systemd/` — installs all **three** as system timers" -->`,
+  `<!-- src: machines 3816d27 | 2026-09-12 -->`).
+- **note for the reviewer:** the three names are currently correct — the count is
+  the defect, not the list. Deleting the names would lose the only record of
+  which units latitude installs, so this is a rewrite, never a delete.
+- **replacement — replaces `AGENTS.md:629-630` verbatim:**
+```
+- `install-timers.sh` + `systemd/` — installs latitude's timers as **system**
+  units. **The set is the script's own unit list, never a count written here**
+  (`mirror-refresh`, `archive-mirror`, `restic-hub-selfcheck` as of 2026-09-12);
+```
+- **bytes:** 232 -> 268 (+36). A correct pointer costs more than a wrong count.
+- **first seen:** 2026-09-12
+
+## 1272c058 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `memory-harvest / fleet-gather.sh gotchas (demoted from global.md 2026-09-11)` # `contradiction` # `project.md:3357-3360`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `memory-harvest / fleet-gather.sh gotchas (demoted from global.md 2026-09-11)` (L3355, 13182 B)
+- **why:** one bullet states an absolute and refutes it thirty lines later
+  without amending its own headline. L3357 says `SKILL_DIR`'s four-up **"resolves
+  to `~/.claude/fleet.json` — which does not exist"**; L3383-3390 says the kernel
+  resolves `..` physically after a symlink, so on `g614jv` the same expression
+  **opened `/home/me/machines/fleet.json`** and "the local-only degradation is
+  not universal". The headline is what a skimming reader and a
+  REGISTER-style first-line read both take away, and it is the half that is
+  wrong on at least one box.
+- **evidence:** `project.md:3357-3360` vs `project.md:3383-3390`, marker at
+  `project.md:3391` (`<!-- conflicts-with: "**Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON`.** It derives `SKILL_DIR` …" -->`,
+  `<!-- src: airdrome c4d5423 | 2026-07-26 -->`). Both halves are dated
+  measurements on different boxes, so neither is deletable: the 2026-07-26 one is
+  the only record of the failure, the later one the only record that it is not
+  universal.
+- **what a human decides:** whether the surviving headline is "pass `FLEET_JSON`
+  because it can break" (advice, always safe) or "it breaks" (a claim that is
+  false on g614jv). The proposal keeps both measurements and demotes the claim to
+  the advice.
+- **replacement — replaces `project.md:3357-3360` verbatim (the bullet's opening;
+  L3361-3390 are unchanged and the marker at L3391 is then removed):**
+```
+- **Invoke `fleet-gather.sh` by its repo path, or pass `FLEET_JSON` — the
+  four-up derivation is NOT portable.** It derives `SKILL_DIR` with a plain
+  `cd … && pwd` (logical, not `-P`). Whether that lands on
+  `~/.claude/fleet.json` (absent) or on the real `~/machines/fleet.json` depends
+  on the path layer: it failed where first seen 2026-07-26, and on `g614jv` the
+  same expression opened the right file (measured, see the end of this bullet).
+  So do not rely on either outcome. `fleet_hosts` then returns empty
+```
+- **bytes:** 279 -> 495 (+216)
+- **first seen:** 2026-09-12
+
+## 07e2fcbb · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `contradiction` # `project.md:977-987`
+- **action:** contradiction
+- **scope:** repo:machines — **security-relevant**; read this one before the byte counts
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737, 25858 B)
+- **does not overlap** the two open `Backups` items: `83538d13` (contradiction,
+  `project.md:849-854`), `b069cc28` (delete, `project.md:971-976`),
+  `2a10559c` (delete, `project.md:942-945`), `7dc3f946`/`dd41f743` (compress,
+  L800-803 / L901-906). This range L977-987 is untouched by all of them —
+  `b069cc28` stops at L976, one line before it.
+- **why:** three claims about latitude's restic REST hub were measured false on
+  the box this morning, and one of them is a **safety posture** a reader would
+  act on. The store says the hub is bound to `100.64.0.8:8001, not 0.0.0.0`, runs
+  `--no-auth`, and therefore "reachability IS authorisation"; and that
+  `--append-only` is deliberately NOT set. Live on 2026-09-12:
+  `HostConfig.PortBindings` = `{"8000/tcp":[{"HostIp":"","HostPort":"8001"}]}` —
+  a **wildcard** bind (`0.0.0.0:8001` and `[::]:8001`) — with
+  `OPTIONS = --private-repos --append-only --prometheus` and htpasswd at
+  `/data/.htpasswd`. The file also already contradicted itself before this
+  morning: `project.md:1093` and `:2649` both say the hub serves `--append-only`.
+  An agent trusting L977-987 concludes the LAN cannot reach the hub (it can:
+  latitude has no host firewall at all, `iptables -P INPUT ACCEPT` plus a jump to
+  `ts-input`, no ufw/nftables/firewalld) and that retention is manual (it is not:
+  prune runs on latitude through per-client maintenance profiles
+  `g614jv-maintenance`, `g513ie-maintenance`).
+- **evidence:** `project.md:977-987` (the three stale claims) vs
+  `project.md:3918-3931` in `Оффсайт, хаб и зеркало: что измерили 2026-09-12`,
+  carrying all three markers at `project.md:3932`, `:3933`, `:3934`
+  (`<!-- src: machines 3816d27 | 2026-09-12 -->`); plus the pre-existing internal
+  disagreement at `project.md:1093` and `project.md:2649`.
+- **one item, not three:** the three claims are one bullet-pair describing one
+  container, and applying any one alone leaves the reader with a half-true
+  posture — the worst of the three states.
+- **replacement — replaces `project.md:977-987` verbatim:**
+```
+  - **`restic-server` REST hub** for other boxes — `vps/homeserver/restic-server`.
+    **Measured on latitude 2026-09-12:** published on a **wildcard** bind
+    (`HostConfig.PortBindings` = `{"8000/tcp":[{"HostIp":"","HostPort":"8001"}]}`,
+    i.e. `0.0.0.0:8001` and `[::]:8001`), with
+    `OPTIONS = --private-repos --append-only --prometheus` and htpasswd at
+    `/data/.htpasswd`. So **authentication, not reachability, is what protects
+    it** — and it has to be: latitude runs no host firewall at all
+    (`iptables -P INPUT ACCEPT`, only a jump into `ts-input`; no ufw, no
+    nftables, no firewalld), so a published port is open to every device on the
+    home wifi.
+    ~~bound to `100.64.0.8:8001, not 0.0.0.0`; runs `--no-auth`, so reachability
+    IS authorisation; costs a boot race docker/tailscaled~~ — **retracted
+    2026-09-12**, that describes a posture that was lifted. The tailnet-only
+    bind is what the boot race belonged to; there is no such race on a wildcard
+    bind.
+  - **`--append-only` IS set** (see the OPTIONS above), and retention still
+    works: `prune` runs on latitude through per-client maintenance profiles
+    (`g614jv-maintenance`, `g513ie-maintenance`), each with its own key held
+    locally — a client can never delete, the hub owner always can.
+    ~~`--append-only` is deliberately NOT set: it would break `forget --prune`~~
+    — **wrong twice, retracted 2026-09-12**: this file already said the opposite
+    at `:1093` and `:2649`.
+```
+- **bytes:** 793 -> 1690 (+897). Byte-positive on purpose; the shorter version is
+  the one that gets somebody's backups read off the wifi.
+- **first seen:** 2026-09-12
+
+## 836db99b · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Backups` # `contradiction` # `project.md:795-799`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Backups` (L737, 25858 B)
+- **does not overlap** `7dc3f946` (compress, `project.md:800-803`), which starts
+  on the line after this range ends, nor any other open `Backups` item.
+- **why:** a **forward instruction that has become false** — the class this store
+  itself calls more dangerous than a stale fact (`project.md:3314`: *"Инструкция
+  будущей сессии, ставшая ложной, опаснее устаревшего факта"*). L797-799 says the
+  offsite fix "remains cheap (rotate one dock's drive off-site)" and assigns it to
+  Task 19. The owner rejected disk rotation outright on 2026-09-11 — *"езжу я раз
+  в несколько месяцев, но не хочу таскать диски каждый раз"* — and the replacement
+  design is an always-on box at the parents' house near Karaganda, logical name
+  `offsite`, role `backup-offsite`, specced in
+  `docs/superpowers/specs/2026-09-12-village-offsite-backup-design.md` and planned
+  in `docs/superpowers/plans/2026-09-12-village-offsite-backup.md`. An agent
+  reading the old bullet proposes exactly what was already turned down.
+- **evidence:** `project.md:795-799` vs `project.md:3937-3947` in
+  `Оффсайт, хаб и зеркало: что измерили 2026-09-12`, marker at `project.md:3948`
+  (`<!-- conflicts-with: "remains cheap (rotate one dock's drive off-site) rather than adding cloud/object storage" -->`,
+  `<!-- src: machines 3816d27 | 2026-09-12 -->`). Corroborated in the repo itself:
+  the `offsite-backup` branch merged as `f0d287e` ("the village offsite backup
+  site, code half").
+- **what survives:** the **gap** statement — every copy is in one apartment — is
+  still true and is the reason the section exists. Only the remedy and its owner
+  change. The struck text is kept with a date, per this store's own rule.
+- **replacement — replaces `project.md:795-799` verbatim:**
+```
+- ~~Homeserver's immich backup targets `G:`/`H:`~~ — **superseded 2026-07-31**:
+  g513ie has only `C:`; those drives now live in latitude's docks. **The offsite
+  gap itself still stands** — every copy is in one apartment. ~~the fix remains
+  cheap (rotate one dock's drive off-site) rather than adding cloud/object
+  storage; Task 19 of the migration plan owns it~~ — **отвергнуто владельцем
+  2026-09-11**: «езжу я раз в несколько месяцев, но не хочу таскать диски
+  каждый раз». Замена — всегда включённая коробка в родительском доме под
+  Карагандой (логическое имя `offsite`, роль `backup-offsite`): один раз
+  засеивается привезённым диском, дальше получает дельты по оптоволокну. Дизайн
+  `docs/superpowers/specs/2026-09-12-village-offsite-backup-design.md`, план
+  `docs/superpowers/plans/2026-09-12-village-offsite-backup.md`.
+```
+- **bytes:** 330 -> 900 (+570)
+- **first seen:** 2026-09-12
+
+## b09fa087 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Fleet network` # `contradiction` # `project.md:335-338`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Fleet network` (L191, 40066 B)
+- **does not overlap** the five open `Fleet network` items, whose ranges are
+  L193-250 (`45e6a3cb`), L278-297 (`3b71c80d`), L301-314 (`90c837eb`),
+  L471-480 (`7a8ce25a`), L532-546 (`131173da`) and L547-553 (`af15caff`).
+  L335-338 falls in the gap between L314 and L471.
+- **why:** the store asserts a **capability does not exist** that was measured
+  existing this morning. L335-336: *"In Orca, the registered PATH **is** the
+  environment — there is no environment / runtime / distro field"* (probed
+  2026-07-26). L4076-4083: Orca on Windows has a per-project agent runtime —
+  Windows, or a named WSL distro — and desktop's `machines` is set to
+  `desktop-wsl`, so worktrees, terminals and the `claude` process all run inside
+  the distro. An agent holding the old claim mis-reads where a desktop Orca
+  session's code actually runs, which is the exact confusion `AGENTS.md` already
+  warns about for this box ("on desktop means the distro, not the Windows
+  profile").
+- **evidence:** `project.md:335-340` vs `project.md:4076-4083`, marker at
+  `project.md:4084` (`<!-- conflicts-with: "In Orca, the registered PATH *is* the environment — there is no environment / runtime / distro field" -->`,
+  `<!-- src: machines 3816d27 | 2026-09-12 -->`). The 2026-07-26 probe is not
+  deletable — the `projectHostSetup` shape it records (`projectId / hostId /
+  path / kind / hookSettings`, `hostId` = `local` for Windows and WSL alike, and
+  the per-`(projectId, path)` keying) is still the only write-up of that
+  structure, and the newer bullet adds that **Orca keys projects by git remote**
+  (`github:<owner>/<repo>`) and refuses a second path for the same repo.
+- **what a human decides:** whether the 2026-07-26 shape still holds field for
+  field, or only the "no runtime field" half has been superseded. The proposal
+  assumes the narrower reading.
+- **replacement — replaces `project.md:335-337` verbatim (L338-340 unchanged):**
+```
+- **In Orca the registered PATH used to BE the environment — that stopped being
+  true.** Probed 2026-07-26: there was no environment / runtime / distro field,
+  and a `projectHostSetup` carried only `projectId / hostId / path / kind /
+  hookSettings`. **Superseded 2026-09-12** — Orca on Windows now has a
+  per-project agent runtime (Windows, or a named WSL distro); see the
+  *Orca's project model* subsection. What the 2026-07-26 probe still describes
+  correctly is the record's own shape:
+```
+- **bytes:** 232 -> 520 (+288)
+- **first seen:** 2026-09-12
+
+## c15efa06 · contradiction · /home/me/machines/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/machines/.claude/memory/project.md` # `Гейт, который рапортует успех, ничего не сделав — общая форма (2026-09-10)` # `contradiction` # `project.md:3243-3244`
+- **action:** contradiction
+- **scope:** repo:machines
+- **apply on:** g15
+- **target:** `/home/me/machines/.claude/memory/project.md`
+- **anchor:** `Гейт, который рапортует успех, ничего не сделав — общая форма (2026-09-10)` (L3219, 4772 B)
+- **why:** the section names an outstanding remedy — *"Настоящее лечение — увести
+  зеркало с этого порта"* — for a problem that was cured two days later by a
+  different fix. Measured 2026-09-10 and written up this morning: the hub was
+  removed and the connectors re-crimped, the NS1066 now plugs straight into the
+  laptop's USB3 port, negotiates 5000, `Cannot enable` is gone from the log,
+  reads run at 80 MB/s (the 2.5-inch platter's own ceiling, not the bus) and a
+  full `mirror-refresh` pass takes 31 seconds. The residual-risk paragraph is
+  still correct about the self-healing receiver reporting `Result=success`; only
+  its forward instruction is dead.
+- **evidence:** `project.md:3243-3244` vs `project.md:3965-3972` in
+  `Оффсайт, хаб и зеркало: что измерили 2026-09-12`, marker at `project.md:3973`
+  (`<!-- conflicts-with: "Настоящее лечение — увести" (project.md, раздел «Гейт, который рапортует успех», продолжение строки: «зеркало с этого порта») -->`,
+  `<!-- src: machines 3816d27 | 2026-09-12 -->`).
+- **the marker's SIBLING is already covered, this one is not.** The same
+  paragraph carries a second marker at `project.md:3974` quoting *"ждать
+  освобождения `spare320` ради бэя Ugreen, возможно,"* — that text lives at
+  `project.md:3279` and open item `dc9d304c` already cites it verbatim as
+  evidence. Only the `:3243` half is unclaimed, which is why this is one item and
+  not two.
+- **replacement — replaces `project.md:3243-3244` verbatim:**
+```
+  след — строка `WARN … remounting once` в журнале. ~~Настоящее лечение — увести
+  зеркало с этого порта~~ — **ВЫЛЕЧЕНО 2026-09-10 иначе**: хаб убрали, разъёмы
+  переобжали, NS1066 воткнут прямо в USB3-порт (5000, 80 МБ/с, полный проход
+  31 с) — см. раздел про 480 Мбит. Остаточный риск `Result=success` при этом
+  никуда не делся и остаётся общей формой.
+```
+- **bytes:** 138 -> 420 (+282)
+- **first seen:** 2026-09-12
+
+## 67eec8cd · delete · /home/me/my/telegrind/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/my/telegrind/.claude/memory/project.md` # `Product invariants` # `delete` # `telegrind-project.md:8-14`
+- **action:** delete
+- **scope:** repo:telegrind — **the first queue item this repo has ever had**
+- **apply on:** g15 (the only box with `repo_groups: ["my"]`; `telegrind` is checked out nowhere else)
+- **target:** `/home/me/my/telegrind/.claude/memory/project.md`
+- **anchor:** `Product invariants` (L6, 553 B)
+- **why:** the section's two bullets describe a Sheets projection layer that
+  `248fe9d` deleted whole. `## The workbook layer is gone (2026-09-11)` (L57)
+  states it plainly: no `gspread`, no `projection` module, no `_config` /
+  `_categories` worksheets, no `/link`, `/import`, `/rebuild`, `/reload`,
+  `/unlink`; `/q` is the only command the router registers.
+- **evidence of what supersedes it:** `telegrind/.claude/memory/project.md:59-66`
+  vs the two stale bullets at `:8-11` and `:12-14`; both markers written by Phase
+  A this morning at `:67` and `:68`
+  (`<!-- src: telegrind 35574a2 | 2026-09-12 -->`).
+- **NOT the last copy, and this is the load-bearing check:** the product
+  invariant itself — *"Ничего из написанного не теряется"*, storage is
+  unconditional into Postgres — is restated in the superseding bullet
+  (*"Storage is unconditional into Postgres and stops there: the invariant
+  survived the deletion, the projection did not"*). Only the **and-then-projects
+  clause** is being removed. The `## Product invariants` heading keeps its
+  reason to exist.
+- **replacement — replaces `telegrind-project.md:8-14` verbatim:**
+```
+- **"Ничего из написанного не теряется"** is the product claim, not a slogan:
+  every handler writes the message row to Postgres *unconditionally*, and that
+  is where it stops — there is no projection layer any more (see *The workbook
+  layer is gone*, 2026-09-11). Declining to extract (unknown command, voice,
+  `??`) is never licence to drop the message.
+```
+- **bytes:** 456 -> 306 (−150), and the two markers at `:67-68` go with it
+  (−~420 B in the superseding section, which no longer needs them)
+- **first seen:** 2026-09-12
+
+## aec2ecb9 · delete · /home/me/my/telegrind/.claude/memory/project.md
+
+- **id-inputs:** `/home/me/my/telegrind/.claude/memory/project.md` # `Known drift` # `delete` # `telegrind-project.md:51-56`
+- **action:** delete
+- **scope:** repo:telegrind
+- **apply on:** g15
+- **target:** `/home/me/my/telegrind/.claude/memory/project.md`
+- **anchor:** `Known drift` (L49, 338 B)
+- **why:** the whole section is one bullet asserting that the root `CLAUDE.md`
+  `## Architecture` section is stale — that it "still describes the
+  `Outcome`/`Loan`/`Wish` `Sheet` subclasses and the `/start` onboarding FSM",
+  and that the current shape is `llm.extract` -> `projection.apply_changes`. Both
+  halves are now false. The `CLAUDE.md` Architecture section was rewritten and
+  walks `middleware` -> `handlers` -> `store` -> `taxonomy` -> `extract` ->
+  `query` -> `answer` -> `receipts` -> `coerce` -> `config` -> `models` -> `llm`;
+  and **there is no `llm.extract` and no `projection.apply_changes` anywhere in
+  the tree** — the drift note now names a shape more obsolete than the file it
+  accuses.
+- **evidence of what supersedes it:** `telegrind-project.md:79-82`
+  (*"The root `CLAUDE.md` Architecture section describes the code that
+  exists."*), marker at `:83`
+  (`<!-- conflicts-with: "The `## Architecture` section of the root `CLAUDE.md` is stale as of 2026-09-10…" -->`,
+  `<!-- src: telegrind 35574a2 | 2026-09-12 -->`).
+- **last-copy check:** nothing here is the only record of anything. The section
+  records a defect that no longer exists; the module walk it would have been
+  useful for lives in `CLAUDE.md:81-189` itself.
+- **deleting the whole `## Known drift` heading is correct**, not just the
+  bullet: it has exactly one bullet and no other content. If the reviewer
+  prefers to keep the heading as a slot for future drift, keep it with the
+  bullet removed — either is fine, the bullet is the decision.
+- **replacement:** (none — deletion of `telegrind-project.md:49-56`, heading
+  included, plus the now-pointless marker at `:83`)
+- **bytes:** 338 -> 0 (−338), plus −~370 B for the marker line
+- **first seen:** 2026-09-12
+
+## e5973531 · contradiction · /home/me/my/telegrind/CLAUDE.md
+
+- **id-inputs:** `/home/me/my/telegrind/CLAUDE.md` # `Architecture` # `contradiction` # `telegrind-CLAUDE.md:96-120`
+- **action:** contradiction
+- **scope:** repo:telegrind — an **auto-loaded instruction file** (16410 B, loaded in every session opened in this repo)
+- **apply on:** g15
+- **target:** `/home/me/my/telegrind/CLAUDE.md`
+- **anchor:** `Architecture` (L81, 5415 B)
+- **why:** the file names two different columns as the thing that selects the
+  extraction tail. `## Architecture` says it twice — the `/q` flow at L96
+  (*"store the question, `extractable=False`"*) and the ingestion walk at L120
+  (*"The slash catch-all first (stored with `extractable=False`, so a command
+  never coins a category)"*). `## Message routing — the verdict column` (L295,
+  added this morning) says **`message.verdict` — not `extractable` — is what
+  selects the extraction tail**: a never-null string of `fact` / `question` /
+  `talk` / `system`, only `fact` entering `unextracted_tail`; `/q` writes
+  `question`, every other slash command and everything the bot sends writes
+  `system`. `extractable` is still written in step with it and **is no longer
+  read by anything** — the expand half of a deliberate expand/contract migration.
+- **why this one bites harder than a stale fact:** the two flags currently agree,
+  so nothing fails. When the contract half lands and `extractable` is dropped, a
+  reader who learned the mechanism from `## Architecture` has no way to know
+  which of the two the code was actually keyed on.
+- **evidence:** `telegrind-CLAUDE.md:96` and `:120` vs `:297-305`, with markers
+  at `:306` and `:307`
+  (`<!-- src: telegrind db9de98 | 2026-09-12 -->`); the reasoning is written out
+  in `docs/superpowers/specs/2026-09-11-claude-meta-layer-design.md`.
+- **replacement — two one-line edits, applied together:**
+```
+# replaces telegrind-CLAUDE.md:96
+  → handlers/query.py               # store the question, verdict="question"
+```
+```
+# replaces telegrind-CLAUDE.md:120-121
+**`telegrind/bot/handlers/handlers.py`** — ingestion. The slash catch-all first
+(stored with `verdict="system"`, so a command never coins a category — see
+*Message routing*), then
+```
+- **one item, not two:** applying one edit and not the other leaves the file
+  still disagreeing with itself, in the same section.
+- **bytes:** 175 -> 214 (+39)
+- **first seen:** 2026-09-12
