@@ -110,8 +110,15 @@ case "$PROFILE" in
     # docker/immich/postgres. sysrq wants a human at THAT keyboard: latitude's
     # display is one nobody sits at and hub has no keyboard, so there the sysctl
     # would be inert decoration. Both are no-ops without root and self-skip.
+    # orca_skills sits AFTER agents_config and agent_clis and not one place
+    # later: the skills CLI picks its install targets by looking for agent config
+    # directories, so ~/.claude must exist before it runs. It is also not
+    # APPENDED — that would land it after dotfiles, which stays last for the
+    # reason its own comment gives. It reaches exactly two boxes (g15 and
+    # desktop-wsl, the runtimes where an Orca-driven `claude` actually runs) and
+    # is an info-level skip everywhere else, including darwin.
     TIERS=(apt_min apt_dev docker battery_limit lid_ignore oom_guard sysrq agents_config git_base gortex
-           "agent_clis claude" shell_init autofetch
+           "agent_clis claude" orca_skills shell_init autofetch
            ssh_accounts selfpull ssh_trust dotfiles) ;;
   hub)
     # Lean server tier. Deliberately absent: apt_dev, gortex, and

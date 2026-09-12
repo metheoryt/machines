@@ -40,8 +40,17 @@ eq "$(printf '%s\n' "$hub" | grep -c '^tier_apt_min$')" "1" "hub runs tier_apt_m
 
 # workstation keeps today's full set, in today's order.
 eq "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
-   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_lid_ignore tier_oom_guard tier_sysrq tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
+   "tier_apt_min tier_apt_dev tier_docker tier_battery_limit tier_lid_ignore tier_oom_guard tier_sysrq tier_agents_config tier_git_base tier_gortex tier_agent_clis claude tier_orca_skills tier_shell_init tier_autofetch tier_ssh_accounts tier_selfpull tier_ssh_trust tier_dotfiles " \
    "workstation tier list and order"
+# tier_orca_skills sits immediately after `agent_clis claude` and that POSITION
+# is the assertion, not just its membership: the skills CLI picks its install
+# targets by looking for agent config directories, so ~/.claude must exist
+# first — and appending it instead would land it after tier_dotfiles, which
+# stays last because the bare-repo checkout is refused when an untracked file
+# occupies a tracked path.
+has "$(printf '%s\n' "$ws" | grep '^tier_' | tr '\n' ' ')" \
+    "tier_agent_clis claude tier_orca_skills " \
+    "orca_skills runs straight after the agent CLIs, never appended"
 
 # hub is lean: no dev apt layer, no gortex.
 hasnt "$hub" '^tier_apt_dev$' "hub omits tier_apt_dev"
@@ -534,7 +543,18 @@ hasnt "$ws"  '^tier_brew_' "linux never runs a brew tier"
 # or a hatch on `air` would be different code (`launchd` limits, a hard reset)
 # rather than these tiers in a second list. Both are also absent from `server`,
 # which is a separate decision documented in linux.sh: measure latitude first.
-strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit|lid_ignore|oom_guard|sysrq)$' | tr '\n' ' '; }
+#
+# tier_orca_skills is the tenth, added 2026-09-12, and it is the first exception
+# whose reason is neither packaging, hardware nor evidence — it is a DECISION
+# about one box. air runs the Orca GUI but exposes no Orca CLI on PATH at all,
+# not even under `zsh -lc`, so resolving one there means guessing at an app
+# bundle path on a machine that is usually asleep, for a single host. air is
+# therefore installed by hand and the tier is Linux-only; its darwin arm is a
+# skip-with-a-message, not a second resolver. If air ever grows a CLI, the fix
+# is a measured branch in _orca_cli plus this tier in the macos list — not a
+# guessed path. Design:
+# docs/superpowers/specs/2026-09-12-orca-integration-design.md.
+strip_pkg() { printf '%s\n' "$1" | grep '^tier_' | grep -vE '^tier_((apt|brew)_(min|dev)|brew_cask|fleet_ssh|dotfiles|dotfiles_sync|docker|battery_limit|lid_ignore|oom_guard|sysrq|orca_skills)$' | tr '\n' ' '; }
 eq "$(strip_pkg "$mac")" "$(strip_pkg "$ws")" \
    "macos and linux workstation lists match once the package tiers are removed"
 

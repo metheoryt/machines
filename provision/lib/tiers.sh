@@ -1223,6 +1223,156 @@ tier_agent_clis() {
   done
 }
 
+# ── BEST-EFFORT: Orca skills (Linux only) ────────────────────────────────────
+# Makes the four skills an Orca-driven agent session needs reproducible. They
+# were installed by hand on every box and had already drifted apart when this
+# was measured (2026-09-12): g15 had all four, desktop-wsl had three in
+# ~/.agents/skills and ONE link in ~/.claude/skills, air had one and two.
+# Design: docs/superpowers/specs/2026-09-12-orca-integration-design.md.
+#
+# NOT portable, by decision. Its targets are the two boxes where an Orca agent
+# runtime actually runs a `claude` process — g15 (Linux AppImage) and
+# desktop-wsl (the distro Orca on Windows is switched into). Both run linux.sh
+# with the `workstation` profile, so one tier-list entry reaches both. air runs
+# the GUI app but exposes no Orca CLI on PATH at all, so darwin is a
+# skip-with-a-message and air stays hand-installed — resolving a CLI there means
+# guessing at a bundle path on a box that is usually asleep.
+#
+# **Skills follow the agent runtime, not the app.** Flip desktop's runtime to
+# Windows and the live store becomes %USERPROFILE% with nothing in the distro
+# consulted; that needs a windows.ps1 step, not a branch here.
+#
+# Paths are env-overridable so provision/tests/orca-skills-tier.test.sh can
+# drive the present/absent diff in a tmpdir, as tier_docker does.
+ORCA_SKILLS_AGENTS_DIR="${ORCA_SKILLS_AGENTS_DIR:-$HOME/.agents/skills}"
+ORCA_SKILLS_CLAUDE_DIR="${ORCA_SKILLS_CLAUDE_DIR:-$HOME/.claude/skills}"
+
+# The desired set is explicit and it is ONE uniform list for every target —
+# `--all` would additionally drag in orca-linear, linear-tickets, orca-emulator,
+# orca-emulator-android and orca-per-workspace-env, none of which this fleet
+# uses. Two sources, because `find-skills` is not in Orca's bundled registry.
+#
+# computer-use is in the WSL list too, and that is measured rather than assumed:
+# its own SKILL.md resolves $ORCA_CLI_COMMAND first "for managed WSL sessions",
+# and `orca computer` inside desktop-wsl bridges through orca-ide →
+# orca-wsl-bridge.ps1 → orca.exe, so it drives the Windows windows that are the
+# only ones that exist on that box. A three-skill WSL variant would have been a
+# branch to test for no gain.
+ORCA_SKILLS_BUNDLED="computer-use orca-cli orchestration"
+ORCA_SKILLS_EXTRA="find-skills"
+ORCA_SKILLS_EXTRA_REPO="vercel-labs/skills"
+
+# _orca_cli: print the Orca executable to use, or nothing (rc 1).
+#
+# NEVER bare `orca` on Linux. /usr/bin/orca is the GNOME screen reader (Ubuntu
+# package `orca`, on every desktop install), so a provisioning run, a systemd
+# unit or an ssh command that types `orca` starts speech synthesis on the user's
+# machine. Bare `orca` only looks right inside an Orca-managed terminal, which
+# puts ~/.config/orca/linux-orca-cli-shim ahead of /usr/bin — and provisioning
+# is never that. `orca-ide` is what Orca's own CliInstaller writes; `orca-cli` is
+# accepted as a second candidate for a box where a different installer got there
+# first. $ORCA_CLI_COMMAND is deliberately NOT consulted: measured unset on g15
+# even under TERM_PROGRAM=Orca, it is exported only for managed WSL sessions —
+# so it is absent on every path this tier takes, and honouring it would open a
+# route to a value whose basename is the screen reader.
+_orca_cli() {
+  local c
+  for c in orca-ide orca-cli; do
+    if command -v "$c" >/dev/null 2>&1; then printf '%s\n' "$c"; return 0; fi
+  done
+  return 1
+}
+
+# _orca_skill_present <name>: true only when BOTH stores have it.
+#
+# The install writes one real directory (~/.agents/skills/<name>, the `universal`
+# target) and one relative symlink into it (~/.claude/skills/<name>, the
+# `claude-code` target). A ~/.agents-only probe would call air's `find-skills`
+# present while the agent that reads skills in a session cannot see it — the
+# precise drift class this tier closes. Probed THROUGH the link (-e on the
+# SKILL.md inside it) rather than by comparing `readlink` text: the link is
+# relative (`../../.agents/skills/<name>`) and ~/.claude/skills also holds real
+# directories that are nobody's link.
+_orca_skill_present() {
+  [ -d "$ORCA_SKILLS_AGENTS_DIR/$1" ] && [ -e "$ORCA_SKILLS_CLAUDE_DIR/$1/SKILL.md" ]
+}
+
+tier_orca_skills() {
+  local ORCA n
+  local -a bundled_add=() bundled_upd=() extra_add=() extra_upd=() args=()
+
+  if _is_darwin; then
+    info "Orca skills: air is installed by hand (no Orca CLI on PATH there) — skipped"
+    return 0
+  fi
+
+  # info, not warn: latitude and hub have no Orca and should not grow one. Same
+  # register as tier_docker on a WSL distro — expected state, not a failure.
+  if ! ORCA="$(_orca_cli)"; then
+    info "Orca skills: no orca-ide on PATH — skipped"
+    return 0
+  fi
+
+  # warn: this one wanted to and could not. `orca skills install` is a wrapper
+  # over `npx --yes skills add`, so without npx there is nothing to run.
+  if ! have npx; then
+    warn "Orca skills: found '$ORCA' but no npx — install node, then re-run"
+    return 0
+  fi
+
+  for n in $ORCA_SKILLS_BUNDLED; do
+    if _orca_skill_present "$n"; then bundled_upd+=("$n"); else bundled_add+=("$n"); fi
+  done
+  for n in $ORCA_SKILLS_EXTRA; do
+    if _orca_skill_present "$n"; then extra_upd+=("$n"); else extra_add+=("$n"); fi
+  done
+
+  # `--agent` is explicit on purpose: without it the skills CLI installs into
+  # every agent it knows about and litters the host with config directories for
+  # agents it does not have. claude-code + universal is what these boxes have,
+  # and `universal` is what makes Codex and Zed see the skills too.
+  #
+  # ONE comma-joined value, because the WRAPPER's --agent is last-wins: measured
+  # with --dry-run on g15, `--agent claude-code --agent universal` resolves to
+  # `npx … --agent universal` — claude-code dropped, silently, rc 0, which
+  # installs the real directory with no link in ~/.claude/skills and manufactures
+  # exactly the drift this tier exists to close. The RAW npx form below is the
+  # opposite: the wrapper expands the comma into repeated flags for it.
+  if [ "${#bundled_add[@]}" -gt 0 ]; then
+    args=()
+    for n in "${bundled_add[@]}"; do args+=(--skill "$n"); done
+    info "Orca skills: installing ${bundled_add[*]}…"
+    "$ORCA" skills install "${args[@]}" --agent claude-code,universal >/dev/null 2>&1 \
+      && ok "Orca skills installed: ${bundled_add[*]}" \
+      || warn "Orca skills install failed — retry: $ORCA skills install ${args[*]} --agent claude-code,universal"
+  fi
+  # `skills update` takes no --agent (it resolves to `npx skills update <names>
+  # --global`), so it can never repair a missing ~/.claude link — which is why
+  # anything missing on EITHER side goes to install above, not here.
+  if [ "${#bundled_upd[@]}" -gt 0 ]; then
+    args=()
+    for n in "${bundled_upd[@]}"; do args+=(--skill "$n"); done
+    "$ORCA" skills update "${args[@]}" >/dev/null 2>&1 \
+      && ok "Orca skills up to date: ${bundled_upd[*]}" \
+      || warn "Orca skills update failed — retry: $ORCA skills update ${args[*]}"
+  fi
+
+  if [ "${#extra_add[@]}" -gt 0 ]; then
+    args=()
+    for n in "${extra_add[@]}"; do args+=(--skill "$n"); done
+    info "Orca skills: installing ${extra_add[*]} from $ORCA_SKILLS_EXTRA_REPO…"
+    npx --yes skills add "$ORCA_SKILLS_EXTRA_REPO" "${args[@]}" --global \
+        --agent claude-code --agent universal -y >/dev/null 2>&1 \
+      && ok "Orca skills installed: ${extra_add[*]}" \
+      || warn "skills add $ORCA_SKILLS_EXTRA_REPO failed — retry by hand"
+  fi
+  if [ "${#extra_upd[@]}" -gt 0 ]; then
+    npx --yes skills update "${extra_upd[@]}" --global -y >/dev/null 2>&1 \
+      && ok "Orca skills up to date: ${extra_upd[*]}" \
+      || warn "skills update ${extra_upd[*]} failed — retry by hand"
+  fi
+}
+
 # ── BEST-EFFORT: git-autofetch (fetch-only refresh of all repos under $HOME) ──
 # Mirrors modules/system/git-autofetch on the Nix fleet: a periodic `git fetch`
 # — refs only, NEVER pull/merge/rebase and never touching a work tree — so

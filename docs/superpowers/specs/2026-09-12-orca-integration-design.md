@@ -1,6 +1,6 @@
 # Orca integration — design
 
-**Date:** 2026-09-12 · **Status:** approved, unimplemented · **Branch:** `orca-integration`
+**Date:** 2026-09-12 · **Status:** L1 implemented; L2 and L3 open · **Branch:** `orca-integration`
 
 Orca (the IDE + its agent runtime) is installed by hand on this fleet, and the
 four skills that make it usable from an agent session were installed by hand
@@ -91,11 +91,20 @@ hand-managed. On Darwin it skips with a message. Both targets run
 `provision/linux.sh` with the `workstation` profile, so one tier-list entry
 reaches both and the distro needs no separate wiring.
 
-**Open, and it is per-box:** `computer-use` drives OS windows, and desktop-wsl has
-none — its windows are Windows-side. Either the desired set is three skills in a
-WSL distro and four on a GUI box, or `computer-use` is installed everywhere and
-simply unused where it cannot act. Decide at implementation time; the diff logic
-is the same either way.
+**`computer-use` in a WSL distro — settled 2026-09-12, one uniform four-skill
+set.** The worry was that it drives OS windows and desktop-wsl has none. Its own
+`SKILL.md` answers that: the first executable it resolves is `$ORCA_CLI_COMMAND`,
+with the comment *"Orca exports this for managed WSL sessions"* — the skill's
+authors expect it to run there, and `orca computer` inside the distro bridges
+through `orca-ide` → `orca-wsl-bridge.ps1` → `orca.exe`, so it drives the Windows
+windows that are the only ones that box has. A three-skill WSL variant would have
+been a branch to test for no gain.
+
+That same file is why `_orca_cli()` does **not** consult `$ORCA_CLI_COMMAND`
+itself: measured unset on g15 even under `TERM_PROGRAM=Orca`, it is exported only
+for Orca-managed WSL sessions, so it is absent on every path a provisioning run
+takes — while honouring it would open a route to a value whose basename is the
+screen reader.
 
 **Resolution.** A small pure function, `_orca_cli()`, prints the executable or
 nothing:
@@ -165,12 +174,15 @@ LAST (the bare-repo checkout is refused when an untracked file occupies a tracke
 path). After `agents_config` and `agent_clis` because the
 skills CLI detects install targets by looking for agent config directories, so
 `~/.claude` must exist first. Not in the `server` or `hub` lists: neither box has
-Orca and neither should grow it. `provision/orca-serve.sh` calls the tier at the
-end of its own install so a fresh Orca box is complete in one run — and that call
-site must set the globals `tiers.sh` declares in its header (`REPO SUDO PRIV
-WARNINGS APT_UPDATED`). orca-serve.sh sets `SUDO` only and its own `warn()` never
-touches `WARNINGS`, so under `set -u` the first warn inside a tier body aborts the
-script.
+Orca and neither should grow it.
+
+**`provision/orca-serve.sh` does NOT call the tier, and that is deliberate.** It
+would be one line, and it would wire a `set -u` abort into the only script g15
+runs in desktop mode: `tiers.sh` declares `REPO SUDO PRIV WARNINGS APT_UPDATED`
+in its header, orca-serve.sh sets `SUDO` alone, and its own `warn()` never
+touches `WARNINGS` — so the first warn inside any tier body kills the script.
+Carried into the serve-deletion follow-up below, where that globals init belongs
+next to the rest of the surgery.
 
 **Tests** — `provision/tests/orca-skills-tier.test.sh`, modelled on
 `docker-tier.test.sh`: pure decisions only, no network, `TIERS_LIB_ONLY=1`.
@@ -183,6 +195,30 @@ resolution prefers `orca-ide`; darwin → skip rc 0; no
 CLI → skip rc 0; no npx → warn rc 0; desired-vs-present diff yields add for
 missing and update for present; the desired list contains exactly the four names
 and none of the Linear/emulator bundle.
+
+**Written and green 2026-09-12 — `provision/tests/orca-skills-tier.test.sh`, 7
+mutations, all caught**: the two above plus a `~/.agents`-only presence probe,
+everything routed to `update`, each of the two guards deleted, and an unwanted
+skill joining the desired set. Two things the writing taught, both now in the
+suite's own header:
+
+- **The suite could start the screen reader, and did.** Under mutation 1 the
+  no-CLI case still had `/usr/bin` behind its shim directory, so a resolver that
+  falls through to bare `orca` ran the real GNOME screen reader on g15 — speech,
+  and a run that had to be killed. A test for a hazard must not be able to
+  trigger it: that case now uses the shim directory *alone* (the tier needs no
+  external command to reach either guard), and a bare-`orca` shim sits beside
+  `orca-ide` in every live case with an assertion that nothing ever invokes it.
+- **Argument boundaries need a real separator.** `"\037"` inside double quotes in
+  POSIX `sh` is four literal characters, so the first shim recorded an argv that
+  could not tell `--agent claude-code,universal` from the split form — the
+  mutation-2 assertion was passing for the wrong reason. The shim builds its
+  record with `printf '\037%s'` instead.
+
+**`just test` from a linked worktree is 3 reds, not 2.** `fleet-profile`,
+`expansion-multibyte` and `agents/tests/bootstrap` all fail there and all pass in
+the main checkout; roadmap P6 records the count as 2. Not a property of this
+change — the same worktree bug — but the filed number is wrong.
 
 ## L2 — routing rules
 
