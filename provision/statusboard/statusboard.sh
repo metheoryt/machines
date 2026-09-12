@@ -1486,6 +1486,40 @@ sb_backup_alerts() {
   return 0
 }
 
+# sb_backup_rows_alert <present> <age-secs> <period>: the COLLECTOR's own
+# liveness, which is a different question from any row inside the file.
+#
+# The board read /var/lib/fleet-backup/rows with `[ -r ... ] && cat`, no mtime
+# check at all — while the design everywhere else in this file is scrupulous
+# that a file's own mtime is its liveness signal. So a backup-status.timer that
+# was stopped, masked or never enabled left the last good rows frozen on disk
+# and the strip painted them green forever. It produces no failed unit either,
+# so SB_FAILED had nothing to say about it: a collector that stops is exactly
+# the silence sb_backup_alerts' own header calls the failure this feature exists
+# to catch, and it was the one case that could not reach the strip.
+#
+# GATED ON THE FILE EXISTING, deliberately. Most of the fleet has no backup job
+# conf and never writes this file; alerting on its absence would light every
+# other box amber forever, which is how a warning colour stops meaning anything
+# (the same argument the fleet strip makes for not counting a sleeping phone).
+# A file that exists was written by a collector that was once running — from
+# that point on, its age is the collector's pulse.
+#
+# The period is the timer's interval doubled (backup-status.timer is 15 min), so
+# one missed run is not an alert: the same one-missed/two-missed shape
+# bs_age_state uses, applied to the collector instead of to a backup.
+sb_backup_rows_alert() {
+  local present="${1:-no}" age="${2:-}" period="${3:-1800}"
+  [ "$present" = yes ] || return 0
+  case "$period" in '' | *[!0-9]*) period=1800 ;; esac
+  case "$age" in
+    '' | *[!0-9]*) printf 'warn:backup rows unreadable\n'; return 0 ;;
+  esac
+  if [ "$age" -le "$period" ]; then return 0
+  elif [ "$age" -le $((period * 2)) ]; then printf 'warn:backup rows stale%s\n' "$(sb_dur_short "$age")"
+  else printf 'bad:backup collector stopped%s\n' "$(sb_dur_short "$age")"; fi
+}
+
 # sb_dur_short <secs>: " 3d" / " 5h" / "" — a leading space so the caller can
 # concatenate it unconditionally, the way sb_fleet_alerts does with ${age:+ $age}.
 sb_dur_short() {
@@ -2084,7 +2118,8 @@ SB_MOUNTS=""; SB_UNMOUNTED=""
 # probes before its first paint, but --once and any future caller ordering should
 # not be able to turn a missing reading into a crash.
 SB_CAP=""; SB_ST=""; SB_PW=""; SB_EN=""; SB_EF=""; SB_LIM=""; SB_SRC=""
-SB_UP=""; SB_LOAD=""; SB_FAILED=""; SB_BACKUP=""
+SB_UP=""; SB_LOAD=""; SB_FAILED=""; SB_BACKUP=""; SB_BACKUP_AGE=""; SB_BACKUP_PRESENT=no
+SB_BACKUP_ROWS=${SB_BACKUP_ROWS:-/var/lib/fleet-backup/rows}
 SB_LAN_ST=""; SB_LAN_DEV=""; SB_LAN_IP=""; SB_LAN_GW=""
 SB_GW_ST=""; SB_GW_RTT=""; SB_NET_ST=""; SB_NET_RTT=""
 # The manifest, parsed once — it cannot change while the board runs. A board outside
@@ -2282,8 +2317,15 @@ sb_sample_slow() {
 
   # Backup freshness. A FILE READ, not a walk: backup-status.sh does the walking
   # on its own 15-minute timer, and the board repaints every second.
-  SB_BACKUP=""
-  [ -r /var/lib/fleet-backup/rows ] && SB_BACKUP="$(cat /var/lib/fleet-backup/rows)"
+  # The file's own mtime is the COLLECTOR's liveness signal, read whether or not
+  # the contents can be parsed — see sb_backup_rows_alert.
+  SB_BACKUP=""; SB_BACKUP_AGE=""; SB_BACKUP_PRESENT=no
+  if [ -e "$SB_BACKUP_ROWS" ]; then
+    SB_BACKUP_PRESENT=yes
+    bmt="$(stat -c %Y "$SB_BACKUP_ROWS" 2>/dev/null)"
+    case "$bmt" in '' | *[!0-9]*) : ;; *) SB_BACKUP_AGE=$(($(date +%s) - bmt)) ;; esac
+    [ -r "$SB_BACKUP_ROWS" ] && SB_BACKUP="$(cat "$SB_BACKUP_ROWS")"
+  fi
 
   # Series. Whole watts and hundredths of load: a glyph is the resolution here, so
   # decimals would be carried around for nothing.
@@ -2580,6 +2622,7 @@ sb_alerts() {
       ;;
   esac
   [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
+  sb_backup_rows_alert "${SB_BACKUP_PRESENT:-no}" "${SB_BACKUP_AGE:-}"
   [ -n "${SB_BACKUP:-}" ] && sb_backup_alerts "$SB_BACKUP"
   if [ "${SB_DK_ST:-}" = down ]; then
     printf 'bad:docker unreachable\n'
