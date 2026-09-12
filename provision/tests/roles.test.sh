@@ -85,6 +85,12 @@ done
 defined role_backup_client
 defined role_backup_hub
 
+# ── backup-offsite (landed with its fleet.json entry — see the plan) ──────────
+# THE ASSERTION IS THAT IT IS DEFINED. backup-offsite is NOT in PLANNED_ROLES and
+# must never be added to it: the whole point of that list is to declare a gap
+# loudly, and this role has an executor from the moment the manifest names it.
+defined role_backup_offsite
+
 # latitude is the machine that carries both. debian is its platform.
 not_skipped "role_backup_client(debian)" "$(role_backup_client dry-run debian latitude 2>&1)"
 not_skipped "role_backup_hub(debian)"    "$(role_backup_hub    dry-run debian latitude 2>&1)"
