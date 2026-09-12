@@ -1381,7 +1381,7 @@ tier_orca_skills() {
   if [ "${#extra_add[@]}" -gt 0 ]; then
     args=()
     for n in "${extra_add[@]}"; do args+=(--skill "$n"); done
-    info "Orca skills: installing ${extra_add[*]} from $ORCA_SKILLS_EXTRA_REPO…"
+    info "Orca skills: installing ${extra_add[*]} from ${ORCA_SKILLS_EXTRA_REPO}…"
     npx --yes skills add "$ORCA_SKILLS_EXTRA_REPO" "${args[@]}" --global \
         --agent claude-code --agent universal -y >/dev/null 2>&1 \
       && ok "Orca skills installed: ${extra_add[*]}" \
