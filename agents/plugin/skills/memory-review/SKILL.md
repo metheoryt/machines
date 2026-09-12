@@ -31,13 +31,19 @@ ls -1 "$HOME"/*/.claude/harvest/shared-proposal-*.md \
 cat ~/machines/docs/memory-consolidate/queue.md
 cat ~/machines/docs/memory-consolidate/ledger.tsv 2>/dev/null
 
-git -C ~/machines status --porcelain
-git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --porcelain --untracked-files=no
+# Dirty-check ONLY the stores this skill writes. A repo-wide `status` in
+# ~/machines is dirty whenever another agent is working in that checkout — which
+# is most of the time — so the unscoped version defers forever.
+git -C ~/machines status --porcelain -- .claude/memory/project.md docs/memory-consolidate
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME status --porcelain --untracked-files=no -- \
+  $HOME/.claude/memory $HOME/.claude/host-memory.md
 ```
 
-If both are empty, say so and stop — do not go looking for work to do. A **dirty
-tracked store** means someone is mid-edit or the 10-minute sync timer is about to
-commit: defer rather than mixing your write into theirs.
+If both inboxes are empty, say so and stop — do not go looking for work to do. A
+**dirty tracked store** in those scoped paths means someone is mid-edit or the
+10-minute sync timer is about to commit: defer rather than mixing your write into
+theirs. Anything else dirty in `~/machines` is somebody else's work in a shared
+checkout — not your business, and not a reason to defer.
 
 ### Proposals first, queue second
 
@@ -191,18 +197,40 @@ transcript watermark is read-once), but Track B re-derives drift from the git
 history every run, so an unrecorded rejection comes back tomorrow night.
 
 Commit **each repo separately** — a dotfiles-tracked store and a repo-tracked
-store are different repositories and never share a commit:
+store are different repositories and never share a commit — and commit with
+`--only <paths>`, never a bare `add` + `commit -m`:
 
 ```bash
-# dotfiles side (core/global/host-memory/personality)
-git --git-dir=$HOME/.dotfiles --work-tree=$HOME add <ABSOLUTE paths>
-git --git-dir=$HOME/.dotfiles --work-tree=$HOME commit -m "memory: ..."
+# dotfiles side (core/global/host-memory/personality). ABSOLUTE paths, always.
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME commit --only <ABSOLUTE paths> -m "memory: ..."
 
 # repo side (a project.md, plus the queue + ledger themselves)
-git -C ~/machines add docs/memory-consolidate .claude/memory/project.md
-git -C "$repo" add .claude/harvest   # the decided proposals, per repo
-git -C ~/machines commit -m "memory-review: ..."
+git -C ~/machines add -N docs/memory-consolidate      # only for files git has not seen yet
+git -C ~/machines commit --only docs/memory-consolidate .claude/memory/project.md \
+  -m "memory-review: ..."
+git -C "$repo" commit --only .claude/harvest -m "memory-review: decided <n> proposals"
+
+# proof, on each one — the file list must be exactly the paths you passed
+git --git-dir=$HOME/.dotfiles --work-tree=$HOME show --stat --oneline HEAD
+git -C ~/machines show --stat --oneline HEAD
 ```
+
+**The dotfiles side is where this matters most.** The 10-minute `dotfiles-sync`
+timer runs `git add -u`, so a tick landing inside your window stages every
+tracked `$HOME` change on the box; a bare `commit -m` then ships all of it under
+a `memory:` message, and the next promote carries it to `main`. `--only` commits
+the named paths from the work-tree and ignores the index — measured 2026-09-12,
+a decoy staged immediately before survives the commit untouched and stays
+staged. `--only` also **fails outright on a path git has never seen**
+(`pathspec … did not match any file(s) known to git`), so a file created this
+session — a first `project.md`, a new `runs/` entry — needs `git add -N <path>`
+first.
+
+The decisive case is the overlapping one, and it behaves: if a timer tick
+staged *your* store too and you kept editing it afterwards, `--only` commits the
+**work-tree** content — every edit, including the ones made after the tick — and
+still leaves the other files the tick staged out of the commit and staged
+(measured 2026-09-12 against a bare repo with `--git-dir`/`--work-tree`).
 
 ## Step 6 — Promote what is shared
 
