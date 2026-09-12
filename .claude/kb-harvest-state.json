@@ -1,14 +1,27 @@
 {
   "last_refresh": {
-    "commit": "73a5334",
+    "commit": "3816d27",
     "date": "2026-09-12",
     "sessions_processed": [
-      "40ef9ef4-d45c-480b-be1b-8c36137324ef",
-      "96a76e02-1793-4233-ac7d-48537a2760ab"
+      "0841a872-769c-4948-ab5c-cd309f8803a4",
+      "08aa9fe8-f2bf-43b7-85e0-1e72c768d649",
+      "1abc7229-e7c6-4c11-83c7-2346e369dbcd",
+      "1f85e506-5144-47ec-9879-b2e6e9aa4024",
+      "218b2f03-9598-45f7-9e54-e07b0a00571f",
+      "21e77c45-070e-458f-a868-6ae84714fe3a",
+      "2c9011f6-5636-4bc5-9201-41789e849764",
+      "39d0667c-131d-4ea9-a3c1-80a4ae38efda",
+      "54aa8a0b-e7b2-41d8-a8eb-72c69054c360",
+      "96603b2b-d196-4807-979c-2e38a868d2c7",
+      "96a76e02-1793-4233-ac7d-48537a2760ab",
+      "dbe42595-fa4a-47df-b506-cd0bf29f142b",
+      "eaf499c8-75c7-4a57-b4b0-afd3b1ea3562",
+      "ff591452-99db-4ac4-a41b-00600f3802b8"
     ],
     "tiers_touched": [
       ".claude/memory/project.md",
-      "AGENTS.md"
+      "AGENTS.md",
+      ".claude/harvest/shared-proposal-2026-09-12.md"
     ]
   },
   "sessions": {
@@ -65,8 +78,15 @@
       "cwd": "/home/me/machines",
       "host": "desktop-wsl",
       "id_hash": "b809312e3f09d5fb7fa6a770f5727629bbf418f9",
-      "last_line": 360,
+      "last_line": 362,
       "last_ts": "2026-09-11T10:40:29.591Z"
+    },
+    "08aa9fe8-f2bf-43b7-85e0-1e72c768d649": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "f224a915343cc7fac114e331d9f923ebe86fcc9a",
+      "last_line": 686,
+      "last_ts": "2026-09-12T02:07:41.409Z"
     },
     "0c30deed-3e70-40cf-b821-8acc30c510d4": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -131,6 +151,13 @@
       "last_line": 218,
       "last_ts": "2026-08-11T21:42:31.825Z"
     },
+    "1abc7229-e7c6-4c11-83c7-2346e369dbcd": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "de3a8c1d6a67bb1b6a9d3b47b6a42fba798ef012",
+      "last_line": 1421,
+      "last_ts": "2026-09-12T04:49:02.965Z"
+    },
     "1c32a4fa-aa84-4681-b911-13f82e00cf95": {
       "cwd": "C:\\Users\\methe\\machines",
       "host": "g614jv",
@@ -156,7 +183,7 @@
       "cwd": "/home/me/machines",
       "host": "desktop-wsl",
       "id_hash": "4c99d299b19f8efe02ad69b6ab9515e790d5b46d",
-      "last_line": 1999,
+      "last_line": 2000,
       "last_ts": "2026-09-10T20:21:11.821Z"
     },
     "20023ba9-de26-4f91-84b5-afad4f5582e9": {
@@ -172,6 +199,20 @@
       "id_hash": "9107f60fb6eefeca178fa78667ba49a581ff90bf",
       "last_line": 1970,
       "last_ts": "2026-07-24T01:49:58.061Z"
+    },
+    "218b2f03-9598-45f7-9e54-e07b0a00571f": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "47d7270231483d2006a484a4e988e0751434b388",
+      "last_line": 250,
+      "last_ts": "2026-09-12T03:08:34.551Z"
+    },
+    "21e77c45-070e-458f-a868-6ae84714fe3a": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "2e42e7e0889f9a4083ff46cd39758b12c5c8fe32",
+      "last_line": 1873,
+      "last_ts": "2026-09-12T05:11:40.630Z"
     },
     "23bbd86b-54ec-4598-8111-19fe22f5df99": {
       "cwd": "C:\\Users\\methe\\GitHub\\machines",
@@ -240,7 +281,7 @@
       "cwd": "/home/me/machines",
       "host": "desktop-wsl",
       "id_hash": "c80057b672330335e31f92cce03f15cff8313c41",
-      "last_line": 5118,
+      "last_line": 5119,
       "last_ts": "2026-09-10T20:14:03.061Z"
     },
     "2caeba31-b0ed-4746-a12c-7683ccf9cfb1": {
@@ -313,6 +354,13 @@
       "last_line": 497,
       "last_ts": "2026-07-17T18:40:08.730Z"
     },
+    "39d0667c-131d-4ea9-a3c1-80a4ae38efda": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "be71af7ad802fb101f7b3fe01d594fd2a7d828a3",
+      "last_line": 611,
+      "last_ts": "2026-09-12T04:54:43.751Z"
+    },
     "3aff55e1-78de-41ce-a96d-ddc452c67518": {
       "cwd": "/home/me/machines",
       "host": "g513ie",
@@ -338,7 +386,7 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "b41f22f25b75751245fd7450dec1b14480fd5387",
-      "last_line": 1865,
+      "last_line": 1868,
       "last_ts": "2026-09-11T19:55:23.784Z"
     },
     "413ff7f2-c9db-46d0-af39-c4684fdfcdf6": {
@@ -452,6 +500,13 @@
       "id_hash": "71068a4e346c217f640b1b26ea8f92f9236230ca",
       "last_line": 102,
       "last_ts": "2026-07-07T18:33:51.282Z"
+    },
+    "54aa8a0b-e7b2-41d8-a8eb-72c69054c360": {
+      "cwd": "/tmp/claude-1000/-home-me-machines/40ef9ef4-d45c-480b-be1b-8c36137324ef/scratchpad",
+      "host": "g513ie",
+      "id_hash": "0f108bec76c0cc68012befe7fb7de1c0e9045330",
+      "last_line": 32,
+      "last_ts": "2026-09-11T17:54:07.517Z"
     },
     "568d85ae-86e5-4a9f-879b-5b948572685a": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -611,7 +666,7 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "6cdf31fa162b08ec59fca801caf302a769f3e75e",
-      "last_line": 2187,
+      "last_line": 2190,
       "last_ts": "2026-09-11T17:12:38.357Z"
     },
     "736d8526-95b0-42ef-985c-25f3478041a4": {
@@ -782,12 +837,19 @@
       "last_line": 340,
       "last_ts": "2026-08-24T08:50:10.870Z"
     },
+    "96603b2b-d196-4807-979c-2e38a868d2c7": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "97b7935d5144b693fa00db18fe00afe5e91eb169",
+      "last_line": 260,
+      "last_ts": "2026-09-12T06:47:42.091Z"
+    },
     "96a76e02-1793-4233-ac7d-48537a2760ab": {
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "aa480aafe5cad19f2efa29d1bdda9b44df6e4752",
-      "last_line": 157,
-      "last_ts": "2026-09-11T22:18:27.417Z"
+      "last_line": 873,
+      "last_ts": "2026-09-11T23:39:35.973Z"
     },
     "96d9a682-dbcd-4649-8fc4-a113d30f3e1a": {
       "cwd": "/home/me/machines",
@@ -1216,6 +1278,13 @@
       "last_line": 50,
       "last_ts": "2026-07-19T19:43:07.349Z"
     },
+    "dbe42595-fa4a-47df-b506-cd0bf29f142b": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "4c9e588c2a5101fab9c71284b900f700db354f78",
+      "last_line": 407,
+      "last_ts": "2026-09-12T01:07:02.781Z"
+    },
     "dc3e7e73-f226-4856-ac95-d6ad8f07d827": {
       "cwd": "/home/me/machines",
       "host": "g614jv",
@@ -1271,6 +1340,13 @@
       "id_hash": "fd0071ca4016fe0bab6881d0e3e299b6bebeaa0a",
       "last_line": 466,
       "last_ts": "2026-07-21T14:57:22.773Z"
+    },
+    "eaf499c8-75c7-4a57-b4b0-afd3b1ea3562": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "7797e9942f899410f9bc1c0e42e8d91fdee02181",
+      "last_line": 376,
+      "last_ts": "2026-09-12T02:31:03.865Z"
     },
     "eddb2751-71aa-44ae-aaad-c7ddf4b33382": {
       "cwd": "/home/me/machines",
@@ -1348,6 +1424,13 @@
       "id_hash": "bf27b397046437903f4bdc3142390adab23575c2",
       "last_line": 159,
       "last_ts": "2026-07-07T17:22:16.514Z"
+    },
+    "ff591452-99db-4ac4-a41b-00600f3802b8": {
+      "cwd": "/home/me/machines",
+      "host": "g513ie",
+      "id_hash": "8b2562ffae9ee2772530a6dc9ec759328b70d0c1",
+      "last_line": 209,
+      "last_ts": "2026-09-12T07:36:30.157Z"
     }
   }
 }

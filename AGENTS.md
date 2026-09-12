@@ -16,6 +16,14 @@ an already-broken link; `provision/tests/windows-core-symlinks.test.sh` guards
 the tracked shape. The one-command check is `wc -c CLAUDE.md` — it must match
 `AGENTS.md`, not read 9.
 
+**And do not run that check in PowerShell.** `(Get-Item CLAUDE.md).Length` reads
+**0** for a perfectly intact symlink, so the PowerShell-native equivalent of
+`wc -c` reports the healthy case as the broken one. What tells the truth there
+are the attributes: `ReparsePoint` present, `.Target` reading `AGENTS.md`, and
+`core.symlinks=true`. Measured on desktop 2026-09-12, where the link was healthy
+and looked 0-byte.
+<!-- src: machines 3816d27 | 2026-09-12 -->
+
 ## Repository Overview
 
 Config, provisioning, and data-backup for a small machine fleet — **Debian,
@@ -278,6 +286,16 @@ failure's real cause is still unknown — but it is style plus defence-in-depth,
 a reproduced bash bug. **If you are about to repeat a mechanism from this file in a
 commit message, that is the moment to measure it.**
 
+**`roles.test.sh` does not reliably print `ALL PASS`, and neither does every
+other suite.** The comment beside it above says it does; project memory has
+carried the correction for longer. A loop that greps for that string undercounts
+failures — check each suite's **exit code**, which is what `just test` itself
+does. This is the second time two files in this repo have disagreed about a
+mechanism rather than about a fact; per this file's own rule, the contradiction
+is the bug.
+<!-- conflicts-with: "bash provision/tests/roles.test.sh      # prints ALL PASS, nonzero on failure" -->
+<!-- src: machines 3816d27 | 2026-09-12 -->
+
 ## Architecture
 
 ### Top-level directories
@@ -459,6 +477,22 @@ here.** `$ErrorActionPreference` is `Stop`, so it throws and the process exits 1
 before ever reaching `exit 2` — the pre-existing `no machine selected` arm had
 been doing exactly that. Use plain stderr, then `exit`.
 
+**`provision/roles/` also holds `backup-offsite.sh`** (posix only — there is no
+`.ps1`). `backup-offsite` is a SINK: it receives other machines' backups and can
+never delete them. **It is distinguished from `backup-hub` by the direction of
+trust, not by the software.** The hub is in the owner's own flat, so it holds the
+fleet's repositories AND their passwords and it prunes them. The offsite sink is
+900 km away in a house he does not occupy, so it holds no password at all, serves
+`--append-only`, never prunes, and proves its own bytes keylessly. It also never
+runs `restic init`, for the reason `backup/base.yaml` spells out: a role that
+created repositories would reintroduce the silent-empty-repo failure that design
+closes. And its rest-server is **native, not a container** — deliberately,
+because latitude's is part of the `cyphy.kz` stack and therefore lives in `vps`
+(machines here, services there), while being a sink is this box's entire purpose;
+keeping Docker off the appliance also keeps the bind-source race that has cost
+this fleet two multi-day outages away from it.
+<!-- src: machines 3816d27 | 2026-09-12 -->
+
 ### Fleet networking / tailnet architecture
 
 The fleet transport is a self-hosted **Headscale tailnet** (`cc.cyphy.kz`,
@@ -616,6 +650,38 @@ are not re-derivable from the code.
   `.env`); container-side bind paths never change, so the *arr databases need no
   edits on a host-disk move.
 
+- `backup-status.sh` + `systemd/backup-status.{service,timer}` — a further unit
+  pair `install-timers.sh` installs, and the thing that turns "is the backup
+  fresh" into one implementation instead of two. **The enabling trick is that a
+  restic repository's newest snapshot age is readable from `<repo>/snapshots/`
+  FILE MTIMES** — no restic binary, no password, no repository lock — which is
+  what makes it cheap enough to fire every 15 minutes across the hub's own repo
+  and every pusher's. Severity is keyed on a **declared** period
+  (`provision/statusboard/backup-jobs.<hostname>.conf`), never on observed
+  periodicity: observed periodicity would put Debian's nine housekeeping timers
+  on the page and would have nothing to say about a weekly job. One missed period
+  is `late`, two is `stale`, and an age that cannot be read is `unknown` — a
+  warning that must reach the strip, never silence. **The unit list is the
+  script's own `UNITS`/`TIMERS` arrays**, plus a pre-flight loop that refuses to
+  touch systemd unless every script it names is executable; read those, never a
+  count written in prose.
+  <!-- conflicts-with: "`install-timers.sh` + `systemd/` — installs all **three** as system timers" -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- `restic-pack-verify.sh` — **a restic pack file's NAME is the SHA-256 of its own
+  stored bytes** (measured on latitude 2026-09-12), so hashing every file under
+  `data/`, `index/` and `snapshots/` and comparing each against its own name is a
+  100% read-data check that needs **no password and no restic binary** — strictly
+  stronger coverage than `check --read-data-subset 5%`, on a box that holds
+  nothing but ciphertext. What it deliberately does NOT prove, and nobody should
+  later claim it did: that blobs *decrypt* (a pack can be byte-perfect and the key
+  wrong), and that the index agrees with the packs or that a snapshot's tree
+  resolves. Those are structural, they live in metadata, and metadata is small —
+  so they are checked keyed from the *other* end, over the link. Bytes at the
+  sink, structure at the source, and neither end can hide the other's failure.
+  `config` and `keys/*` are not content-addressed and can only be judged against
+  a recorded baseline.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
 **`hosts/g15/ubuntu/`** — the personal-projects host, reinstalled from Windows 11
 on 2026-09-07. Its `README.md` says why the directory is `ubuntu/` while the
 manifest says `debian` (the manifest token is a platform *class*). Also holds
@@ -627,6 +693,20 @@ manifest says `debian` (the manifest token is a platform *class*). Also holds
 Overview*: both were deleted 2026-07-31). `hosts/desktop/wsl/` carries the
 `ssh.socket` 2222 drop-in and its README.
 (`hosts/server/` was deleted with the decommission — git history has it.)
+
+**`hosts/offsite/debian/`** — the village box, 900 km away, an appliance in a
+house nobody technical occupies. **It is a host directory for a machine that is
+not in `fleet.json`.** `role_backup_offsite` resolves its installer as
+`hosts/<machine>/debian/install-rest-server.sh`, so the manifest name and the
+directory name are the same string, and a member added to the manifest without
+its directory makes the role print "no installer for `<machine>` (skipped)"
+rather than fail. Its `README.md` is the entry point and states the invariants
+the scripts enforce: no repository password ever lives on that box, it serves
+`--append-only` and never prunes, it never runs `restic init`, and **it pushes
+nothing** — latitude PULLS its status file, so the box needs no outbound ssh,
+mail or webhook and no key into Almaty. Granting it one would open, in the other
+direction, exactly the hole `--append-only` closes.
+<!-- src: machines 3816d27 | 2026-09-12 -->
 
 ### Key patterns
 
@@ -747,6 +827,44 @@ Overview*: both were deleted 2026-07-31). `hosts/desktop/wsl/` carries the
   them and asserts nothing ever invokes it. It resolves under the driver only
   because `provision/linux.sh:233` exports `~/.local/bin` onto PATH — delete
   that line and `tier_orca_skills` silently info-skips on every box.
+
+- **Never bind a fleet service to a tailnet address.** Nothing can bind
+  `100.64.x.x` before `tailscaled` is up, and the failure takes the worst shape
+  available: the bind fails during container network *setup* (`failed to set up
+  container networking: driver failed programming external connectivity … cannot
+  assign requested address`), so the container never reaches a running state and
+  **never exits** — and a restart policy only retries containers that *exit*.
+  Measured twice on latitude's restic REST hub: 2026-08-02 left `ExitCode=255`
+  with `RestartCount=0` ten hours later, and 2026-08-04 left the container `Up`
+  with `HostConfig.PortBindings` intact but `NetworkSettings.Ports` **empty**. So
+  `docker ps` is not the diagnostic; `docker inspect -f '{{json
+  .NetworkSettings.Ports}}'` is. Bind the wildcard and let **credentials** carry
+  the security argument — a bind with no address to wait for has no race left to
+  lose, and htpasswd + `--private-repos` is strictly stronger than "reachable
+  means authorised" because it also constrains fleet members. Recovery after any
+  change to such a container is `docker compose up -d --force-recreate`, never
+  `up -d` or `start`: those reuse the existing container, come back running, log
+  `start server on [::]:8000`, and are reachable by nobody.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **A sweep that walked nothing must not report clean.** `find <dir> … 2>/dev/null`
+  over a content-addressed tree walks whatever subset exists and the redirect
+  hides the rest, so a repository with every pack file deleted renders as
+  `files=1 bad=0`, exit 0, all the way to the status board. A missing
+  content-addressed DIRECTORY is a collapse in **coverage**, not corruption; and
+  a file that could not be READ (a vanished file, EIO on a dying platter, a
+  permission error) is neither clean nor corrupt — counting it bad attributes
+  corruption to a file nobody read, skipping it silently is the exact failure the
+  sweep exists to catch. Each needs its own exit status. Same rule as *Two
+  failures must not share one exit status* above, applied to the two states that
+  look like success.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Before choosing exit numbers, survey every other exit map that runs on the
+  same box.** The rule above only holds if the numbers are unique across the
+  scripts a reader triages together: `restic-pack-verify.sh` took 4 and 5 because
+  `install-rest-server.sh` had already claimed 1/2/3/78/79 and `install-timers.sh`
+  20..23 on that machine. Picking per-script and colliding across scripts
+  reintroduces the ambiguity the rule exists to remove.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
 
 ## Hardware Context
 

@@ -1,6 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against 73a5334 on 2026-09-12 -->
+<!-- KB refreshed against 3816d27 on 2026-09-12 -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
@@ -3909,3 +3909,306 @@ revisited since.
   alone yields a dangling link — extract the real path.
 - The Ubuntu "restart to finish updating" prompt is apt/unattended-upgrades and
   has nothing to do with Orca; apt's `orca` 50.2 is the GNOME screen reader.
+
+
+## Оффсайт, хаб и зеркало: что измерили 2026-09-12
+
+<!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Хаб на latitude больше НЕ `--no-auth` и не привязан к tailnet-адресу — проверено
+  живьём 2026-09-12.** `HostConfig.PortBindings` = `{"8000/tcp":[{"HostIp":"","HostPort":"8001"}]}`,
+  то есть wildcard (`0.0.0.0:8001` и `[::]:8001`), а `OPTIONS` =
+  `--private-repos --append-only --prometheus` с htpasswd в `/data/.htpasswd`. Так
+  что «достижимость И ЕСТЬ авторизация» описывает снятую позицию, а буллет про
+  «`--append-only` намеренно НЕ выставлен, он сломает `forget --prune`» неверен
+  дважды: файл сам себе противоречил (`:1093` и `:2649` уже говорили, что хаб
+  отдаёт `--append-only`). Ретенция при этом работает: prune крутится на latitude
+  через per-client maintenance-профили (`g614jv-maintenance`, `g513ie-maintenance`),
+  каждый со своим ключом локально — клиент удалить не может никогда, владелец хаба
+  может всегда. Посылка, из-за которой wildcard-бинду НУЖНА аутентификация: на
+  latitude нет хостового файрвола вообще (`iptables -P INPUT ACCEPT`, только прыжок
+  в `ts-input`; ни ufw, ни nftables, ни firewalld), так что опубликованный
+  docker-порт реально открыт каждому устройству в домашнем wifi.
+  <!-- conflicts-with: "now bound to **`100.64.0.8:8001`, not `0.0.0.0`**. It runs `--no-auth`, so reachability IS authorisation" -->
+  <!-- conflicts-with: "`--append-only` is deliberately NOT set: it would break `forget --prune` and turn retention into a manual chore" -->
+  <!-- conflicts-with: "Costs a boot race (docker cannot bind before tailscaled is up) which `restart: unless-stopped` absorbs — check that first if the container is ever dead after a reboot." -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **План оффсайта — больше не «возить диск из дока».** Файл дважды говорит, что
+  дешёвое закрытие оффсайт-дыры — ротация одного дискового лотка, и назначает
+  владельцем Task 19 миграционного плана. Владелец отверг ротацию прямо
+  2026-09-11: «езжу я раз в несколько месяцев, но не хочу таскать диски каждый
+  раз». Замена — всегда включённая коробка в родительском доме под Карагандой:
+  один раз засеивается диском, привезённым в ближайшую поездку, дальше получает
+  дельты по домашнему оптоволокну. Логическое имя `offsite`, роль
+  `backup-offsite`; дизайн в
+  `docs/superpowers/specs/2026-09-12-village-offsite-backup-design.md`, план в
+  `docs/superpowers/plans/2026-09-12-village-offsite-backup.md`. Агент, читающий
+  старый буллет, предложит ровно то, от чего уже отказались.
+  <!-- conflicts-with: "remains cheap (rotate one dock's drive off-site) rather than adding cloud/object storage" -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Мошеннический диск 2026-07-30 ВЕРНУЛИ в магазин — его на latitude нет и не
+  будет.** Раздел про приёмку подробно описывает подлог (HGST Ultrastar
+  `HUS726060ALE611` под этикеткой WD Purple) и нигде не говорит, что диск уехал
+  обратно, — этого достаточно, чтобы агент опознал живой диск как тот самый (в
+  этой сессии так и произошло, поправил владелец). HGST на latitude — обычный
+  `HGST HTS541010A9E680`, 1 ТБ Travelstar. Смежное: ни один локальный диск нельзя
+  увезти в деревню, потому что все четыре 2.5″ в коробке — шпиндели на 1 ТБ и
+  меньше (три крупнейших по 931.5 G) против ~950 ГБ оффсайт-полезной нагрузки.
+  Ограничение — запас по ёмкости, а не физический размер: доки принимают и 2.5″,
+  и 3.5″, так что «он не влезет» здесь никогда не аргумент.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **480 Мбит на зеркале — ВЫЛЕЧЕНО, и вместе с ним умер план освобождать бэй
+  Ugreen.** 2026-09-10 хаб убрали, разъёмы переобжали: NS1066 теперь воткнут
+  ПРЯМО в USB3-порт ноутбука без хаба, договаривается на 5000, `Cannot enable` в
+  логе больше не появляется. Чтение — 80 МБ/с, то есть потолок самой 2.5″
+  пластины, а не шины; полный проход `mirror-refresh` — 31 секунда. Это снимает
+  два стоящих в файле утверждения: «настоящее лечение — увести зеркало с этого
+  порта» и «ждать освобождения spare320 ради бэя Ugreen, возможно, не нужно
+  вовсе». Скорость зеркала была ЕДИНСТВЕННОЙ причиной выселять `/mnt/spare320` из
+  бэя Ugreen, так что вопрос про spare320 теперь только «когда закончится
+  прижигание 8 ТБ».
+  <!-- conflicts-with: "настоящее лечение — увести зеркало с этого порта" -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Деградировавшая, но работающая USB-линия — самое опасное состояние, и все три
+  скорости дал ОДИН неплотный разъём.** Тот же коннектор `/mnt/immich-mirror`
+  выдавал 12 Мбит/с (USB 1.1 full-speed, замерено 923 КБ/с — полный проход занял
+  бы около недели), потом 480, потом 5000, при неизменных диске и коробке. Обе
+  первые версии были неверны: «шинный хаб не прокормит 2.5″ шпиндель» (NS1066
+  заявляет 2 mA, хаб GenesysLogic — 100 mA) и «не контачат SuperSpeed-пары
+  NS1066». Дело было в прижиме разъёма. Остаётся правило: rsync на деградировавшей
+  линии не падает, он ПОЛЗЁТ сутками под зелёным таймером, так что медленная линия
+  прячется лучше отсутствующей — смотреть `cat /sys/bus/usb/devices/*/speed`
+  прежде, чем верить любой цифре пропускной способности, и держать
+  `UDMA_CRC_Error_Count` (здесь 0) как признак умирающего разъёма, а не разовой
+  плохой вставки.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Запушить конфиг resticprofile — ЗНАЧИТ его задеплоить, а `initialize: true`
+  превращает ранний pull в молча созданный пустой репозиторий.** `resticprofile`
+  читает `backup/<identity>/profiles.yaml` прямо из рабочего дерева git, то есть
+  отдельного шага деплоя нет: коммит доезжает до каждой коробки на ближайшем тике
+  `fleet-selfpull`. У latitude в профиле стоит `initialize: true`, поэтому
+  конфиг, называющий `/mnt/wd8`, пока данные ещё на `/mnt/spare320`, СОЗДАСТ там
+  пустой репозиторий с нулевой историей и отрапортует успех. Именно поэтому
+  `migrate-restic-wd8.sh` делает `git pull` сам, внутри `cutover`, после дельты и
+  после `verify`, и отказывается продолжать, если в конфиге осталась хоть одна
+  ссылка на старый путь.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **`restic-hub-selfcheck.sh` держит UUID хабового диска литералом, поэтому
+  переезд репозитория обязан двигать и его.** Самопроверка сверяет носитель по
+  UUID файловой системы, а не по пути: `DRIVE_UUID="726efd1f-7eb1-45d7-a09e-1e9467c6319f"`
+  прописан в скрипте (сверяется с `findmnt -no UUID /mnt/wd8`). Когда оба
+  restic-репозитория переехали с `/mnt/spare320` на `/mnt/wd8`, литерал пришлось
+  править тем же изменением — иначе самопроверка кричит «не тот диск» на
+  совершенно здоровой системе, и этот ложный красный неотличим от настоящего
+  отказа хаба. Любой будущий переезд репозиториев несёт ту же обязанность.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Коллектор, который остановился, — это не зелёная полоска.** Статусборд читал
+  файл строк как `[ -r … ] && cat`, вообще без проверки mtime, — при том что весь
+  остальной файл скрупулёзно трактует mtime файла как сигнал его живости.
+  Остановленный, замаскированный или никогда не включённый таймер сборщика
+  оставлял последние хорошие строки замороженными на диске, и полоса красила их
+  зелёным вечно; failed-юнита при этом тоже нет, так что `SB_FAILED` сказать
+  нечего. Правило: у файла, который пишет периодический сборщик, его собственный
+  mtime — это пульс сборщика. Алерт при этом гейтится на **существование** файла,
+  иначе каждая коробка, у которой такой работы нет, светится янтарным навсегда —
+  а это и есть способ обесценить предупреждающий цвет.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **ИБП для latitude: он защищает ДОКИ и роутер, а не ноутбук.** Ноутбук — сам
+  себе ИБП и держится часами, так что подключить его за ИБП значит потратить
+  ~65 Вт бюджета на повторное страхование уже застрахованного и урезать время
+  доков с ~1 ч до ~20 мин. Нагрузка за ИБП — ~60–70 Вт (два дока ~45, роутер ~10,
+  5G-модем ~7), поэтому любой линейно-интерактивный аппарат на 600–1200 ВА
+  избыточен по мощности: настоящая ось — энергия батареи, и считать надо примерно
+  на треть ниже паспортных Вт·ч на глубину разряда и потери инвертора (180 Вт·ч
+  паспорта ≈ 1.5–2 ч при 65 Вт). Схема: розетка → ИБП → существующий удлинитель,
+  на котором уже висят ноутбук, оба дока и роутер.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **Связывающее ограничение при выборе ИБП — порт связи, а не ВА и не AVR.**
+  Любой кандидат без USB/RS-232 отпадает независимо от ёмкости: без NUT
+  (`usbhid-ups` на Debian) ничто не остановит контейнеры и не отмонтирует диски,
+  когда батарея сядет, — и доки исчезнут посреди записи, то есть ровно та
+  bind-source-гонка, ради закрытия которой ИБП и покупается. Логика обратна
+  интуиции: **чем больше батарея, тем важнее порт**, потому что 25-секундное
+  моргание пачку не разряжает, а двух-трёхчасовое заканчивается смертью ИБП под
+  нагрузкой. Рыночные ловушки, которые это правило отсекает: у SVC суффикс `L`
+  против `F` — это И ЕСТЬ порт связи (`V-1200-L-LCD` без него, `V-1200-F-LCD` —
+  то же железо с USB), а вся инверторная линейка SVC DI порта не имеет вовсе, так
+  что «часы автономии от внешней банки 100 А·ч» покупаются слепотой. И
+  «стабилизатор» (например SVC R-1000) — не ИБП: батареи нет, умирает вместе с
+  сетью, и лишь дублирует AVR, уже встроенный в любой линейно-интерактивный
+  аппарат. Остановились на `SVC V-1200-F-LCD` (1200 ВА / 720 Вт, 12 В 7.5 А·ч ×2,
+  AVR 165–275 В, 3× Schuko, USB); на месте проверить одно — часть поставок идёт с
+  несменной батареей, что превращает трёх-четырёхлетнюю банку в мёртвую коробку
+  вместо дешёвой замены.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+- **5G как резервный WAN делает «правильное выключение» штатным путём, а не
+  редким.** Ставить его стоит: 5G — единственный класс линии, переживающий
+  бытовое отключение, потому что проводной интернет умирает на ONT/терминале в
+  той же розетке, а не у провайдера, тогда как базовая станция держит часы
+  собственного резерва. Но требование к ИБП это УЖЕСТОЧАЕТ, а не ослабляет: когда
+  сеть и сервер живут сквозь отключение, типичным концом длинного отключения
+  становится «ИБП сел → доки умерли → ноутбук продолжает работать от своей
+  батареи и писать в исчезнувшие диски». Низкобатарейное выключение по NUT
+  превращается из редкого в штатный путь кода. Две вещи померить ДО покупки
+  железа: прогнать переключение WAN руками и засечь, за сколько возвращается
+  tailnet (ping-пробы дуального WAN часто думают десятки секунд и нередко не
+  возвращаются обратно), и ограничить трафик qbittorrent/servarr, чтобы
+  переключение не съело сотовую квоту за час.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+## Orca, the provisioner and the harness — measured 2026-09-12
+
+<!-- src: machines 3816d27 | 2026-09-12 -->
+
+### Orca's project model
+
+- **Orca on Windows has a per-project agent runtime — Windows, or a named WSL
+  distro — and desktop's `machines` is set to `desktop-wsl`**, so worktrees,
+  terminals and the `claude` process all run inside the distro. That supersedes
+  this file's "In Orca, the registered PATH *is* the environment — there is no
+  environment / runtime / distro field" (probed 2026-07-26); the field exists now.
+  And a repo cannot be registered twice, once per runtime: **Orca keys projects by
+  git remote** (`github:<owner>/<repo>`) and refuses the second path with "such a
+  project already exists".
+  <!-- conflicts-with: "In Orca, the registered PATH *is* the environment — there is no environment / runtime / distro field" -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Deleting an Orca project on one host deletes every host's setup.** Measured
+  2026-09-12: removing the `machines` project on desktop also dropped g15's
+  registration — `orca repo list` went 7 → 6 and the `project setups` row vanished
+  — on a box nobody touched. Projects are keyed by git remote while
+  `projectHostSetup` rows carry a `hostId`, so one delete reaches every host.
+  `orca repo add --path <path>` restores the repo but comes back with
+  `hookSettings.scripts = {setup: "", archive: ""}`, so the `wt-setup` /
+  `wt-teardown` wiring is lost with it. Upstream bug, not reported.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **The Orca CLI has no writer for `hookSettings`.** `orca repo` exposes `add`,
+  `show`, `list`, `set-base-ref`, `search-refs` and nothing that sets them, so
+  per-repo Setup/Archive hooks can only be pasted into Orca's UI or edited in
+  `orca-data.json` behind an Orca-closed guard (the `/orca-repair` precedent). The
+  paste-it-once step is already drifting: of 7 repos registered on g15
+  (2026-09-12), 6 carried `setup: wt-setup` / `archive: wt-teardown` and one
+  carried empty strings.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **There is a third class of ghost workspace `/orca-repair` does not know.**
+  `orca-data.json` can hold TWO entries for the SAME path under different
+  repo-ids, with the stale one's repo-id absent from `repos` — which is why Orca
+  cannot clean it up itself and why that skill misses it: it only knows the two
+  classes where the worktree or the environment is gone. Right-click → Remove does
+  not apply either, because a live checkout sits behind the ghost rather than an
+  empty path. Removing it means editing `orca-data.json` with Orca fully quit, and
+  `activeWorkspaceKey` must be repointed at the surviving entry or Orca reopens
+  into nothing.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+### Provisioning
+
+- **`orca_skills` sits in the workstation `TIERS` list immediately after
+  `agents_config` and `agent_clis`, and that is not cosmetic.** The skills CLI
+  picks its install targets by looking for agent config directories, so
+  `~/.claude` must already exist. Nor may the tier be *appended*: that lands it
+  after `dotfiles`, which stays last for the reason its own comment gives. The
+  tier is deliberately not portable — it reaches exactly the two boxes where a
+  `claude` process actually runs under Orca (g15 and desktop-wsl, both on
+  `workstation`), and darwin is a deliberate skip-with-a-message. **Skills follow
+  the agent runtime, not the app**: flip desktop's runtime to Windows and the live
+  store becomes `%USERPROFILE%` with nothing in the distro consulted — that is a
+  `windows.ps1` step, not a branch in the tier.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **`npx` belongs to the `npm` package, not to `nodejs`.** On Debian/Ubuntu it is
+  a separate package and `/usr/bin/npx` is registered to it (`dpkg -S`, g15
+  2026-09-12), so a layer installing only `nodejs` leaves `tier_orca_skills`
+  warning about a missing npx on every box that same layer has just provisioned.
+  Same shape as `just`: a tier whose own prerequisite nothing that runs first
+  installs. Measured separately on desktop-wsl over ssh: no node, no npx, and the
+  Windows node under `/mnt/c` unreachable — **sshd does not inherit the interop
+  PATH**, so no non-interactive run (converge, `/ship`, a provisioning run) sees
+  any Windows path at all. The fix is a Linux node inside the distro, never a
+  reach across the 9P boundary.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **`provision/lib/tiers.sh` has a call contract, and `orca-serve.sh` does not
+  satisfy it.** The header declares the globals every tier body needs — `REPO
+  SUDO PRIV WARNINGS APT_UPDATED` — plus the driver helpers `info/ok/warn/die/have`;
+  `TIERS_LIB_ONLY=1 source` loads the file with no side effects, which is what the
+  suites rely on. `provision/orca-serve.sh` sets `SUDO` alone and its own `warn()`
+  never touches `WARNINGS`, so under `set -u` the first warning inside any tier
+  body kills the script. Calling a tier from there looks like a one-line change
+  and wires in an abort; the globals init has to come with it.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **`just test` on the Windows checkout fails at `cygpath`, not on an empty suite
+  list.** It exits 1 with `could not find ``cygpath`` executable to translate
+  recipe ``test`` shebang interpreter path`: every recipe body is a
+  `#!/usr/bin/env bash` shebang recipe, and `just` needs `cygpath` from Git for
+  Windows' `usr\bin`, which is not on PATH there. So the gate is one PATH entry
+  away from *starting* on Windows — what stays unmeasured is whether bash suites
+  written for Linux paths would then pass under Git Bash. WSL runs them natively,
+  which is the whole argument for keeping development there.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **`wsl -d <distro>` through a Windows parent has a small argument ceiling.**
+  `ssh desktop.gg.ez "wsl -d desktop-wsl -- bash -lc '<base64 payload>'"` fails
+  with "Argument list too long" when a whole file is inlined. Route the payload as
+  a file instead — `scp -P 2222 <file> desktop-wsl.gg.ez:/tmp/…` then
+  `ssh -p 2222 desktop-wsl.gg.ez`, the direct path, which has no such limit.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+
+### The harness and the memory machinery
+
+- **The cyphy skills are live from the MAIN checkout's working tree.**
+  `~/.claude/skills/cyphy` is a whole-directory symlink to
+  `~/machines/agents/plugin`, so the live text of every cyphy skill is whatever
+  the main checkout currently has checked out. Editing a skill on a branch or in a
+  worktree changes nothing: while `~/machines` sat on `offsite-backup`,
+  `/memory-review` kept running the pre-fix rules even though the fix was merged —
+  silently, with no version anywhere to compare. The useful converse: once the
+  change is merged and the checkout is back on `main`, the new skill text is live
+  immediately, with no bootstrap or install step.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **`just test` gives zero signal on a skill edit.** No suite in the gate reads
+  the markdown under `agents/plugin/skills/`, measured while rewriting three
+  SKILL files: the gate ran green and said nothing about any of them. A green
+  `just test` after a skill-text change is not evidence; the evidence has to be
+  the measurement itself.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Memory-store drift is merge-base, not size.** A machine branch's copy of a
+  SHARED store can be *smaller* than main's and still be the only copy of real
+  content: measured 2026-09-11, `desktop-wsl`'s `personality/practices.md` was
+  735 B smaller than main's while holding 126 lines that exist on no other box.
+  `consolidate-phase.md` states the opposite as a rule, so a run following the
+  brief discards exactly the memory the pass exists to find. Compare per path by
+  merge-base or blob hash against `origin/main`, never by file size.
+  <!-- conflicts-with: "A branch *smaller* than main's is just lagging its next sync tick; that is not a finding" -->
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Phase B's invariant check blames a concurrent session's writes on itself.** It
+  attributes ANY mid-run change in `~/machines` to the run doing the checking, so
+  a second agent editing the repo produces a wrong diagnosis rather than a
+  collision warning. On 2026-09-11 three agent sessions were writing `~/machines`
+  at once with none aware of the others, and that is what tripped it. Before
+  concluding a harvest run corrupted its own tree, check for other live sessions
+  on the box.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Widening a stable-hash id from three fields to four must not append a
+  separator for the absent field.** `"a\037b\037c\037"` is a different string
+  from `"a\037b\037c"`, so a bare `${4:-}` silently rehashes every id already
+  written into the queue and the ledger (measured 2026-09-12: `857b229a` became
+  `91bb8eda`). Branch on emptiness instead, which reproduces the old hash byte for
+  byte. General form: a content-addressed id's schema migration has to be verified
+  against values *already recorded*, never only against new ones.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
+- **Do not put a vector index over the curated memory corpus.** It is ~570 KB
+  across ~10 stores with ~74 `##` headings — small enough to enumerate, and
+  enumerable things do not need semantic search. Worse, vector search returns one
+  plausible neighbour and stays silent about the rest, which is precisely the
+  failure to avoid here: a duplicated section was found only because the headings
+  of both stores were listed in full, and an embedding query would have returned
+  one and hidden the other. Where embeddings do belong is over the raw transcripts
+  — hundreds of sessions, no headings, not enumerable.
+  <!-- src: machines 3816d27 | 2026-09-12 -->
