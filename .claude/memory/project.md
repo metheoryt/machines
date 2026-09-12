@@ -1,6 +1,6 @@
 # Project memory: machines
 
-<!-- KB refreshed against 3816d27 on 2026-09-12 -->
+<!-- KB refreshed against e63f1e1 on 2026-09-12 -->
 
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
@@ -4226,3 +4226,171 @@ revisited since.
   one and hidden the other. Where embeddings do belong is over the raw transcripts
   — hundreds of sessions, no headings, not enumerable.
   <!-- src: machines 3816d27 | 2026-09-12 -->
+
+## Harvest scope, fleet SSH, renames and the Orca stores — measured 2026-09-12 (evening)
+
+### What a gather actually pulls back
+
+- **The remote pull is not filtered by `--match` either.** `fleet-gather.sh`
+  tars the remote's whole `~/.cache/kb-digests`, so a run gets back not only
+  every previous run's digests (already recorded above) but **every other
+  repo's** — a box that harvests a dozen repos delivers all of them into
+  whichever repo asked. Partition the out dir by each digest's own `# cwd:`
+  header before reading a single row, and inside that, read only the files
+  whose mtime belongs to this run. Measured 2026-09-12: 34 digests in the out
+  dir against 6 genuinely new sessions, the oldest dated 2026-07-19. The
+  failure has no error in it — Lane 1 is append-only, so re-reading a stale
+  digest lands as a duplicated bullet, not as a warning.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Two gathers must never run against the same box at once, and that makes the
+  batched single gather a correctness requirement rather than the optimisation
+  it is filed as above.** The remote paths are fixed — `~/.cache/kb-harvest-state.json`
+  and `~/.cache/kb-digests` — so two concurrent runs overwrite each other's
+  seeded watermark and each pulls back the other's state, cross-contaminating
+  read-once between repos. Gathers belong in the orchestrator, serially; never
+  one per repo-subagent running in parallel.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **The self-exclusion message is `[g16] is this box, skipping self` now**, and
+  the consequence is wider than the Windows-native store. `local_host_id()` maps
+  this box's `hostname` (`g614jv`) to g16's `detect.hostname`, which is the same
+  string, so a run started inside `g16-wsl` skips g16 — and because g16 is
+  skipped, `fd_wsl_hosts` never enumerates its distros either. From inside the
+  distro, neither g16's Windows-native `machines` transcripts nor any sibling
+  distro is reachable at all. Measured 2026-09-12 in the same run: latitude,
+  air and g15 all answered ssh from here, and `g16.gg.ez:22` timed out as it
+  must (a WSL distro cannot ssh its own Windows host).
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **A dirty state file is not evidence the gather consumed anything.**
+  `distill.py` rewrites `.claude/kb-harvest-state.json` byte-identically except
+  for a stripped trailing newline, so `git diff` can be non-empty (6053 → 6052
+  bytes, showing only `\ No newline at end of file`) with no watermark moved.
+  Measured 2026-09-12.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Watermark entries are keyed by host AND transcript path, so a reinstall or
+  a rename orphans them permanently** — those sessions can never be re-read or
+  re-verified. `vps`'s state file still carries `g513ie` Windows-path sessions
+  from before that box was reinstalled to Ubuntu on 2026-09-07 (the ssh user
+  changed too). Expect a state file's session count to exceed what any run can
+  reach; the excess is history, not a backlog.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **And the `host` field of an existing entry is rewritten on every gather that
+  touches that session**, to whatever `--host` the run passes — so it records the
+  latest run, not the box the session was recorded on. Measured 2026-09-12: the
+  entries that said `desktop-wsl` (a fleet nickname an earlier run passed) came
+  back as `g614jv` (the `detect.hostname` `fleet-gather.sh` passes now), in the
+  same file the rename deliberately did NOT sweep by hand precisely to keep its
+  provenance verifiable. The machine rewrites it anyway; treat `host` in the
+  state file as a hint, never as provenance.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **`hub` is excluded from every gather by design** (workstation members only),
+  which has a consequence nobody has acted on: Claude sessions run *on the VPS
+  itself* (`-home-debian-vps` transcripts) are never harvested into `~/my/vps`
+  and age out invisibly. Related and structural, not a run failure: a repo with
+  no git remote at all (`DeMarket`, `housing`) has no shareable watermark, so
+  read-once there is permanently per-box.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **A clean run leaves behind the file the Recovery section reads as an abort.**
+  `.claude/harvest/state-before.json` is untracked and is NOT deleted on
+  success, so its presence proves nothing about the previous run. The
+  discriminator is the Lane 1 staging file: `lane1-<date>.md` is removed only
+  after the commit lands, so a leftover `lane1-*.md` is the real sign of an
+  aborted run.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Nothing drains the `conflicts-with` markers.** `memory-harvest/SKILL.md`
+  files a marker as a work item for the consolidation pass, but
+  `consolidate-phase.md` never mentions the string, so markers accumulate
+  unread across the corpus in repos a given run never opens. On 2026-09-12 the
+  large majority of the consolidation queue's newly filed items originated from
+  markers rather than from fresh transcript content — which is the argument for
+  reading them deliberately, not for writing fewer.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Phase B's duplicate suppression is doing its work in the text check, not
+  the id check.** In the 2026-09-12 run every duplicate caught was caught by
+  text and none by id, so a run that skipped the text pass would have queued
+  all of them. Its input is also wider than Phase A's output — four `$HOME`
+  memory stores grew from a different, concurrent session on the same box after
+  the report was written, and filed items came from there. Because suppression
+  exists, a second Phase B run on the same day is safe.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+
+### Fleet SSH: the hole the rename made visible
+
+- **A hand edit to a provisioned file has a one-timer half-life on this fleet.**
+  `fleet-selfpull.timer` fires roughly every 10 minutes, a changed `fleet.json`
+  is a `_touches_driver` trigger in `converge.sh`, and the triggered reprovision
+  rewrites `~/.ssh/config` from `tier_ssh_accounts` alone. Measured 2026-09-12:
+  a fleet block merged onto g15 by hand was gone inside one interval. Verify any
+  fix to a provisioned file *after* one timer interval, never at write time.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Putting `fleet_ssh` in the posix tier lists is not the one-line fix it reads
+  as.** The tier mints `~/.ssh/id_fleet` when absent and prints ENROLLMENT
+  NEEDED; latitude has no `id_fleet` at all, so enabling it on latitude and g15
+  creates two new keys that must reach `provision/fleet-authorized-keys`, a
+  commit, and every other box before either machine can connect. Until then the
+  rendered block is **strictly worse than no block**, because
+  `IdentityFile ~/.ssh/id_fleet` overrides the `id_ed25519` those boxes actually
+  use — measured both directions in one shell on 2026-09-12: the hand-rendered
+  stanza got `Permission denied` while `ssh -i ~/.ssh/id_ed25519
+  methe@100.64.0.4` answered `g614jv`. The real choice is parameterizing the
+  renderer's `IdentityFile` (the Windows renderer already takes it as one) or
+  enrolling two keys in the same change; `docs/fleet-roadmap.md` P3 carries it.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+
+### What a rename costs that no test can see
+
+- **An installed `resticprofile-backup@<profile>.service` hard-codes
+  `WorkingDirectory=…/backup/<identity>`**, so renaming a `backup/<identity>/`
+  directory silently kills the scheduled job — it fails into nothing at its next
+  fire — until that directory's own `install-tasks.sh` is re-run on the box.
+  Measured during the 2026-09-12 `backup/desktop-wsl/` → `backup/g16-wsl/`
+  rename. Nothing in this repo can observe an installed unit, which is why
+  re-running the installer is part of such a rename rather than a follow-up.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Split the affected files by what their rows ARE.** Files whose rows are
+  pending *instructions* — `.claude/harvest/shared-proposal-*.md`,
+  `docs/memory-consolidate/queue.md` — must get a name-resolving header, because
+  a row naming a branch that no longer exists is an instruction that cannot be
+  executed. Files that are *history* — `.claude/memory/project.md`,
+  `.claude/kb-harvest-state.json` — get a preamble and are not swept: a memory
+  log that edits its own past stops being evidence, and rewriting harvest-state
+  keys makes their provenance unverifiable.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+
+### Orca's on-disk state — three key spellings and a cross-OS pid
+
+- **`orca-data.json` spells the same worktree three different ways, and
+  splitting on `::` mis-parses two of them.** Recents under
+  `workspaceSessionsByHostId` are keyed `runtime:<envId>|<repoId>::<path>`,
+  `worktreeIdentityAliases` keys are `local|<repoId>::<path>`, and
+  `orca-ide worktree list --environment <id>` prints the bare
+  `<repoId>::<path>`. Comparing a recent against the live registry verbatim
+  flags every live entry as stale — measured 2026-09-12, where stale-recent
+  detection was 100% false-positive and every flagged recent was live.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **A tool that reads an Orca store must select the WHOLE store, and must fail
+  CLOSED across an OS boundary.** g16-wsl holds two stores — a retired
+  `~/.config/orca` beside the live Windows profile under `/mnt/c` — and pointing
+  only the *data* path at one of them leaves the environments and runtime files
+  resolved against the other: the retired store has no `orca-environments.json`
+  at all, so the environment set comes back empty and every live environment
+  reads as orphaned. Worse, the pid in a Windows `orca-runtime.json` means
+  nothing in the distro's `/proc` and can collide with an unrelated Linux pid,
+  so a "is Orca running" probe returns *not running* with the UI up. For a
+  cross-OS store the only safe guard is the runtime file's existence.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Two classes of Orca state look stale and are not.** `sshTargets` are
+  IMPORTED from the host OS's `~/.ssh/config` rather than authored in Orca
+  (measured 2026-09-12 on the Windows profile, where `homeserver` and `server`
+  survived as targets for dead hosts), so deleting one in the UI is undone at
+  the next import — edit the ssh config file instead. And `worktreeMeta` rows
+  whose paths no longer exist are kept on purpose, with
+  `retiredWorktreeNamesByRepo` beside them holding the same history; they are
+  invisible in the projects panel and every vanished-path row found belonged to
+  a live repo with a correctly removed worktree. Do not prune either as a ghost.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Orca keeps rolling `orca-data.json.bak.N` snapshots next to
+  `orca-data.json`** in the profile dir, so a deleted Automation is fully
+  recoverable — its definition is a row in the `automations` array — and can be
+  re-created with `orca-ide automations create`. Verified 2026-09-12 by reading
+  `.bak.1`.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->

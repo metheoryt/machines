@@ -1,26 +1,18 @@
 {
   "last_refresh": {
-    "commit": "3816d27",
+    "commit": "e63f1e1",
     "date": "2026-09-12",
     "sessions_processed": [
-      "0841a872-769c-4948-ab5c-cd309f8803a4",
-      "08aa9fe8-f2bf-43b7-85e0-1e72c768d649",
-      "1abc7229-e7c6-4c11-83c7-2346e369dbcd",
-      "1f85e506-5144-47ec-9879-b2e6e9aa4024",
-      "218b2f03-9598-45f7-9e54-e07b0a00571f",
-      "21e77c45-070e-458f-a868-6ae84714fe3a",
-      "2c9011f6-5636-4bc5-9201-41789e849764",
-      "39d0667c-131d-4ea9-a3c1-80a4ae38efda",
-      "54aa8a0b-e7b2-41d8-a8eb-72c69054c360",
-      "96603b2b-d196-4807-979c-2e38a868d2c7",
-      "96a76e02-1793-4233-ac7d-48537a2760ab",
-      "dbe42595-fa4a-47df-b506-cd0bf29f142b",
-      "eaf499c8-75c7-4a57-b4b0-afd3b1ea3562",
+      "42e7be29-d521-45b6-856a-1a82bda98408",
+      "5ed920f1-5def-477f-b099-46f991701110",
+      "6cd2582b-8717-410c-9bd7-f820b11b9caa",
+      "ce01f384-5c4b-4550-99b0-a59df02c5ce0",
       "ff591452-99db-4ac4-a41b-00600f3802b8"
     ],
     "tiers_touched": [
       ".claude/memory/project.md",
       "AGENTS.md",
+      "docs/superpowers/specs/2026-09-12-village-offsite-backup-design.md",
       ".claude/harvest/shared-proposal-2026-09-12.md"
     ]
   },
@@ -76,7 +68,7 @@
     },
     "0841a872-769c-4948-ab5c-cd309f8803a4": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "b809312e3f09d5fb7fa6a770f5727629bbf418f9",
       "last_line": 362,
       "last_ts": "2026-09-11T10:40:29.591Z"
@@ -104,7 +96,7 @@
     },
     "0e43a5b9-cb84-475c-bcc3-d39e3d6fa643": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "f4574049f17753a25e163531fbad7a3dcae4c413",
       "last_line": 888,
       "last_ts": "2026-09-07T08:07:12.426Z"
@@ -146,7 +138,7 @@
     },
     "154981fa-38d2-44bd-a66e-0a7f680fc97f": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "ae5eb20e8a58a282e39f8e032342a345f42d6ed2",
       "last_line": 218,
       "last_ts": "2026-08-11T21:42:31.825Z"
@@ -167,7 +159,7 @@
     },
     "1c965f0b-9d29-4d5c-8df0-a46520173a4c": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "0710a878b37c54c9d3cca31062a9ad1a1c750eed",
       "last_line": 1757,
       "last_ts": "2026-08-30T14:28:41.298Z"
@@ -181,7 +173,7 @@
     },
     "1f85e506-5144-47ec-9879-b2e6e9aa4024": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "4c99d299b19f8efe02ad69b6ab9515e790d5b46d",
       "last_line": 2000,
       "last_ts": "2026-09-10T20:21:11.821Z"
@@ -211,7 +203,7 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "2e42e7e0889f9a4083ff46cd39758b12c5c8fe32",
-      "last_line": 1873,
+      "last_line": 1877,
       "last_ts": "2026-09-12T05:11:40.630Z"
     },
     "23bbd86b-54ec-4598-8111-19fe22f5df99": {
@@ -239,8 +231,8 @@
       "cwd": "/Users/me/machines",
       "host": "air",
       "id_hash": "0bdc725b17261e09c8cff4a64028560012c7f2d8",
-      "last_line": 4984,
-      "last_ts": "2026-08-31T09:58:27.858Z"
+      "last_line": 4990,
+      "last_ts": "2026-09-12T11:23:28.189Z"
     },
     "26c0c0e3-e9e9-48cf-bf45-3b417796e2cb": {
       "cwd": "/home/me/orca/workspaces/machines/Launching-subagents-call-stack",
@@ -279,7 +271,7 @@
     },
     "2c9011f6-5636-4bc5-9201-41789e849764": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "c80057b672330335e31f92cce03f15cff8313c41",
       "last_line": 5119,
       "last_ts": "2026-09-10T20:14:03.061Z"
@@ -342,7 +334,7 @@
     },
     "37016424-4def-4121-8594-cdc1f3169eb4": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "2104724221b81d5ae30b83348921d5be8b7674d3",
       "last_line": 83,
       "last_ts": "2026-08-11T14:14:12.521Z"
@@ -358,7 +350,7 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "be71af7ad802fb101f7b3fe01d594fd2a7d828a3",
-      "last_line": 611,
+      "last_line": 613,
       "last_ts": "2026-09-12T04:54:43.751Z"
     },
     "3aff55e1-78de-41ce-a96d-ddc452c67518": {
@@ -402,6 +394,13 @@
       "id_hash": "b6cb144006cd40328d0be05790c9cb996e88e374",
       "last_line": 28,
       "last_ts": "2026-07-14T17:06:36.613Z"
+    },
+    "42e7be29-d521-45b6-856a-1a82bda98408": {
+      "cwd": "/Users/me/machines",
+      "host": "air",
+      "id_hash": "bc622ad31f055a6df75bca4269e9934e9cf22a4f",
+      "last_line": 406,
+      "last_ts": "2026-09-12T11:40:46.036Z"
     },
     "431c838f-417a-4af1-ae05-3aa94033dcf3": {
       "cwd": "C:\\Users\\methe\\machines",
@@ -489,7 +488,7 @@
     },
     "51664786-9699-4a50-a9e1-bf1486b6c75a": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "788d91502ec55b4cd93c38aca2b3855f7808f3a8",
       "last_line": 377,
       "last_ts": "2026-08-13T11:19:56.016Z"
@@ -549,6 +548,13 @@
       "id_hash": "37747b381a68cd53a1417332294580886beb52bf",
       "last_line": 580,
       "last_ts": "2026-07-15T19:54:32.336Z"
+    },
+    "5ed920f1-5def-477f-b099-46f991701110": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "471b89171d832905f9a28ccbda04d821ae61c462",
+      "last_line": 338,
+      "last_ts": "2026-09-12T09:53:58.778Z"
     },
     "5f2c5b91-a65b-49ab-bb6d-2410fcb35c58": {
       "cwd": "/home/me/machines",
@@ -619,6 +625,13 @@
       "id_hash": "8cd4fbc125af2f8a2a613ac3b1c067708cd04ee6",
       "last_line": 349,
       "last_ts": "2026-08-02T07:36:36.028Z"
+    },
+    "6cd2582b-8717-410c-9bd7-f820b11b9caa": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "32545d6c4c3ad67ad7c0e7f6be59fea29ce4e833",
+      "last_line": 2057,
+      "last_ts": "2026-09-12T10:59:07.944Z"
     },
     "6ddfd3b8-8c8d-4fd6-abf0-82dcb764b5e6": {
       "cwd": "/home/me/machines",
@@ -706,7 +719,7 @@
     },
     "7b9e836f-992a-4794-91ab-7830f53962dd": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "5aec8cba347ff2a8e29695ac7733c003bb0de2af",
       "last_line": 15,
       "last_ts": "2026-08-24T08:51:51.865Z"
@@ -769,7 +782,7 @@
     },
     "8c14685f-8c92-4ffb-95c6-7b5d58990499": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "d83af186f21eb63982f41b5c3736dc50ec236e60",
       "last_line": 825,
       "last_ts": "2026-08-25T08:46:21.231Z"
@@ -804,7 +817,7 @@
     },
     "91f69ddb-cd10-4338-8265-b413c6f6de1c": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "160f5edb0cb392f20343a32a37f1ed2c2d434fa5",
       "last_line": 34,
       "last_ts": "2026-08-24T07:09:17.029Z"
@@ -825,14 +838,14 @@
     },
     "94a6aabd-6c43-4097-89cc-befae4513d69": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "9b8fd24d8ce69eeb53797ec6fd9d0dcf6dcfbe43",
       "last_line": 308,
       "last_ts": "2026-08-16T15:38:01.816Z"
     },
     "957a3618-6b3a-4e67-ad24-140ce102791a": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "85df761288b7e46b8b2132dca0be5a46aafed49c",
       "last_line": 340,
       "last_ts": "2026-08-24T08:50:10.870Z"
@@ -841,7 +854,7 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "97b7935d5144b693fa00db18fe00afe5e91eb169",
-      "last_line": 260,
+      "last_line": 262,
       "last_ts": "2026-09-12T06:47:42.091Z"
     },
     "96a76e02-1793-4233-ac7d-48537a2760ab": {
@@ -909,7 +922,7 @@
     },
     "9f8843ff-3d15-434a-b3f0-0f66aba311cb": {
       "cwd": "/tmp/claude-1000/-home-me-machines/8c14685f-8c92-4ffb-95c6-7b5d58990499/scratchpad/rrtest",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "0fb92d9711e8a0ba993fcce503fa9043950dc58a",
       "last_line": 34,
       "last_ts": "2026-08-24T14:31:03.702Z"
@@ -979,7 +992,7 @@
     },
     "b226a898-82a3-4b76-b9af-cbf6809fee8a": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "abee00858d638b991529e7ad60a66e29c2c08140",
       "last_line": 33,
       "last_ts": "2026-08-11T22:05:51.314Z"
@@ -1007,7 +1020,7 @@
     },
     "b79a2f46-0ad0-4d39-a786-1d71d5998b96": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "23f05ef24a4b8ebea74f622bfbca68f7beb85539",
       "last_line": 107,
       "last_ts": "2026-09-07T08:57:37.530Z"
@@ -1035,7 +1048,7 @@
     },
     "ba2002ea-d123-4587-a129-164a6f3d6d5e": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "912d7896f970a9778755248807a5594f9383c8f5",
       "last_line": 6527,
       "last_ts": "2026-09-03T15:45:57.700Z"
@@ -1140,7 +1153,7 @@
     },
     "cb783c52-88ca-4a39-b894-3fc587dec801": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "d30fb8025b2941bd455142c891a77e8617fd0f4a",
       "last_line": 190,
       "last_ts": "2026-08-13T17:06:20.170Z"
@@ -1159,6 +1172,13 @@
       "last_line": 918,
       "last_ts": "2026-07-14T19:15:14.841Z"
     },
+    "ce01f384-5c4b-4550-99b0-a59df02c5ce0": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "a078b29a9521928c37c9518b0f0d3acb1fe8902e",
+      "last_line": 678,
+      "last_ts": "2026-09-12T11:50:13.003Z"
+    },
     "cecc365e-10ff-45f4-bccc-35c8ea3dcb3e": {
       "cwd": "/home/me/orca/workspaces/machines/orca-session-management",
       "host": "latitude5520",
@@ -1168,7 +1188,7 @@
     },
     "cf0464a2-7229-47f2-9dbf-d163f8edcdd8": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "ae7d4d8eedaf7266a358b8860f12de9f7b24a3e1",
       "last_line": 617,
       "last_ts": "2026-08-11T21:07:34.731Z"
@@ -1203,7 +1223,7 @@
     },
     "d2993749-ff3b-43b5-91a4-608f4c5bc2f2": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "a7b20b054f5892ff510634872d240fb19070ab2d",
       "last_line": 178,
       "last_ts": "2026-09-02T13:50:00.322Z"
@@ -1245,21 +1265,21 @@
     },
     "d6c47e87-28f2-43a3-900d-c3e6b91e3de9": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "7f5715d4bed0e25430f2d16b7d73509e4c145993",
       "last_line": 40,
       "last_ts": "2026-09-10T19:53:39.736Z"
     },
     "d730f2b8-9d2d-42d2-853b-2ce33b93e100": {
       "cwd": "/tmp/claude-1000/-home-me-machines/8c14685f-8c92-4ffb-95c6-7b5d58990499/scratchpad/rrtest",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "6f53362f79258310831451b50ea283344b9824c2",
       "last_line": 22,
       "last_ts": "2026-08-24T14:34:32.889Z"
     },
     "d795f925-b7b9-441b-bd21-81fbc8a9b930": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "b5f17b24160615e6f0314f7a62cdab1365ed53b8",
       "last_line": 7713,
       "last_ts": "2026-09-10T13:18:35.894Z"
@@ -1322,14 +1342,14 @@
     },
     "e76270ea-6739-413a-be55-3623d7f19ecb": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "3e2906932e4a16970ce1b8dccc8ae938814898bd",
       "last_line": 328,
       "last_ts": "2026-08-17T14:01:50.151Z"
     },
     "e7c42e32-8273-4ce5-bdee-3c7dcdf5b586": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "783cf0c04c19feb06840b2ae18f9307780fc58b5",
       "last_line": 1078,
       "last_ts": "2026-08-24T07:32:39.799Z"
@@ -1347,6 +1367,13 @@
       "id_hash": "7797e9942f899410f9bc1c0e42e8d91fdee02181",
       "last_line": 376,
       "last_ts": "2026-09-12T02:31:03.865Z"
+    },
+    "ed2b56b1-cf3a-4769-8cf5-694ae6a38343": {
+      "cwd": "/home/me/machines",
+      "host": "g614jv",
+      "id_hash": "5859b2296296dbd9e046317746d3085fb9085ba6",
+      "last_line": 163,
+      "last_ts": "2026-09-12T12:05:00.591Z"
     },
     "eddb2751-71aa-44ae-aaad-c7ddf4b33382": {
       "cwd": "/home/me/machines",
@@ -1392,7 +1419,7 @@
     },
     "f2585392-3cc8-47c9-9bac-03d74d68ed0d": {
       "cwd": "/home/me/machines",
-      "host": "desktop-wsl",
+      "host": "g614jv",
       "id_hash": "14d4e7a227b86753666a068014c0cab9d55fc456",
       "last_line": 654,
       "last_ts": "2026-09-07T16:10:01.197Z"
@@ -1429,8 +1456,8 @@
       "cwd": "/home/me/machines",
       "host": "g513ie",
       "id_hash": "8b2562ffae9ee2772530a6dc9ec759328b70d0c1",
-      "last_line": 209,
-      "last_ts": "2026-09-12T07:36:30.157Z"
+      "last_line": 510,
+      "last_ts": "2026-09-12T08:26:56.922Z"
     }
   }
 }

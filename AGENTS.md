@@ -617,6 +617,20 @@ mirrored mode that follow from this: the distro's own tailnet node
 WSL projects' reach to the VPN-only `10.99.x` hosts, which is why mirrored was
 chosen in the first place (its `.wslconfig` comment records that).
 
+**Only `air` and the two boxes that render their own `~/.ssh/config` can reach
+fleet members by name.** `provision/linux.sh` runs `ssh_accounts` and
+`ssh_trust` and never `fleet_ssh` — `tiers.test.sh` PINS that absence, for a
+reason that died with the flake (NixOS rendered the file instead) — so
+latitude's and g15's `~/.ssh/config` carry the account span and nothing else,
+and from either box `ssh g16` has no `Host` block, falls through to the default
+identity and the wrong user, and fails. The 2026-09-12 rename did not cause
+this; the same hole existed under the name `desktop` and the rename only made
+it visible. `tier_fleet_ssh` is darwin-only, which is why `air` is the
+exception. Roadmap P3, and the fix is not a one-line tier-list edit — see
+`project.md` for why a rendered block is worse than no block until both keys
+are enrolled.
+<!-- src: machines e63f1e1 | 2026-09-12 -->
+
 ### Host configurations
 
 `hosts/<name>/<platform>/` — per-machine ops scripts, no build system.

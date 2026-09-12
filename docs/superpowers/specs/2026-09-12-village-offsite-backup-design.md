@@ -236,3 +236,73 @@ Mother's and grandmother's phone photos are backed up nowhere. The owner's
 answer: they do not want it yet, and when they do, `immich.cyphy.kz` in Almaty
 serves them — the link is good. So the village box does **not** become a photo
 target for the household; it stays a pure backup sink.
+
+## Hardware survey, 2026-09-12 — measured after this spec was written
+
+Recorded here rather than edited in above, because the spec is the decision
+record and this is what was learned against it.
+
+- **The RAM line and the `prune` line in this spec contradict the shipped
+  role.** `hosts/offsite/debian/README.md` — which is what exists — states that
+  the box holds no repository password and must never be given one, that it
+  never prunes, and that verification is `restic-pack-verify.sh`, a `sha256sum`
+  sweep needing neither key nor restic binary. The resident workload is
+  therefore `rest-server` plus a weekly hash sweep plus an hourly selfcheck,
+  i.e. 1–2 GB — and that is precisely what makes SBC/ARM-class hardware viable
+  for this role at all.
+  <!-- conflicts-with: "**8 GB RAM or more.** `prune` and `check` run here." -->
+  <!-- conflicts-with: "on the village box with its own key" -->
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **The AC-restore evidence comes in three states, not two.** *Contrary* for
+  the UGREEN NASync DXP2800, whose auto-start is documented as a UGOS
+  control-panel option — i.e. inside the OS this build would replace. *Absent*
+  for the Aoostar WTR Pro and the CWWK/Topton N100 6-bay ITX board, whose
+  manuals contain no BIOS section at all. *Documented* for mainstream desktop
+  boards (MSI publishes *Settings > Advanced > Power Management Setup > Restore
+  after AC Power Loss = Power On*). An SBC removes the blocker structurally: it
+  has no BIOS and powers on whenever supply arrives — true of the Raspberry Pi
+  since the 1B, and only `WAIT_FOR_POWER_BUTTON` / `POWER_OFF_ON_HALT` in EEPROM
+  change that.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **Classes ruled out, with the reason rather than the price.** Beelink ME mini:
+  six M.2 NVMe slots and **zero** 3.5" bays, though this spec named it as a
+  candidate class. Synology DS223/DS223j and ASUSTOR AS1002T: ARM plus a vendor
+  OS, so they cannot run the Debian `backup-offsite` role, `rest-server`, or the
+  verify/selfcheck timers. Aoostar WTR Max: overkill. Pi 5 + Radxa Penta SATA
+  HAT is rejected **by this spec's own argument** — the HAT needs its own 12 V
+  brick for 3.5" drives, so the build ends up with more external connectors and
+  bricks than the USB dock the spec already rejected over eight mains-dip dock
+  drops on latitude. Survivors satisfying both storage and AC-restore: a local
+  mATX desktop build, Radxa Rock 5 ITX (4 native SATA, no BIOS), ODROID-H4+
+  (x86 N97, 4 SATA, single supply, published docs).
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **8 TB is no longer the value tier, and that is an input to "headroom goes in
+  the chassis", not a refutation of it.** On the dns-shop.kz 3.5" catalogue
+  2026-09-12: WD Blue 8 TB WD80EAAZ at 23 511 ₸/TB against Seagate Exos X24
+  12 TB ST12000NM002H at 17 324 ₸/TB (capacity confirmed on the product page,
+  not the listing title). 8 TB is old-generation areal density and the tier the
+  shortage hit hardest, so roughly +20 000 ₸ buys +4 TB of enterprise drive with
+  a 5-year warranty. Counterweight for an unattended room: Exos is 7200 rpm —
+  louder, hotter, ~2 W more at idle.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **The drive is the long-lead item, so it is ordered before the chassis.** As
+  of 2026-09-12 the HDD market is globally sold out for 2026 (WD's CEO: "pretty
+  much sold out for calendar 2026"; Seagate filling roughly half to two-thirds
+  of near-term demand; channel lead times quoted up to 12 months; US retail 8 TB
+  roughly $200 → $400 since Sep 2025). This spec budgeted "weeks of margin"
+  against a ~40 h `badblocks -w` pass; the procurement queue is now the longer
+  pole. The shortage had **not** reached the local shop's shelf price.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
+- **A mail forwarder cannot run the disk-acceptance identity gate, which is why
+  importing the drive is the wrong trade.** shipper.kz and Globbing give a US
+  address, receive, consolidate and reship — they never power a box on, never
+  run `smartctl -i -A`, never photograph a BIOS page. So an imported drive lands
+  in Almaty with its return window already dead, and `disk-acceptance.sh`'s
+  `identity` phase — the gate that caught the 2026-07-30 fraud, a 2015 HGST with
+  74 502 power-on hours and 3.02 PB written wearing a WD Purple sticker — runs
+  on a clock that no longer means anything. The landed-cost math on 2026-09-12
+  ($13/kg, 7–10 days, duty-free threshold €200 with 15% on the excess) left an
+  imported 8 TB only ~15 000 ₸ under the local shelf price: not worth trading a
+  live return window. Sources also disagree whether that threshold is per parcel
+  or cumulative per month, so mixed orders go in different calendar months.
+  <!-- src: machines e63f1e1 | 2026-09-12 -->
