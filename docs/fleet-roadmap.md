@@ -710,6 +710,25 @@ be diffed against a remembered failure count.
 
 ## P6 — Housekeeping.
 
+**No tier installs `just`, and it is the repo's only validation gate
+(2026-09-12):**
+
+- [ ] **Add `just` to the workstation dev layer** — `tier_apt_dev`'s package list
+  beside `gh`/`uv`, and `tier_brew_dev` on darwin. Measured 2026-09-12: g15 has
+  `~/.local/bin/just` 1.58.0 **installed by hand**, desktop-wsl has none at all,
+  and desktop's Windows profile has the winget build. So on the distro where
+  every working repo of that box lives, `just test` cannot run — and `just test`
+  is the whole validation surface of this repo since the Nix gate went (P4).
+  A gate nobody can run is the same class of problem as a gate that reports a
+  count it did not reach.
+
+  Found while deciding which runtime should own the `machines` project in Orca
+  on desktop. That question is settled independently — **WSL**, because
+  `just test` on the Windows checkout exits 1 having run nothing: the suite is
+  `*.test.sh` bash files and `_test-suites` is a recursive `find` that matches
+  none of them there. The Windows checkout stays the place `windows.ps1` /
+  `install.ps1` RUN, reached by `git pull`, never the place they are edited.
+
 **Two one-line bugs found during g15 phase 4 (2026-09-07), both deliberately
 left for their own change rather than fixed mid-migration:**
 
