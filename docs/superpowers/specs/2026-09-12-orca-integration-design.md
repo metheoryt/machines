@@ -25,15 +25,30 @@ These five facts drive every decision below. Re-measure before contradicting one
    installed by Orca's own CliInstaller). Note `provision/orca-serve.sh`'s
    `orca_cli_name()` would pick a third name, `orca-cli`, which **does not exist
    on g15** — Orca's installer got there first.
-2. **Orca belongs on TWO boxes, and one of them is Windows.** g15 (native Linux
-   desktop AppImage) and desktop — where Orca runs **Windows-native** and reaches
-   the WSL distro through its own environment switching, so nothing about Orca
-   needs to exist inside WSL. `orca-ide` IS present on desktop-wsl today; that is
-   leftover from the `serve` era and is to be removed, not provisioned (decided
-   2026-09-12). air runs the GUI app and is **hand-managed by decision** (see 4).
-   latitude has node but no npx; hub has no node at all. A fleet-wide install is
-   not the shape — and the posix tier below has exactly ONE target box, g15.
-3. **The skill set has already drifted.** g15 has all four
+2. **The Orca APP lives on two boxes; the place skills must land is a third
+   thing — wherever the agent process runs.** g15 runs the Linux AppImage. desktop
+   runs the Windows app, and its **agent runtime is set to WSL (desktop-wsl)**, so
+   worktrees, terminals and the `claude` process are all inside the distro.
+   Measured there 2026-09-12: `~/.local/bin/orca-ide` is a 1148-byte shim Orca
+   itself installed (`# Orca managed WSL CLI launcher`) that `exec`s
+   `powershell.exe` → `orca-wsl-bridge.ps1` →
+   `…\AppData\Local\Programs\orca\resources\bin\orca.exe`; there is no
+   AppImage (`~/.cache/orca` absent) and no serve unit. **So the earlier reading
+   of that file as serve-era leftover was wrong — it is Orca's own bridge and it
+   stays**, and the distro is a REAL skills target: `claude` is installed there
+   and reads the distro's `$HOME`. air runs the GUI app and is **hand-managed by
+   decision** (see 4). latitude has node but no npx; hub has no node at all. The
+   posix tier below therefore has TWO targets: g15 and desktop-wsl.
+
+   The corollary is a rule, not a fact about today: **skills follow the agent
+   runtime, not the app.** Flip desktop's runtime to Windows and the store that
+   matters becomes `%USERPROFILE%`, with nothing in the distro consulted.
+3. **The skill set has already drifted — on both non-g15 boxes.** Measured in
+   desktop-wsl 2026-09-12: `~/.agents/skills` holds `find-skills`, `orca-cli`,
+   `orchestration` (no `computer-use`), while `~/.claude/skills` links
+   **`orchestration` alone** — so the agent that actually runs there sees one of
+   the three it has. That is the same half-installed shape as air, on the box
+   Orca drives daily. Further: g15 has all four
    (`computer-use`, `orca-cli`, `orchestration`, `find-skills`); **air has only
    `orchestration` in `~/.claude/skills` and `find-skills` + `orchestration` in
    `~/.agents/skills`** — the box used as the client that proxies to the g15 and
@@ -71,8 +86,16 @@ These five facts drive every decision below. Re-measure before contradicting one
 ## L1 — `tier_orca_skills`
 
 A new best-effort tier in `provision/lib/tiers.sh`. **Not PORTABLE — Linux-only
-by decision**: its single target is g15, air is hand-managed, and the remaining
-Orca box is Windows-native (measurement 2). On Darwin it skips with a message.
+by decision**: its targets are g15 and desktop-wsl (measurement 2), and air is
+hand-managed. On Darwin it skips with a message. Both targets run
+`provision/linux.sh` with the `workstation` profile, so one tier-list entry
+reaches both and the distro needs no separate wiring.
+
+**Open, and it is per-box:** `computer-use` drives OS windows, and desktop-wsl has
+none — its windows are Windows-side. Either the desired set is three skills in a
+WSL distro and four on a GUI box, or `computer-use` is installed everywhere and
+simply unused where it cannot act. Decide at implementation time; the diff logic
+is the same either way.
 
 **Resolution.** A small pure function, `_orca_cli()`, prints the executable or
 nothing:
@@ -213,11 +236,14 @@ them blocks L1.
 
 ## Risks
 
-- **One target box makes the tier's value reproducibility, not fan-out.** g15 has
-  been reinstalled once already; the argument for a tier over a written-down
-  command is that the next reinstall does not depend on anyone reading the doc.
-  If that is not worth a tier, the fallback is a line in the g15 runbook — but
-  then nothing re-asserts the set.
+- **npx in desktop-wsl is Windows' node** (`/mnt/c/Program Files/nodejs/npx`),
+  reached over interop — measured again 2026-09-12, no Linux node in the distro.
+  It works, it is slow, and it writes through the 9P boundary. If the tier is
+  painful there, install a Linux node in the distro rather than skipping the tier.
+- **Two target boxes, and reproducibility is still the stronger argument than
+  fan-out.** g15 has been reinstalled once already; the point of a tier over a
+  written-down command is that the next reinstall does not depend on anyone
+  reading the doc.
 - **`vercel-labs/skills` is a third-party source.** It is already installed and
   in use; the spec only makes the existing choice reproducible. If that
   dependency is unwanted, drop `find-skills` from the desired set — nothing else
@@ -236,14 +262,14 @@ them blocks L1.
   `orca_install_mode` — with their cases in `provision/orca-serve.test.sh`.
   `orca_cli_name()` goes too: with WSL out, the only Linux box is g15, where
   `/usr/bin/orca` exists and Orca's own installer already owns `orca-ide`.
-  Separately: remove the leftover `orca-ide` from desktop-wsl, and disable the
-  unit there if it is still enabled.
-- **Windows gets its own skills path, and it is the same two commands.** Orca's
-  Settings UI on desktop shows `npx skills add …` verbatim, so the Windows
-  install is the npx form with no Orca CLI involved. Shape it as a
-  `provision/windows.ps1` step (or a `Roles`-side helper), not as a port of the
-  posix tier — and it needs one measurement first: whether node/npx is on that
-  box at all, and whether the skills CLI writes the same two stores under
+  **Nothing to clean up in desktop-wsl**: measurement 2 found no serve unit, no
+  AppImage, and an `orca-ide` that is Orca's own Windows bridge — leave it.
+- **A Windows skills path is needed only if desktop's agent runtime is switched
+  to Windows.** It is WSL today, so the distro's stores are the live ones and the
+  Windows side has the app and nothing else to install. When it is wanted, it is
+  the same two `npx skills add …` commands Orca's Settings UI prints, as a
+  `provision/windows.ps1` step — and it needs one measurement first: node/npx on
+  that box, and whether the skills CLI writes the same two stores under
   `%USERPROFILE%`.
 - **`tier_agents_config`'s comment still says bootstrap mirrors config into an
   Orca-managed account profile.** That mechanism was deleted 2026-09-09 and
