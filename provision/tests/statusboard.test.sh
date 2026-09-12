@@ -1051,6 +1051,31 @@ has "$DA" 'warn:old_thing created'     'severity: a created-but-never-started co
 hasnt "$DA" 'immich_server'            'severity: a healthy container is not an alert'
 eq "$(sb_docker_alerts '')" ''         'severity: no containers, no alerts'
 
+# ── Severity policy (sb_backup_alerts) ────────────────────────────────────────
+# Takes one argument for the same reason the two above do: this is a judgement
+# about what is worth waking someone for, and a judgement that reads a dozen
+# globals cannot be tested.
+#
+# `stale` outranks `late` the way `missing` outranks `offline` on the fleet
+# strip: one missed run is a schedule that slipped, two is a backup that has
+# stopped. `bad` is the repo itself — gone, empty, or a box reporting a failed
+# integrity sweep — and that never degrades to a warning.
+BA="$(sb_backup_alerts "$(printf '%s\n' \
+  'latitude|3600|86400|ok|' \
+  'photos|90000|86400|late|' \
+  'g614jv|200000|86400|stale|' \
+  'g513ie||86400|bad|no snapshots' \
+  'offsite|1800|7200|bad|sweep found 3 bad packs')")"
+has "$BA" 'warn:photos late'                     'severity: one missed run is a warning'
+has "$BA" 'bad:g614jv stale'                     'severity: two missed runs is a failure'
+has "$BA" 'bad:g513ie no snapshots'              'severity: an empty repo is bad, with its reason'
+has "$BA" 'bad:offsite sweep found 3 bad packs'  'severity: a fresh row can still be bad'
+hasnt "$BA" 'latitude'                           'severity: a fresh backup is not an alert'
+eq "$(sb_backup_alerts '')" ''                   'severity: no backup rows, no alerts'
+# An unreadable age must not read as healthy: silence is the failure this catches.
+has "$(sb_backup_alerts 'x||86400|unknown|')" 'warn:x age unknown' \
+  'severity: an unreadable age is a warning, never silence'
+
 # ── Page tabs ─────────────────────────────────────────────────────────────────
 # The VISIBLE width must not depend on which page is active — only the colour moves —
 # or the alert text beside the tabs shifts every time the board rotates.

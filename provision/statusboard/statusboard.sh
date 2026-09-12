@@ -1460,6 +1460,41 @@ sb_docker_alerts() {
   return 0
 }
 
+# sb_backup_alerts <backup-rows>: an offsite copy nobody verifies is a BELIEF in a
+# second copy. These rows come from backup-status.sh, which reads snapshot-dir
+# mtimes and the status file the offsite box pushes.
+#
+# `stale` outranks `late` exactly as `missing` outranks `offline` on the fleet
+# strip: one missed run is a schedule that slipped, two is a backup that has
+# stopped. `bad` is the repository itself and never degrades to a warning.
+#
+# `unknown` is a WARNING, never silence. The failure this whole feature exists to
+# catch is a job that quietly stopped — the `server` immich tasks reported
+# `State: Ready` while every run failed for 13 days — so an age that cannot be
+# read must reach the strip.
+sb_backup_alerts() {
+  local name age period state detail
+  while IFS='|' read -r name age period state detail; do
+    [ -n "$name" ] || continue
+    case "$state" in
+      bad)   printf 'bad:%s %s\n' "$name" "${detail:-failed}" ;;
+      stale) printf 'bad:%s stale%s\n' "$name" "$(sb_dur_short "$age")" ;;
+      late)  printf 'warn:%s late%s\n' "$name" "$(sb_dur_short "$age")" ;;
+      unknown) printf 'warn:%s age unknown\n' "$name" ;;
+    esac
+  done <<< "${1:-}"
+  return 0
+}
+
+# sb_dur_short <secs>: " 3d" / " 5h" / "" — a leading space so the caller can
+# concatenate it unconditionally, the way sb_fleet_alerts does with ${age:+ $age}.
+sb_dur_short() {
+  case "${1:-}" in '' | *[!0-9]*) return 0 ;; esac
+  if [ "$1" -ge 86400 ]; then printf ' %sd' $(($1 / 86400))
+  elif [ "$1" -ge 3600 ]; then printf ' %sh' $(($1 / 3600))
+  else printf ' %sm' $(($1 / 60)); fi
+}
+
 # sb_alert_line <sev:text>…: the one line every page carries, whichever page is up.
 #
 # It is what makes paging safe. The board's whole value is that a glance from across
@@ -2049,7 +2084,7 @@ SB_MOUNTS=""; SB_UNMOUNTED=""
 # probes before its first paint, but --once and any future caller ordering should
 # not be able to turn a missing reading into a crash.
 SB_CAP=""; SB_ST=""; SB_PW=""; SB_EN=""; SB_EF=""; SB_LIM=""; SB_SRC=""
-SB_UP=""; SB_LOAD=""; SB_FAILED=""
+SB_UP=""; SB_LOAD=""; SB_FAILED=""; SB_BACKUP=""
 SB_LAN_ST=""; SB_LAN_DEV=""; SB_LAN_IP=""; SB_LAN_GW=""
 SB_GW_ST=""; SB_GW_RTT=""; SB_NET_ST=""; SB_NET_RTT=""
 # The manifest, parsed once — it cannot change while the board runs. A board outside
@@ -2244,6 +2279,11 @@ sb_sample_slow() {
   SB_FAILED=""
   command -v systemctl >/dev/null 2>&1 &&
     SB_FAILED="$(systemctl --failed --no-legend --plain 2>/dev/null | wc -l | tr -d ' ')"
+
+  # Backup freshness. A FILE READ, not a walk: backup-status.sh does the walking
+  # on its own 15-minute timer, and the board repaints every second.
+  SB_BACKUP=""
+  [ -r /var/lib/fleet-backup/rows ] && SB_BACKUP="$(cat /var/lib/fleet-backup/rows)"
 
   # Series. Whole watts and hundredths of load: a glyph is the resolution here, so
   # decimals would be carried around for nothing.
@@ -2540,6 +2580,7 @@ sb_alerts() {
       ;;
   esac
   [ -n "${SB_UNMOUNTED:-}" ] && printf 'warn:disks unmounted\n'
+  [ -n "${SB_BACKUP:-}" ] && sb_backup_alerts "$SB_BACKUP"
   if [ "${SB_DK_ST:-}" = down ]; then
     printf 'bad:docker unreachable\n'
   elif [ "${SB_DK_ST:-}" = up ]; then
