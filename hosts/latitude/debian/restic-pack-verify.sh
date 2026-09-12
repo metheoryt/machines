@@ -32,8 +32,6 @@
 #
 # EXIT: 0 clean · 1 a hash mismatch · 2 usage or precondition (not a repo).
 # Distinct on purpose — see AGENTS.md, two failures must not share one status.
-set -uo pipefail
-export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
 # ── pure helpers (unit-tested by provision/tests/backup-offsite.test.sh) ──────
 
@@ -92,4 +90,4 @@ rpv_main() {
 }
 
 # Sourceable: the suite sources this file to drive the pure helpers above.
-[ -n "${RESTIC_PACK_VERIFY_LIB_ONLY:-}" ] || { rpv_main "$@"; exit $?; }
+[ -n "${RESTIC_PACK_VERIFY_LIB_ONLY:-}" ] || { set -uo pipefail; export PATH=/usr/sbin:/sbin:/usr/bin:/bin; rpv_main "$@"; exit $?; }
