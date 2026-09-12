@@ -75,12 +75,12 @@ fleet_profile() {
 # pure override.
 #
 # This is a per-MACHINE field rather than a fleet-wide default because the two
-# cannot express the same thing: `pure` (work repos) belongs on air and desktop
+# cannot express the same thing: `pure` (work repos) belongs on air and g16
 # and NOT on g15, which exists to be the personal-projects host. The rejected
 # alternatives were a machine-local opt-out file (untracked state that no
 # provision run reproduces — the same objection that keeps Ubuntu Pro out of
 # this repo) and the profile, which cannot distinguish them at all: g15, air and
-# desktop are all `workstation`.
+# g16 are all `workstation`.
 fleet_repo_groups() {
     jq -r --arg m "$1" '.machines[$m].repo_groups // [] | .[]' "$(fleet_manifest_path)"
 }

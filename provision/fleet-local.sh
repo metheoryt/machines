@@ -10,8 +10,8 @@
 # `--parent <fleet-alias>` names the Windows member this distro runs on, so
 # fleet-dispatch can reach that member through WSL interop instead of over the
 # tailnet — a distro cannot ssh to its own host's node (hairpin: proven
-# 2026-08-30, desktop answers latitude and times out from desktop-wsl). It must
-# be declared, never inferred: `detect.hostname` is the WSL name on desktop
+# 2026-08-30, g16 answers latitude and times out from g16-wsl). It must
+# be declared, never inferred: `detect.hostname` is the WSL name on g16
 # (g614jv) and the native name on g15 (g513ie), so no hostname test is right
 # for both. Omitting the flag preserves whatever the file already declares.
 set -u

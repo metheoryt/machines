@@ -1,7 +1,31 @@
 # Rename `desktop` → `g16` (and `desktop-wsl` → `g16-wsl`)
 
-Decided 2026-09-12. Status: **not started.** Written before a context compact —
-everything below was measured in that session, so do not re-derive it.
+Decided 2026-09-12. Status: **repo half DONE**, live moves tracked below.
+Written before a context compact — everything below was measured in that
+session, so do not re-derive it.
+
+## Corrections found while executing (2026-09-12)
+
+- **Headscale nodes 3 and 9 were already gone** when the rename ran — the
+  debris item below is stale. Do not hunt for them.
+- **`g16` has THREE earlier referents, all this same hardware**, not two: the
+  retired NixOS install, AND the `hosts/g16/` directory that `ea0409c` renamed
+  to `hosts/desktop/` on 2026-07-20. So this rename is a partial revert.
+- **The WSL distro's Windows REGISTRATION stays `desktop-wsl`.** Renaming it
+  means export/import or a registry edit and would move `\\wsl$\<name>` and
+  Docker Desktop's integration list with it. Nothing needs it to match the
+  nickname: `fd_wsl_hosts` reads the distro name from `wsl -l -q` live and pairs
+  it with whatever `fleet.local.json` declares, so the dispatch target is
+  `g16:desktop-wsl`.
+- **The installed restic unit hard-codes the old path.**
+  `resticprofile-backup@profile-wsl.service` carries
+  `WorkingDirectory=.../backup/desktop-wsl`, so the 06:00 job fails into nothing
+  the moment the directory is renamed. Re-running `backup/g16-wsl/install-tasks.sh`
+  is part of the change, not a follow-up. No test can see this.
+- **`origin/server` and `origin/g15-wsl` are NOT debris to delete.** A dotfiles
+  machine branch is the only copy of that box's host-local files — they are
+  absent from `main` by design. Tag before any deletion, or leave them.
+- **The gate is 59 suites here, not 37.** Green, 0 failures, after the rename.
 
 ## Why
 

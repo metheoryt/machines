@@ -68,7 +68,7 @@
 #     * Space WAS the blocker, and stopped being one on 2026-09-10. The REST
 #       server's data path was /mnt/spare320/restic-rest on a 293 G drive with
 #       164 G free, already carrying latitude's own repo (12 G) and
-#       desktop-wsl's (29 G); a ~130 G DB leg would have left it under 12% free
+#       g16-wsl's (29 G); a ~130 G DB leg would have left it under 12% free
 #       with no room for prune to work in. The hub now lives on /mnt/wd8, 7.3 T
 #       with 6.5 T free, so the space argument no longer holds and only the
 #       sudo/NOPASSWD one does. Adding the leg is live work, not a deferred
@@ -91,7 +91,7 @@
 #
 # ── THE REPOSITORY, AND WHY NO URL IS COMMITTED ──────────────────────────────
 #
-# Same arrangement as ../desktop-wsl/profiles.yaml, for the same reason: the
+# Same arrangement as ../g16-wsl/profiles.yaml, for the same reason: the
 # REST server requires htpasswd auth, restic's REST backend accepts credentials
 # only inside the URL, and this file is tracked and the repo is PUBLIC. A URL
 # here would commit a transport password; a URL on the command line would put it
@@ -119,9 +119,9 @@
 # (see the g513ie-maintenance profile in ../latitude/profiles.yaml).
 #
 # TRUST FACT, stated rather than worked around: /home/me/my/vps/backup/wsl/pass.txt
-# is desktop-wsl's restic password, and it is inside this backup's source. That
+# is g16-wsl's restic password, and it is inside this backup's source. That
 # is fine — this repo is encrypted — but it means whoever holds g15's key can
-# read desktop-wsl's repo. It is not excluded: dropping one file out of a backup
+# read g16-wsl's repo. It is not excluded: dropping one file out of a backup
 # to make a trust boundary look tidier would leave the file itself unprotected,
 # which is worse.
 
@@ -149,7 +149,7 @@ g15:
   # a profile — measured on 0.33.1; see that file), so the only way a client
   # creates a repository is by asking. This one never asks.
   #
-  # The hazard is the same one that cost desktop-wsl its history-restart risk:
+  # The hazard is the same one that cost g16-wsl its history-restart risk:
   # /mnt/wd8 on latitude is mounted `nofail`, so when that USB drive is
   # absent docker bind-mounts an empty directory and the REST server serves it
   # happily. An initialising client would create a fresh zero-history repo
@@ -176,11 +176,11 @@ g15:
       - "**/.DS_Store"
       - "**/*.tmp"
     exclude-caches: true
-    # 05:00. latitude's own backup is 04:30 and took 3 s; desktop-wsl's client
+    # 05:00. latitude's own backup is 04:30 and took 3 s; g16-wsl's client
     # is 06:00. This lands between them so three clients are not chunking
     # against one USB drive at once.
     schedule: "05:00"
-    # NOT base.yaml's `user`, for the same reason ../desktop-wsl/profiles.yaml
+    # NOT base.yaml's `user`, for the same reason ../g16-wsl/profiles.yaml
     # spells out: resticprofile's `user` permission means a ROOT-OWNED unit that
     # merely runs as the user, so installing it needs sudo — and g15 has no
     # NOPASSWD sudo and no TTY when driven over ssh. `user_logged_on` produces a
@@ -208,7 +208,7 @@ g15:
     # than just the retention step. Retention for this repo runs on latitude,
     # against the filesystem, bypassing the server: see the
     # `g513ie-maintenance` profile in ../latitude/profiles.yaml. Unlike
-    # desktop-wsl's client, whose comment records a gap that had no home, this
+    # g16-wsl's client, whose comment records a gap that had no home, this
     # one has a home from the start.
     before-backup: false
     after-backup: false

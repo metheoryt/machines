@@ -122,7 +122,7 @@ cmd_instructions() {
 
 # Every other box's memory is READABLE from right here: the dotfiles bare repo
 # holds all branches, so `cat-file` reaches latitude's, air's, g15's, hub's and
-# both desktop sides' host-memory without touching the network or those boxes.
+# both g16 sides' host-memory without touching the network or those boxes.
 # It is NOT writable from here — see SKILL.md. Retired boxes still have branches
 # (origin/server, origin/g15-wsl), and a retired branch can be the last copy of
 # a fact, which is exactly why this lists them instead of filtering them out.

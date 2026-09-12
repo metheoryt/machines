@@ -14,7 +14,7 @@ source "$LIB"
 
 # fleet_profile: an explicit `profile` field wins; absent, it defaults to
 # workstation. hub and latitude carry one (latitude gained `server` in 380cb55,
-# ahead of its post-NixOS reinstall as a headless box); `air` and `desktop` carry
+# ahead of its post-NixOS reinstall as a headless box); `air` and `g16` carry
 # none, so they exercise the default path. Keep at least one of each here — a
 # manifest edit that gives every machine an explicit profile would otherwise leave
 # the default branch untested.
@@ -81,6 +81,17 @@ fleet_has_machine g15 && pass "fleet_has_machine accepts 'g15'" \
   || die "fleet_has_machine accepts 'g15'"
 fleet_has_machine server && die "fleet_has_machine still accepts the pre-rename 'server'" \
   || pass "fleet_has_machine rejects the pre-rename 'server'"
+
+# The SECOND rename, 2026-09-12: `desktop` -> `g16`, same defect (a role word
+# naming no role — three of five members are laptops). Both arms again, for the
+# same reason: a stale `--machine desktop` that reads as a successful no-op is
+# exactly what this pair exists to catch. Note `g16` is a REUSED token — it named
+# this box's retired NixOS install and its pre-2026-07-20 host directory — so
+# accepting it proves the manifest key, not the history.
+fleet_has_machine g16 && pass "fleet_has_machine accepts 'g16'" \
+  || die "fleet_has_machine accepts 'g16'"
+fleet_has_machine desktop && die "fleet_has_machine still accepts the pre-rename 'desktop'" \
+  || pass "fleet_has_machine rejects the pre-rename 'desktop'"
 
 # The exit CODE is the assertion: a nonzero status is what stops `just provision
 # --machine typo --apply` from reading as a successful no-op.

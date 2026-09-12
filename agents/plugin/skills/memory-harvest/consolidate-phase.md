@@ -15,7 +15,7 @@ The pass that tidies the memory corpus, fleet-wide. It was called `/dream` until
 2026-09-11, by analogy with memory being reorganised during sleep; the name was
 swapped for one that says its scope, because the old one gave no hint whether to
 run it once or once per box. It is once, for everything. It runs unattended (Orca Automation,
-nightly, on `desktop`) and its whole output is a queue of proposed decisions a
+nightly, on `g16`) and its whole output is a queue of proposed decisions a
 human works through whenever it suits them.
 
 ## The invariant that defines this phase
@@ -246,8 +246,8 @@ What only this pass can see:
   tracked on no other branch and not on `main`. A **per-project store is the
   thing a dotfiles branch can hold that `main` does not** — that is the class to
   look for, not any particular branch.
-- **Two branches for one physical machine.** `desktop` (Windows-native) and
-  `desktop-wsl` are the same box; so were `g15` and `g15-wsl`. Their
+- **Two branches for one physical machine.** `g16` (Windows-native) and
+  `g16-wsl` are the same box; so were `g15` and `g15-wsl`. Their
   `host-memory.md` files overlap by construction.
 
 ### The write boundary — this is where fleet-wide stops
@@ -577,7 +577,7 @@ suppressing categories the ledger shows being rejected repeatedly.
 cd ~/machines && claude -p '/memory-harvest'
 ```
 
-On `desktop`, via an Orca Automation, so the sessions can be watched. It is
+On `g16`, via an Orca Automation, so the sessions can be watched. It is
 read-only plus one commit to one repo, so a failed run costs nothing and the
 next night starts from the same queue.
 

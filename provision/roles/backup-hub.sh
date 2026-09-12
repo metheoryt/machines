@@ -37,7 +37,7 @@ role_backup_hub() {
             fi
             if [ "$mode" != "apply" ]; then
                 # A DRY RUN MUST NOT ASSERT. The suite that exercises this runs
-                # on whatever box you happen to be on -- desktop-wsl has no
+                # on whatever box you happen to be on -- g16-wsl has no
                 # /mnt/wd8 and no container, so asserting here would make
                 # roles.test.sh red everywhere but latitude.
                 echo "  backup-hub: would run (as root) $selfcheck"

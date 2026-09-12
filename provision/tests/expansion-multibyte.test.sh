@@ -110,7 +110,7 @@ PY
 # 2026-09-02 and it is false:
 #
 #   • as `bash -c` AND as a real script file, unbraced exits 0 and prints correctly
-#   • on bash 5.3.9 (desktop-wsl), 5.2.37 (latitude), 5.2.15 (hub)
+#   • on bash 5.3.9 (g16-wsl), 5.2.37 (latitude), 5.2.15 (hub)
 #   • under LC_ALL=C, C.utf8 and en_US.utf8
 #   • unbracing ONLY that one line at HEAD leaves provision-wsl.test.sh green, and
 #     the whole 65aac22^ tree — the "red" state the fix was credited with greening —

@@ -1,6 +1,6 @@
 # Host-local, g15 only. The DB image mounts a bind path on the distro ext4
 # instead of a named docker volume: the 186 GB PGDATA was copied in physically
-# from the desktop (rsync/tar straight into this path), which a named volume
+# from g16 (rsync/tar straight into this path), which a named volume
 # would not have allowed without root inside docker.s storage dir.
 # Image pinned by digest to the exact build the copied catalog came from --
 # a pgvector minor bump or a different glibc collation would let the DB start

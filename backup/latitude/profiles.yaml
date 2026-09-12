@@ -191,7 +191,7 @@ latitude:
 
 # The prune --append-only made latitude's job.
 #
-# The g614jv repo is written by desktop-wsl over REST, and the server runs
+# The g614jv repo is written by g16-wsl over REST, and the server runs
 # --append-only, so the client cannot forget or prune: every DELETE but a lock
 # gets 403 (repo/repo.go:737). Retention therefore runs HERE, against the
 # filesystem, bypassing the server. This is the maintenance step the compose
@@ -199,7 +199,7 @@ latitude:
 # server-side chore on latitude" with no home) -- it has a home now.
 #
 # It needs the CLIENT's encryption password, which is why that password is
-# escrowed twice: on desktop-wsl's dotfiles branch for its own restore, and on
+# escrowed twice: on g16-wsl's dotfiles branch for its own restore, and on
 # this host's branch for this job. /home/me/.config/restic/g614jv.pass.txt is
 # tracked on the `latitude` branch, mode 600; this unit runs as root and can
 # read it.
@@ -280,11 +280,11 @@ g614jv-maintenance:
   # 5% sample, against a backup that takes 6s-14min. Affordable and still wrong.
   #
   # A client-side check only runs when the client runs. The failure this whole
-  # system is most exposed to is a client that quietly stopped -- desktop-wsl was
+  # system is most exposed to is a client that quietly stopped -- g16-wsl was
   # already found frozen ~35 hours under a green unit once -- and a pre-backup
   # check goes dark at exactly that moment. It verifies the repo only while
   # something is already verifying it by writing to it. Here the check runs on
-  # latitude's own schedule whether or not desktop-wsl ever comes back, which is
+  # latitude's own schedule whether or not g16-wsl ever comes back, which is
   # the same principle as reading freshness from `snapshots/` mtimes: the box
   # that failed cannot hide the failure.
   #
@@ -321,7 +321,7 @@ g614jv-maintenance:
 # cannot forget or prune — every DELETE but a lock gets 403, and with
 # base.yaml's `after-backup: true` that 403 would fail the whole backup run.
 # Retention therefore runs on the filesystem, bypassing the server. Unlike
-# desktop-wsl, whose profile documents a pruning gap that had no home for four
+# g16-wsl, whose profile documents a pruning gap that had no home for four
 # days, g15's client has this from the moment it was created.
 #
 # The password is escrowed TWICE by design: on g15's dotfiles branch for its own
@@ -356,7 +356,7 @@ g513ie-maintenance:
     keep-yearly: 10
     prune: true
     # 09:30. The drive already carries four scheduled writers — latitude's
-    # backup 04:30, g15's client 05:00, desktop-wsl's 06:00, g614jv's forget
+    # backup 04:30, g15's client 05:00, g16-wsl's 06:00, g614jv's forget
     # 07:30 (and its check Sun 08:30). This is clear of all of them, and clear
     # of a slow g15 first run in particular.
     schedule: "09:30"

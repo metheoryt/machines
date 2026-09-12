@@ -18,7 +18,7 @@
 # (roadmap P0) and this is the cheapest thing that stops the silence.
 #
 # KNOWN FALSE POSITIVE: check 8 reads snapshot freshness, which is really a
-# CLIENT liveness check. desktop-wsl is a laptop; a weekend off fails it with
+# CLIENT liveness check. g16-wsl is a laptop; a weekend off fails it with
 # nothing wrong on the hub. Check 3 is the one that fires only on real hub
 # breakage. The 26h threshold is left as it was found -- see it misfire before
 # changing it.

@@ -154,7 +154,7 @@ tier_apt_dev() {
   #
   # `just` is here because it is THIS repo's validation gate (`just test`), and
   # nothing installed it anywhere: measured 2026-09-12, g15 had 1.58.0 dropped
-  # into ~/.local/bin by hand, desktop-wsl had none at all, and only desktop's
+  # into ~/.local/bin by hand, g16-wsl had none at all, and only g16's
   # Windows profile had a package (winget). A gate that is absent on the box
   # where the work happens is not a gate. The justfile uses [group]/[doc]
   # attributes, so it needs just >= 1.27 — every apt box in the fleet is well
@@ -166,7 +166,7 @@ tier_apt_dev() {
   # nodejs (dpkg -S on g15, 2026-09-12). Without it tier_orca_skills below hits
   # its no-npx warn on every box this layer just provisioned, which is the same
   # shape as `just`: a tier whose own prerequisite nothing installs. Measured on
-  # desktop-wsl the same day, over ssh: no node, no npx, and no Windows path on
+  # g16-wsl the same day, over ssh: no node, no npx, and no Windows path on
   # PATH either — sshd does not inherit the interop PATH, so the Windows node at
   # /mnt/c/Program Files/nodejs is unreachable from every non-interactive run.
   # A Linux node in the distro is the fix, not a reach across the 9P boundary.
@@ -788,7 +788,7 @@ LID
 OOM_GUARD_DIR=/etc/systemd/system/user-.slice.d
 OOM_GUARD_FILE="$OOM_GUARD_DIR/50-fleet-oom-guard.conf"
 # Percentages of MemTotal, not absolute figures: this tier reaches a 30 GB
-# desktop and an 8 GB WSL distro from the same list. High throttles the slice and
+# a desktop and an 8 GB WSL distro from the same list. High throttles the slice and
 # forces reclaim inside it; Max is where the cgroup OOM killer fires.
 OOM_GUARD_HIGH_PCT=60
 OOM_GUARD_MAX_PCT=75
@@ -1247,19 +1247,19 @@ tier_agent_clis() {
 # ── BEST-EFFORT: Orca skills (Linux only) ────────────────────────────────────
 # Makes the four skills an Orca-driven agent session needs reproducible. They
 # were installed by hand on every box and had already drifted apart when this
-# was measured (2026-09-12): g15 had all four, desktop-wsl had three in
+# was measured (2026-09-12): g15 had all four, g16-wsl had three in
 # ~/.agents/skills and ONE link in ~/.claude/skills, air had one and two.
 # Design: docs/superpowers/specs/2026-09-12-orca-integration-design.md.
 #
 # NOT portable, by decision. Its targets are the two boxes where an Orca agent
 # runtime actually runs a `claude` process — g15 (Linux AppImage) and
-# desktop-wsl (the distro Orca on Windows is switched into). Both run linux.sh
+# g16-wsl (the distro Orca on Windows is switched into). Both run linux.sh
 # with the `workstation` profile, so one tier-list entry reaches both. air runs
 # the GUI app but exposes no Orca CLI on PATH at all, so darwin is a
 # skip-with-a-message and air stays hand-installed — resolving a CLI there means
 # guessing at a bundle path on a box that is usually asleep.
 #
-# **Skills follow the agent runtime, not the app.** Flip desktop's runtime to
+# **Skills follow the agent runtime, not the app.** Flip g16's runtime to
 # Windows and the live store becomes %USERPROFILE% with nothing in the distro
 # consulted; that needs a windows.ps1 step, not a branch here.
 #
@@ -1275,7 +1275,7 @@ ORCA_SKILLS_CLAUDE_DIR="${ORCA_SKILLS_CLAUDE_DIR:-$HOME/.claude/skills}"
 #
 # computer-use is in the WSL list too, and that is measured rather than assumed:
 # its own SKILL.md resolves $ORCA_CLI_COMMAND first "for managed WSL sessions",
-# and `orca computer` inside desktop-wsl bridges through orca-ide →
+# and `orca computer` inside g16-wsl bridges through orca-ide →
 # orca-wsl-bridge.ps1 → orca.exe, so it drives the Windows windows that are the
 # only ones that exist on that box. A three-skill WSL variant would have been a
 # branch to test for no gain.

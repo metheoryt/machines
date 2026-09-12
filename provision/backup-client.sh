@@ -6,15 +6,15 @@
 # THE PROFILE DIR IS KEYED ON WHO THE BOX IS, not on which fleet.json entry owns
 # the hardware. Windows and each WSL distro on it are separate boxes with
 # separate things to lose, so each gets its own client and its own backup/<id>/.
-# Identity is a fleet.json machine name (latitude, desktop, g15) or a
-# fleet.local.json nickname (desktop-wsl, g15-wsl) -- one flat namespace, and the
+# Identity is a fleet.json machine name (latitude, g16, g15) or a
+# fleet.local.json nickname (g16-wsl, g15-wsl) -- one flat namespace, and the
 # names are already unique. Each box provisions itself from the chain that
 # already provisions it, so nothing reaches across a machine boundary.
 #
 # ── THE TRAP THIS RESOLVER EXISTS TO CLOSE ───────────────────────────────────
 # `fleet_detect` returns the WRONG machine on a WSL box, differently wrong on
-# each one. On desktop-wsl `hostname` is g614jv -- which IS `desktop`'s
-# detect.hostname -- so detection returns `desktop`, and this distro would
+# each one. On g16-wsl `hostname` is g614jv -- which IS `g16`'s
+# detect.hostname -- so detection returns `g16`, and this distro would
 # schedule WINDOWS' profile against its own filesystem. On g15-wsl the OS
 # hostname is not g513ie, so detection returns nothing at all. Same code, two
 # different wrong answers.

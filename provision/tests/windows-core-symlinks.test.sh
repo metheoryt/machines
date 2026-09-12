@@ -7,7 +7,7 @@
 # AGENTS.md; the link is what joins them.
 #
 # Why a test, and why it also inspects a .ps1 from bash: on 2026-08-03 the
-# desktop Windows-native checkout was measured with CLAUDE.md as a 9-byte
+# g16 Windows-native checkout was measured with CLAUDE.md as a 9-byte
 # REGULAR FILE containing the literal text "AGENTS.md" — git's rendering of a
 # symlink when core.symlinks is false. Every agent session in that clone had
 # therefore loaded nine bytes of nothing, silently, because a 9-byte file is not

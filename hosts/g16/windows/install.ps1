@@ -4,14 +4,15 @@
   Run on a freshly reinstalled Windows (elevated PowerShell recommended, so the
   restore's icacls / WSL / robocopy steps behave). One-liner:
 
-      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/desktop/windows/install.ps1 | iex
+      irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows/install.ps1 | iex
 
   It ensures git is present, clones the `machines` repo, and hands off to
   provision/windows.ps1 (Developer Mode, core.symlinks, Git Bash, Claude Code,
   agents/bootstrap.sh, and the machine-local .claude bits out of a backup).
 
   RETARGETED 2026-09-09. It handed off to `hosts\g16\windows\restore.ps1`,
-  dead twice over: the g16 -> desktop rename (2026-07-20) and restore.ps1's
+  dead twice over: the g16 -> desktop rename (2026-07-20, reverted 2026-09-12
+  when the machine went back to `g16`) and restore.ps1's
   deletion (2026-07-31, commit 1080828). So step 3 threw unconditionally and
   steps 1-2 - the only part anyone actually needs from a fresh box - were
   unreachable through the one-liner. provision/windows.ps1 is the live successor
@@ -85,5 +86,5 @@ Write-Host "`nRepo ready. Handing off to provision\windows.ps1...`n" -Foreground
 Write-Host "`n=== Agent environment is up. The rest is still manual ===" -ForegroundColor Green
 Write-Host "Repos, .ssh (+ icacls perms), Downloads and the vault are NOT restored by" -ForegroundColor Green
 Write-Host "any script - restore.ps1 was deleted 2026-07-31. Follow Phase 4 of:" -ForegroundColor Green
-Write-Host "    $Dest\hosts\desktop\windows\windows-reinstall-runbook.md" -ForegroundColor Cyan
-Write-Host "`nApp list:  winget import ... hosts\desktop\windows\winget-packages.json" -ForegroundColor DarkGray
+Write-Host "    $Dest\hosts\g16\windows\windows-reinstall-runbook.md" -ForegroundColor Cyan
+Write-Host "`nApp list:  winget import ... hosts\g16\windows\winget-packages.json" -ForegroundColor DarkGray

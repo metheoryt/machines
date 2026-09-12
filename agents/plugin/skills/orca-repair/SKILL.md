@@ -74,7 +74,7 @@ worktree also still exists and is abandoned, remove it separately with
 
 ## Notes
 
-- **A box can hold TWO stores, and then `--data` is mandatory** (desktop-wsl,
+- **A box can hold TWO stores, and then `--data` is mandatory** (g16-wsl,
   2026-09-12): a retired WSL `~/.config/orca` sits beside the live Windows profile
   under `/mnt/c/Users/<user>/AppData/Roaming/orca`, and candidate order picks the
   retired one. `--data` now selects the whole store — the environment registry and

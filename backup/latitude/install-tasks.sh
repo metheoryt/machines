@@ -2,9 +2,9 @@
 # Installs latitude's restic schedules from the profiles.yaml next to this file.
 #
 # SUDO IS LOAD-BEARING, and it is the only reason this script exists separately
-# from desktop-wsl's. Both of latitude's profiles declare
+# from g16-wsl's. Both of latitude's profiles declare
 # `schedule-permission: system`, so resticprofile writes into
-# /etc/systemd/system and must be root; desktop-wsl's client is user-scope and
+# /etc/systemd/system and must be root; g16-wsl's client is user-scope and
 # must NOT be root, or its units land in the wrong manager. The scope decision
 # lives next to the config that declares it rather than being re-derived by the
 # role executor.

@@ -90,7 +90,7 @@ printf '%s\n' "$rds" | bash -n || fail 'rds: emitted script is not valid bash'
 # ── detect_hosts: fleet.json workstations ∩ ssh config Host entries ───────────
 if command -v jq >/dev/null 2>&1; then
   aliases="$(detect_hosts "$fixture_json" "$tmp/.ssh/config" | cut -f1 | sort | tr '\n' ' ')"
-  # desktop absent from config → excluded; hub never a workstation
+  # g16 absent from config → excluded; hub never a workstation
   eq "$aliases" 'latitude server ' 'detect_hosts: config-present workstations only'
   # the emitted row is the full tuple, not just the alias
   detect_hosts "$fixture_json" "$tmp/.ssh/config" | grep -Fxq "$(printf 'server\twindows\tmethe-server\tmethe')" \

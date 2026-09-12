@@ -20,7 +20,7 @@
 # dirty-streak block below for the incident that motivated it.
 #
 # NOTE the Windows counterpart provision/fleet-selfpull.ps1 has NOT been given
-# this, and has no test coverage at all (review item 20). desktop's clone can
+# this, and has no test coverage at all (review item 20). g16's clone can
 # still freeze silently.
 #
 # Testable: `FLEET_SELFPULL_LIB_ONLY=1 source` loads helpers without scanning.
@@ -37,7 +37,7 @@ FLEET_ROOTS="${FLEET_ROOTS:-$HOME $HOME/my $HOME/pure $HOME/cyphy671 $HOME/exact
 # ── dirty-streak state ────────────────────────────────────────────────────────
 # A single dirty tick is normal (someone is mid-edit) and stays a skip. A repo
 # dirty for HOURS while the fleet moves is a fault, and it used to be invisible:
-# desktop-wsl sat 28 commits behind for ~35 hours on one untracked zero-byte
+# g16-wsl sat 28 commits behind for ~35 hours on one untracked zero-byte
 # .zed/tasks.json, with 185 consecutive `SKIP dirty` lines in the journal and a
 # green unit the whole time. One of the unpulled commits revoked an SSH key.
 #

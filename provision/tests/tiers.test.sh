@@ -564,7 +564,7 @@ macplan hub >/dev/null 2>&1 && die "macos hub profile should be rejected" \
   || pass "macos rejects the hub profile"
 
 # `just` is the repo's validation gate and no tier installed it until 2026-09-12
-# (g15 had it by hand, desktop-wsl not at all). Both dev layers must carry it, or
+# (g15 had it by hand, g16-wsl not at all). Both dev layers must carry it, or
 # the box where the work happens cannot run the suite that gates the work.
 adbody="$(awk '/^tier_apt_dev\(\)/,/^}/' "$TIERS")"
 bdbody="$(awk '/^tier_brew_dev\(\)/,/^}/' "$TIERS")"

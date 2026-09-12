@@ -6,7 +6,7 @@ Generated 2026-07-05. Machine: single 2 TB NVMe (disk 0), currently C: (976 GB W
 
 **Backup target:** Kingston XS2000 1 TB USB SSD → **`R:` (partition "data", Disk 1)**, ~700 GB free. Backup lives in `R:\backup`; automated by `backup.ps1`. Note: on the freshly reinstalled Windows the SSD **usually gets a different drive letter** — it came back as **`H:`** after the 2026-07 reinstall, and this is expected. You don't hand-substitute: **`restore.ps1` and `provision\windows.ps1` auto-discover the backup on *any* drive letter** (they scan every volume for `<L>:\backup`). The literal `R:\backup` paths in the Phase 4 steps below are illustrative — only substitute the real letter if you run a raw manual copy instead of the scripts.
 
-**Where this runbook + script live:** in the **`machines` repo** at `hosts/desktop/windows/` (this machine is `desktop`, OS hostname `ME-G614JV`; it was `g16` when this was written). They're committed and pushed to `github.com/metheoryt/machines`, so they survive the wipe — after reinstall, `git clone` machines to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd <your machines checkout>\hosts\desktop\windows`.
+**Where this runbook + script live:** in the **`machines` repo** at `hosts/g16/windows/` (this machine is `g16`, OS hostname `ME-G614JV`; it was `g16` when this was written, `desktop` from 2026-07-20 to 2026-09-12, and `g16` again since). They're committed and pushed to `github.com/metheoryt/machines`, so they survive the wipe — after reinstall, `git clone` machines to get them back (no dependency on the broken OneDrive). Each backup run also drops standalone copies on the SSD: `R:\backup\windows-reinstall-runbook.md` and `R:\windows-reinstall\backup.ps1`. Run the script from the repo: `cd <your machines checkout>\hosts\g16\windows`.
 
 ---
 
@@ -80,7 +80,7 @@ The 100 GB qaz-law Postgres volume is **dropped**: the data can be re-ingested a
 ### 1e. User data + cloud folders (sync is unreliable — backed up directly)
 
 Copied to `R:\backup`: **Downloads**; **OneDrive** — ⚠️ **sync is broken on this PC, so the cloud is NOT trusted**; the script copies the local `C:\Users\methe\OneDrive` folder **directly** (incl. your redirected **Documents**, **Pictures**, and **Desktop** = `OneDrive\Рабочий стол`). Currently **all 13,527 files / 3.6 GB are fully on disk, 0 online-only stubs**, so the direct copy is complete. The step re-checks for stubs at backup time and, if any appear (a broken engine may dehydrate files), writes `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` and warns — those must be pulled from onedrive.live.com before wiping. Also: **GoogleDrive**; **Obsidian** vault(s) (path read from `%APPDATA%\obsidian\obsidian.json`); and **RustDesk config** (`%APPDATA%\RustDesk\config` → `R:\backup\home\AppData\RustDesk\config` — your RustDesk ID, private key/device identity, saved peers, and relay/ID-server settings; the noisy `log\` folder is skipped). The script also drops a copy of this runbook onto the SSD.
-> Keep the runbook readable while the PC is down — it's pushed to `github.com/metheoryt/machines` (`hosts/desktop/windows/`), so you can open it there from your phone or any device. The SSD also has a copy at `R:\backup\windows-reinstall-runbook.md`. (Do **not** rely on the broken OneDrive to deliver it.)
+> Keep the runbook readable while the PC is down — it's pushed to `github.com/metheoryt/machines` (`hosts/g16/windows/`), so you can open it there from your phone or any device. The SSD also has a copy at `R:\backup\windows-reinstall-runbook.md`. (Do **not** rely on the broken OneDrive to deliver it.)
 
 **App configs** (`AppData`, not caught by the profile-root dotfile sweep) → `R:\backup\home\AppData\…`:
 - **Windows Terminal** `settings.json` (profiles, color schemes, keybinds)
@@ -112,7 +112,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 - [ ] `.ssh` keys (id_ed25519, id_rsa) present under `R:\backup\home\.ssh`
 - [ ] `R:\backup\OneDrive` and `R:\backup\GoogleDrive` copied — open a file from each on the SSD to confirm real content (not 0-byte). OneDrive folder includes your Documents + Pictures + **Desktop** (`Рабочий стол`) — confirm the Desktop subfolder is there.
 - [ ] **OneDrive sync is broken** → confirm **no** `R:\backup\OneDrive-STUBS-NOT-ON-DISK.csv` was created (its presence means some files were online-only and got missed — recover them from onedrive.live.com first). Ideally also spot-check the SSD's OneDrive file count ≈ 13,527.
-- [ ] **This runbook is readable from a device other than this PC** — confirm it's on `github.com/metheoryt/machines` (`hosts/desktop/windows/`, pushed) AND at `R:\backup\windows-reinstall-runbook.md` on the SSD (don't trust OneDrive to deliver it)
+- [ ] **This runbook is readable from a device other than this PC** — confirm it's on `github.com/metheoryt/machines` (`hosts/g16/windows/`, pushed) AND at `R:\backup\windows-reinstall-runbook.md` on the SSD (don't trust OneDrive to deliver it)
 
 **Belt-and-suspenders:** optionally `rsync`/copy the whole `R:\backup` folder to server too. Costs little, means the network *and* the SSD would both have to fail to lose anything.
 
@@ -147,7 +147,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 ## Phase 4 — Restore
 
 > ### 🔤 Phase 4.0 — Rename this repo `nix` → `machines` (do this FIRST, before re-cloning)
-> This repo outgrew the `nix` name — it holds every host's config (NixOS modules *and* Windows `hosts/desktop`), the agent environment, memory, and bootstrap. Rename it now, while re-cloning is unavoidable anyway (so there's no local `git mv` to do — just clone under the new name).
+> This repo outgrew the `nix` name — it holds every host's config (NixOS modules *and* Windows `hosts/g16`), the agent environment, memory, and bootstrap. Rename it now, while re-cloning is unavoidable anyway (so there's no local `git mv` to do — just clone under the new name).
 > 1. On GitHub: repo **Settings → Rename** `nix` → `machines`. **(done 2026-07-05.)** GitHub keeps redirects, so any lingering `…/nix` reference below still resolves until you've swept them.
 > 2. Clone under the new name: `git clone git@github.com:metheoryt/machines.git C:\Users\<you>\GitHub\machines` — use `machines` everywhere the steps below say `nix`. **(The one-liner below does this for you.)**
 > 3. Sweep the hard-coded `nix` references (then commit + push). **(done 2026-07-06.)** The active path/URL refs in `backup.ps1`, `modules\system\git-autofetch\git-autofetch.ps1`, `install.ps1`, and this runbook now say `machines`. The **restore-side scripts** (`restore.ps1`, `provision\windows.ps1`, `git-autofetch.ps1`) now derive the repo root from their **own location** (`$PSScriptRoot`) instead of assuming `~\GitHub\machines`, so the checkout can live anywhere (this box keeps it at `~\machines`). `agents/memory/global.md`, `flake.nix` / `modules/**`, `.gortex.yaml` / `.mcp.json`, and the `just agent-bootstrap*` recipes were already clean. Only historical mentions remain and are intentionally left: the `repos\nix\` backup-folder name (correct as of the pre-rename backup) and the `docs/superpowers/plans/**` `cd …/GitHub/nix` lines (history, low priority).
@@ -155,7 +155,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 >
 > **▶ Automated entry point (does step 2 + the restore below).** On the fresh Windows, from an **elevated** PowerShell:
 > ```powershell
-> irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/desktop/windows/install.ps1 | iex
+> irm https://raw.githubusercontent.com/metheoryt/machines/main/hosts/g16/windows/install.ps1 | iex
 > ```
 > Installs git if missing, clones `machines`, and hands off to
 > **`provision\windows.ps1`** — Developer Mode, `core.symlinks`, Git + Git Bash,
@@ -169,7 +169,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 > **manual** now. The numbered steps 1–9 below are the whole procedure, not a
 > description of what a script does for you.
 
-1. **Windows apps:** the curated keeper list is version-controlled in the repo at `hosts\desktop\windows\winget-packages.json` (already pruned — dropped apps removed, Store/forgotten apps added), so no manual editing: `winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable hosts\desktop\windows\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer, RustDesk, Intel DSA) by hand. *(The SSD `inventory\winget-packages-snapshot.json` is only a point-in-time capture for diffing new installs back into the curated list — not the restore source.)*
+1. **Windows apps:** the curated keeper list is version-controlled in the repo at `hosts\g16\windows\winget-packages.json` (already pruned — dropped apps removed, Store/forgotten apps added), so no manual editing: `winget import --accept-package-agreements --accept-source-agreements --ignore-unavailable hosts\g16\windows\winget-packages.json`. Reinstall the non-winget keepers (JetBrains Toolbox → PyCharm, NCALayer, RustDesk, Intel DSA) by hand. *(The SSD `inventory\winget-packages-snapshot.json` is only a point-in-time capture for diffing new installs back into the curated list — not the restore source.)*
 2. **SSH + configs (Windows):** copy `R:\backup\home\.ssh` → `C:\Users\<you>\.ssh`, then fix perms (icacls: remove inherited, grant your user only). Restore the other dotfiles (`.gitconfig`, `.wslconfig`, `.kube`, `.gcm`, `.config`, `.claude.json`, shell histories, etc.).
    - **Agent config (`.claude`) — bootstrap, don't copy verbatim:** run `provision\windows.ps1 -BackupRoot R:\backup` (add `-Work` if the work profile is used). One script enables **Developer Mode** (native symlinks fail without it — the agent config is all symlinks into this repo), sets **`core.symlinks=true`** (see below), ensures Git + Claude Code, runs `agents/bootstrap.sh` (via Git Bash — the `just agent-bootstrap` recipe and the bare `bash` on PATH both misbehave on Windows), and restores only the machine-local bits (`.credentials.json`, `settings.local.json`, `projects/`) without clobbering the freshly-bootstrapped symlink trees. On NixOS/macOS the equivalent is `just agent-bootstrap`.
      - **Developer Mode alone is not enough, and the gap is silent.** It only lets `ln -s` succeed; **git refuses to check a symlink out until `core.symlinks` says otherwise**, and Git for Windows' installer writes `core.symlinks=false` into the **system** config — so every fresh clone inherits it. The repo tracks one symlink, `CLAUDE.md` → `AGENTS.md`, and under that default it lands as a **9-byte regular file containing the literal text `AGENTS.md`**. Every agent session in the clone then loads nine bytes of nothing. That is what happened here: measured 2026-08-03, unnoticed for four weeks, because **`git status` calls such a tree CLEAN** (index and worktree agree under that mode) and a 9-byte file is not an error. Fixed 2026-08-13; `windows.ps1` step 2 now sets it `--global`, clears a stale per-clone `false`, and re-materialises any already-broken link by reading the **index** (`git ls-files -s`, mode 120000) rather than the worktree.
@@ -193,7 +193,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
        default=me
        ```
      - **Make the VHD sparse so it auto-shrinks and doesn't bloat the SSD:** `wsl --shutdown` first (the whole WSL VM must release the disk — `--terminate <distro>` alone hits `ERROR_SHARING_VIOLATION` while other distros/Docker Desktop hold the VM), then `wsl --manage <distro> --set-sparse true --allow-unsafe`. Verify: the distro's `Flags` under `HKCU\...\Lxss\<guid>` gains the `+8` bit (7 → 15). For *new* distros instead, set `[experimental] sparseVhd=true` in `.wslconfig`.
-   - **`.wslconfig` — the VM caps and the freeze guard (host-side; nothing inside the distro can set these).** Since 2026-08-12 this file is **tracked in the dotfiles repo on the `desktop` branch** — restore it from there, not by hand, and treat that copy as the source of truth (it carries the per-setting reasoning as comments, and the sync timer keeps it current). The block below is illustrative, like the `R:\backup` drive letters above: it is what the file should contain, so you can verify the restore, because getting it wrong wedges the VM:
+   - **`.wslconfig` — the VM caps and the freeze guard (host-side; nothing inside the distro can set these).** Since 2026-08-12 this file is **tracked in the dotfiles repo on the `g16` branch** — restore it from there, not by hand, and treat that copy as the source of truth (it carries the per-setting reasoning as comments, and the sync timer keeps it current). The block below is illustrative, like the `R:\backup` drive letters above: it is what the file should contain, so you can verify the restore, because getting it wrong wedges the VM:
      ```ini
      [wsl2]
      processors=8
@@ -250,7 +250,7 @@ Your GPG keys live inside the WSL export on one SSD. If that SSD is dead when yo
 Curated from `winget list` + WSL packages on 2026-07-05. **Excluded as auto/noise** (don't reinstall by hand): NVIDIA/Intel/Realtek/Thunderbolt drivers, VC++ redistributables, .NET runtimes, WindowsAppRuntimes, UI.Xaml, codec/video extensions, and built-in Store apps (Photos, Paint, Calculator, Xbox, etc.).
 
 ### Restored automatically
-- **`winget import` the curated repo list** (`hosts\desktop\windows\winget-packages.json`, version-controlled) → all winget keepers below **plus** the four Store apps (WhatsApp, NetSpot, NVIDIA App, MyASUS) via its `msstore` source block. Already pruned, so no pre-edit — just import.
+- **`winget import` the curated repo list** (`hosts\g16\windows\winget-packages.json`, version-controlled) → all winget keepers below **plus** the four Store apps (WhatsApp, NetSpot, NVIDIA App, MyASUS) via its `msstore` source block. Already pruned, so no pre-edit — just import.
 - **Chrome / JetBrains** → account sync (bookmarks, passwords, IDE settings).
 
 ### Dev — IDEs & editors

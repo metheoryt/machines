@@ -14,7 +14,7 @@
 #
 # Step 6 is AFTER fleet-local.sh and that ordering is load-bearing: it resolves
 # its identity from the fleet.local.json step 4 writes. A WSL distro cannot be
-# identified any other way -- on desktop-wsl `hostname` is g614jv, which IS the
+# identified any other way -- on g16-wsl `hostname` is g614jv, which IS the
 # Windows parent's detect.hostname, so detection would hand this distro the
 # PARENT's backup profile. It is a no-op skip until backup/<nickname>/ exists.
 #

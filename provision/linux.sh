@@ -81,13 +81,13 @@ case "$PROFILE" in
     # it is whether the box lives on mains. This list used to omit it with the
     # comment "a laptop someone carries", which described `air` and was simply
     # untrue of the two workstation-profile laptops the fleet actually has —
-    # g15 sits on AC as the personal-projects host, desktop as the Windows box
+    # g15 sits on AC as the personal-projects host, g16 as the Windows box
     # (whose cap is G-Helper's, not this repo's). A cell held at 100% on AC
     # swells, which is the whole reason latitude has the cap.
     #
     # `air` is excluded by being darwin, not by being workstation: macos.sh has
     # its own tier list and no battery tier, so nothing here reaches it. The one
-    # box this newly touches is desktop-wsl, where it is a no-op — but NOT for the
+    # box this newly touches is g16-wsl, where it is a no-op — but NOT for the
     # reason it is tempting to write down. Measured there 2026-09-08: the distro
     # DOES expose /sys/class/power_supply/BAT1 (and AC1); what it has not got is
     # `charge_control_end_threshold` inside it. The tier's loop tests for that
@@ -115,7 +115,7 @@ case "$PROFILE" in
     # directories, so ~/.claude must exist before it runs. It is also not
     # APPENDED — that would land it after dotfiles, which stays last for the
     # reason its own comment gives. It reaches exactly two boxes (g15 and
-    # desktop-wsl, the runtimes where an Orca-driven `claude` actually runs) and
+    # g16-wsl, the runtimes where an Orca-driven `claude` actually runs) and
     # is an info-level skip everywhere else, including darwin.
     TIERS=(apt_min apt_dev docker battery_limit lid_ignore oom_guard sysrq agents_config git_base gortex
            "agent_clis claude" orca_skills shell_init autofetch

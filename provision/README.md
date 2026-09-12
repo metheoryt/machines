@@ -344,7 +344,7 @@ Notes:
   `ORCA_TS_HOSTNAME`.
 - **Step 3 is only for CROSS-MACHINE access.** Windows Orca opens its own host's
   distro directly, so a distro reached only from its own Windows host needs no
-  runtime. Restored 2026-08-29 for `g15-wsl`, which `air` and `desktop` drive
+  runtime. Restored 2026-08-29 for `g15-wsl`, which `air` and `g16` drive
   over the tailnet. Version defaults to `latest`; pin with `ORCA_VERSION`.
 - **Serve needs an X display, and under WSLg it cannot make its own.** Orca
   starts an Xvfb on `:99` when `DISPLAY` is unset, but WSLg mounts
@@ -389,7 +389,7 @@ ed25519 key trusted by the other boxes, and a merged `~/.ssh/config` so
 `ssh latitude` / `ssh server` / `ssh hub` work from inside the distro. The
 distro is a **leaf**: it reaches out to the fleet and is trusted by it, but is
 **not** a `fleet.json` member (its OS hostname `g614jv` collides with the
-`desktop` host, and the box is disposable). Design:
+`g16` host, and the box is disposable). Design:
 `docs/superpowers/specs/2026-07-17-ssh-wsl-fleet-design.md`.
 
 Run **inside the distro, after `tailscale-wsl.sh`**:
@@ -408,7 +408,7 @@ It:
   its trust entry never goes stale. The store is **host-scoped**, so *every WSL
   distro on the same Windows host shares one key* — a per-host fleet identity,
   named after the host (`me@wsl-<host>`, mapping `uname -n` to the matching
-  `fleet.json` member, e.g. `g614jv` → `me@desktop-wsl`), not after the distro;
+  `fleet.json` member, e.g. `g614jv` → `me@g16-wsl`), not after the distro;
 - appends `id_fleet.pub` to `provision/fleet-authorized-keys` (if not already
   there). **Operator step:** commit + push, then re-provision the other boxes
   (`nixos-rebuild switch` / `windows.ps1`) so they trust the key;
@@ -476,5 +476,5 @@ is pulled: directly at `<nickname>.gg.ez` if `dispatch:direct`, or as
 distro that ran `provision-wsl` is reachable on the very next `/ship` or
 memory-harvest run. (This WSL-discovery path is implemented but not yet exercised
 end-to-end on a live box; the Windows-native dispatch path in
-`fleet-dispatch.sh` — reaching `desktop`/`server`'s own
+`fleet-dispatch.sh` — reaching `g16`/`g15`'s own
 `C:\Users\<winuser>\machines` clone — has been.)

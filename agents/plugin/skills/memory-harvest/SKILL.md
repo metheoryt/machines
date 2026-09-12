@@ -421,7 +421,7 @@ source provision/lib/fleet.sh
 Not the publisher → skip it and say so in one line. Publisher → dispatch **one
 subagent** with `consolidate-phase.md` beside this file as its brief.
 
-The publisher is **g15**, and the reason is not uptime — latitude, desktop and
+The publisher is **g15**, and the reason is not uptime — latitude, g16 and
 g15 are all always on, and air is the only box that sleeps. It is that Phase B
 is an *agent session*: it needs Claude Code, a `machines` checkout and the
 dotfiles bare repo with every branch fetched, on a box someone actually works
@@ -448,8 +448,8 @@ Read-once is enforced across the fleet, not per box.
 What that does **not** survive is two boxes running before either has pushed —
 so **stagger the automations**, a couple of hours apart is enough.
 
-The repos are also not spread the way the machine list suggests: on the desktop
-machine every working repo lives inside the `desktop-wsl` distro (Linux, ext4)
+The repos are also not spread the way the machine list suggests: on the g16
+machine every working repo lives inside the `g16-wsl` distro (Linux, ext4)
 and the Windows side holds only `machines`, so the automation there belongs in
 the distro.
 

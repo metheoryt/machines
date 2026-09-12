@@ -138,7 +138,7 @@ if [ -f "$nixmod" ]; then
 fi
 
 # ── a dirty tree must stop being silent once it PERSISTS ─────────────────────
-# THE BUG: desktop-wsl sat 28 commits behind for ~35 hours because one untracked
+# THE BUG: g16-wsl sat 28 commits behind for ~35 hours because one untracked
 # zero-byte .zed/tasks.json tripped the dirty gate. The journal held 185
 # consecutive `SKIP dirty` lines and zero OK, while the timer, the service and
 # .machines/last-converge all reported success. A revoked SSH key stayed trusted

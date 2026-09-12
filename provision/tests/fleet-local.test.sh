@@ -27,7 +27,7 @@ tmp2="$(mktemp -d)"; mkdir -p "$tmp2/machines"
 
 # Default is direct — every existing fleet.local.json predates this field, and
 # the personal distro's current direct-SSH behavior must not change.
-bash "$SCRIPT" --nickname desktop-wsl --repo "$tmp2/machines" >/dev/null
+bash "$SCRIPT" --nickname g16-wsl --repo "$tmp2/machines" >/dev/null
 got="$(jq -r '.self.dispatch' "$tmp2/machines/fleet.local.json")"
 [ "$got" = direct ] && pass "dispatch defaults to direct" \
   || die "dispatch default: expected 'direct', got '$got'"
@@ -62,22 +62,22 @@ rm -rf "$tmp2"
 tmp3="$(mktemp -d)"; mkdir -p "$tmp3/machines"
 g="$tmp3/machines/fleet.local.json"
 
-bash "$SCRIPT" --nickname desktop-wsl --repo "$tmp3/machines" >/dev/null
+bash "$SCRIPT" --nickname g16-wsl --repo "$tmp3/machines" >/dev/null
 [ "$(jq -r '.self | has("parent")' "$g")" = false ] && pass "no --parent → key absent" \
   || die "parent key should be absent: $(cat "$g")"
 
-bash "$SCRIPT" --nickname desktop-wsl --parent desktop --repo "$tmp3/machines" >/dev/null
-[ "$(jq -r '.self.parent' "$g")" = desktop ] && pass "--parent written" \
-  || die "parent: expected 'desktop', got '$(jq -r '.self.parent' "$g")'"
+bash "$SCRIPT" --nickname g16-wsl --parent g16 --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self.parent' "$g")" = g16 ] && pass "--parent written" \
+  || die "parent: expected 'g16', got '$(jq -r '.self.parent' "$g")'"
 
 # A later run without the flag must not silently drop it — provision-wsl.sh
 # omits --parent whenever the caller does, and losing it re-breaks dispatch.
-bash "$SCRIPT" --nickname desktop-wsl --repo "$tmp3/machines" >/dev/null
-[ "$(jq -r '.self.parent' "$g")" = desktop ] && pass "--parent survives a re-run without the flag" \
+bash "$SCRIPT" --nickname g16-wsl --repo "$tmp3/machines" >/dev/null
+[ "$(jq -r '.self.parent' "$g")" = g16 ] && pass "--parent survives a re-run without the flag" \
   || die "parent lost on re-write: $(cat "$g")"
 
 # But an explicit new value replaces it.
-bash "$SCRIPT" --nickname desktop-wsl --parent g15 --repo "$tmp3/machines" >/dev/null
+bash "$SCRIPT" --nickname g16-wsl --parent g15 --repo "$tmp3/machines" >/dev/null
 [ "$(jq -r '.self.parent' "$g")" = g15 ] && pass "--parent overwrites the old value" \
   || die "parent not overwritten: $(cat "$g")"
 rm -rf "$tmp3"

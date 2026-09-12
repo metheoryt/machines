@@ -17,8 +17,13 @@ provisioner under `provision/`.
   restic REST backup hub. Never sleeps, by design.
 - **air** — MacBook, the **primary dev box**.
 - **hub** — Debian VPS at `cyphy.kz`; Headscale control server + AmneziaWG VPN hub.
-- **desktop** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
-  **Windows-only**. Its former NixOS install `g16` was retired 2026-07-08.
+- **g16** (`g614jv` WSL / `ME-G614JV` native) — ASUS ROG G16 2024, RTX 4060;
+  **Windows-only**. Named `desktop` from 2026-07-20 until 2026-09-12, when the
+  name went back to the model — the same defect that renamed `server` to `g15`.
+  `g16` also named this box's NixOS install, retired 2026-07-08; same hardware,
+  so an old `g16` reference is this machine either way. Its WSL host is
+  `g16-wsl` (the distro is still REGISTERED as `desktop-wsl`; nothing needs
+  those to match).
 - **g15** (`g513ie`) — ASUS ROG **G15** 2023 (model **G513IE**), RTX 3050 Ti,
   Windows 11. The **personal-projects host**. Named `server` until 2026-08-27,
   when it was renamed and put back into `fleet.json`; reach it as
@@ -128,7 +133,7 @@ between latitude leaving NixOS and 2026-08-01.
 install both as system timers. Read the headers first — they record decisions the
 code cannot show you.
 
-**`hosts/desktop/windows/`** — install/reinstall +
+**`hosts/g16/windows/`** — install/reinstall +
 backup scripts.
 
 ## Hardware Notes

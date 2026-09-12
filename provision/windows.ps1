@@ -126,7 +126,7 @@ Info "bash: $GitBash"
 # repo tracks exactly one symlink, CLAUDE.md -> AGENTS.md, and under that default
 # it lands as a 9-byte regular file holding the literal text "AGENTS.md" - so
 # every agent session in the clone loads nine bytes of nothing. Measured live on
-# the desktop box 2026-08-03; it went 4 weeks unnoticed because `git status`
+# the g16 box 2026-08-03; it went 4 weeks unnoticed because `git status`
 # calls such a tree CLEAN (index and worktree agree under that mode) and a
 # 9-byte file raises no error. Set at --global so it outlives this clone and
 # covers every future one; guarded by provision/tests/windows-core-symlinks.test.sh.
@@ -181,7 +181,7 @@ try {
 # python.org exe under %LOCALAPPDATA%\Programs\Python and install via `--source winget`
 # (avoids the Store PythonManager) when absent. A real install lands ahead of the Store
 # alias on PATH, which is what makes `python`/`py` resolve for distill (verified on the
-# desktop box, where distill works via the probe's python3->python fallback).
+# g16 box, where distill works via the probe's python3->python fallback).
 $pyReal = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
           Select-Object -First 1
 if ($pyReal) {
@@ -200,7 +200,7 @@ if ($pyReal) {
 # settings.local.json (which Claude Code does not read at user scope) into
 # settings.json (which it does), and that function is written in jq: with no jq
 # it warns once and returns, so gortex's hooks are written and never run - at
-# any posture. Measured on desktop 2026-08-30, where the line
+# any posture. Measured on g16 2026-08-30, where the line
 # "! jq not found - gortex hooks stay inert" had been the whole story since the
 # box was provisioned. The POSIX tiers install jq already (tier_apt_min,
 # tier_brew_min); Windows was the only platform where the wiring silently did

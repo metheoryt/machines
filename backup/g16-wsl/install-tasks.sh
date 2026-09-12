@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs desktop-wsl's restic client schedule from the profiles.yaml next to
+# Installs g16-wsl's restic client schedule from the profiles.yaml next to
 # this file.
 #
 # NO SUDO, deliberately -- the mirror image of ../latitude/install-tasks.sh.

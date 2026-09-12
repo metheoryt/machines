@@ -21,7 +21,7 @@
 # dock bay, which is the opposite of the point.
 #
 # WHY TWO PASSES, as with the servarr move. Five scheduled writers touch these
-# trees (latitude backup 04:30, g15 client 05:00, desktop-wsl client 06:00,
+# trees (latitude backup 04:30, g15 client 05:00, g16-wsl client 06:00,
 # forget 07:30 and 09:30, selfcheck 09:03, weekly checks Sun 06:00/08:30/10:30).
 # Pass 1 runs live; `cutover` stops every writer and runs a delta over what
 # moved. The hub is down for the delta, not for the copy.

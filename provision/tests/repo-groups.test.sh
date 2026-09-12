@@ -26,12 +26,12 @@ source "$REPO/provision/roles/repos.sh"
 # g15 declares `my` only: it is the personal-projects host and the owner does not
 # want the work repos (`pure`) or the retired `cyphy671` account on it.
 eq "$(fleet_repo_groups g15)" "my" "fleet_repo_groups g15 == my (explicit)"
-# air and desktop declare nothing, so they exercise the default path — repos.sh
+# air and g16 declare nothing, so they exercise the default path — repos.sh
 # keeps its own list. Keep at least one machine with no field here: a manifest
 # edit that gave every box an explicit list would leave that branch untested,
 # which is the same trap fleet-profile.test.sh guards for `profile`.
 eq "$(fleet_repo_groups air)" "" "fleet_repo_groups air is empty (field absent)"
-eq "$(fleet_repo_groups desktop)" "" "fleet_repo_groups desktop is empty (field absent)"
+eq "$(fleet_repo_groups g16)" "" "fleet_repo_groups g16 is empty (field absent)"
 # An unknown machine must be empty, not the string "null" — jq -r prints a null
 # that way, and `repos.sh null` would match no group row while looking deliberate.
 eq "$(fleet_repo_groups no-such-box)" "" "fleet_repo_groups unknown machine is empty"

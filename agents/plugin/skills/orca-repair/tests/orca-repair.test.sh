@@ -132,7 +132,7 @@ with tempfile.TemporaryDirectory() as td:
 
 # Real recents are keyed `runtime:<envId>|<repoId>::<path>`; the live registry
 # prints the bare `<repoId>::<path>`. The fixture above uses bare ids on both
-# sides and so never exercised the mismatch — on desktop-wsl 2026-09-12 every one
+# sides and so never exercised the mismatch — on g16-wsl 2026-09-12 every one
 # of a reachable environment's recents was flagged stale while every one was live.
 PFX = "runtime:env-live|"
 data5 = {"workspaceSessionsByHostId": {LIVE: {
@@ -145,7 +145,7 @@ check("prefix: prefixed LIVE recent is NOT flagged",
 check("prefix: prefixed STALE recent IS flagged",
       set(plan5["ghosts_by_runtime"].get(LIVE, [])) == {PFX + STALE})
 
-# --data selects a STORE. This is the 2026-09-12 desktop-wsl bug: --data moved the
+# --data selects a STORE. This is the 2026-09-12 g16-wsl bug: --data moved the
 # data path while ENV_FILE/RUNTIME_FILE stayed on a retired second store whose
 # orca-environments.json did not exist, so gather_env_ids() returned {} and every
 # LIVE environment was reported as an orphaned block — one --apply from deleting

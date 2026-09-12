@@ -29,7 +29,7 @@ role_backup_client() {
         *)
             # WINDOWS STILL LANDS HERE, and it is still a hole from THIS side.
             # The Windows executor is provision/roles/backup-client.ps1, reached
-            # only through provision.ps1 — so `provision.sh --machine desktop`
+            # only through provision.ps1 — so `provision.sh --machine g16`
             # run from Linux prints this skip and exits 0, provisioning nothing.
             # That path is not how a Windows member is provisioned, but nothing
             # stops someone taking it. Pinned in roles.test.sh so closing it has

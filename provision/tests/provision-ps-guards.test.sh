@@ -116,9 +116,9 @@ printf '%s\n' "$out" | grep -q '> Roles:' \
   || pass "unknown machine never reaches the role loop"
 
 # 2. A DECLARED stub reports itself as declared and does not fail the run.
-#    desktop carries base + ssh-server, both unimplemented, plus three roles that
+#    g16 carries base + ssh-server, both unimplemented, plus three roles that
 #    do have executors — so one run exercises both sides of the branch.
-out="$(run -Machine desktop)"; rc=$?
+out="$(run -Machine g16)"; rc=$?
 eq "$rc" "0" "a dry run with declared stubs exits 0"
 printf '%s\n' "$out" | grep -q "base - plan: no executor yet (declared)" \
   && pass "'base' reports as declared, not as a failure" \
@@ -132,7 +132,7 @@ printf '%s\n' "$out" | grep -q "base - plan: no executor yet (declared)" \
 #    Every prompt is answered `n`, so the implemented roles are skipped and the
 #    exit code can only have come from the fallback arm.
 out="$(printf 'n\nn\nn\nn\nn\nn\nn\n' | timeout 180 "$PS" -NoProfile -ExecutionPolicy Bypass \
-        -Command "& '$FRONT' -Machine desktop -Apply -PlannedRoles @(); exit \$LASTEXITCODE" 2>&1)"; rc=$?
+        -Command "& '$FRONT' -Machine g16 -Apply -PlannedRoles @(); exit \$LASTEXITCODE" 2>&1)"; rc=$?
 eq "$rc" "1" "an undeclared, executor-less role fails -Apply"
 printf '%s\n' "$out" | grep -q "x base - no executor, and not declared" \
   && pass "the undeclared role's missing executor is named" \

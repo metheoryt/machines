@@ -116,10 +116,10 @@ esac
 
 # windows hits the POSIX fallthrough, and still does after Task 5. The Windows
 # executor exists (provision/roles/backup-client.ps1) but is reached only through
-# provision.ps1 — so `provision.sh --machine desktop` from Linux prints a skip and
+# provision.ps1 — so `provision.sh --machine g16` from Linux prints a skip and
 # exits 0. Not the path a Windows member is provisioned by, and not stopped from
 # being taken either. Pinned so closing it is a deliberate edit.
-skipped "role_backup_client(windows)" "$(role_backup_client dry-run windows desktop 2>&1)"
+skipped "role_backup_client(windows)" "$(role_backup_client dry-run windows g16 2>&1)"
 
 # backup-hub's fallthrough IS a decision: a USB drive by UUID, a container and a
 # port on one box do not generalise. Asserted as intended behaviour so nobody

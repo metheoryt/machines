@@ -78,7 +78,7 @@ def set_config_dir(d):
     the stale dir had no orca-environments.json at all, so gather_env_ids()
     returned the empty set and EVERY live environment read as an orphaned block —
     a --apply would have deleted the state of two working environments. Measured
-    on desktop-wsl 2026-09-12.
+    on g16-wsl 2026-09-12.
     """
     global CONFIG_DIR, ENV_FILE, RUNTIME_FILE
     CONFIG_DIR = d
@@ -279,7 +279,7 @@ def registry_id(wt):
     Orca keys its recents `runtime:<envId>|<repoId>::<path>`, while
     `worktree list --environment` prints the bare `<repoId>::<path>`. Comparing
     the two forms verbatim makes EVERY recent of a reachable environment look
-    stale: measured on desktop-wsl 2026-09-12, all three of g15-ubuntu's recents
+    stale: measured on g16-wsl 2026-09-12, all three of g15-ubuntu's recents
     were flagged and all three were live in the registry. The unit fixture used
     bare ids, so nothing caught it — this detector was 100% false-positive on real
     data, and --apply would have wiped the entire recent list it was pointed at.

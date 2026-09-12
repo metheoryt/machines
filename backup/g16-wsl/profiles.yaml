@@ -41,7 +41,7 @@ wsl:
   # user g614jv may access /g614jv and nothing else. It is what the old
   # `{{ .Hostname }}` template expanded to anyway -- a WSL distro inherits its
   # WINDOWS host name, not the distro nickname or the tailnet node name. Both of
-  # desktop's distros therefore resolve to this one repo and SHARE it. That is
+  # g16's distros therefore resolve to this one repo and SHARE it. That is
   # safe (restic keys snapshots by host + paths, so sharing dedupes rather than
   # clobbers) but it is not isolation - do not rely on it to separate two
   # distros. $WSL_DISTRO_NAME would name them properly and is deliberately not
@@ -50,7 +50,7 @@ wsl:
   # on every scheduled run.
   #
   # Both files are OPERATIONAL copies and are escrowed in the private dotfiles
-  # repo on this machine's own branch (desktop-wsl), which is the authoritative
+  # repo on this machine's own branch (g16-wsl), which is the authoritative
   # off-box copy. The repo password is ALSO escrowed on latitude's branch,
   # because latitude is where this repo's pruning is to be done from and
   # --append-only makes it impossible from here. (That job is not written yet --
@@ -90,7 +90,7 @@ wsl:
     # NOT base.yaml's inherited `user`, which fails on this box with
     # "user is not allowed to create a system job: please restart resticprofile
     # as root". resticprofile's `user` permission means a ROOT-OWNED unit that
-    # merely runs as the user, so installing it needs sudo - and desktop-wsl has
+    # merely runs as the user, so installing it needs sudo - and g16-wsl has
     # no passwordless sudo and no TTY when driven over ssh through wsl.exe.
     # `user_logged_on` produces a genuine `systemctl --user` unit, which needs no
     # privilege at all.

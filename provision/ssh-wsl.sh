@@ -8,7 +8,7 @@
 # Model: a LEAF node, not a fleet.json member. The distro reaches out to the
 # fleet AND accepts inbound fleet logins (it installs fleet-authorized-keys into
 # its own ~/.ssh/authorized_keys), but is not added to fleet.json (its OS
-# hostname g614jv collides with the `desktop` Windows host's detect.hostname, and
+# hostname g614jv collides with the `g16` Windows host's detect.hostname, and
 # the box is disposable). So other boxes get no `ssh <name>` alias back to it —
 # reach it by tailnet IP / MagicDNS name. The inbound trust is a SNAPSHOT copy
 # (unlike ssh-server.nix's declarative keyFiles): re-run this script after a new
@@ -97,9 +97,9 @@ ssh_wsl_sanitize() {
 # last NixOS host, retired 2026-07-29.)
 #
 # Each block matches BOTH the bare name and the MagicDNS FQDN
-# (`Host desktop desktop.gg.ez`) as of 2026-08-01. Bare-name-only blocks let the
+# (`Host g16 g16.gg.ez`) as of 2026-08-01. Bare-name-only blocks let the
 # FQDN form fall through to the trailing `Host *.gg.ez` catch-all, which hard-
-# codes `User me` — so `ssh desktop.gg.ez` / `server.gg.ez` went out as me@ to
+# codes `User me` — so `ssh g16.gg.ez` / `server.gg.ez` went out as me@ to
 # boxes whose user is `methe`, and `hub.gg.ez` as me@ instead of debian@, all
 # failing with `Permission denied (publickey)` while the bare name worked.
 # Everything resolvable prints the FQDN (tailscale status, MagicDNS, known_hosts),
@@ -200,7 +200,7 @@ ssh_wsl_merge_config() {
 
 # Map this box's hostname ($2) to the fleet member whose detect.hostname matches
 # it (case-insensitive), so the per-Windows-host leaf key is named after the
-# fleet box it lives inside (e.g. g614jv → desktop → me@desktop-wsl). Falls back
+# fleet box it lives inside (e.g. g614jv → g16 → me@g16-wsl). Falls back
 # to the sanitized hostname when no fleet member matches. Deterministic; the only
 # IO is invoking jq on the fleet.json content ($1).
 ssh_wsl_host_label() {
@@ -273,10 +273,12 @@ KEY="$HOME/.ssh/$FLEET_KEY_NAME"
 mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
 # One key per Windows HOST (the store below is host-scoped, so every distro on a
 # host shares it) — so name it after the host, not the distro: map uname -n to
-# the matching fleet member (g614jv → desktop), else the sanitized hostname.
-# Suffix, not prefix: `desktop-wsl` matches the distro's own name, its tailnet
-# node and its dotfiles branch. The old `wsl-desktop` form was the same two words
-# in the other order, which read as a different box every time.
+# the matching fleet member (g614jv → g16), else the sanitized hostname.
+# Suffix, not prefix: `g16-wsl` matches this host's tailnet node and its
+# dotfiles branch (NOT the Windows distro registration, still `desktop-wsl`
+# since the 2026-09-12 rename — nothing needs those two to agree). The old
+# `wsl-desktop` form was the same two words in the other order, which read as a
+# different box every time.
 KEY_COMMENT="me@$(ssh_wsl_host_label "$(cat "$FLEET_JSON")" "$(uname -n)")-wsl"
 
 # Resolve the persistence store. Auto-detect the single non-system dir under

@@ -25,20 +25,20 @@ AmneziaWG survives on the VPS **only** as the relatives' obfuscated VPN.
 |---|---|---|---|
 | `hub` | `100.64.0.1` | Debian VPS | Headscale control plane + embedded DERP; AWG relatives-hub |
 | `g15` | `100.64.0.10` | **Ubuntu 26.04 resolute** (`g513ie`) | the personal-projects host. **Windows was wiped 2026-09-07** and with it the `g15-wsl` distro — one host replaces two. Reach it as `me@g15.gg.ez` (no `ssh` block in the manifest; `ssh.user` defaults to `me`). Its old tailnet node `100.64.0.3` is retired. **In restic since 2026-09-08** (`~/my` + `~/Music`); its 184 GB database is not, see the item at the end of P6 |
-| `desktop` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
+| `g16` | `100.64.0.4` | Windows 11 (`g614jv`) | tailnet + sshd |
 | `air` | `100.64.0.7` | macOS | **primary dev box** |
 | `latitude` | `100.64.0.8` | **Debian 13 trixie** | **services host** — immich + servarr + speedtest + tugtainer |
 
-`desktop-wsl` (`100.64.0.6`) is the one remaining self-declared WSL host: no
+`g16-wsl` (`100.64.0.6`) is the one remaining self-declared WSL host: no
 `fleet.json` entry, a gitignored `fleet.local.json` instead. It is
 **`dispatch:parent`** since 2026-08-31 — reached as `wsl.exe -d desktop-wsl`
-through `desktop`, because in `networkingMode=mirrored` its sshd lost port 22 to
+through `g16`, because in `networkingMode=mirrored` its sshd lost port 22 to
 the Windows OpenSSH server and answers on 2222 instead. Its own tailnet node is
 still registered and no longer load-bearing. `g15-wsl` (`100.64.0.9`) is gone
 with the Windows install it lived on.
 
 **One LAN, not two.** Every member except `hub` sits behind the same router and
-gets direct P2P — measured 2026-09-07 from `desktop-wsl`: latitude 2 ms, g15
+gets direct P2P — measured 2026-09-07 from `g16-wsl`: latitude 2 ms, g15
 3 ms, hub 6 ms via its public IP, 99 MB/s to latitude. This section said "two
 separate LANs … cross-LAN pairs relay through our own DERP — expected and
 accepted" until 2026-09-07, and that sentence is why a migration design first
@@ -73,7 +73,7 @@ from the tag.
 > If this is picked back up: the enabling trick is already proven — a repo's
 > newest snapshot age is readable from `<repo>/snapshots/` **file mtimes**, with
 > no restic binary and no password, and because latitude is the hub it can see
-> every pusher's repo including `desktop-wsl`'s. The design that was worked out
+> every pusher's repo including `g16-wsl`'s. The design that was worked out
 > and not built: one status script emitting rows (`--json` for agents), pure
 > `sb_backup_*` helpers above the `STATUSBOARD_LIB_ONLY` guard so they are
 > fixture-testable like `sb_docker_alerts`, and a severity policy keyed on each
@@ -94,7 +94,7 @@ is what made the right work obvious._
 | immich DB (albums, faces, metadata) | 2.9 G | ✅ immich's nightly dump → mirror **and** restic, daily 04:30 |
 | immich library, 2025→now | 242 G | ✅ rsync mirror → sdd2, **timer** daily 03:35 |
 | **immich archive 1970–2024** | **663 G** | ✅ second copy on `/mnt/xs`, byte-verified; monthly refresh |
-| `desktop-wsl` `$HOME` | 8.1 G | ✅ restic → latitude's REST hub, daily 06:00 |
+| `g16-wsl` `$HOME` | 8.1 G | ✅ restic → latitude's REST hub, daily 06:00 |
 | ServarrConfig, xs-keepers, vps `.env`s | 3.6 G | ✅ restic, versioned, daily 04:30 |
 | servarr media | 526 G | ✅ deliberately unprotected — replaceable torrent data |
 | **history for the photo libraries** | — | ❌ mirrors give a second copy, **not versions** |
@@ -110,7 +110,7 @@ is what made the right work obvious._
   `immich-mirror` / `spare320` / `immich-2024` during the migration — the
   migration consumed the backup drives. Whatever gets built starts from zero;
   there is no history to recover.
-- `restic-server` (the REST target on `server:8001`, which `desktop-wsl` pushed
+- `restic-server` (the REST target on `server:8001`, which `g16-wsl` pushed
   to) has been `Exited (0)` for 3 days. `latitude` has the restic binary but no
   repo, timer, or container; `hub` has no restic at all.
 
@@ -178,7 +178,7 @@ tunnel and no detour. State:
   `100.64.0.8:8001` rather than `0.0.0.0` — it runs `--no-auth`, so publishing on
   all interfaces had been exposing the fleet's backups to every device on the home
   wifi. Verified: tailnet answers, LAN address refused.
-- [x] **`desktop-wsl` backs up again** — repo `8ca511f48c` via the hub, snapshot
+- [x] **`g16-wsl` backs up again** — repo `8ca511f48c` via the hub, snapshot
   `c2c05a9f`, 8.1 GiB, user timer daily 06:00. It had **no** timer at all; the
   config pointed at the dead `server.gg.ez:8001`.
 - [x] **Fixed a bug the timers exposed.** `mirror-refresh.sh -go` had *always*
@@ -648,7 +648,7 @@ be diffed against a remembered failure count.
   | probe | result |
   |---|---|
   | `bash -c` and a real script file, `set -u`, `"$var…"` | exits 0, prints correctly |
-  | bash 5.3.9 (desktop-wsl), 5.2.37 (latitude), 5.2.15 (hub) | same on all three |
+  | bash 5.3.9 (g16-wsl), 5.2.37 (latitude), 5.2.15 (hub) | same on all three |
   | `LC_ALL=C`, `C.utf8`, `en_US.utf8` | same in all three |
   | unbrace ONLY that line at HEAD, run `provision-wsl.test.sh` | **green** |
   | the whole `65aac22^` tree — the "red" state the brace fix greened | **green today** |
@@ -715,15 +715,15 @@ be diffed against a remembered failure count.
 
 - [ ] **Add `just` to the workstation dev layer** — `tier_apt_dev`'s package list
   beside `gh`/`uv`, and `tier_brew_dev` on darwin. Measured 2026-09-12: g15 has
-  `~/.local/bin/just` 1.58.0 **installed by hand**, desktop-wsl has none at all,
-  and desktop's Windows profile has the winget build. So on the distro where
+  `~/.local/bin/just` 1.58.0 **installed by hand**, g16-wsl has none at all,
+  and g16's Windows profile has the winget build. So on the distro where
   every working repo of that box lives, `just test` cannot run — and `just test`
   is the whole validation surface of this repo since the Nix gate went (P4).
   A gate nobody can run is the same class of problem as a gate that reports a
   count it did not reach.
 
   Found while deciding which runtime should own the `machines` project in Orca
-  on desktop. That question is settled — **WSL** — but the first reason written
+  on g16. That question is settled — **WSL** — but the first reason written
   here for it was wrong, and the real one is narrower. `just test` on the Windows
   checkout exits 1 with `could not find \`cygpath\` executable to translate
   recipe \`test\` shebang interpreter path`: every recipe body is a
@@ -810,23 +810,23 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
 
 - [ ] **`provision/fleet-selfpull.ps1` has no dirty-streak escalation and no
   test coverage at all.** The bash side got both on 2026-08-03, after one
-  untracked zero-byte `.zed/tasks.json` held desktop-wsl 28 commits behind for
+  untracked zero-byte `.zed/tasks.json` held g16-wsl 28 commits behind for
   ~35 hours — 185 consecutive `SKIP dirty` lines under a green timer, one of the
   unpulled commits a key revocation. The PowerShell counterpart still reports a
-  persistently dirty tree as an ordinary skip and exits 0, so `desktop` — the one
+  persistently dirty tree as an ordinary skip and exits 0, so `g16` — the one
   Windows-native member left — can still freeze exactly that way, silently. The
   gap is named in `provision/fleet-selfpull.sh`'s header as review item 20;
   recorded here because a script comment is not where the backlog is read. Port
   `_streak_bump` / `_streak_clear` and `FLEET_SELFPULL_DIRTY_LIMIT`, and give the
   `.ps1` its first suite.
 
-- [ ] **`provision/wsl-fixes.sh` should own desktop-wsl's ssh port**, and does
+- [ ] **`provision/wsl-fixes.sh` should own g16-wsl's ssh port**, and does
   not. In `networkingMode=mirrored` the distro shares the Windows adapters and
   `ssh.socket` loses the bind on `0.0.0.0:22` to the Windows OpenSSH server —
   `Dependency failed for ssh.service` every boot from 2026-08-29, unnoticed for
   five weeks while this repo documented the box as reachable. The fix is a
   drop-in moving it to 2222, now **tracked but not provisioned** at
-  `hosts/desktop/wsl/ssh-socket-override.conf`: reprovisioning the distro still
+  `hosts/g16/wsl/ssh-socket-override.conf`: reprovisioning the distro still
   does not restore it. Doing it properly means gating on the real precondition
   (mirrored networking plus port 22 already taken, not the distro's name) and a
   Windows-side arm for the inbound firewall rule, which mirrored mode makes
@@ -846,7 +846,7 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   first deciding, file by file, what on it still matters — it is not a `branch -d`.
 
 - [ ] **hub's `me@desktop-wsl-ubuntu-26-04` key** (`…DXi623`) is live —
-  desktop-wsl's `id_ed25519` — and redundant only because desktop-wsl's ssh
+  g16-wsl's `id_ed25519` — and redundant only because g16-wsl's ssh
   config pins `id_fleet`. Removing it is a real revocation, not a cleanup.
   Needs a deliberate decision.
 - [ ] **latitude's migration debris**: 21M `~/immich-migration/` plus six
@@ -943,9 +943,9 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
   Recorded with what was on the table, so it can be reopened on new information
   rather than re-argued: `restic-server` runs `--no-auth`, so on a default-open
   tailnet **reachability is authorisation** for every repo on the REST hub — any
-  tailnet node can read or write latitude's and desktop-wsl's backups. The natural
+  tailnet node can read or write latitude's and g16-wsl's backups. The natural
   trigger to revisit is a node joining that is not ours, which has never happened.
-- [ ] **Drop `desktop`'s AWG.** It runs AmneziaWG beside Tailscale and its
+- [ ] **Drop `g16`'s AWG.** It runs AmneziaWG beside Tailscale and its
   services already work over the tailnet. Remove once nothing depends on
   `10.0.0.6`, then drop the peer on hub.
 - [ ] Enumerate `xs-keepers/home`'s ~20 config dirs; unbundle
@@ -977,7 +977,7 @@ defined in `linux.sh` and `macos.sh` rather than a shared lib.
     server's data path is `/mnt/spare320/restic-rest` on a 293 G drive.
     g15's repo landed at **83 G** (95.540 GiB processed → 88.945 GiB added →
     82.012 GiB stored), which leaves **82 G free** against latitude's own repo
-    (12 G), desktop-wsl's (29 G) and the 89 G `music-from-g513ie` pile. So a
+    (12 G), g16-wsl's (29 G) and the 89 G `music-from-g513ie` pile. So a
     DB leg does not fit today at all; dropping that pile would give 171 G,
     against an unmeasured ~120–130 G leg — feasible, with no growth headroom
     and no temp room for prune.

@@ -22,12 +22,12 @@ eq "$(ssh_wsl_sanitize 'Ubuntu-26.04')"     'ubuntu-26-04'   'sanitize dotted'
 eq "$(ssh_wsl_sanitize 'My_Cool Distro!!')" 'my-cool-distro' 'sanitize punctuation'
 
 # ── ssh_wsl_stamp_pub (no double/blank comment regardless of input comment) ───
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY' 'me@desktop-wsl')" \
-   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: no embedded comment → stamp once'
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old@comment' 'me@desktop-wsl')" \
-   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: strip embedded comment (no doubling)'
-eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@desktop-wsl')" \
-   'ssh-ed25519 AAAABODY me@desktop-wsl' 'stamp_pub: strip multi-word comment'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY' 'me@g16-wsl')" \
+   'ssh-ed25519 AAAABODY me@g16-wsl' 'stamp_pub: no embedded comment → stamp once'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old@comment' 'me@g16-wsl')" \
+   'ssh-ed25519 AAAABODY me@g16-wsl' 'stamp_pub: strip embedded comment (no doubling)'
+eq "$(ssh_wsl_stamp_pub 'ssh-ed25519 AAAABODY old comment with spaces' 'me@g16-wsl')" \
+   'ssh-ed25519 AAAABODY me@g16-wsl' 'stamp_pub: strip multi-word comment'
 
 # ── ssh_wsl_render_config (needs jq) ──────────────────────────────────────────
 if command -v jq >/dev/null 2>&1; then
@@ -162,7 +162,7 @@ eq "$TRUST_MARKER_END"   '# <<< fleet-trust <<<'                       'trust ma
 
 FLEET='ssh-ed25519 AAAABODYONE me@latitude
 ssh-ed25519 AAAABODYTWO methe@server
-ssh-ed25519 AAAABODYSELF me@desktop-wsl'
+ssh-ed25519 AAAABODYSELF me@g16-wsl'
 # Empty existing → the fleet keys wrapped in exactly one marked span.
 eq "$(ssh_wsl_merge_authorized_keys '' "$FLEET")" \
    "$TRUST_MARKER_BEGIN

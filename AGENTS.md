@@ -20,7 +20,7 @@ the tracked shape. The one-command check is `wc -c CLAUDE.md` — it must match
 **0** for a perfectly intact symlink, so the PowerShell-native equivalent of
 `wc -c` reports the healthy case as the broken one. What tells the truth there
 are the attributes: `ReparsePoint` present, `.Target` reading `AGENTS.md`, and
-`core.symlinks=true`. Measured on desktop 2026-09-12, where the link was healthy
+`core.symlinks=true`. Measured on g16 2026-09-12, where the link was healthy
 and looked 0-byte.
 <!-- src: machines 3816d27 | 2026-09-12 -->
 
@@ -39,7 +39,7 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
 - **air** — MacBook, `platform: darwin`, tailnet `100.64.0.7`, roles `base,
   ssh-server, agents, dotfiles, repos`. Called **the primary dev box** here since
   the 2026-07 migration, and that label is doubtful: every `pure` work repo moved
-  off it to `desktop-wsl` by 2026-08-02 (`~/pure` was found absent on air that
+  off it to `g16-wsl` by 2026-08-02 (`~/pure` was found absent on air that
   day) and has not moved back. Not re-verified since — air is frequently asleep
   and was unreachable again on 2026-09-11 — so check the box before trusting
   either the label or this caveat. Provisioned with
@@ -53,13 +53,22 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
   `fleet.json` member (roles `base, ssh-server, agents, dotfiles,
   backup-client`); runs the Headscale control server + the AmneziaWG VPN hub.
   Services live in the sibling `vps` repo.
-- **desktop / g614jv / ME-G614JV** — ASUS ROG G16 2024, RTX 4060; **Windows-only**
-  (WSL hostname `g614jv`, native `ME-G614JV`), tailnet `100.64.0.4`. Its former
-  NixOS install `g16` was retired 2026-07-08; `hosts/desktop/` holds only
-  `windows/`. `desktop-wsl` (`100.64.0.6`) is a self-declared WSL host on it.
+- **g16 / g614jv / ME-G614JV** — ASUS ROG G16 2024, RTX 4060; **Windows-only**
+  (WSL hostname `g614jv`, native `ME-G614JV`), tailnet `100.64.0.4`. **Named
+  `desktop` from 2026-07-20 until 2026-09-12**, and renamed back for the reason
+  `server` became `g15`: three of five members are laptops, so `desktop` named
+  no role and distinguished nothing. **`g16` is therefore a reused token with
+  two earlier referents, both this same hardware** — the `hosts/g16/` directory
+  before `ea0409c` renamed it on 2026-07-20, and the NixOS install retired
+  2026-07-08. So an old `g16` reference in docs or git history is this machine;
+  what it is NOT is a different box. `hosts/g16/` holds `windows/` and `wsl/`.
+  `g16-wsl` (`100.64.0.6`) is a self-declared WSL host on it — **the WSL distro
+  is still registered with Windows as `desktop-wsl`, deliberately**, since
+  `fd_wsl_hosts` discovers that name from `wsl -l -q` and never derives it from
+  the nickname.
   **The Windows side carries almost nothing — only `machines`.** Every working
-  repo on this machine lives inside `desktop-wsl`, deliberately: it is Linux on
-  ext4, which is where developing on them is less painful. So "on desktop" as a
+  repo on this machine lives inside `g16-wsl`, deliberately: it is Linux on
+  ext4, which is where developing on them is less painful. So "on g16" as a
   place to find a repo means the distro, not the Windows profile, and anything
   enumerating this box's repos has to go through the distro.
 - **g15 / g513ie** — ASUS ROG **G15** 2023 (model G513IE), Ryzen 7 4800H,
@@ -117,7 +126,7 @@ were deleted 2026-08-01; see *The NixOS tree is gone* below before reaching for
     `.desktop` entry execs.
 
 The repo also carries the Windows reinstall bootstrap and runbook
-(`hosts/desktop/windows/`) and shared Win11 install media (`install-media/`).
+(`hosts/g16/windows/`) and shared Win11 install media (`install-media/`).
 **It carries no backup or restore script** — `backup.ps1` and `restore.ps1` were
 both deleted 2026-07-31 (`1080828`), so Phase 1 (preserve) and the automatic half
 of Phase 4 (restore repos, `.ssh` + perms, Downloads, the vault) are manual.
@@ -307,7 +316,7 @@ is the bug.
 | `scripts/` | `converge.sh` (convergence engine) + `converge.test.sh`, `update-gortex.sh` (bumps the pin). |
 | `hosts/` | Per-machine, per-platform ops scripts: `hosts/<name>/<platform>/`. |
 | `docs/` | `fleet-roadmap.md` is the live backlog; `superpowers/plans/` holds plans and specs. |
-| `backup/` | The fleet's restic profiles, one dir per **identity** — `backup/<identity>/` where identity is a `fleet.json` machine (`latitude`) or a `fleet.local.json` nickname (`desktop-wsl`), one flat namespace. Each dir ships `profiles.yaml` plus its own `install-tasks.sh` / `.ps1` — and inherits the shared `backup/base.yaml`, installed by `backup/restic-install.sh` / `.bat` — because scope is not derivable by the caller: latitude's profiles are `schedule-permission: system` and need sudo, a WSL client is user-scope and must NOT be root. Moved here from `vps` 2026-09-01. |
+| `backup/` | The fleet's restic profiles, one dir per **identity** — `backup/<identity>/` where identity is a `fleet.json` machine (`latitude`) or a `fleet.local.json` nickname (`g16-wsl`), one flat namespace. Each dir ships `profiles.yaml` plus its own `install-tasks.sh` / `.ps1` — and inherits the shared `backup/base.yaml`, installed by `backup/restic-install.sh` / `.bat` — because scope is not derivable by the caller: latitude's profiles are `schedule-permission: system` and need sudo, a WSL client is user-scope and must NOT be root. Moved here from `vps` 2026-09-01. |
 | `install-media/` | Shared Win11 install media. |
 
 ### The provisioner is the whole story now
@@ -418,7 +427,7 @@ every item. It is **g15**, not latitude, and picking latitude by analogy with
 running a shell script, which a headless services host runs happily, while Phase
 B is an **agent session** needing Claude Code, a `machines` checkout and the
 dotfiles bare repo, on a box someone actually works at. Uptime was never the
-deciding axis either — latitude, desktop and g15 are all always on, and `air` is
+deciding axis either — latitude, g16 and g15 are all always on, and `air` is
 the only box that sleeps. So when a job must have exactly one writer, site it by
 what the job *is*, not by where the last single-writer job went.
 
@@ -503,9 +512,9 @@ relatives).
 
 **One LAN, not two.** Every member except `hub` sits behind the same router —
 some on wifi, some on cable — and gets direct P2P. Measured with `tailscale
-ping` on 2026-09-07 from `desktop-wsl`: latitude direct via 192.168.8.155 in
+ping` on 2026-09-07 from `g16-wsl`: latitude direct via 192.168.8.155 in
 2 ms, g15 direct via 192.168.8.170 in 3 ms, hub direct via its public IP in
-6 ms. Throughput follows: 99 MB/s desktop-wsl -> latitude over the tailnet.
+6 ms. Throughput follows: 99 MB/s g16-wsl -> latitude over the tailnet.
 
 This paragraph used to say "two separate LANs… cross-LAN pairs relay through our
 own DERP — expected and accepted", and that sentence did real damage: it is why
@@ -518,11 +527,11 @@ accepting it.
 property outlives the distro and applies to any NATed WSL2 distro.** A distro in
 NAT networking mode cannot punch through to another NATed peer, so `tailscale
 ping` reported `direct connection not established` and the pair sat on DERP at
-3.3 MB/s. `desktop-wsl` has no such problem: its `.wslconfig` sets
+3.3 MB/s. `g16-wsl` has no such problem: its `.wslconfig` sets
 `networkingMode=mirrored`, so it holds a real LAN address. **Do not reach for
 mirrored as the fix** — it also exposes the Windows Tailscale adapter inside the
 distro, and a box with both a Windows tailnet node and a distro node then has two
-routes to fight over (the warning is written out in desktop's own `.wslconfig`).
+routes to fight over (the warning is written out in g16's own `.wslconfig`).
 Two routes that do work from a NATed distro: reach it through its Windows host's
 sshd over the LAN (44 MB/s), or have it push outbound to a LAN peer, which NAT
 permits.
@@ -542,12 +551,12 @@ parent — not through a `fleet.json` entry either way. The shared dispatch prim
 `fd_wsl_hosts`) is sourced by both `/ship`'s `fleet-pull.sh` and memory-harvest's
 `fleet-gather.sh`; it also handles the Windows-native members by dispatching
 through Git Bash via PowerShell's call operator, keyed on `platform: windows` in
-`fleet.json` — which means **`desktop` and only `desktop`**. `g15` was a Windows
+`fleet.json` — which means **`g16` and only `g16`**. `g15` was a Windows
 member from 2026-08-27 until the 2026-09-07 reinstall; its manifest platform is
 `debian` now, so it is dispatched as a posix member like any other.
 
 **A WSL distro cannot ssh to its own Windows host** (proven 2026-08-30: from
-`desktop-wsl`, `desktop.gg.ez:22` times out, while the same address answers
+`g16-wsl`, `g16.gg.ez:22` times out, while the same address answers
 from `latitude`). So for exactly one Windows member — the one the calling box
 runs on — `fd_probe`/`fd_run` skip the network and invoke Git Bash through WSL
 interop instead. Which member that is is **declared**, in `fleet.local.json`'s
@@ -555,15 +564,15 @@ interop instead. Which member that is is **declared**, in `fleet.local.json`'s
 `provision-wsl.sh`). Two things it deliberately is NOT:
 
 - **Not inferred from a hostname.** `detect.hostname` is the *WSL* name on
-  `desktop` (`g614jv`) and the *native* name on `g15` (`g513ie`), so no single
+  `g16` (`g614jv`) and the *native* name on `g15` (`g513ie`), so no single
   comparison is right for both — a match on one box is a coincidence.
 - **Not gated on `$WSL_DISTRO_NAME`.** sshd does not set it, so a `/ship`
   started over ssh *into* the distro read it empty and fell back to the
   network. The gate is `/proc/sys/fs/binfmt_misc/WSLInterop` — the binfmt
   handler that makes a `.exe` executable at all, i.e. the actual precondition.
-- **Not a fallback on a failed ssh.** From `desktop-wsl`, `ssh g15` also fails
+- **Not a fallback on a failed ssh.** From `g16-wsl`, `ssh g15` also fails
   whenever `g15` is asleep; falling back there would run the script against
-  *desktop's* Windows clone and print it as a green `g15` row. A right-looking
+  *g16's* Windows clone and print it as a green `g15` row. A right-looking
   row on the wrong machine is worse than `SKIP unreachable`.
 
 `fd_wsl_hosts` is deliberately left on ssh: it only enumerates a parent's
@@ -573,10 +582,10 @@ distros, and making it interop-aware would unmask a second bug — `fleet-pull`'
 
 **Gotcha:** a self-declared WSL host has no `fleet.json` entry, so the generated
 `~/.ssh/config` has no `Host` block for its bare name — only the catch-all
-`Host *.gg.ez`. From `air`, `ssh desktop-wsl` falls through to the default
-identity and fails; `ssh desktop-wsl.gg.ez` is the form that resolves.
+`Host *.gg.ez`. From `air`, `ssh g16-wsl` falls through to the default
+identity and fails; `ssh g16-wsl.gg.ez` is the form that resolves.
 
-**But `desktop-wsl` answers on port 2222, not 22** — and until 2026-09-07 it
+**But `g16-wsl` answers on port 2222, not 22** — and until 2026-09-07 it
 answered on neither, for five weeks, while this file said it worked.
 `.wslconfig` puts that distro in `networkingMode=mirrored`, so it shares the
 Windows adapters and its `ssh.socket` lost the bind on `0.0.0.0:22` to the
@@ -590,17 +599,18 @@ the LAN also needs an inbound Windows firewall rule (`New-NetFirewallRule
 -LocalPort 2222 -RemoteAddress 192.168.8.0/24`), because in mirrored mode the
 Windows firewall governs the distro's ports; over the tailnet no rule is needed.
 The override is **tracked since 2026-09-07** at
-`hosts/desktop/wsl/ssh-socket-override.conf` (`01cc091`) — copy it, do not
+`hosts/g16/wsl/ssh-socket-override.conf` (`01cc091`) — copy it, do not
 rewrite it from scratch — but **nothing provisions it**: `wsl-fixes.sh` is the
 named owner and carries no `2222`/`ssh.socket` arm yet, so reprovisioning
-desktop-wsl still does not restore it.
+g16-wsl still does not restore it.
 
 **And it was declared `dispatch:direct` until 2026-08-31, which is how those five
 weeks stayed quiet.** `fd_probe` keys on that field, so every fleet-wide run
 (`/ship`, memory-harvest) resolved the name, got refused, and printed
 `SKIP unreachable` while the run itself stayed green — a successful `tailscale
 ping` proves nothing about reachability here. It is `dispatch:parent` now,
-reached as `wsl.exe -d desktop-wsl` through `desktop`. Two consequences of
+reached as `wsl.exe -d desktop-wsl` (the distro's Windows registration name,
+unchanged by the rename) through `g16`. Two consequences of
 mirrored mode that follow from this: the distro's own tailnet node
 (`100.64.0.6`) is still registered but no longer load-bearing, and reverting
 `networkingMode` is not the fix — besides the route fight above, NAT breaks the
@@ -688,9 +698,9 @@ manifest says `debian` (the manifest token is a platform *class*). Also holds
 `compose.override.yml` + `install-compose-override.sh` for qaz-code, and
 `rustdesk-seed.sh`.
 
-`hosts/desktop/windows/` carries `install.ps1`, the reinstall runbook and
+`hosts/g16/windows/` carries `install.ps1`, the reinstall runbook and
 `winget-packages.json` — **no backup or restore script** (see *Repository
-Overview*: both were deleted 2026-07-31). `hosts/desktop/wsl/` carries the
+Overview*: both were deleted 2026-07-31). `hosts/g16/wsl/` carries the
 `ssh.socket` 2222 drop-in and its README.
 (`hosts/server/` was deleted with the decommission — git history has it.)
 
@@ -871,13 +881,14 @@ direction, exactly the hole `--append-only` closes.
 ### Two-layer hostname convention
 
 - **Logical name** — the fleet key / SSH alias / tailnet node / repo
-  `hosts/<dir>`: `latitude` / `desktop` / `hub` / `air` / `g15`. Role-based
-  where a role exists (`desktop`, `hub`), model-based otherwise (`latitude`,
-  `air`, `g15`) — the rule is *stable and human*, not *role*. **`g15` was
-  `server` until 2026-08-27, the only logical name ever renamed**, and it was
-  renamed precisely because the role it named had moved to latitude. A rename
-  moves the tailnet node, the dotfiles branch and `fleet-authorized-keys` in the
-  same change, or it moves nothing.
+  `hosts/<dir>`: `latitude` / `g16` / `hub` / `air` / `g15`. Model-based
+  everywhere except `hub`, which names a role the VPS genuinely has — the rule
+  is *stable and human*, and a role word only qualifies while the role is real.
+  **Two logical names have been renamed, both when their role word stopped
+  naming a role**: `server` -> `g15` on 2026-08-27 (latitude had taken the
+  services role), and `desktop` -> `g16` on 2026-09-12 (three of five members
+  are laptops). A rename moves the tailnet node, the dotfiles branch and
+  `fleet-authorized-keys` in the same change, or it moves nothing.
 - **OS hostname** — `detect.hostname` in `fleet.json` — the hardware model,
   lowercased: `latitude5520`, `g614jv`, `g513ie`, `27608`. Note `g15` (logical,
   the marketing model) and `g513ie` (OS hostname, the SKU) are the two layers of

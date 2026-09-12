@@ -6,7 +6,7 @@ Description=Verify the restic REST backup hub after boot and daily
 # container start, so the boot run is the one that matters most. 15 min lets
 # docker, the USB enumeration and the nofail mount all settle first.
 OnBootSec=15min
-# 09:00 daily, comfortably after the desktop-wsl client's 06:00 backup, so the
+# 09:00 daily, comfortably after the g16-wsl client's 06:00 backup, so the
 # freshness check reads that morning's snapshot rather than yesterday's.
 OnCalendar=*-*-* 09:00:00
 Persistent=true

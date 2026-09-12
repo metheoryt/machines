@@ -228,7 +228,7 @@ grep -q 'local -x GIT_SSH_COMMAND' "$REPO/provision/roles/dotfiles.sh"
 eq "$?" '0' 'clone: ...because it is declared local -x, not exported'
 
 # The Windows executor clones over the same ssh and prompts identically, so the
-# posix fix alone would leave `desktop` and `g15` hanging on a fresh provision.
+# posix fix alone would leave `g16` and `g15` hanging on a fresh provision.
 PS1_SRC="$(cat "$REPO/provision/roles/dotfiles.ps1")"
 has "$PS1_SRC" 'BatchMode=yes' 'ps1: the Windows executor sets the same non-interactive posture'
 has "$PS1_SRC" 'StrictHostKeyChecking=accept-new' 'ps1: ...including accept-new'

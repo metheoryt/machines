@@ -3,8 +3,8 @@
 # the `backup-client` role and step 6 of the WSL chain.
 #
 # THE TEST THAT MATTERS IS THE FIRST ONE. `fleet_detect` returns the WRONG
-# machine on a WSL box, differently wrong on each: on desktop-wsl `hostname` is
-# g614jv, which IS `desktop`'s detect.hostname, so detection hands the distro the
+# machine on a WSL box, differently wrong on each: on g16-wsl `hostname` is
+# g614jv, which IS `g16`'s detect.hostname, so detection hands the distro the
 # WINDOWS parent's backup profile; on g15-wsl the hostname matches nothing and it
 # returns empty. So fleet.local.json's nickname must win OUTRIGHT — never a
 # "prefer, else fall back", because falling back lands on a known-wrong answer.

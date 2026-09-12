@@ -10,7 +10,7 @@ posix role executor allowlists `wsl|debian|darwin` (it was
 prints "no posix executor" and returns **0**, so `ubuntu` there would have
 skipped `dotfiles` and `repos` while `--apply` reported success. The directory
 name follows the real OS, like `hosts/latitude/debian` and
-`hosts/desktop/windows` do.
+`hosts/g16/windows` do.
 
 ## `compose.override.yml` + `install-compose-override.sh`
 
@@ -59,7 +59,7 @@ Facts worth having before touching the database:
 Orca runs as a **native GUI app** here, not the headless `serve` runtime it was
 under WSL: a headless `serve` holds Electron's one-instance-per-userData lock
 and the desktop app then cannot open at all. `provision/orca-serve.sh` gates its
-autostart on WSL since `63472aa` and stays in the repo for `desktop-wsl`.
+autostart on WSL since `63472aa` and stays in the repo for `g16-wsl`.
 
 Deliberately prose and not an installer: `orca-serve.sh` already owns the
 extract mechanism, and a re-extracting script in `hosts/` can clobber a live

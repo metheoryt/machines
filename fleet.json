@@ -15,7 +15,7 @@
       "roles": ["base", "ssh-server", "agents", "dotfiles", "repos"],
       "detect": { "hostname": "air" }
     },
-    "desktop": {
+    "g16": {
       "platform": "windows",
       "tailnet": { "ip": "100.64.0.4" },
       "ssh": { "user": "methe" },

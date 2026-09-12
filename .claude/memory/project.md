@@ -5,6 +5,19 @@
 Repo-local, git-tracked Claude memory. Loaded every session (merged with
 global + per-host). One bullet per fact under a topical heading.
 
+**READ THIS BEFORE ANY `desktop` BELOW.** On 2026-09-12 the machine `desktop`
+was renamed **`g16`** and its WSL host `desktop-wsl` -> **`g16-wsl`**, for the
+reason `server` became `g15` on 2026-08-27: three of five members are laptops,
+so `desktop` named no role. Every `desktop` / `desktop-wsl` in the dated
+sections below is this same box under its old name — they are deliberately NOT
+rewritten, because a memory log that edits its own history stops being evidence.
+Two names that did NOT move: the OS hostname is still `g614jv`, and the WSL
+distro is still REGISTERED with Windows as `desktop-wsl` (`fd_wsl_hosts` reads
+that from `wsl -l -q` and never derives it from the nickname). `g16` is a reused
+token — it named this box's retired NixOS install and its `hosts/g16/` directory
+before `ea0409c` renamed that to `hosts/desktop/` on 2026-07-20 — but all three
+referents are this same hardware, so an old `g16` is never a different machine.
+
 ## Workflow
 
 - **Git workflow — one framework, see `agents/docs/git-workflow.md`.** `main` is

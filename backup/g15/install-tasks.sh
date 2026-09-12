@@ -1,7 +1,7 @@
 #!/bin/bash
 # Installs g15's restic client schedule from the profiles.yaml next to this file.
 #
-# NO SUDO, like ../desktop-wsl/install-tasks.sh and unlike ../latitude's. The
+# NO SUDO, like ../g16-wsl/install-tasks.sh and unlike ../latitude's. The
 # `g15` profile is `schedule-permission: user_logged_on`, so its units belong to
 # THIS user's systemd manager. Running this as root would put them in the system
 # manager, where they would run as root, read the wrong password path, and leave

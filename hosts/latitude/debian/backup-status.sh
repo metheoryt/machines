@@ -5,7 +5,7 @@
 # minutes: a restic repository's newest snapshot age is readable from
 # <repo>/snapshots/ FILE MTIMES. No restic binary, no password, no repository
 # lock. latitude is the hub, so it can see every pusher's repo — its own,
-# desktop-wsl's and g15's — from the filesystem.
+# g16-wsl's and g15's — from the filesystem.
 #
 # WHY IT IS A SEPARATE SCRIPT FROM THE BOARD. The board repaints every second and
 # this walks four directories; and an agent, a timer or a human at a terminal all

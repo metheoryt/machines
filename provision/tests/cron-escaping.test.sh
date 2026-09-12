@@ -10,7 +10,7 @@
 #
 # as the command and fed ` 120)); /usr/bin/env bash …` to it on stdin. The line
 # installs without complaint, `crontab -l` shows it in full, and the job silently
-# never runs. Measured live on desktop-wsl, whose journal logs
+# never runs. Measured live on g16-wsl, whose journal logs
 # `CMD (sleep $((RANDOM )`. `tier_autofetch`'s line has no `%` at all, which is
 # the only reason one of the three fallbacks worked.
 #

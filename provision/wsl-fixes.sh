@@ -70,13 +70,13 @@
 #      but earlyoom is per-distro: a SECOND distro running it would watch the
 #      same kernel-global memory and could double-kill on one pressure event.
 #      Three distros run on this box (desktop-wsl, Ubuntu-24.04, docker-desktop)
-#      and only desktop-wsl has earlyoom active, so there is no double-kill
+#      and only g16-wsl has earlyoom active, so there is no double-kill
 #      today. Check `systemctl is-active earlyoom` in the others before
 #      provisioning them.
 #
 #      NOT covered here, because this script runs inside the distro: the
 #      host-side `.wslconfig` (autoMemoryReclaim=disabled, swap=16GB). That
-#      lives in hosts/desktop/windows/windows-reinstall-runbook.md. Full
+#      lives in hosts/g16/windows/windows-reinstall-runbook.md. Full
 #      diagnosis: qaz-code/docs/known-issues/sync-wsl-freeze.md.
 # NOTE: This file is currently sourced only by provision/tests/wsl-fixes.test.sh
 # (with WSL_FIXES_LIB_ONLY=1). The `set -e` would leak into any other shell

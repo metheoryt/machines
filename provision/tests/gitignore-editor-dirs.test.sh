@@ -3,7 +3,7 @@
 #
 # THE BUG THIS EXISTS FOR: `.gitignore` covered `.idea/`, `.vscode/` and
 # `*.sublime-*` but had no Zed entry. A single zero-byte `.zed/tasks.json` on
-# desktop-wsl therefore made the clone permanently dirty, and `fleet-selfpull`'s
+# g16-wsl therefore made the clone permanently dirty, and `fleet-selfpull`'s
 # dirty gate skipped it on every tick — 185 consecutive `SKIP dirty` lines and
 # zero `OK`, 28 commits behind for ~35 hours, while the timer, the service and
 # `.machines/last-converge` all reported success. One of those 28 unpulled
@@ -42,7 +42,7 @@ fi
 # One entry per editor: the directory itself, and a file inside it — a rule
 # written as `.zed` rather than `.zed/` covers one and not always the other.
 # Zed is here because it is in use: `.config/zed` is dotfiles-tracked, and its
-# stray file is what froze desktop-wsl. Do not pre-add editors nobody opens —
+# stray file is what froze g16-wsl. Do not pre-add editors nobody opens —
 # `.fleet/` in particular would read as this repo's own fleet concept.
 for d in .idea .vscode .zed; do
     if ignored "$d/"; then
@@ -67,7 +67,7 @@ fi
 # The dirty-gate consequence, stated as its own case so a future edit that drops
 # a pattern fails with the reason rather than just a name.
 if ignored ".zed/tasks.json"; then
-    pass ".zed/tasks.json — the exact path that froze desktop-wsl — is ignored"
+    pass ".zed/tasks.json — the exact path that froze g16-wsl — is ignored"
 else
     die ".zed/tasks.json is NOT ignored: this is the literal file that held a fleet member 28 commits behind"
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # provision/tests/windows-jq.test.sh — windows.ps1 must provision jq.
 #
-# THE BUG THIS EXISTS FOR, measured on desktop (g614jv) 2026-08-30:
+# THE BUG THIS EXISTS FOR, measured on g16 (g614jv) 2026-08-30:
 #
 #     ! jq not found — gortex hooks stay inert in .../.claude/settings.local.json
 #

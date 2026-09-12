@@ -1260,7 +1260,7 @@ sb_chart_width() {
 # each: "ip|node|os|state|last_seen". Summary FIRST so the caller still reads it with
 # a plain `read -r` and the peer lines are whatever follows.
 #
-# The second column is the NODE name — `latitude`, `desktop`, `server` — which is
+# The second column is the NODE name — `latitude`, `g16`, `g15` — which is
 # exactly what fleet.json is keyed by. `--json` looks like the more honest source and
 # is the worse one: its HostName is the OS hostname (g614jv, g513ie), which joins to
 # nothing, and it would want jq on a board whose every other parser is awk.

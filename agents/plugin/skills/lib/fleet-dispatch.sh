@@ -12,11 +12,11 @@
 #
 # One Windows member cannot be reached that way: the one THIS box runs on. A WSL
 # distro cannot ssh to its own Windows host's tailnet node (proven 2026-08-30 —
-# desktop answers latitude and times out from desktop-wsl on the same machine),
+# g16 answers latitude and times out from g16-wsl on the same machine),
 # so a dispatch to it must go through WSL interop instead of the network. Which
 # member that is has to be DECLARED, in fleet.local.json's `self.parent`: it
 # cannot be inferred from hostnames, because fleet.json's `detect.hostname` is
-# the WSL name on desktop (g614jv) and the native name on g15 (g513ie). Nor may
+# the WSL name on g16 (g614jv) and the native name on g15 (g513ie). Nor may
 # it be inferred from "ssh failed" — falling back on a failed probe would run
 # the script against the LOCAL Windows clone while reporting it as a sleeping
 # g15, and a green row on the wrong machine is worse than SKIP unreachable.

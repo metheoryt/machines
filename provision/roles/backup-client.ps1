@@ -9,7 +9,7 @@
 # machine boundary.
 #
 # THE PER-DIR CONTRACT IS install-tasks.ps1, and it is a separate file from the
-# posix install-tasks.sh for the same reason latitude's and desktop-wsl's .sh
+# posix install-tasks.sh for the same reason latitude's and g16-wsl's .sh
 # files differ from each other: the SCOPE decision cannot be made here. On posix
 # it is sudo-or-not (system vs user systemd units); on Windows `resticprofile
 # schedule` writes Task Scheduler entries and wants an elevated shell. That
