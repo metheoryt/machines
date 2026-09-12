@@ -120,3 +120,4 @@ b08cb236	applied	2026-09-12	gortex freshness mechanism moved practices.md -> glo
 e70e98cb	applied	2026-09-12	stale 135-commit count replaced by the measurement command; the only-copy fact kept	/home/me/CLAUDE.md	Do not trust a commit count written
 a3e1b01f	applied	2026-09-12	g15-wsl recorded as a deleted remote with a surviving local ref, not as history to keep	/home/me/.claude/host-memory.md	not a fleet branch any more
 8dd3022d	rejected	2026-09-12	superseded by a6f70ff5 + 34ccf2ed, applied on g15 2026-09-12; its two passages no longer exist		
+15635b46	applied	2026-09-12	core.md main-checkout rule promoted to dotfiles main (06b3d58); now on all five boxes	/home/me/.claude/memory/core.md	Никогда не редактировать код в main checkout
