@@ -545,8 +545,22 @@ Nix ever returns. Leave them.
   `fleet.json` is a `_touches_driver` trigger in `converge.sh`, and the
   reprovision rewrites `~/.ssh/config` from `tier_ssh_accounts` alone. Measured
   the same day — a hand-merged block on g15 was gone inside one timer interval.
-  The fix is to put `fleet_ssh` in the posix tier lists (and flip that
-  assertion), not to write the file.
+  **And the fix is NOT just adding `fleet_ssh` to the posix tier lists.** That
+  tier mints `~/.ssh/id_fleet` when it is absent and prints ENROLLMENT NEEDED —
+  latitude has no `id_fleet` at all (measured the same day), so enabling the
+  tier there and on g15 creates two new keys that must be appended to
+  `provision/fleet-authorized-keys`, committed and pulled everywhere before
+  either box can reach anything. **Until that enrolment lands the rendered block
+  is strictly WORSE than no block**, because its `IdentityFile ~/.ssh/id_fleet`
+  overrides the `id_ed25519` these boxes actually use — proven both ways on
+  2026-09-12: a hand-rendered stanza got `Permission denied`, while
+  `ssh -i ~/.ssh/id_ed25519 methe@100.64.0.4` from the same box answered
+  `g614jv`. The block was the cause, not the name.
+
+  So it is one of two jobs, not a tier-list edit: parameterize the renderer's
+  IdentityFile (the Windows renderer already does — `fleet-ssh-config.ps1`'s
+  header calls it "one deliberate divergence" and takes it as a parameter), or
+  enrol two new fleet keys in the same change that enables the tier.
 
   The original entry's stated failure mode is **out of date**: it claimed
   latitude has "no GitHub account block at all". It has all three — `linux.sh`

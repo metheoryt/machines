@@ -4,6 +4,12 @@ Written by `/memory-harvest`, applied by `/memory-review`. **Append-only from th
 side**: a run never rewrites or reorders an existing item, so notes added by
 hand survive. An item leaves this file only through `consolidate.sh decide`.
 
+> **Branch names changed 2026-09-12.** Any row below whose destination reads
+> `desktop-wsl` means the dotfiles branch now called **`g16-wsl`**, and
+> `desktop` means **`g16`** — the machine was renamed and the old refs are
+> deleted on origin. The rows are not rewritten (this file is append-only from a
+> run's side); resolve the name here.
+
 ## 0c1fdb6a · harvest · /home/me/machines/.claude/memory/project.md
 
 - **action:** harvest

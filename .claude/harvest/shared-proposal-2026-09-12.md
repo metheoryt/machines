@@ -4,6 +4,12 @@ Filed by `/memory-harvest` Phase A. Lane 2 only: nothing here has been written.
 `/memory-review` is what applies these. Rows are self-contained on purpose —
 the transcripts behind them expire.
 
+> **Branch names changed 2026-09-12.** Any row below whose destination reads
+> `desktop-wsl` means the dotfiles branch now called **`g16-wsl`**, and
+> `desktop` means **`g16`** — the machine was renamed and the old refs are
+> deleted on origin. The rows are not rewritten (this file is append-only from a
+> run's side); resolve the name here.
+
 Source digests: `40ef9ef4-d45c-480b-be1b-8c36137324ef` (g15, 2026-09-11
 17:14–19:55) and `96a76e02-1793-4233-ac7d-48537a2760ab` (g15, 2026-09-11 22:14).
 Track B baseline `ac285c4..73a5334`.
