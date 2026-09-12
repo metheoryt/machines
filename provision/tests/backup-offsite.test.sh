@@ -36,6 +36,36 @@ eq "$(rpv_check_line data/8a/8a1f4ccec0325b33 8a1f4ccec0325b33)" '' \
 has "$(rpv_check_line data/8a/8a1f4ccec0325b33 deadbeefdeadbeef)" 'BAD data/8a/8a1f4ccec0325b33' \
   'a pack whose bytes changed is named'
 
+# ── bs_age_state ──────────────────────────────────────────────────────────────
+# The severity policy is keyed on each job's DECLARED expected period, not on
+# observed periodicity. That is what keeps Debian's nine housekeeping timers off
+# the page and catches the four that matter — and it is the only rule that
+# makes "late" mean anything for a job that runs weekly.
+export BACKUP_STATUS_LIB_ONLY=1
+# shellcheck source=hosts/latitude/debian/backup-status.sh
+source "$REPO/hosts/latitude/debian/backup-status.sh"
+
+eq "$(bs_age_state 3600 86400)"   ok    'fresh: an hour into a daily job is ok'
+eq "$(bs_age_state 86399 86400)"  ok    'fresh: one second inside the period is still ok'
+eq "$(bs_age_state 90000 86400)"  late  'late: one missed daily run is late'
+eq "$(bs_age_state 172801 86400)" stale 'stale: two missed daily runs is stale'
+eq "$(bs_age_state 600000 604800)" ok   'period is per-job: a week-old weekly job is ok'
+eq "$(bs_age_state '' 86400)"     unknown 'no age at all is unknown, not ok'
+eq "$(bs_age_state abc 86400)"    unknown 'a non-numeric age is unknown, not ok'
+
+# ── absent status file (controller ruling) ───────────────────────────────────
+# The offsite status file is delivered by a later task; on every box today it is
+# absent. That must never read as bad or as an error — it is simply not here yet.
+rm -rf /tmp/bs-test-jobs.$$ /tmp/bs-test-state.$$
+mkdir -p /tmp/bs-test-jobs.$$
+printf 'status offsite /tmp/bs-test-jobs.%s/does-not-exist.json 7200\n' "$$" > /tmp/bs-test-jobs.$$/jobs.conf
+out="$(BACKUP_STATUS_LIB_ONLY= BACKUP_STATUS_JOBS=/tmp/bs-test-jobs.$$/jobs.conf BACKUP_STATUS_STATE_DIR=/tmp/bs-test-state.$$ bash "$REPO/hosts/latitude/debian/backup-status.sh")"
+rc=$?
+eq "$rc" 0 'an absent status file exits 0, never an error'
+has "$out" 'offsite||7200|unknown|' 'an absent status file yields an unknown row, never bad'
+hasnt "$out" '|bad|' 'an absent status file is never reported as bad'
+rm -rf /tmp/bs-test-jobs.$$ /tmp/bs-test-state.$$
+
 # Every suite in this repo prints ALL PASS and exits nonzero on failure — that is
 # what `just test` reads. Keep this block LAST in the file; later tasks append
 # above it.
